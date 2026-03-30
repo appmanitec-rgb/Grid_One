@@ -5,11 +5,18 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
-import * as QRCode from 'qrcode';
 import * as bcrypt from 'bcrypt';
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+} from 'crypto';
+import { toDataURL } from 'qrcode';
 import * as speakeasy from 'speakeasy';
 import { DatabaseService } from '../../database/database.service';
+
+const toQrCodeDataUrl = toDataURL as (text: string) => Promise<string>;
 
 type MfaUser = {
   id: string;
@@ -51,7 +58,7 @@ export class MfaService {
       throw new BadRequestException('Falha ao inicializar segredo MFA.');
     }
     const encrypted = this.encryptSecret(base32);
-    const qrCodeDataUrl = await QRCode.toDataURL(otpAuthUrl);
+    const qrCodeDataUrl = await toQrCodeDataUrl(otpAuthUrl);
 
     await this.prisma.user.update({
       where: { id: userId },
@@ -92,7 +99,8 @@ export class MfaService {
       where: { id: userId },
       data: {
         mfaEnabled: true,
-        mfaRecoveryCodesHash: recoveryHashes as unknown as Prisma.InputJsonValue,
+        mfaRecoveryCodesHash:
+          recoveryHashes as unknown as Prisma.InputJsonValue,
       },
     });
 
@@ -162,7 +170,9 @@ export class MfaService {
   private async consumeRecoveryCode(user: MfaUser, recoveryCode: string) {
     const hashes = this.readRecoveryHashes(user.mfaRecoveryCodesHash);
     if (hashes.length === 0) {
-      throw new UnauthorizedException('Nao existem codigos de recuperacao validos.');
+      throw new UnauthorizedException(
+        'Nao existem codigos de recuperacao validos.',
+      );
     }
 
     let matchedIndex = -1;

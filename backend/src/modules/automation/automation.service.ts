@@ -1,9 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import {
-  AutomationRunMode,
-  AutomationRunStatus,
-  Prisma,
-} from '@prisma/client';
+import { AutomationRunMode, AutomationRunStatus, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
 
 export type AutomationConfigSnapshot = {

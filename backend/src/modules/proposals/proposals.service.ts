@@ -391,7 +391,9 @@ export class ProposalsService {
         tx,
         id,
         actorUserId,
-        requiresApproval ? 'REQUEST_DISCOUNT_APPROVAL' : 'REQUEST_DISCOUNT_AUTO',
+        requiresApproval
+          ? 'REQUEST_DISCOUNT_APPROVAL'
+          : 'REQUEST_DISCOUNT_AUTO',
         proposal.status,
         nextStatus,
         requiresApproval

@@ -79,4 +79,3 @@ export class MaintenanceOrdersController {
     return authUser?.sub as string;
   }
 }
-

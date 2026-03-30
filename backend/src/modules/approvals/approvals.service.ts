@@ -73,10 +73,13 @@ export class ApprovalsService {
       where: { id: input.requesterUserId },
       select: { id: true, managerId: true },
     });
-    if (!requester) throw new BadRequestException('Solicitante nao encontrado.');
+    if (!requester)
+      throw new BadRequestException('Solicitante nao encontrado.');
 
     const approverUserId =
-      input.approverUserId ?? requester.managerId ?? (await this.findFallbackApproverId());
+      input.approverUserId ??
+      requester.managerId ??
+      (await this.findFallbackApproverId());
 
     const created = await this.prisma.approvalRequest.create({
       data: {
@@ -145,7 +148,12 @@ export class ApprovalsService {
         decidedAt: new Date(),
       },
     });
-    await this.applyDecisionEffects(approval, status, actorUserId, decisionNote);
+    await this.applyDecisionEffects(
+      approval,
+      status,
+      actorUserId,
+      decisionNote,
+    );
 
     await this.auditLogsService.record({
       domain:

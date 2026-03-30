@@ -11,4 +11,3 @@ import { ProposalsService } from './proposals.service';
   providers: [ProposalsService],
 })
 export class ProposalsModule {}
-

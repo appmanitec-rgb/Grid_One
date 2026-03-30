@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ProposalStatus, UserRole } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
+import { ApprovalsService } from '../approvals/approvals.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { ProposalsService } from './proposals.service';
 
 describe('ProposalsService', () => {
@@ -28,7 +30,22 @@ describe('ProposalsService', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ProposalsService, { provide: DatabaseService, useValue: db }],
+      providers: [
+        ProposalsService,
+        { provide: DatabaseService, useValue: db },
+        {
+          provide: ApprovalsService,
+          useValue: {
+            create: jest.fn(),
+          },
+        },
+        {
+          provide: AuditLogsService,
+          useValue: {
+            record: jest.fn(),
+          },
+        },
+      ],
     }).compile();
 
     service = module.get<ProposalsService>(ProposalsService);

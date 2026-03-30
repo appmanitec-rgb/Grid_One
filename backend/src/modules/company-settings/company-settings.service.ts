@@ -21,7 +21,9 @@ export class CompanySettingsService {
 
   private normalizeEmail(value?: string) {
     const normalized = this.normalizeText(value);
-    return typeof normalized === 'string' ? normalized.toLowerCase() : normalized;
+    return typeof normalized === 'string'
+      ? normalized.toLowerCase()
+      : normalized;
   }
 
   private normalizeCnpj(value?: string) {
@@ -119,11 +121,18 @@ export class CompanySettingsService {
     await this.ensurePrimaryCompany();
 
     return this.prisma.companySettings.findMany({
-      orderBy: [{ isPrimary: 'desc' }, { companyName: 'asc' }, { createdAt: 'asc' }],
+      orderBy: [
+        { isPrimary: 'desc' },
+        { companyName: 'asc' },
+        { createdAt: 'asc' },
+      ],
     });
   }
 
-  async createCompany(userId: string | undefined, dto: UpdateCompanySettingsDto) {
+  async createCompany(
+    userId: string | undefined,
+    dto: UpdateCompanySettingsDto,
+  ) {
     const data = this.buildCompanyData(dto);
     await this.ensureUniqueCnpj(data.cnpj);
 

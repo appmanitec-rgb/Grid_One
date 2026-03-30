@@ -11,7 +11,10 @@ export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
   @Get('overview')
-  overview(@Query('dateFrom') dateFrom?: string, @Query('dateTo') dateTo?: string) {
+  overview(
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
     return this.reportsService.overview(dateFrom, dateTo);
   }
 }

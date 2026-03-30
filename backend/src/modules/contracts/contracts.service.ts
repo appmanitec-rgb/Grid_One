@@ -399,7 +399,8 @@ export class ContractsService {
               amount: outstanding,
               method: PaymentMethod.OTHER,
               paidAt: effectivePaidAt,
-              notes: 'Baixa automatica a partir da quitacao da fatura contratual.',
+              notes:
+                'Baixa automatica a partir da quitacao da fatura contratual.',
             },
           });
         }

@@ -1,5 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DatabaseService } from '../../database/database.service';
+import { ApprovalsService } from '../approvals/approvals.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { MaintenanceOrdersService } from './maintenance-orders.service';
 
 describe('MaintenanceOrdersService', () => {
@@ -10,6 +12,18 @@ describe('MaintenanceOrdersService', () => {
       providers: [
         MaintenanceOrdersService,
         { provide: DatabaseService, useValue: {} },
+        {
+          provide: ApprovalsService,
+          useValue: {
+            create: jest.fn(),
+          },
+        },
+        {
+          provide: AuditLogsService,
+          useValue: {
+            record: jest.fn(),
+          },
+        },
       ],
     }).compile();
 

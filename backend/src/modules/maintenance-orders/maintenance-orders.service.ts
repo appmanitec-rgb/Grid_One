@@ -157,7 +157,11 @@ export class MaintenanceOrdersService {
     });
   }
 
-  async update(id: string, dto: UpdateMaintenanceOrderDto, actorUserId?: string) {
+  async update(
+    id: string,
+    dto: UpdateMaintenanceOrderDto,
+    actorUserId?: string,
+  ) {
     const current = await this.prisma.maintenanceOrder.findUnique({
       where: { id },
       select: {
@@ -189,7 +193,7 @@ export class MaintenanceOrdersService {
           generatorCriticality: generator.criticality,
           technicianId: dto.technicianId ?? current.technicianId ?? undefined,
           checklistData:
-            (dto.checklistData as Record<string, unknown> | undefined) ??
+            dto.checklistData ??
             (current.checklistData as Record<string, unknown> | undefined),
           assignmentJustification: dto.assignmentJustification,
           assignmentOverrideApprovalId: dto.assignmentOverrideApprovalId,
@@ -505,8 +509,12 @@ export class MaintenanceOrdersService {
     ) {
       if (!input.certificationJustification?.trim()) {
         const missing = [
-          ...competency.missingCertifications.map((item) => `certificacao ${item}`),
-          ...competency.missingSpecialties.map((item) => `especialidade ${item}`),
+          ...competency.missingCertifications.map(
+            (item) => `certificacao ${item}`,
+          ),
+          ...competency.missingSpecialties.map(
+            (item) => `especialidade ${item}`,
+          ),
         ];
         throw new BadRequestException(
           `Competencias pendentes (${missing.join(', ')}). Informe justificativa para prosseguir.`,
@@ -874,4 +882,3 @@ export class MaintenanceOrdersService {
     };
   }
 }
-

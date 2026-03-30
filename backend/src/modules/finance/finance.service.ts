@@ -164,7 +164,10 @@ export class FinanceService {
           },
         });
 
-        if (linkedInvoice && linkedInvoice.status !== ContractInvoiceStatus.PAID) {
+        if (
+          linkedInvoice &&
+          linkedInvoice.status !== ContractInvoiceStatus.PAID
+        ) {
           await tx.contractInvoice.update({
             where: { id: linkedInvoice.id },
             data: {
@@ -493,7 +496,8 @@ export class FinanceService {
         data: {
           paidAmount: nextPaid,
           status,
-          paidAt: status === AccountsPayableStatus.PAID ? effectivePaidAt : undefined,
+          paidAt:
+            status === AccountsPayableStatus.PAID ? effectivePaidAt : undefined,
         },
       });
 
@@ -837,15 +841,11 @@ export class FinanceService {
     const name = (dto.name ?? current?.name ?? '').trim();
 
     if (!code) {
-      throw new BadRequestException(
-        'Codigo do centro de custo e obrigatorio.',
-      );
+      throw new BadRequestException('Codigo do centro de custo e obrigatorio.');
     }
 
     if (!name) {
-      throw new BadRequestException(
-        'Nome do centro de custo e obrigatorio.',
-      );
+      throw new BadRequestException('Nome do centro de custo e obrigatorio.');
     }
 
     const duplicateCode = await tx.costCenter.findFirst({
@@ -951,7 +951,9 @@ export class FinanceService {
       contractId,
       generatorId,
       isActive:
-        ('isActive' in dto ? dto.isActive : undefined) ?? current?.isActive ?? true,
+        ('isActive' in dto ? dto.isActive : undefined) ??
+        current?.isActive ??
+        true,
     };
   }
 }

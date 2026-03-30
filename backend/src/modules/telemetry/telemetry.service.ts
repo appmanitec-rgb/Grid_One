@@ -43,7 +43,9 @@ export class TelemetryService {
       },
     });
 
-    const generatorIds = [...new Set(recentEvents.map((event) => event.generatorId))];
+    const generatorIds = [
+      ...new Set(recentEvents.map((event) => event.generatorId)),
+    ];
 
     const activeOrders = generatorIds.length
       ? await this.prisma.maintenanceOrder.findMany({
@@ -105,7 +107,8 @@ export class TelemetryService {
 
     for (const bucket of ordersByGenerator.values()) {
       bucket.sort((a, b) => {
-        const statusDelta = this.statusRank(a.status) - this.statusRank(b.status);
+        const statusDelta =
+          this.statusRank(a.status) - this.statusRank(b.status);
         if (statusDelta !== 0) return statusDelta;
 
         const priorityDelta =
@@ -132,14 +135,17 @@ export class TelemetryService {
         severity,
         generator: event.generator,
         activeOrderCount: generatorOrders.length,
-        activeOrders: generatorOrders.slice(0, 3).map(({ generatorId, ...order }) => order),
+        activeOrders: generatorOrders.slice(0, 3).map(({ ...order }) => order),
         automationOpen: generatorOrders.some(
           (order) => order.type === MaintenanceOrderType.REFUELING,
         ),
       };
     });
 
-    const latestEventByGenerator = new Map<string, (typeof recentAlerts)[number]>();
+    const latestEventByGenerator = new Map<
+      string,
+      (typeof recentAlerts)[number]
+    >();
     for (const event of recentAlerts) {
       if (!latestEventByGenerator.has(event.generator.id)) {
         latestEventByGenerator.set(event.generator.id, event);
@@ -179,8 +185,10 @@ export class TelemetryService {
     return {
       stats: {
         monitoredGenerators: latestEvents.length,
-        activeAlerts: latestEvents.filter((event) => event.severity !== 'ok').length,
-        lowFuelGenerators: latestEvents.filter((event) => this.isLowFuel(event)).length,
+        activeAlerts: latestEvents.filter((event) => event.severity !== 'ok')
+          .length,
+        lowFuelGenerators: latestEvents.filter((event) => this.isLowFuel(event))
+          .length,
         gridFailures: latestEvents.filter(
           (event) =>
             event.alarmType === TelemetryAlarmType.GRID_FAILURE ||

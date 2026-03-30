@@ -141,9 +141,13 @@ export class AuthService {
 
     await this.mfaService.verifyUserMfa(payload.sub, code);
 
-    const user = await this.database.user.findUnique({ where: { id: payload.sub } });
+    const user = await this.database.user.findUnique({
+      where: { id: payload.sub },
+    });
     if (!user || !user.isActive) {
-      throw new UnauthorizedException('Usuario indisponivel para autenticacao.');
+      throw new UnauthorizedException(
+        'Usuario indisponivel para autenticacao.',
+      );
     }
 
     const accessPolicy = this.resolveAccessPolicy(user);
@@ -169,7 +173,9 @@ export class AuthService {
     const setupResult = await this.mfaService.verifySetup(userId, code);
     const user = await this.database.user.findUnique({ where: { id: userId } });
     if (!user || !user.isActive) {
-      throw new UnauthorizedException('Usuario indisponivel para autenticacao.');
+      throw new UnauthorizedException(
+        'Usuario indisponivel para autenticacao.',
+      );
     }
 
     const accessPolicy = this.resolveAccessPolicy(user);
@@ -223,7 +229,9 @@ export class AuthService {
     }
 
     if (!session.user?.isActive) {
-      throw new UnauthorizedException('Usuario indisponivel para autenticacao.');
+      throw new UnauthorizedException(
+        'Usuario indisponivel para autenticacao.',
+      );
     }
 
     const accessPolicy = this.resolveAccessPolicy(session.user);
@@ -263,7 +271,10 @@ export class AuthService {
     return this.mfaService.disable(userId, input);
   }
 
-  private async issueLoginSuccess(params: LoginContext, device?: DeviceContext) {
+  private async issueLoginSuccess(
+    params: LoginContext,
+    device?: DeviceContext,
+  ) {
     const token = await this.issueAccessToken({
       id: params.id,
       email: params.email,
@@ -283,8 +294,7 @@ export class AuthService {
       ...(refreshSession
         ? {
             refresh_token: refreshSession.refreshToken,
-            refresh_token_expires_at:
-              refreshSession.expiresAt.toISOString(),
+            refresh_token_expires_at: refreshSession.expiresAt.toISOString(),
           }
         : {}),
       user: this.buildUserPayload(params, params.accessPolicy),

@@ -17,7 +17,10 @@ function loadEnvFile() {
     if (eqIndex < 0) continue;
 
     const key = trimmed.slice(0, eqIndex).trim();
-    const value = trimmed.slice(eqIndex + 1).trim().replace(/^"|"$/g, '');
+    const value = trimmed
+      .slice(eqIndex + 1)
+      .trim()
+      .replace(/^"|"$/g, '');
     if (!(key in process.env)) {
       process.env[key] = value;
     }
@@ -50,7 +53,9 @@ async function assertRequiredColumns(
   tableName: string,
   requiredColumns: string[],
 ) {
-  const existingColumns = await prisma.$queryRawUnsafe<{ column_name: string }[]>(
+  const existingColumns = await prisma.$queryRawUnsafe<
+    { column_name: string }[]
+  >(
     `
     SELECT column_name
     FROM information_schema.columns
@@ -60,7 +65,9 @@ async function assertRequiredColumns(
     `,
   );
 
-  const existingNames = new Set(existingColumns.map((column) => column.column_name));
+  const existingNames = new Set(
+    existingColumns.map((column) => column.column_name),
+  );
   const missingColumns = requiredColumns.filter(
     (column) => !existingNames.has(column),
   );

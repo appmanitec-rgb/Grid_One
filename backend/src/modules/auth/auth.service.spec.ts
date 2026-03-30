@@ -5,6 +5,29 @@ import { DatabaseService } from '../../database/database.service';
 import { AuthService } from './auth.service';
 import { MfaService } from './mfa.service';
 
+type RefreshSessionRunner = (
+  userId: string,
+  device?: {
+    deviceId?: string;
+    deviceName?: string;
+  },
+) => Promise<{ refreshToken: string; expiresAt: Date } | null>;
+
+function getRefreshSessionRunner(service: AuthService): RefreshSessionRunner {
+  const internalMethod = Reflect.get(
+    service as object,
+    'createOrRotateRefreshSession',
+  ) as RefreshSessionRunner | undefined;
+
+  if (!internalMethod) {
+    throw new Error(
+      'Metodo interno createOrRotateRefreshSession indisponivel.',
+    );
+  }
+
+  return (userId, device) => internalMethod.call(service, userId, device);
+}
+
 describe('AuthService', () => {
   let service: AuthService;
   let database: {
@@ -19,7 +42,10 @@ describe('AuthService', () => {
     const error = new Error(
       'Unique constraint failed',
     ) as Prisma.PrismaClientKnownRequestError;
-    Object.setPrototypeOf(error, Prisma.PrismaClientKnownRequestError.prototype);
+    Object.setPrototypeOf(
+      error,
+      Prisma.PrismaClientKnownRequestError.prototype,
+    );
     Object.assign(error, {
       code: 'P2002',
       clientVersion: '5.21.0',
@@ -54,7 +80,7 @@ describe('AuthService', () => {
   });
 
   it('returns null when deviceId is missing', async () => {
-    const result = await (service as any).createOrRotateRefreshSession('user-1');
+    const result = await getRefreshSessionRunner(service)('user-1');
 
     expect(result).toBeNull();
     expect(database.authSession.findUnique).not.toHaveBeenCalled();
@@ -66,7 +92,7 @@ describe('AuthService', () => {
     database.authSession.findUnique.mockResolvedValue(null);
     database.authSession.create.mockResolvedValue({ id: 'session-1' });
 
-    const result = await (service as any).createOrRotateRefreshSession('user-1', {
+    const result = await getRefreshSessionRunner(service)('user-1', {
       deviceId: 'device-1',
       deviceName: 'Chrome',
     });
@@ -100,7 +126,7 @@ describe('AuthService', () => {
     database.authSession.findUnique.mockResolvedValue({ id: 'session-1' });
     database.authSession.update.mockResolvedValue({ id: 'session-1' });
 
-    const result = await (service as any).createOrRotateRefreshSession('user-1', {
+    const result = await getRefreshSessionRunner(service)('user-1', {
       deviceId: 'device-1',
       deviceName: 'Firefox',
     });
@@ -128,7 +154,7 @@ describe('AuthService', () => {
     );
     database.authSession.update.mockResolvedValue({ id: 'session-1' });
 
-    await (service as any).createOrRotateRefreshSession('user-1', {
+    await getRefreshSessionRunner(service)('user-1', {
       deviceId: 'device-1',
       deviceName: 'Edge',
     });

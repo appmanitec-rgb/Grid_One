@@ -324,7 +324,8 @@ export class ReportsService {
     const recurringRevenue = contractsByStatus
       .filter(
         (row) =>
-          row.key === ContractStatus.ACTIVE || row.key === ContractStatus.RENEWAL,
+          row.key === ContractStatus.ACTIVE ||
+          row.key === ContractStatus.RENEWAL,
       )
       .reduce((sum, row) => sum + this.toNumber(row.amount), 0);
 
@@ -432,8 +433,7 @@ export class ReportsService {
       finance: {
         bankBalance: this.toNumber(bankBalanceAgg._sum.currentBalance),
         receivablesOutstanding,
-        receivablesOutstandingCount:
-          receivablesOutstandingAgg._count._all || 0,
+        receivablesOutstandingCount: receivablesOutstandingAgg._count._all || 0,
         receivablesOverdueAmount,
         receivablesOverdueCount: receivablesOverdueAgg._count._all || 0,
         payablesOutstanding,
@@ -527,7 +527,10 @@ export class ReportsService {
     return mode === 'start' ? this.startOfDay(date) : this.endOfDay(date);
   }
 
-  private mapEnumBuckets<TEnum extends string, TRow extends { _count: { _all: number } }>(
+  private mapEnumBuckets<
+    TEnum extends string,
+    TRow extends { _count: { _all: number } },
+  >(
     values: TEnum[],
     rows: TRow[],
     labels: Record<string, string>,

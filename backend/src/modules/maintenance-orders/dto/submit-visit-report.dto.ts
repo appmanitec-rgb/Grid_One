@@ -9,4 +9,3 @@ export class SubmitVisitReportDto {
   @IsOptional()
   note?: string;
 }
-

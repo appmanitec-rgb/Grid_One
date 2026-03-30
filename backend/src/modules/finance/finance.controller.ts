@@ -184,10 +184,7 @@ export class FinanceController {
 
   @UseGuards(AuthGuard)
   @Patch('cost-centers/:id')
-  updateCostCenter(
-    @Param('id') id: string,
-    @Body() dto: UpdateCostCenterDto,
-  ) {
+  updateCostCenter(@Param('id') id: string, @Body() dto: UpdateCostCenterDto) {
     return this.financeService.updateCostCenter(id, dto);
   }
 

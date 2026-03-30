@@ -71,8 +71,13 @@ export class UsersService {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(createUserDto.password, salt);
 
-    const { password, accessPolicy, role, managerId, kpiTargetJson, ...userData } =
-      createUserDto;
+    const { accessPolicy, role, managerId, kpiTargetJson } = createUserDto;
+    const userData = { ...createUserDto } as Partial<CreateUserDto>;
+    delete userData.password;
+    delete userData.accessPolicy;
+    delete userData.role;
+    delete userData.managerId;
+    delete userData.kpiTargetJson;
 
     const createData: Prisma.UserUncheckedCreateInput = {
       ...(userData as Omit<
@@ -147,7 +152,12 @@ export class UsersService {
     const { password, accessPolicy, role, ...updateData } = updateUserDto;
     const currentUser = await this.prisma.user.findUnique({
       where: { id },
-      select: { id: true, role: true, accessPolicy: true, isSystemMaster: true },
+      select: {
+        id: true,
+        role: true,
+        accessPolicy: true,
+        isSystemMaster: true,
+      },
     });
     if (!currentUser) {
       throw new BadRequestException('Usuario nao encontrado.');
@@ -438,7 +448,8 @@ export class UsersService {
     const current = await this.prisma.userManufacturerSpecialty.findFirst({
       where: { id: specialtyId, userId },
     });
-    if (!current) throw new BadRequestException('Especialidade nao encontrada.');
+    if (!current)
+      throw new BadRequestException('Especialidade nao encontrada.');
 
     const updated = await this.prisma.userManufacturerSpecialty.update({
       where: { id: specialtyId },
@@ -471,7 +482,8 @@ export class UsersService {
     const current = await this.prisma.userManufacturerSpecialty.findFirst({
       where: { id: specialtyId, userId },
     });
-    if (!current) throw new BadRequestException('Especialidade nao encontrada.');
+    if (!current)
+      throw new BadRequestException('Especialidade nao encontrada.');
     const removed = await this.prisma.userManufacturerSpecialty.delete({
       where: { id: specialtyId },
     });
@@ -588,7 +600,9 @@ export class UsersService {
   private async validateManager(managerId?: string, userId?: string) {
     if (!managerId) return;
     if (userId && managerId === userId) {
-      throw new BadRequestException('O usuario nao pode ser gestor de si mesmo.');
+      throw new BadRequestException(
+        'O usuario nao pode ser gestor de si mesmo.',
+      );
     }
     const manager = await this.prisma.user.findUnique({
       where: { id: managerId },
@@ -607,7 +621,9 @@ export class UsersService {
     if (!user) throw new BadRequestException('Usuario nao encontrado.');
   }
 
-  private async attachManagers<T extends { managerId: string | null }>(rows: T[]) {
+  private async attachManagers<T extends { managerId: string | null }>(
+    rows: T[],
+  ) {
     const managerIds = Array.from(
       new Set(rows.map((row) => row.managerId).filter(Boolean) as string[]),
     );

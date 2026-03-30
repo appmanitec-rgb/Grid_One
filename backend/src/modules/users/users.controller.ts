@@ -141,7 +141,12 @@ export class UsersController {
     @Body() dto: UpdateUserCertificationDto,
   ) {
     const actorUserId = this.extractUserId(req);
-    return this.usersService.updateCertification(userId, certId, dto, actorUserId);
+    return this.usersService.updateCertification(
+      userId,
+      certId,
+      dto,
+      actorUserId,
+    );
   }
 
   @RequireAccessPolicy('users.manageCertifications')
@@ -205,4 +210,3 @@ export class UsersController {
     return authUser?.sub as string;
   }
 }
-
