@@ -1,0 +1,170 @@
+﻿@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap");
+@import "tailwindcss";
+
+:root {
+  --background: #e6edf5;
+  --foreground: #0f1f32;
+  --surface: #ffffff;
+  --surface-soft: #f3f7fb;
+  --surface-muted: #f7fbff;
+  --surface-strong: #eaf1f8;
+  --border: #c9d5e2;
+  --border-strong: #afc3d7;
+  --brand: #1368b4;
+  --brand-strong: #0e4e88;
+  --accent: #d9252f;
+  --sidebar: #0f2237;
+  --sidebar-2: #15304d;
+  --text-muted: #607186;
+  --app-body-background:
+    radial-gradient(circle at 10% -8%, rgba(19, 104, 180, 0.16), transparent 42%),
+    radial-gradient(circle at 88% 4%, rgba(217, 37, 47, 0.08), transparent 30%),
+    linear-gradient(160deg, #eef4fa 0%, #e5edf6 46%, #eaf1f9 100%);
+  --app-shell-background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.22)),
+    radial-gradient(circle at 7% 0%, rgba(19, 104, 180, 0.1), transparent 34%),
+    radial-gradient(circle at 92% 12%, rgba(217, 37, 47, 0.05), transparent 26%);
+}
+
+:root[data-manitec-theme="linen"] {
+  --background: #ece3d8;
+  --app-body-background:
+    radial-gradient(circle at 10% -8%, rgba(179, 126, 66, 0.15), transparent 42%),
+    radial-gradient(circle at 90% 6%, rgba(118, 87, 54, 0.08), transparent 28%),
+    linear-gradient(160deg, #f6f0e6 0%, #ece2d4 46%, #f2eadf 100%);
+  --app-shell-background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.46), rgba(255, 255, 255, 0.2)),
+    radial-gradient(circle at 7% 0%, rgba(182, 130, 70, 0.11), transparent 34%),
+    radial-gradient(circle at 90% 12%, rgba(120, 85, 55, 0.06), transparent 24%);
+}
+
+:root[data-manitec-theme="sage"] {
+  --background: #dde8e1;
+  --app-body-background:
+    radial-gradient(circle at 8% -8%, rgba(73, 127, 98, 0.14), transparent 42%),
+    radial-gradient(circle at 90% 4%, rgba(116, 129, 103, 0.08), transparent 28%),
+    linear-gradient(160deg, #edf4ef 0%, #dfeae2 44%, #e8f0ea 100%);
+  --app-shell-background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.48), rgba(255, 255, 255, 0.2)),
+    radial-gradient(circle at 7% 0%, rgba(89, 133, 107, 0.1), transparent 34%),
+    radial-gradient(circle at 92% 12%, rgba(138, 145, 120, 0.05), transparent 24%);
+}
+
+:root[data-manitec-theme="slate"] {
+  --background: #dbe4ee;
+  --app-body-background:
+    radial-gradient(circle at 10% -8%, rgba(71, 108, 145, 0.16), transparent 42%),
+    radial-gradient(circle at 88% 4%, rgba(109, 125, 146, 0.08), transparent 28%),
+    linear-gradient(160deg, #e9eff5 0%, #dce5ef 46%, #e5ecf4 100%);
+  --app-shell-background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.46), rgba(255, 255, 255, 0.18)),
+    radial-gradient(circle at 7% 0%, rgba(80, 113, 145, 0.12), transparent 34%),
+    radial-gradient(circle at 92% 12%, rgba(121, 136, 155, 0.06), transparent 26%);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: "Manrope", "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "Consolas", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--foreground);
+  font-family: "Manrope", "Segoe UI", sans-serif;
+  background: var(--app-body-background);
+  transition: background 220ms ease;
+}
+
+::selection {
+  background: rgba(19, 104, 180, 0.18);
+  color: #07111d;
+}
+
+h1,
+h2,
+h3 {
+  font-family: "Space Grotesk", "Manrope", sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.modern-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.9));
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 10px 30px -20px rgba(9, 31, 40, 0.45);
+  backdrop-filter: blur(8px);
+}
+
+.slide-fade-in {
+  animation: slideFadeIn 360ms ease-out both;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.dashboard-shell {
+  color: #0f1f32;
+  background: var(--app-shell-background);
+  transition: background 220ms ease;
+}
+
+.dashboard-shell input,
+.dashboard-shell select,
+.dashboard-shell textarea {
+  color: #0f172a;
+  border-color: #c2cfdd;
+  background-color: #ffffff;
+}
+
+.dashboard-shell input::placeholder,
+.dashboard-shell textarea::placeholder {
+  color: #6b7b8f;
+}
+
+.dashboard-shell input:focus,
+.dashboard-shell select:focus,
+.dashboard-shell textarea:focus {
+  outline: none;
+  border-color: #0f5ea6;
+  box-shadow: 0 0 0 3px rgba(19, 104, 180, 0.2);
+}
+
+.dashboard-container {
+  margin-inline: auto;
+  width: min(100%, 1600px);
+}
+
+.glass-surface {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.88));
+  border: 1px solid rgba(201, 213, 226, 0.86);
+  box-shadow: 0 18px 44px -34px rgba(15, 31, 50, 0.45);
+  backdrop-filter: blur(12px);
+}
+
+@keyframes slideFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

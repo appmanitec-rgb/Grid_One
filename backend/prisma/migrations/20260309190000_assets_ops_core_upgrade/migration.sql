@@ -1,0 +1,3 @@
+-- No-op migration.
+-- The objects from this migration were folded into
+-- 20260309155103_finance_hr_core to keep local schemas consistent.

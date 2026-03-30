@@ -1,0 +1,1715 @@
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "binary"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  NORMAL
+  TECHNICIAN
+  SALES
+  ENGINEER_APPLICATION
+  LOGISTICS
+  CLIENT
+}
+
+enum UserAvailabilityStatus {
+  AVAILABLE
+  ON_SERVICE
+  IN_TRANSIT
+  OFF_DUTY
+  VACATION
+}
+
+enum SkillLevel {
+  TRAINEE
+  JUNIOR
+  PLENO
+  SENIOR
+  MASTER
+}
+
+enum ApprovalType {
+  BUDGET_DISCOUNT
+  RVT_SIGNOFF
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AuditDomain {
+  USERS
+  MAINTENANCE_ORDERS
+  PROPOSALS
+}
+
+enum UserCertificationScope {
+  SAFETY
+  TECHNICAL
+}
+
+enum OrderStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELED
+}
+
+enum ItemType {
+  PART
+  SERVICE
+}
+
+enum ProposalType {
+  PARTS
+  SERVICES
+  PARTS_AND_SERVICES
+  CONTRACT
+}
+
+enum ProposalStatus {
+  DRAFT
+  BOARD_REVIEW
+  REVISION_REQUIRED
+  CLIENT_REVIEW
+  DISCOUNT_REVIEW
+  WON
+  LOST
+  SENT
+  APPROVED
+  REJECTED
+}
+
+enum SalesOpportunityStage {
+  PROSPECTION
+  SITE_SURVEY_SCHEDULED
+  PROPOSAL_SENT
+  NEGOTIATION
+  WON
+  LOST
+}
+
+enum OpportunityTemperature {
+  HOT
+  WARM
+  COLD
+}
+
+enum OpportunityLossReason {
+  PRICE
+  DEADLINE
+  COMPETITOR
+  PROJECT_CANCELED
+  TECHNICAL_SCOPE
+  OTHER
+}
+
+enum CommercialInspectionStatus {
+  DRAFT
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELED
+}
+
+enum ClientType {
+  CONTRACT
+  NO_CONTRACT
+}
+
+enum ClientPersonType {
+  INDIVIDUAL
+  LEGAL_ENTITY
+}
+
+enum ClientContactStatus {
+  ACTIVE
+  INACTIVE
+  LEFT_COMPANY
+}
+
+enum ClientAddressType {
+  BILLING
+  INSTALLATION
+  OTHER
+}
+
+enum ServiceGroup {
+  TOF
+  TM
+  TB
+  TMA
+  OUTROS
+}
+
+enum ProductOrigin {
+  NACIONAL
+  ESTRANGEIRA_IMPORTACAO_DIRETA
+  ESTRANGEIRA_MERCADO_INTERNO
+}
+
+enum GeneratorOperationalStatus {
+  OPERATING
+  STOPPED_BY_FAILURE
+  IN_MAINTENANCE
+  DEACTIVATED
+}
+
+enum GeneratorLifecycleStatus {
+  AVAILABLE
+  LEASED
+  IN_MAINTENANCE
+  SCRAP
+}
+
+enum GeneratorCriticality {
+  A
+  B
+  C
+}
+
+enum ContractStatus {
+  ACTIVE
+  SUSPENDED
+  CANCELED
+  RENEWAL
+}
+
+enum PreventiveRecurrence {
+  MONTHLY
+  BIMONTHLY
+  QUARTERLY
+  SEMIANNUAL
+  ANNUAL
+}
+
+enum PartsCoverageType {
+  INCLUDED
+  BILLED_SEPARATELY
+}
+
+enum BillingAdjustmentIndex {
+  IPCA
+  IGPM
+  NONE
+}
+
+enum ContractInvoiceStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELED
+}
+
+enum MaintenanceOrderType {
+  PREVENTIVE
+  CORRECTIVE
+  INSTALLATION
+  DEMOBILIZATION
+  REFUELING
+}
+
+enum TelemetryAlarmType {
+  NONE
+  LOW_FUEL
+  BATTERY_LOW
+  HIGH_COOLANT_TEMPERATURE
+  LOW_OIL_PRESSURE
+  START_FAILURE
+  GRID_FAILURE
+}
+
+enum WarehouseType {
+  MAIN
+  MOBILE
+}
+
+enum InventoryMovementType {
+  IN
+  OUT
+  TRANSFER_IN
+  TRANSFER_OUT
+  RESERVATION
+  RELEASE
+  ADJUSTMENT
+  PURCHASE_RECEIPT
+  OS_CONSUMPTION
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SENT
+  APPROVED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELED
+}
+
+enum AccountsPayableStatus {
+  OPEN
+  PAID
+  OVERDUE
+  CANCELED
+}
+
+enum AccountsReceivableStatus {
+  OPEN
+  PARTIAL
+  OVERDUE
+  PAID
+  CANCELED
+}
+
+enum PaymentMethod {
+  PIX
+  BOLETO
+  TRANSFER
+  CASH
+  CARD
+  OTHER
+}
+
+enum BankAccountType {
+  CHECKING
+  SAVINGS
+  CASHBOX
+}
+
+enum PayableCategory {
+  TAXES
+  PAYROLL
+  SUPPLIERS
+  FLEET
+  UTILITIES
+  RENT
+  OTHER
+}
+
+enum CostCenterType {
+  CLIENT
+  CONTRACT
+  GENERATOR
+  INTERNAL
+}
+
+enum CostCenterEntryType {
+  REVENUE
+  COST
+  EXPENSE
+}
+
+enum TimeEntryStatus {
+  TRANSIT
+  WORK
+  PAUSE
+}
+
+enum CommissionStatus {
+  PENDING
+  RELEASED
+  PAID
+  CANCELED
+}
+
+enum HrAssetType {
+  EPI
+  TOOL
+}
+
+enum HrAssetStatus {
+  ACTIVE
+  RETURNED
+  LOST
+  EXPIRED
+}
+
+enum FleetVehicleStatus {
+  AVAILABLE
+  IN_USE
+  MAINTENANCE
+  BLOCKED
+}
+
+enum AutomationRunMode {
+  FULL
+  LIGHT
+}
+
+enum AutomationRunStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+  SKIPPED
+}
+
+model User {
+  id                    String   @id @default(uuid())
+  name                  String
+  email                 String   @unique
+  passwordHash          String
+  role                  UserRole @default(TECHNICIAN)
+  isActive              Boolean  @default(true)
+  isSystemMaster        Boolean  @default(false)
+  accessPolicy          Json?
+  functionalId          String?
+  documentId            String?
+  profilePhotoUrl       String?
+  managerId             String?
+  availabilityStatus    UserAvailabilityStatus @default(AVAILABLE)
+  availabilityUpdatedAt DateTime?
+  skillLevel            SkillLevel             @default(JUNIOR)
+  regionTags            String[]
+  digitalSignatureUrl   String?
+  salesTargetMonthly    Float?
+  kpiTargetJson         Json?
+  mfaEnabled            Boolean                @default(false)
+  mfaSecretEncrypted    String?
+  mfaRecoveryCodesHash  Json?
+  department            String?
+  branch                String?
+  approvalDiscountLimit Float?
+  hourCost              Float?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  technicianProfile      Technician?
+  manager                User?                        @relation("UserManagementHierarchy", fields: [managerId], references: [id], onDelete: SetNull)
+  managedUsers           User[]                       @relation("UserManagementHierarchy")
+  proposals              Proposal[]
+  proposalMovements      ProposalMovement[]
+  presences              UserPresence[]
+  certifications         UserCertification[]
+  manufacturerSpecialties UserManufacturerSpecialty[]
+  requestedApprovals     ApprovalRequest[]            @relation("ApprovalRequester")
+  approvalQueue          ApprovalRequest[]            @relation("ApprovalApprover")
+  systemAuditLogs        SystemAuditLog[]             @relation("SystemAuditActor")
+  clientAuditLogs        ClientAuditLog[]
+  createdGenerators      Generator[]                 @relation("GeneratorCreatedBy")
+  managedClients         Client[]                    @relation("ClientSalesOwner")
+  createdContracts       ServiceContract[]           @relation("ContractCreatedBy")
+  assignedOpportunities  SalesOpportunity[]          @relation("OpportunityAssignedSeller")
+  commercialInspections  CommercialInspection[]      @relation("InspectionInspector")
+  companySettingsUpdated CompanySettings[]           @relation("CompanySettingsUpdatedBy")
+  financialAuditLogs     FinancialAuditLog[]         @relation("FinancialAuditActor")
+  receivablePayments     AccountsReceivablePayment[] @relation("ReceivablePaymentActor")
+  payablePayments        AccountsPayablePayment[]    @relation("PayablePaymentActor")
+  timeEntries            TimeEntry[]
+  commissions            CommissionEntry[]
+  hrAssetAssignments     HrAssetAssignment[]
+  fleetAllocations       FleetAllocation[]
+  authSessions           AuthSession[]
+  requestedAutomationRuns AutomationRun[]           @relation("AutomationRunRequestedBy")
+
+  @@map("users")
+}
+
+model AuthSession {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId         String
+  deviceName       String?
+  refreshTokenHash String   @unique
+  expiresAt        DateTime
+  lastUsedAt       DateTime?
+  revokedAt        DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([userId, deviceId])
+  @@index([expiresAt, revokedAt])
+  @@map("auth_sessions")
+}
+
+model AutomationRun {
+  id                String             @id @default(uuid())
+  mode              AutomationRunMode
+  trigger           String
+  status            AutomationRunStatus @default(RUNNING)
+  requestedByUserId String?
+  requestedByUser   User?              @relation("AutomationRunRequestedBy", fields: [requestedByUserId], references: [id], onDelete: SetNull)
+  startedAt         DateTime           @default(now())
+  finishedAt        DateTime?
+  durationMs        Int?
+  summary           Json?
+  errorMessage      String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([status, startedAt])
+  @@index([mode, startedAt])
+  @@index([requestedByUserId])
+  @@map("automation_runs")
+}
+
+model UserPresence {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  latitude       Float
+  longitude      Float
+  accuracyMeters Float?
+  speedKmh       Float?
+  heading        Float?
+  batteryLevel   Int?
+  source         String?  @default("MOBILE")
+  recordedAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  @@index([userId, recordedAt])
+  @@index([recordedAt])
+  @@map("user_presences")
+}
+
+model UserCertification {
+  id        String                 @id @default(uuid())
+  userId    String
+  user      User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code      String
+  scope     UserCertificationScope @default(SAFETY)
+  issuer    String?
+  validUntil DateTime
+  metadata  Json?
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+
+  @@index([userId, code, validUntil])
+  @@map("user_certifications")
+}
+
+model UserManufacturerSpecialty {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  manufacturer String
+  level       SkillLevel @default(JUNIOR)
+  validUntil  DateTime?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId, manufacturer])
+  @@map("user_manufacturer_specialties")
+}
+
+model ApprovalRequest {
+  id              String         @id @default(uuid())
+  type            ApprovalType
+  status          ApprovalStatus @default(PENDING)
+  entityType      String
+  entityId        String
+  requesterUserId String
+  requesterUser   User           @relation("ApprovalRequester", fields: [requesterUserId], references: [id], onDelete: Cascade)
+  approverUserId  String
+  approverUser    User           @relation("ApprovalApprover", fields: [approverUserId], references: [id], onDelete: Cascade)
+  requestNote     String?
+  decisionNote    String?
+  decidedAt       DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([status, approverUserId, createdAt])
+  @@index([entityType, entityId])
+  @@map("approval_requests")
+}
+
+model SystemAuditLog {
+  id           String      @id @default(uuid())
+  domain       AuditDomain
+  entityType   String
+  entityId     String
+  action       String
+  actorUserId  String?
+  actorUser    User?       @relation("SystemAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  beforePayload Json?
+  afterPayload Json?
+  reason       String?
+  createdAt    DateTime    @default(now())
+
+  @@index([domain, entityType, entityId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("system_audit_logs")
+}
+
+model CompanySettings {
+  id              String   @id @default(uuid())
+  key             String   @unique @default("default")
+  companyName     String?
+  tradeName       String?
+  cnpj            String?
+  stateRegistration String?
+  municipalRegistration String?
+  taxRegime       String?
+  contactName     String?
+  contactRole     String?
+  phone           String?
+  whatsapp        String?
+  email           String?
+  billingEmail    String?
+  website         String?
+  address         String?
+  addressNumber   String?
+  addressComplement String?
+  district        String?
+  city            String?
+  state           String?
+  zipCode         String?
+  country         String?
+  logoUrl         String?
+  primaryColor    String?
+  secondaryColor  String?
+  notes           String?
+  isPrimary       Boolean  @default(false)
+  updatedByUserId String?
+  updatedByUser   User?    @relation("CompanySettingsUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([cnpj])
+  @@index([isPrimary])
+  @@map("company_settings")
+}
+
+model Technician {
+  id     String   @id @default(uuid())
+  cpf    String   @unique
+  phone  String
+  skills String[]
+
+  latitude  Float?
+  longitude Float?
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
+
+  orders         MaintenanceOrder[]
+  certifications TechnicianCertification[]
+
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  warehouses Warehouse[]
+
+  @@map("technicians")
+}
+
+model Client {
+  id                    String           @id @default(uuid())
+  companyName           String
+  tradeName             String?
+  cnpj                  String           @unique
+  email                 String?
+  contactName           String?
+  phone                 String
+  address               String?
+  city                  String
+  state                 String
+  stateRegistration     String?
+  municipalRegistration String?
+  cnae                  String?
+  preferences           String?
+  segment               String?
+  clientType            ClientType       @default(NO_CONTRACT)
+  personType            ClientPersonType @default(LEGAL_ENTITY)
+  paymentTermDefault    String?
+  creditLimit           Float?
+  priceTableCode        String?
+  isDelinquent          Boolean          @default(false)
+  withholdsInss         Boolean          @default(false)
+  withholdsIss          Boolean          @default(false)
+  salesOwnerId          String?
+
+  salesOwner User? @relation("ClientSalesOwner", fields: [salesOwnerId], references: [id], onDelete: SetNull)
+
+  addresses             ClientAddress[]
+  contacts              ClientContact[]
+  auditLogs             ClientAuditLog[]
+  proposals             Proposal[]
+  opportunities         SalesOpportunity[]
+  commercialInspections CommercialInspection[]
+  sites                 Site[]
+  generators            Generator[]
+  contracts             ServiceContract[]
+  accountsReceivable    AccountsReceivable[]
+  costCenters           CostCenter[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("clients")
+}
+
+model ClientAddress {
+  id         String            @id @default(uuid())
+  type       ClientAddressType
+  street     String
+  number     String?
+  complement String?
+  district   String?
+  zipCode    String?
+  city       String
+  state      String
+  country    String?           @default("BR")
+
+  clientId              String
+  client                Client                 @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  opportunities         SalesOpportunity[]
+  commercialInspections CommercialInspection[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("client_addresses")
+}
+
+model ClientContact {
+  id     String              @id @default(uuid())
+  name   String
+  status ClientContactStatus @default(ACTIVE)
+  role   String?
+  phone  String?
+  mobile String?
+  email  String?
+
+  clientId              String
+  client                Client                 @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  opportunities         SalesOpportunity[]
+  commercialInspections CommercialInspection[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("client_contacts")
+}
+
+model GeneratorModel {
+  id    String  @id @default(uuid())
+  name  String  @unique
+  brand String?
+
+  suggestedItems         CatalogItem[]     @relation("ModelSuggestedItems")
+  baseItems              ModelBaseItem[]
+  category               String?
+  defaultPowerKva        Float?
+  defaultPowerKw         Float?
+  defaultVoltage         String?
+  controllerType         String?
+  engineModel            String?
+  alternatorModel        String?
+  defaultFuelConsumption String?
+  defaultTankCapacity    String?
+  maintenancePlan        Json?
+  manuals                GeneratorManual[]
+
+  generators Generator[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("modelos")
+}
+
+model Generator {
+  id                     String                     @id @default(uuid())
+  name                   String
+  brand                  String
+  serialNumber           String?                    @unique
+  power                  Float
+  hourMeter              Int?
+  condition              String?                    @default("BOM")
+  assetTag               String?
+  qrCode                 String?
+  installationSite       String?
+  operationalStatus      GeneratorOperationalStatus @default(OPERATING)
+  lifecycleStatus        GeneratorLifecycleStatus   @default(AVAILABLE)
+  criticality            GeneratorCriticality       @default(B)
+  manufactureYear        Int?
+  installationDate       DateTime?
+  warrantyEndDate        DateTime?
+  hasMaintenanceContract Boolean                    @default(false)
+  createdByUserId        String?
+
+  modelId       String?
+  model         GeneratorModel? @relation(fields: [modelId], references: [id])
+  currentSiteId String?
+  currentSite   Site?           @relation(fields: [currentSiteId], references: [id], onDelete: SetNull)
+  createdByUser User?           @relation("GeneratorCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  proposals         Proposal[]
+  clientId          String
+  client            Client                       @relation(fields: [clientId], references: [id])
+  orders            MaintenanceOrder[]
+  telemetryEvents   TelemetryEvent[]
+  baseItems         GeneratorBaseItem[]
+  contractLinks     ContractEquipment[]
+  contractSchedules ContractPreventiveSchedule[]
+  costCenter        CostCenter?                  @relation("GeneratorCostCenter")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("generators")
+}
+
+model ClientAuditLog {
+  id          String   @id @default(uuid())
+  action      String
+  details     String?
+  payload     Json?
+  clientId    String
+  actorUserId String?
+  createdAt   DateTime @default(now())
+
+  client    Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  actorUser User?  @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@map("client_audit_logs")
+}
+
+model CatalogItem {
+  id                     String         @id @default(uuid())
+  sku                    String?        @unique
+  name                   String
+  description            String?
+  commercialDescription  String?
+  category               String?
+  subcategory            String?
+  type                   ItemType
+  unit                   String?        @default("UN")
+  manufacturerPartNumber String?
+  brand                  String?
+  supplier               String?
+  technicalSpecs         Json?
+  applicationNotes       String?
+  ncm                    String?
+  cest                   String?
+  origin                 ProductOrigin?
+  costPrice              Float?         @default(0)
+  averageCost            Float?         @default(0)
+  lastCost               Float?         @default(0)
+  taxPercentage          Float?         @default(0)
+  profitMargin           Float?         @default(0)
+  basePrice              Float
+  stockCurrent           Float?         @default(0)
+  stockMin               Float?         @default(0)
+  stockMax               Float?         @default(0)
+  storageLocation        String?
+  grossWeight            Float?
+  netWeight              Float?
+  taxProfile             Json?
+  isActive               Boolean        @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  generatorModels           GeneratorModel[]           @relation("ModelSuggestedItems")
+  modelBaseItems            ModelBaseItem[]
+  generatorBaseItems        GeneratorBaseItem[]
+  maintenanceOrderMaterials MaintenanceOrderMaterial[]
+  proposalItems             ProposalItem[]
+  supplierItems             SupplierCatalogItem[]
+  inventoryBalances         InventoryBalance[]
+  inventoryMovements        InventoryMovement[]
+  purchaseOrderItems        PurchaseOrderItem[]
+  hrAssetAssignments        HrAssetAssignment[]
+
+  @@map("catalog_items")
+}
+
+model Supplier {
+  id                    String   @id @default(uuid())
+  companyName           String
+  tradeName             String?
+  cnpj                  String?  @unique
+  email                 String?
+  phone                 String?
+  address               String?
+  city                  String?
+  state                 String?
+  stateRegistration     String?
+  municipalRegistration String?
+  categories            String[]
+  representedBrands     String[]
+  paymentTerm           String?
+  qualityScore          Int?
+  punctualityScore      Int?
+  notes                 String?
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  items          SupplierCatalogItem[]
+  purchaseOrders PurchaseOrder[]
+  payableEntries AccountsPayable[]
+
+  @@map("suppliers")
+}
+
+model SupplierCatalogItem {
+  id            String   @id @default(uuid())
+  supplierId    String
+  catalogItemId String
+  supplierSku   String?
+  supplierPrice Float?
+  leadTimeDays  Int?
+  isPrimary     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  supplier    Supplier    @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  catalogItem CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, catalogItemId])
+  @@map("supplier_catalog_items")
+}
+
+model ModelBaseItem {
+  id              String       @id @default(uuid())
+  serviceGroup    ServiceGroup @default(OUTROS)
+  defaultQuantity Int          @default(1)
+
+  modelId String
+  model   GeneratorModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+
+  catalogItemId String
+  catalogItem   CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([modelId, catalogItemId, serviceGroup])
+  @@map("model_base_items")
+}
+
+model GeneratorBaseItem {
+  id           String       @id @default(uuid())
+  serviceGroup ServiceGroup @default(OUTROS)
+  quantity     Int          @default(1)
+
+  generatorId String
+  generator   Generator @relation(fields: [generatorId], references: [id], onDelete: Cascade)
+
+  catalogItemId String
+  catalogItem   CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+
+  sourceModelBaseItemId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([generatorId, catalogItemId, serviceGroup])
+  @@map("generator_base_items")
+}
+
+model Proposal {
+  id                       String         @id @default(uuid())
+  code                     String         @unique
+  status                   ProposalStatus @default(DRAFT)
+  type                     ProposalType
+  totalValue               Float          @default(0)
+  validUntil               DateTime?
+  baseSequence             Int?
+  revision                 Int?           @default(0)
+  requestedDiscountPercent Float?
+  requestedDiscountReason  String?
+
+  scope                   String?
+  freight                 String?    @default("FOB")
+  paymentTerm             String?
+  deliveryLeadTimeDays    Int?
+  paymentDetails          String?
+  hasDownPayment          Boolean    @default(false)
+  downPaymentAmount       Float?
+  installmentCount        Int?
+  installmentIntervalDays Int?       @default(30)
+  firstDueDate            DateTime?
+  internalNotes           String?
+  externalNotes           String?
+  discount                Float?     @default(0)
+  parentProposalId        String?
+  parentProposal          Proposal?  @relation("ProposalRevisionChain", fields: [parentProposalId], references: [id])
+  revisions               Proposal[] @relation("ProposalRevisionChain")
+
+  clientId           String
+  client             Client            @relation(fields: [clientId], references: [id])
+  salesOpportunityId String?
+  salesOpportunity   SalesOpportunity? @relation(fields: [salesOpportunityId], references: [id], onDelete: SetNull)
+
+  generatorId String?
+  generator   Generator? @relation(fields: [generatorId], references: [id])
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  items             ProposalItem[]
+  movements         ProposalMovement[]
+  generatedContract ServiceContract?   @relation("SourceProposalContract")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("proposals")
+}
+
+model SalesOpportunity {
+  id                String                 @id @default(uuid())
+  title             String
+  stage             SalesOpportunityStage  @default(PROSPECTION)
+  temperature       OpportunityTemperature @default(WARM)
+  estimatedValue    Float                  @default(0)
+  expectedCloseDate DateTime?
+  source            String?
+  notes             String?
+  lossReason        OpportunityLossReason?
+  lossReasonDetail  String?
+  wonAt             DateTime?
+  lostAt            DateTime?
+
+  clientId         String
+  client           Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  siteId           String?
+  site             Site?          @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  clientAddressId  String?
+  clientAddress    ClientAddress? @relation(fields: [clientAddressId], references: [id], onDelete: SetNull)
+  primaryContactId String?
+  primaryContact   ClientContact? @relation(fields: [primaryContactId], references: [id], onDelete: SetNull)
+  assignedSellerId String?
+  assignedSeller   User?          @relation("OpportunityAssignedSeller", fields: [assignedSellerId], references: [id], onDelete: SetNull)
+
+  proposals   Proposal[]
+  inspections CommercialInspection[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([stage])
+  @@index([assignedSellerId])
+  @@index([clientId, stage])
+  @@map("sales_opportunities")
+}
+
+model CommercialInspection {
+  id                String                     @id @default(uuid())
+  code              String                     @unique
+  status            CommercialInspectionStatus @default(DRAFT)
+  scheduledAt       DateTime?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  requiredPowerKva  Float?
+  voltage           String?
+  qtaDistanceMeters Float?
+  needsMunck        Boolean                    @default(false)
+  accessNotes       String?
+  checklistData     Json?
+  technicalNotes    String?
+
+  opportunityId    String
+  opportunity      SalesOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  clientId         String
+  client           Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  siteId           String?
+  site             Site?            @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  clientAddressId  String?
+  clientAddress    ClientAddress?   @relation(fields: [clientAddressId], references: [id], onDelete: SetNull)
+  primaryContactId String?
+  primaryContact   ClientContact?   @relation(fields: [primaryContactId], references: [id], onDelete: SetNull)
+  inspectorUserId  String?
+  inspectorUser    User?            @relation("InspectionInspector", fields: [inspectorUserId], references: [id], onDelete: SetNull)
+
+  media CommercialInspectionMedia[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([clientId, status])
+  @@map("commercial_inspections")
+}
+
+model CommercialInspectionMedia {
+  id            String               @id @default(uuid())
+  inspectionId  String
+  inspection    CommercialInspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  fileName      String?
+  fileUrl       String
+  mimeType      String?
+  fileSizeBytes Int?
+  capturedAt    DateTime?
+  createdAt     DateTime             @default(now())
+
+  @@map("commercial_inspection_media")
+}
+
+model ProposalMovement {
+  id         String          @id @default(uuid())
+  action     String
+  note       String?
+  fromStatus ProposalStatus?
+  toStatus   ProposalStatus
+
+  proposalId String
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  actorUserId String?
+  actorUser   User?   @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@map("proposal_movements")
+}
+
+model ProposalItem {
+  id         String @id @default(uuid())
+  quantity   Int    @default(1)
+  unitPrice  Float
+  totalPrice Float
+
+  proposalId String
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  catalogItemId String
+  catalogItem   CatalogItem @relation(fields: [catalogItemId], references: [id])
+
+  @@map("proposal_items")
+}
+
+model MaintenanceOrder {
+  id                    String               @id @default(uuid())
+  title                 String
+  description           String?
+  auvoId                String?
+  auvoLink              String?
+  status                OrderStatus          @default(OPEN)
+  type                  MaintenanceOrderType @default(CORRECTIVE)
+  priority              String               @default("NORMAL")
+  customerReport        String?
+  checklistData         Json?
+  customerSignatureUrl  String?
+  displacementStartedAt DateTime?
+  startedAt             DateTime?
+  pausedAt              DateTime?
+  finishedAt            DateTime?
+  laborHours            Float?
+  hourMeterAfter        Int?
+
+  openedAt DateTime  @default(now())
+  closedAt DateTime?
+
+  generatorId         String
+  generator           Generator                   @relation(fields: [generatorId], references: [id])
+  siteId              String?
+  site                Site?                       @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  costCenterId        String?
+  costCenter          CostCenter?                 @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  contractId          String?
+  contract            ServiceContract?            @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  contractScheduleId  String?
+  contractSchedule    ContractPreventiveSchedule? @relation("ContractScheduleOrderLink", fields: [contractScheduleId], references: [id], onDelete: SetNull)
+  generatedBySchedule ContractPreventiveSchedule? @relation("GeneratedOrderLink")
+  scheduledTo         DateTime?
+
+  technicianId      String?
+  technician        Technician?                @relation(fields: [technicianId], references: [id])
+  materials         MaintenanceOrderMaterial[]
+  receivableEntries AccountsReceivable[]
+  timeEntries       TimeEntry[]
+  commissions       CommissionEntry[]
+  fleetAllocations  FleetAllocation[]
+
+  updatedAt DateTime @updatedAt
+
+  @@map("maintenance_orders")
+}
+
+model ServiceContract {
+  id                       String                 @id @default(uuid())
+  code                     String                 @unique
+  title                    String?
+  status                   ContractStatus         @default(ACTIVE)
+  startDate                DateTime
+  endDate                  DateTime
+  alertDays                Int                    @default(30)
+  preventiveRecurrence     PreventiveRecurrence
+  responseTimeHours        Int?
+  correctiveVisitAllowance Int?
+  partsCoverage            PartsCoverageType      @default(BILLED_SEPARATELY)
+  recurringAmount          Float                  @default(0)
+  dueDay                   Int                    @default(10)
+  adjustmentIndex          BillingAdjustmentIndex @default(IPCA)
+  adjustmentBaseMonth      Int?
+  includesFuelManagement   Boolean                @default(false)
+  notes                    String?
+
+  clientId         String
+  client           Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdByUserId  String?
+  createdByUser    User?       @relation("ContractCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  sourceProposalId String?     @unique
+  sourceProposal   Proposal?   @relation("SourceProposalContract", fields: [sourceProposalId], references: [id], onDelete: SetNull)
+  costCenterId     String?     @unique
+  costCenter       CostCenter? @relation("ContractCostCenter", fields: [costCenterId], references: [id], onDelete: SetNull)
+
+  equipments        ContractEquipment[]
+  invoices          ContractInvoice[]
+  schedules         ContractPreventiveSchedule[]
+  maintenanceOrders MaintenanceOrder[]
+  receivableEntries AccountsReceivable[]
+  commissions       CommissionEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("service_contracts")
+}
+
+model ContractEquipment {
+  id             String          @id @default(uuid())
+  contractId     String
+  contract       ServiceContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  generatorId    String
+  generator      Generator       @relation(fields: [generatorId], references: [id], onDelete: Cascade)
+  coverageAmount Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([contractId, generatorId])
+  @@map("contract_equipments")
+}
+
+model ContractInvoice {
+  id             String                @id @default(uuid())
+  contractId     String
+  contract       ServiceContract       @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  competenceDate DateTime
+  dueDate        DateTime
+  amount         Float
+  variableAmount Float?                @default(0)
+  status         ContractInvoiceStatus @default(PENDING)
+  description    String?
+  paidAt         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([contractId, competenceDate])
+  @@map("contract_invoices")
+}
+
+model ContractPreventiveSchedule {
+  id               String             @id @default(uuid())
+  contractId       String
+  contract         ServiceContract    @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  generatorId      String
+  generator        Generator          @relation(fields: [generatorId], references: [id], onDelete: Cascade)
+  scheduledDate    DateTime
+  status           String             @default("PLANNED")
+  generatedOrderId String?            @unique
+  generatedOrder   MaintenanceOrder?  @relation("GeneratedOrderLink", fields: [generatedOrderId], references: [id], onDelete: SetNull)
+  plannedOrders    MaintenanceOrder[] @relation("ContractScheduleOrderLink")
+  notes            String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([contractId, generatorId, scheduledDate])
+  @@map("contract_preventive_schedules")
+}
+
+model Site {
+  id                 String  @id @default(uuid())
+  name               String
+  code               String?
+  latitude           Float?
+  longitude          Float?
+  accessRestrictions String?
+  baseContactName    String?
+  baseContactPhone   String?
+  notes              String?
+
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  generators        Generator[]
+  opportunities     SalesOpportunity[]
+  inspections       CommercialInspection[]
+  maintenanceOrders MaintenanceOrder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clientId, name])
+  @@map("sites")
+}
+
+model GeneratorManual {
+  id        String         @id @default(uuid())
+  modelId   String
+  model     GeneratorModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  title     String
+  fileUrl   String
+  fileType  String?
+  version   String?
+  isOffline Boolean        @default(true)
+  createdAt DateTime       @default(now())
+
+  @@map("generator_manuals")
+}
+
+model MaintenanceOrderMaterial {
+  id            String           @id @default(uuid())
+  orderId       String
+  order         MaintenanceOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  catalogItemId String
+  catalogItem   CatalogItem      @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  warehouseId   String?
+  warehouse     Warehouse?       @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  quantity      Float
+  unitCost      Float?
+  reservedAt    DateTime?
+  appliedAt     DateTime?
+  createdAt     DateTime         @default(now())
+
+  @@index([orderId])
+  @@map("maintenance_order_materials")
+}
+
+model TechnicianCertification {
+  id           String     @id @default(uuid())
+  technicianId String
+  technician   Technician @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+  code         String
+  validUntil   DateTime
+  issuer       String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([technicianId, code, validUntil])
+  @@map("technician_certifications")
+}
+
+model TelemetryEvent {
+  id                 String             @id @default(uuid())
+  generatorId        String
+  generator          Generator          @relation(fields: [generatorId], references: [id], onDelete: Cascade)
+  alarmType          TelemetryAlarmType @default(NONE)
+  fuelLevelPercent   Float?
+  batteryVoltage     Float?
+  coolantTemperature Float?
+  oilPressure        Float?
+  gridOnline         Boolean?
+  payload            Json?
+  receivedAt         DateTime           @default(now())
+
+  @@index([generatorId, receivedAt])
+  @@map("telemetry_events")
+}
+
+model Warehouse {
+  id           String        @id @default(uuid())
+  code         String        @unique
+  name         String
+  type         WarehouseType @default(MAIN)
+  technicianId String?
+  isActive     Boolean       @default(true)
+
+  technician       Technician?                @relation(fields: [technicianId], references: [id], onDelete: SetNull)
+  balances         InventoryBalance[]
+  movements        InventoryMovement[]
+  purchaseReceipts PurchaseOrderReceipt[]
+  orderMaterials   MaintenanceOrderMaterial[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("warehouses")
+}
+
+model InventoryBalance {
+  id            String      @id @default(uuid())
+  warehouseId   String
+  warehouse     Warehouse   @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  catalogItemId String
+  catalogItem   CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  physicalQty   Float       @default(0)
+  reservedQty   Float       @default(0)
+  minQty        Float       @default(0)
+  maxQty        Float       @default(0)
+  reorderPoint  Float?
+  updatedAt     DateTime    @updatedAt
+  createdAt     DateTime    @default(now())
+
+  @@unique([warehouseId, catalogItemId])
+  @@index([catalogItemId])
+  @@map("inventory_balances")
+}
+
+model InventoryMovement {
+  id            String                @id @default(uuid())
+  movementType  InventoryMovementType
+  warehouseId   String
+  warehouse     Warehouse             @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  catalogItemId String
+  catalogItem   CatalogItem           @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  quantity      Float
+  unitCost      Float?
+  referenceType String?
+  referenceId   String?
+  note          String?
+  createdAt     DateTime              @default(now())
+
+  @@index([warehouseId, catalogItemId, createdAt])
+  @@map("inventory_movements")
+}
+
+model PurchaseOrder {
+  id                  String              @id @default(uuid())
+  code                String              @unique
+  supplierId          String
+  supplier            Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  status              PurchaseOrderStatus @default(DRAFT)
+  issueDate           DateTime            @default(now())
+  expectedDate        DateTime?
+  freightAmount       Float               @default(0)
+  taxAmount           Float               @default(0)
+  totalProductsAmount Float               @default(0)
+  totalAmount         Float               @default(0)
+  paymentTerm         String?
+  notes               String?
+  approvedAt          DateTime?
+
+  items          PurchaseOrderItem[]
+  receipts       PurchaseOrderReceipt[]
+  payableEntries AccountsPayable[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([supplierId, status])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(uuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  catalogItemId   String
+  catalogItem     CatalogItem   @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  quantity        Float
+  receivedQty     Float         @default(0)
+  unitPrice       Float
+  taxAmount       Float?        @default(0)
+  totalPrice      Float
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([purchaseOrderId, catalogItemId])
+  @@map("purchase_order_items")
+}
+
+model PurchaseOrderReceipt {
+  id              String        @id @default(uuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  warehouseId     String
+  warehouse       Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  receivedAt      DateTime      @default(now())
+  notes           String?
+  createdAt       DateTime      @default(now())
+
+  @@index([purchaseOrderId, receivedAt])
+  @@map("purchase_order_receipts")
+}
+
+model AccountsPayable {
+  id              String                   @id @default(uuid())
+  purchaseOrderId String?
+  purchaseOrder   PurchaseOrder?           @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  supplierId      String
+  supplier        Supplier                 @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  description     String
+  issueDate       DateTime                 @default(now())
+  competenceDate  DateTime?
+  dueDate         DateTime
+  amount          Float
+  barcode         String?
+  pixCopyPaste    String?
+  category        PayableCategory          @default(SUPPLIERS)
+  proofUrl        String?
+  costCenterId    String?
+  costCenter      CostCenter?              @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  status          AccountsPayableStatus    @default(OPEN)
+  paidAmount      Float                    @default(0)
+  paidAt          DateTime?
+  canceledAt      DateTime?
+  cancelReason    String?
+  duplicateHash   String?
+  payments        AccountsPayablePayment[]
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  @@index([supplierId, status, dueDate])
+  @@index([duplicateHash])
+  @@map("accounts_payable")
+}
+
+model BankAccount {
+  id             String          @id @default(uuid())
+  name           String
+  bankName       String?
+  type           BankAccountType @default(CHECKING)
+  agency         String?
+  accountNumber  String?
+  pixKey         String?
+  initialBalance Float           @default(0)
+  currentBalance Float           @default(0)
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  receivablePayments AccountsReceivablePayment[]
+  payablePayments    AccountsPayablePayment[]
+
+  @@map("bank_accounts")
+}
+
+model AccountsReceivable {
+  id                 String                      @id @default(uuid())
+  clientId           String
+  client             Client                      @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  contractId         String?
+  contract           ServiceContract?            @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  maintenanceOrderId String?
+  maintenanceOrder   MaintenanceOrder?           @relation(fields: [maintenanceOrderId], references: [id], onDelete: SetNull)
+  costCenterId       String?
+  costCenter         CostCenter?                 @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  description        String
+  competenceDate     DateTime
+  dueDate            DateTime
+  grossAmount        Float
+  discountAmount     Float                       @default(0)
+  interestAmount     Float                       @default(0)
+  penaltyAmount      Float                       @default(0)
+  netAmount          Float
+  paidAmount         Float                       @default(0)
+  status             AccountsReceivableStatus    @default(OPEN)
+  lastChargeEmailAt  DateTime?
+  canceledAt         DateTime?
+  cancelReason       String?
+  commissionReleased Boolean                     @default(false)
+  payments           AccountsReceivablePayment[]
+  commissions        CommissionEntry[]
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+
+  @@index([clientId, status, dueDate])
+  @@index([contractId, competenceDate])
+  @@map("accounts_receivable")
+}
+
+model AccountsReceivablePayment {
+  id            String             @id @default(uuid())
+  receivableId  String
+  receivable    AccountsReceivable @relation(fields: [receivableId], references: [id], onDelete: Cascade)
+  bankAccountId String?
+  bankAccount   BankAccount?       @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+  amount        Float
+  method        PaymentMethod      @default(TRANSFER)
+  paidAt        DateTime           @default(now())
+  actorUserId   String?
+  actorUser     User?              @relation("ReceivablePaymentActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  notes         String?
+  createdAt     DateTime           @default(now())
+
+  @@index([receivableId, paidAt])
+  @@map("accounts_receivable_payments")
+}
+
+model AccountsPayablePayment {
+  id            String          @id @default(uuid())
+  payableId     String
+  payable       AccountsPayable @relation(fields: [payableId], references: [id], onDelete: Cascade)
+  bankAccountId String?
+  bankAccount   BankAccount?    @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+  amount        Float
+  method        PaymentMethod   @default(TRANSFER)
+  paidAt        DateTime        @default(now())
+  actorUserId   String?
+  actorUser     User?           @relation("PayablePaymentActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  notes         String?
+  createdAt     DateTime        @default(now())
+
+  @@index([payableId, paidAt])
+  @@map("accounts_payable_payments")
+}
+
+model FinancialAuditLog {
+  id          String   @id @default(uuid())
+  module      String
+  entityType  String
+  entityId    String
+  action      String
+  reason      String?
+  payload     Json?
+  actorUserId String?
+  actorUser   User?    @relation("FinancialAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([module, entityType, entityId, createdAt])
+  @@map("financial_audit_logs")
+}
+
+model CostCenter {
+  id          String           @id @default(uuid())
+  code        String           @unique
+  name        String
+  type        CostCenterType   @default(INTERNAL)
+  clientId    String?
+  client      Client?          @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  contractId  String?          @unique
+  contract    ServiceContract? @relation("ContractCostCenter")
+  generatorId String?          @unique
+  generator   Generator?       @relation("GeneratorCostCenter", fields: [generatorId], references: [id], onDelete: SetNull)
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  entries           CostCenterEntry[]
+  maintenanceOrders MaintenanceOrder[]
+  receivableEntries AccountsReceivable[]
+  payableEntries    AccountsPayable[]
+
+  @@index([type, isActive])
+  @@map("cost_centers")
+}
+
+model CostCenterEntry {
+  id             String              @id @default(uuid())
+  costCenterId   String
+  costCenter     CostCenter          @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
+  entryType      CostCenterEntryType
+  sourceType     String
+  sourceId       String?
+  amount         Float
+  competenceDate DateTime
+  notes          String?
+  createdAt      DateTime            @default(now())
+
+  @@index([costCenterId, competenceDate])
+  @@map("cost_center_entries")
+}
+
+model TimeEntry {
+  id                 String            @id @default(uuid())
+  userId             String
+  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  maintenanceOrderId String?
+  maintenanceOrder   MaintenanceOrder? @relation(fields: [maintenanceOrderId], references: [id], onDelete: SetNull)
+  status             TimeEntryStatus
+  startedAt          DateTime
+  endedAt            DateTime?
+  transitMinutes     Int               @default(0)
+  workMinutes        Int               @default(0)
+  extraMinutes       Int               @default(0)
+  nightMinutes       Int               @default(0)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([userId, startedAt])
+  @@index([maintenanceOrderId, startedAt])
+  @@map("time_entries")
+}
+
+model CommissionEntry {
+  id                 String              @id @default(uuid())
+  userId             String
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  receivableId       String?
+  receivable         AccountsReceivable? @relation(fields: [receivableId], references: [id], onDelete: SetNull)
+  maintenanceOrderId String?
+  maintenanceOrder   MaintenanceOrder?   @relation(fields: [maintenanceOrderId], references: [id], onDelete: SetNull)
+  contractId         String?
+  contract           ServiceContract?    @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  baseAmount         Float
+  percent            Float
+  amount             Float
+  status             CommissionStatus    @default(PENDING)
+  releasedAt         DateTime?
+  paidAt             DateTime?
+  notes              String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@index([userId, status])
+  @@map("commission_entries")
+}
+
+model HrAssetAssignment {
+  id            String        @id @default(uuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  catalogItemId String?
+  catalogItem   CatalogItem?  @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  assetType     HrAssetType
+  title         String
+  caCode        String?
+  deliveredAt   DateTime
+  expiresAt     DateTime?
+  signedTermUrl String?
+  status        HrAssetStatus @default(ACTIVE)
+  returnedAt    DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([userId, status, expiresAt])
+  @@map("hr_asset_assignments")
+}
+
+model FleetVehicle {
+  id               String             @id @default(uuid())
+  plate            String             @unique
+  renavam          String?
+  model            String
+  currentKm        Int                @default(0)
+  avgKmPerLiter    Float?
+  nextOilChangeKm  Int?
+  nextTireChangeKm Int?
+  nextBeltChangeKm Int?
+  status           FleetVehicleStatus @default(AVAILABLE)
+  isActive         Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  allocations FleetAllocation[]
+
+  @@index([status, isActive])
+  @@map("fleet_vehicles")
+}
+
+model FleetAllocation {
+  id                 String            @id @default(uuid())
+  vehicleId          String
+  vehicle            FleetVehicle      @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  maintenanceOrderId String?
+  maintenanceOrder   MaintenanceOrder? @relation(fields: [maintenanceOrderId], references: [id], onDelete: SetNull)
+  assignedAt         DateTime          @default(now())
+  releasedAt         DateTime?
+  startKm            Int?
+  endKm              Int?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([vehicleId, assignedAt])
+  @@index([userId, assignedAt])
+  @@map("fleet_allocations")
+}
