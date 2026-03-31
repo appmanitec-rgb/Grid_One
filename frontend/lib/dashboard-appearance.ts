@@ -16,27 +16,27 @@ export const DEFAULT_DASHBOARD_THEME: DashboardThemeId = "mist";
 export const DASHBOARD_THEME_OPTIONS: DashboardThemeOption[] = [
   {
     id: "mist",
-    label: "Brisa Azul",
-    description: "Mantem a leitura clara, mas com um azul bem mais suave.",
-    preview: ["#eff4fa", "#dbe7f3", "#9bb7d2"],
+    label: "Neblina",
+    description: "Base fria e discreta.",
+    preview: ["#eef2f6", "#dce4ec", "#8fa1b4"],
   },
   {
     id: "linen",
-    label: "Areia Quente",
-    description: "Tira o gelo do fundo e traz uma base mais cremosa.",
-    preview: ["#f5efe6", "#eadfcf", "#b88a55"],
+    label: "Marfim",
+    description: "Base quente e leve.",
+    preview: ["#f4f1eb", "#e4ddd3", "#a69278"],
   },
   {
     id: "sage",
-    label: "Sage Operacao",
-    description: "Mais fosco e tecnico, com verde acinzentado discreto.",
-    preview: ["#edf3ef", "#d8e5dc", "#7a9484"],
+    label: "Mineral",
+    description: "Cinza esverdeado suave.",
+    preview: ["#edf1ee", "#dbe2dd", "#87978d"],
   },
   {
     id: "slate",
-    label: "Aco Suave",
-    description: "Mais denso e elegante sem cair em dark mode.",
-    preview: ["#e8edf3", "#d4dde8", "#6f879e"],
+    label: "Grafite",
+    description: "Aco azulado discreto.",
+    preview: ["#ebeff3", "#d7dfe7", "#7e8e9f"],
   },
 ];
 
@@ -75,9 +75,11 @@ export function saveStoredDashboardTheme(themeId: DashboardThemeId) {
 export function applyDashboardTheme(themeId: DashboardThemeId) {
   if (typeof document === "undefined") return;
   document.documentElement.setAttribute("data-manitec-theme", themeId);
+  document.body.setAttribute("data-manitec-theme", themeId);
 }
 
 export function clearAppliedDashboardTheme() {
   if (typeof document === "undefined") return;
   document.documentElement.removeAttribute("data-manitec-theme");
+  document.body.removeAttribute("data-manitec-theme");
 }

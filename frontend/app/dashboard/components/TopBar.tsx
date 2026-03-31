@@ -178,14 +178,14 @@ export default function TopBar({
   const initials = userName.trim().charAt(0).toUpperCase() || "U";
 
   return (
-    <header className="sticky top-0 z-20 border-b border-white/70 bg-white/80 shadow-[0_16px_32px_-24px_rgba(15,31,50,0.3)] backdrop-blur-xl">
+    <header className="dashboard-topbar sticky top-0 z-20 border-b border-white/70 bg-white/80 shadow-[0_16px_32px_-24px_rgba(15,31,50,0.3)] backdrop-blur-xl">
       <div className="dashboard-container flex items-center justify-between gap-4 px-4 py-3 md:px-6">
         <div className="flex items-center gap-3">
           {canExpandSidebar && (
             <button
               type="button"
               onClick={onExpandSidebar}
-              className="hidden rounded-xl border border-slate-200 bg-white/90 px-2.5 py-2 text-xs font-bold text-slate-700 shadow-sm hover:bg-white md:inline-flex"
+              className="dashboard-topbar-control hidden rounded-xl border border-slate-200 bg-white/90 px-2.5 py-2 text-xs font-bold text-slate-700 shadow-sm hover:bg-white md:inline-flex"
               title="Expandir menu"
             >
               <span>&gt;</span>
@@ -193,28 +193,25 @@ export default function TopBar({
           )}
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex rounded-full border border-slate-200 bg-slate-100/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-600">
+              <span className="dashboard-topbar-chip inline-flex rounded-full border border-slate-200 bg-slate-100/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-100">
                 {routeFamily}
               </span>
-              <span className="hidden text-xs text-slate-400 md:inline">
-                Leitura contextual da area atual
-              </span>
             </div>
-            <h2 className="mt-2 truncate text-base font-bold text-slate-950 md:text-lg">
+            <h2 className="mt-2 truncate text-base font-bold text-white md:text-lg">
               {heading.title}
             </h2>
-            <p className="hidden max-w-2xl text-xs text-slate-600 md:block">
+            <p className="hidden max-w-2xl text-xs text-slate-200 md:block">
               {heading.subtitle}
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 md:gap-3">
-          <div className="hidden rounded-2xl border border-slate-200 bg-white/72 px-3 py-2 text-right shadow-sm md:block">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+          <div className="dashboard-topbar-chip hidden rounded-2xl border border-slate-200 bg-white/72 px-3 py-2 text-right shadow-sm md:block">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-200/80">
               Hoje
             </p>
-            <p className="mt-1 text-sm font-semibold text-slate-800">{todayLabel}</p>
+            <p className="mt-1 text-sm font-semibold text-white">{todayLabel}</p>
           </div>
 
           <DashboardAppearanceControl
@@ -225,20 +222,20 @@ export default function TopBar({
           {quickAction ? (
             <Link
               href={quickAction.href}
-              className="hidden rounded-2xl bg-slate-950 px-4 py-2.5 text-xs font-semibold text-white shadow-[0_18px_30px_-24px_rgba(15,31,50,0.8)] transition hover:bg-slate-800 md:inline-flex"
+              className="dashboard-topbar-primary hidden rounded-2xl bg-slate-950 px-4 py-2.5 text-xs font-semibold text-white shadow-[0_18px_30px_-24px_rgba(15,31,50,0.8)] transition hover:bg-slate-800 md:inline-flex"
             >
               {quickAction.label}
             </Link>
           ) : null}
 
-          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/88 px-2 py-1.5 shadow-sm">
+          <div className="dashboard-topbar-profile flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/88 px-2 py-1.5 shadow-sm">
             <div className="hidden text-right md:block">
-              <p className="text-sm font-bold text-slate-900">{userName}</p>
-              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+              <p className="text-sm font-bold text-white">{userName}</p>
+              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-200/80">
                 {userRole}
               </p>
             </div>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-sm font-bold text-white">
+            <div className="dashboard-topbar-avatar flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-sm font-bold text-white">
               {initials}
             </div>
           </div>

@@ -42,11 +42,11 @@ type FormFieldProps = {
 type FieldTone = "default" | "warning";
 
 const HERO_STAT_TONES: Record<Tone, string> = {
-  blue: "border-sky-200 bg-[linear-gradient(180deg,#ffffff_0%,#eff7ff_100%)] text-sky-900",
-  emerald: "border-emerald-200 bg-[linear-gradient(180deg,#ffffff_0%,#eefbf4_100%)] text-emerald-900",
-  amber: "border-amber-200 bg-[linear-gradient(180deg,#ffffff_0%,#fff8ea_100%)] text-amber-900",
-  rose: "border-rose-200 bg-[linear-gradient(180deg,#ffffff_0%,#fff1f3_100%)] text-rose-900",
-  slate: "border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] text-slate-900",
+  blue: "from-sky-500 via-cyan-400 to-cyan-300",
+  emerald: "from-emerald-500 via-teal-400 to-cyan-300",
+  amber: "from-amber-500 via-orange-400 to-amber-300",
+  rose: "from-rose-500 via-red-500 to-orange-400",
+  slate: "from-slate-700 via-slate-500 to-slate-400",
 };
 
 function cx(...values: Array<string | false | null | undefined>) {
@@ -62,33 +62,55 @@ export function PageHero({
   aside,
 }: PageHeroProps) {
   return (
-    <section className="relative overflow-hidden rounded-[30px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,rgba(19,104,180,0.14),transparent_34%),radial-gradient(circle_at_86%_18%,rgba(217,37,47,0.09),transparent_26%),linear-gradient(145deg,#ffffff_0%,#f7fbff_52%,#eef4fb_100%)] px-6 py-6 shadow-[0_30px_80px_-52px_rgba(15,31,50,0.6)] md:px-7 md:py-7">
-      <div className="absolute -left-12 bottom-0 h-32 w-32 rounded-full bg-sky-200/40 blur-3xl" />
-      <div className="absolute right-0 top-0 h-40 w-40 rounded-full bg-rose-200/30 blur-3xl" />
+    <section className="relative overflow-hidden rounded-[32px] border border-slate-200/85 bg-[linear-gradient(180deg,#fbfcfd_0%,#f3f6f9_100%)] p-4 shadow-[0_30px_70px_-50px_rgba(15,23,42,0.34)] md:p-5">
+      <div className="absolute inset-x-12 top-0 h-px bg-gradient-to-r from-transparent via-slate-900/20 to-transparent" />
+      <div
+        className="relative rounded-[28px] border border-white/8 px-6 py-6 shadow-[0_28px_70px_-46px_rgba(6,10,18,0.92)] md:px-7 md:py-7"
+        style={{ background: "var(--dashboard-hero-background)" }}
+      >
+        <div
+          className="absolute inset-y-0 left-0 w-1.5 rounded-l-[28px]"
+          style={{ background: "var(--dashboard-hero-ribbon)" }}
+        />
+        <div
+          className="absolute -right-14 top-0 h-40 w-40 rounded-full blur-3xl"
+          style={{ backgroundColor: "var(--dashboard-hero-glow-primary)" }}
+        />
+        <div
+          className="absolute right-16 top-10 h-28 w-28 rounded-full blur-3xl"
+          style={{ backgroundColor: "var(--dashboard-hero-glow-secondary)" }}
+        />
 
-      <div className="relative space-y-6">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-          <div className="max-w-3xl">
-            {eyebrow ? (
-              <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-500">
-                {eyebrow}
+        <div className="relative space-y-6">
+          <div className="grid items-start gap-6 [grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr))]">
+            <div className="max-w-3xl">
+              {eyebrow ? (
+                <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-200">
+                  {eyebrow}
+                </p>
+              ) : null}
+              <h1 className="mt-3 text-3xl font-bold leading-tight text-white md:text-4xl">
+                {title}
+              </h1>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200 md:text-[15px]">
+                {description}
               </p>
+            </div>
+
+            {aside ? (
+              <div className="min-w-0 max-w-full rounded-[24px] border border-white/10 bg-white/8 p-1.5 backdrop-blur-sm xl:justify-self-end xl:max-w-[360px]">
+                {aside}
+              </div>
             ) : null}
-            <h1 className="mt-3 text-3xl font-bold leading-tight text-slate-950 md:text-4xl">
-              {title}
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 md:text-[15px]">
-              {description}
-            </p>
           </div>
-
-          {aside ? <div className="min-w-[280px] max-w-[360px]">{aside}</div> : null}
         </div>
+      </div>
 
+      <div className="relative mt-5 space-y-5">
         {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
 
         {stats.length > 0 ? (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr))]">
             {stats.map((stat) => (
               <MetricCard
                 key={`${stat.label}-${stat.value}`}
@@ -117,17 +139,15 @@ export function MetricCard({
   tone?: Tone;
 }) {
   return (
-    <article
-      className={cx(
-        "rounded-[24px] border px-4 py-4 shadow-[0_18px_40px_-34px_rgba(15,31,50,0.45)]",
-        HERO_STAT_TONES[tone],
-      )}
-    >
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
-      {helper ? <p className="mt-2 text-xs leading-5 text-slate-600">{helper}</p> : null}
+    <article className="overflow-hidden rounded-[24px] border border-slate-200 bg-white/96 shadow-[0_22px_44px_-34px_rgba(15,23,42,0.32)]">
+      <div className={cx("h-1.5 w-full bg-gradient-to-r", HERO_STAT_TONES[tone])} />
+      <div className="px-4 py-4">
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+          {label}
+        </p>
+        <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
+        {helper ? <p className="mt-2 text-xs leading-5 text-slate-600">{helper}</p> : null}
+      </div>
     </article>
   );
 }
@@ -143,10 +163,12 @@ export function SectionCard({
   return (
     <section
       className={cx(
-        "rounded-[28px] border border-slate-200 bg-white/92 p-5 shadow-[0_24px_70px_-52px_rgba(15,31,50,0.45)] backdrop-blur",
+        "relative overflow-hidden rounded-[28px] border border-slate-200/85 bg-white/92 p-5 shadow-[0_24px_54px_-40px_rgba(15,23,42,0.24)] backdrop-blur",
         className,
       )}
     >
+      <div className="absolute inset-x-0 top-0 h-16 bg-[radial-gradient(circle_at_top_left,rgba(15,23,42,0.04),transparent_48%)]" />
+      <div className="absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-slate-900/18 to-transparent" />
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           {eyebrow ? (
@@ -162,7 +184,7 @@ export function SectionCard({
         {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
       </div>
 
-      <div className="mt-5">{children}</div>
+      <div className="relative mt-5">{children}</div>
     </section>
   );
 }
@@ -194,17 +216,17 @@ export function StatusBanner({
   tone?: Tone;
 }) {
   const toneClasses: Record<Tone, string> = {
-    blue: "border-sky-200 bg-sky-50 text-sky-900",
-    emerald: "border-emerald-200 bg-emerald-50 text-emerald-900",
-    amber: "border-amber-200 bg-amber-50 text-amber-900",
-    rose: "border-rose-200 bg-rose-50 text-rose-900",
+    blue: "border-sky-200 bg-[linear-gradient(135deg,#eef6ff_0%,#f8fbff_100%)] text-sky-900",
+    emerald: "border-emerald-200 bg-[linear-gradient(135deg,#edfdf4_0%,#f8fffb_100%)] text-emerald-900",
+    amber: "border-amber-200 bg-[linear-gradient(135deg,#fff5e7_0%,#fffaf3_100%)] text-amber-900",
+    rose: "border-rose-200 bg-[linear-gradient(135deg,#fff0f1_0%,#fff8f8_100%)] text-rose-900",
     slate: "border-slate-200 bg-slate-100 text-slate-700",
   };
 
   return (
     <div
       className={cx(
-        "rounded-2xl border px-4 py-3 text-sm shadow-[0_18px_40px_-32px_rgba(15,31,50,0.3)]",
+        "rounded-2xl border px-4 py-3 text-sm shadow-[0_18px_40px_-32px_rgba(15,31,50,0.24)]",
         toneClasses[tone],
       )}
     >
@@ -282,7 +304,7 @@ export function FieldBox({
   return (
     <div
       className={cx(
-        "rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-3 text-sm text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]",
+        "rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f7fafc_100%)] px-4 py-3 text-sm text-slate-700 shadow-[0_12px_30px_-28px_rgba(15,23,42,0.35)]",
         className,
       )}
     >
@@ -299,10 +321,10 @@ export function DataPill({
   tone?: Tone;
 }) {
   const toneClasses: Record<Tone, string> = {
-    blue: "border-sky-200 bg-sky-50 text-sky-800",
-    emerald: "border-emerald-200 bg-emerald-50 text-emerald-800",
-    amber: "border-amber-200 bg-amber-50 text-amber-800",
-    rose: "border-rose-200 bg-rose-50 text-rose-800",
+    blue: "border-slate-200 bg-slate-100 text-slate-700",
+    emerald: "border-slate-200 bg-slate-100 text-slate-700",
+    amber: "border-stone-200 bg-stone-100 text-stone-700",
+    rose: "border-zinc-200 bg-zinc-100 text-zinc-700",
     slate: "border-slate-200 bg-slate-100 text-slate-700",
   };
 

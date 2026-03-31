@@ -216,7 +216,7 @@ export default function DashboardLayout({
           appearanceTheme={appearanceTheme}
           onChangeAppearanceTheme={handleThemeChange}
         />
-        <main className="flex-1 overflow-y-auto px-4 pb-24 pt-5 md:px-6 md:pb-10 md:pt-6">
+        <main className="dashboard-main flex-1 overflow-y-auto px-4 pb-24 pt-5 md:px-6 md:pb-10 md:pt-6">
           <div className="dashboard-container w-full">
             <div className="slide-fade-in">{children}</div>
           </div>

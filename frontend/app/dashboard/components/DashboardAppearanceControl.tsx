@@ -40,7 +40,7 @@ export default function DashboardAppearanceControl({
       <button
         type="button"
         onClick={() => setIsOpen((current) => !current)}
-        className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
+        className="dashboard-topbar-control inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
       >
         <span className="flex items-center gap-1.5">
           {activeTheme.preview.map((color, index) => (
@@ -51,17 +51,17 @@ export default function DashboardAppearanceControl({
             />
           ))}
         </span>
-        <span>Fundo</span>
+        <span>Tema</span>
       </button>
 
       {isOpen ? (
-        <div className="absolute right-0 top-[calc(100%+0.6rem)] z-30 w-[min(320px,calc(100vw-1.5rem))] rounded-[24px] border border-slate-200 bg-white/96 p-3 shadow-[0_26px_60px_-42px_rgba(15,31,50,0.55)] backdrop-blur">
+        <div className="dashboard-appearance-popover absolute right-0 top-[calc(100%+0.6rem)] z-30 w-[min(320px,calc(100vw-1.5rem))] rounded-[24px] border border-slate-200 bg-white/96 p-3 shadow-[0_26px_60px_-42px_rgba(15,31,50,0.55)] backdrop-blur">
           <div className="px-2 pb-2">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-              Aparencia do ambiente
+              Tema
             </p>
             <p className="mt-1 text-sm text-slate-600">
-              Escolha o fundo que deixa sua rotina mais confortavel. A preferencia fica salva por usuario.
+              Escolha o fundo do dashboard.
             </p>
           </div>
 
@@ -79,7 +79,7 @@ export default function DashboardAppearanceControl({
                   }}
                   className={`flex w-full items-start gap-3 rounded-[20px] border px-3 py-3 text-left transition ${
                     active
-                      ? "border-slate-900 bg-slate-950 text-white shadow-[0_20px_36px_-28px_rgba(15,31,50,0.9)]"
+                      ? "dashboard-accent-surface text-white"
                       : "border-slate-200 bg-slate-50/85 text-slate-700 hover:border-slate-300 hover:bg-white"
                   }`}
                 >

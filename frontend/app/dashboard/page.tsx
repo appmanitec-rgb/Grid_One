@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Dispatch,
   SetStateAction,
+  type ReactNode,
   useEffect,
   useMemo,
   useRef,
@@ -62,6 +63,16 @@ type StageColumn = {
   label: string;
 };
 
+type DashboardPanelKey =
+  | "priorities"
+  | "actions"
+  | "pipeline"
+  | "board"
+  | "updates"
+  | "governance";
+
+type DashboardPanelsState = Record<DashboardPanelKey, boolean>;
+
 const PIPELINE_COLUMNS: StageColumn[] = [
   { key: "DRAFT", label: "Rascunho" },
   { key: "BOARD_REVIEW", label: "Analise diretoria" },
@@ -78,39 +89,39 @@ const ACTION_TONES: Record<
 > = {
   blue: {
     shell:
-      "border-sky-200 bg-[linear-gradient(180deg,#ffffff_0%,#eff7ff_100%)]",
-    badge: "bg-sky-100 text-sky-700",
+      "border-sky-200 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#eef7ff_100%)]",
+    badge: "bg-sky-100 text-sky-800",
     accent: "bg-sky-500",
     button:
       "border-sky-200 bg-white text-sky-800 hover:border-sky-300 hover:bg-sky-50",
   },
   emerald: {
     shell:
-      "border-emerald-200 bg-[linear-gradient(180deg,#ffffff_0%,#eefbf4_100%)]",
-    badge: "bg-emerald-100 text-emerald-700",
+      "border-emerald-200 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#eefbf4_100%)]",
+    badge: "bg-emerald-100 text-emerald-800",
     accent: "bg-emerald-500",
     button:
       "border-emerald-200 bg-white text-emerald-800 hover:border-emerald-300 hover:bg-emerald-50",
   },
   amber: {
     shell:
-      "border-amber-200 bg-[linear-gradient(180deg,#ffffff_0%,#fff8ea_100%)]",
-    badge: "bg-amber-100 text-amber-700",
+      "border-amber-200 bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.2),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff7ea_100%)]",
+    badge: "bg-amber-100 text-amber-900",
     accent: "bg-amber-500",
     button:
       "border-amber-200 bg-white text-amber-900 hover:border-amber-300 hover:bg-amber-50",
   },
   rose: {
     shell:
-      "border-rose-200 bg-[linear-gradient(180deg,#ffffff_0%,#fff1f3_100%)]",
-    badge: "bg-rose-100 text-rose-700",
+      "border-rose-200 bg-[radial-gradient(circle_at_top_right,rgba(244,63,94,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff2f4_100%)]",
+    badge: "bg-rose-100 text-rose-800",
     accent: "bg-rose-500",
     button:
       "border-rose-200 bg-white text-rose-800 hover:border-rose-300 hover:bg-rose-50",
   },
   slate: {
     shell:
-      "border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)]",
+      "border-slate-200 bg-[radial-gradient(circle_at_top_right,rgba(71,85,105,0.14),transparent_28%),linear-gradient(180deg,#ffffff_0%,#f5f7fa_100%)]",
     badge: "bg-slate-100 text-slate-700",
     accent: "bg-slate-500",
     button:
@@ -124,42 +135,42 @@ const STAGE_STYLES: Record<
 > = {
   DRAFT: {
     shell:
-      "border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)]",
+      "border-slate-200 bg-[radial-gradient(circle_at_top_right,rgba(71,85,105,0.14),transparent_28%),linear-gradient(180deg,#ffffff_0%,#f5f7f9_100%)]",
     badge: "bg-slate-900 text-white",
     hover: "hover:border-slate-300",
     tone: "slate",
   },
   BOARD_REVIEW: {
     shell:
-      "border-amber-200 bg-[linear-gradient(180deg,#fffef7_0%,#fff7e7_100%)]",
+      "border-amber-200 bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff8eb_100%)]",
     badge: "bg-amber-500 text-amber-950",
     hover: "hover:border-amber-300",
     tone: "amber",
   },
   REVISION_REQUIRED: {
     shell:
-      "border-rose-200 bg-[linear-gradient(180deg,#fffaf8_0%,#fff0ee_100%)]",
+      "border-rose-200 bg-[radial-gradient(circle_at_top_right,rgba(244,63,94,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff2f4_100%)]",
     badge: "bg-rose-500 text-white",
     hover: "hover:border-rose-300",
     tone: "rose",
   },
   CLIENT_REVIEW: {
     shell:
-      "border-sky-200 bg-[linear-gradient(180deg,#f9fdff_0%,#eef8ff_100%)]",
+      "border-sky-200 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#eef7ff_100%)]",
     badge: "bg-sky-500 text-white",
     hover: "hover:border-sky-300",
     tone: "blue",
   },
   DISCOUNT_REVIEW: {
     shell:
-      "border-amber-200 bg-[linear-gradient(180deg,#fffdf7_0%,#fff4de_100%)]",
+      "border-amber-200 bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.2),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff3df_100%)]",
     badge: "bg-amber-500 text-amber-950",
     hover: "hover:border-amber-300",
     tone: "amber",
   },
   WON: {
     shell:
-      "border-emerald-200 bg-[linear-gradient(180deg,#f8fffb_0%,#ebfbf1_100%)]",
+      "border-emerald-200 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#eefbf4_100%)]",
     badge: "bg-emerald-500 text-white",
     hover: "hover:border-emerald-300",
     tone: "emerald",
@@ -174,9 +185,20 @@ const STAGE_STYLES: Record<
 };
 
 const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800";
+  "inline-flex items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#f04b54_0%,#da2d3b_54%,#a91c27_100%)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_18px_34px_-18px_rgba(218,45,59,0.55)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_42px_-18px_rgba(218,45,59,0.6)]";
 const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50";
+  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white/96 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-[0_14px_28px_-24px_rgba(15,23,42,0.26)] transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white";
+const PANEL_TOGGLE_BUTTON =
+  "inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-[0_12px_24px_-22px_rgba(15,23,42,0.28)] transition hover:border-slate-300 hover:bg-slate-50";
+const DASHBOARD_PANELS_STORAGE_KEY = "manitec_dashboard_home_panels";
+const DEFAULT_DASHBOARD_PANELS: DashboardPanelsState = {
+  priorities: true,
+  actions: true,
+  pipeline: true,
+  board: true,
+  updates: true,
+  governance: true,
+};
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -194,6 +216,10 @@ export default function DashboardPage() {
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [canScrollPipelineLeft, setCanScrollPipelineLeft] = useState(false);
   const [canScrollPipelineRight, setCanScrollPipelineRight] = useState(false);
+  const [panelsReady, setPanelsReady] = useState(false);
+  const [panelState, setPanelState] = useState<DashboardPanelsState>(
+    DEFAULT_DASHBOARD_PANELS,
+  );
 
   const stats = useMemo(() => {
     const won = proposals.filter((proposal) => proposal.status === "WON").length;
@@ -269,25 +295,25 @@ export default function DashboardPage() {
       {
         href: "/dashboard/proposals/new",
         title: "Nova proposta",
-        subtitle: "Abra uma negociacao ou orcamento com o cliente.",
+        subtitle: "Abrir proposta comercial.",
         tone: "blue" as Tone,
       },
       {
         href: "/dashboard/orders",
-        title: "Agenda tecnica",
-        subtitle: "Acompanhe execucao, SLA e equipe em campo.",
+        title: "Ordens",
+        subtitle: "Ver execucao e fila tecnica.",
         tone: "emerald" as Tone,
       },
       {
         href: "/dashboard/clients/new",
         title: "Novo cliente",
-        subtitle: "Cadastre contas e contatos sem sair do cockpit.",
+        subtitle: "Cadastrar conta e contatos.",
         tone: "slate" as Tone,
       },
       {
         href: "/dashboard/contracts/new",
         title: "Novo contrato",
-        subtitle: "Formalize cobertura e vigencia com menos atrito.",
+        subtitle: "Criar contrato.",
         tone: "amber" as Tone,
       },
     ];
@@ -295,8 +321,8 @@ export default function DashboardPage() {
     if (canManageUsers) {
       items.unshift({
         href: "/dashboard/control",
-        title: "Usuarios e acessos",
-        subtitle: "Abra a central de cadastro, permissao e governanca.",
+        title: "Acessos",
+        subtitle: "Usuarios e permissoes.",
         tone: "rose" as Tone,
       });
     }
@@ -324,6 +350,30 @@ export default function DashboardPage() {
     setIsBoard(payload.role === "ADMIN");
     setCanManageUsers(access.users.manage);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const saved = localStorage.getItem(DASHBOARD_PANELS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as Partial<DashboardPanelsState>;
+        setPanelState((current) => ({ ...current, ...parsed }));
+      }
+    } catch {
+      // ignore invalid cache
+    } finally {
+      setPanelsReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!panelsReady || typeof window === "undefined") return;
+    localStorage.setItem(
+      DASHBOARD_PANELS_STORAGE_KEY,
+      JSON.stringify(panelState),
+    );
+  }, [panelState, panelsReady]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -503,37 +553,52 @@ export default function DashboardPage() {
     }
   }
 
+  function togglePanel(panel: DashboardPanelKey) {
+    setPanelState((current) => ({ ...current, [panel]: !current[panel] }));
+  }
+
+  function setAllPanels(expanded: boolean) {
+    setPanelState({
+      priorities: expanded,
+      actions: expanded,
+      pipeline: expanded,
+      board: expanded,
+      updates: expanded,
+      governance: expanded,
+    });
+  }
+
   return (
     <div className="space-y-6 pb-10">
       {apiWarning ? <StatusBanner tone="amber">{apiWarning}</StatusBanner> : null}
 
       <PageHero
-        eyebrow="Cockpit de Operacoes"
-        title="Comercial, contratos e execucao no mesmo quadro."
-        description="A home agora privilegia sequencia de leitura: contexto executivo, prioridades de resposta, pipeline e acompanhamento. Menos redundancia, mais decisao clara."
+        eyebrow="Dashboard"
+        title="Resumo comercial e operacional."
+        description="Visao rapida do que exige decisao agora."
         stats={[
           {
             label: "Propostas",
             value: String(stats.total),
-            helper: "volume consolidado da carteira comercial",
+            helper: "carteira",
             tone: "slate",
           },
           {
-            label: "Carteira ativa",
+            label: "Ativas",
             value: String(stats.active),
-            helper: "oportunidades ainda em movimentacao",
+            helper: "em andamento",
             tone: "blue",
           },
           {
-            label: "Receita em jogo",
+            label: "Pipeline",
             value: formatCurrency(totalPipelineValue),
-            helper: "valor total do pipeline atual",
+            helper: "valor total",
             tone: "emerald",
           },
           {
             label: "Conversao",
             value: `${stats.conversion}%`,
-            helper: `${stats.won} ganhas e ${stats.lost} perdidas`,
+            helper: `${stats.won} ganhas`,
             tone: "amber",
           },
         ]}
@@ -543,13 +608,27 @@ export default function DashboardPage() {
               Nova proposta
             </Link>
             <Link href="/dashboard/orders" className={SECONDARY_BUTTON}>
-              Agenda tecnica
+              Ver ordens
             </Link>
             {canManageUsers ? (
               <Link href="/dashboard/control" className={SECONDARY_BUTTON}>
-                Usuarios e acessos
+                Abrir acessos
               </Link>
             ) : null}
+            <button
+              type="button"
+              onClick={() => setAllPanels(false)}
+              className={SECONDARY_BUTTON}
+            >
+              Compactar home
+            </button>
+            <button
+              type="button"
+              onClick={() => setAllPanels(true)}
+              className={SECONDARY_BUTTON}
+            >
+              Expandir home
+            </button>
           </>
         }
         aside={
@@ -564,39 +643,43 @@ export default function DashboardPage() {
       />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(330px,0.95fr)]">
-        <SectionCard
-          eyebrow="Ritmo do Dia"
-          title="Prioridades que precisam de resposta agora"
-          description="Os sinais mais importantes foram condensados em poucos blocos com contexto acionavel, sem repetir a mesma informacao em tres lugares diferentes."
+        <DashboardSection
+          panelKey="priorities"
+          expanded={panelState.priorities}
+          onToggle={togglePanel}
+          eyebrow="Hoje"
+          title="Prioridades"
+          description="Fila do dia."
+          summary={`Ativas ${stats.active}  |  Desconto ${stats.discountQueue}  |  O.S. ${stats.openOrders}`}
         >
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(260px,0.9fr)]">
             <div className="grid gap-3 sm:grid-cols-2">
               <PriorityCard
-                title="Em carteira"
+                title="Ativas"
                 value={String(stats.active)}
-                subtitle="propostas ainda vivas no pipeline"
+                subtitle="pipeline"
                 tone="blue"
               />
               <PriorityCard
-                title="Fila de desconto"
+                title="Desconto"
                 value={String(stats.discountQueue)}
-                subtitle="negociacoes aguardando alcada comercial"
+                subtitle="pendentes"
                 tone="amber"
               />
               <PriorityCard
-                title={isBoard ? "Pendencias board" : "Atualizacoes"}
+                title={isBoard ? "Board" : "Atualizacoes"}
                 value={String(isBoard ? boardPending.length : myUpdates.length)}
                 subtitle={
                   isBoard
-                    ? "itens aguardando decisao executiva"
-                    : "movimentacoes recentes para a sua conta"
+                    ? "aguardando decisao"
+                    : "novos registros"
                 }
                 tone={isBoard ? "rose" : "slate"}
               />
               <PriorityCard
-                title="Ordens abertas"
+                title="Ordens"
                 value={String(stats.openOrders)}
-                subtitle="execucoes tecnicas em andamento"
+                subtitle="em andamento"
                 tone="emerald"
               />
             </div>
@@ -604,21 +687,17 @@ export default function DashboardPage() {
             <FieldBox className="space-y-4 bg-white/90">
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                  Pulso do pipeline
+                  Pipeline
                 </p>
                 <h3 className="mt-2 text-lg font-bold text-slate-950">
-                  Etapas com maior concentracao agora
+                  Etapas com maior volume
                 </h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Em vez de espalhar contagens em cards soltos, a leitura abaixo mostra
-                  onde o fluxo esta realmente travando ou acelerando.
-                </p>
               </div>
 
               {topStages.length === 0 ? (
                 <EmptyState
                   title="Sem etapas ativas"
-                  description="Assim que o pipeline tiver propostas em andamento, o resumo aparece aqui."
+                  description="O resumo aparece quando houver propostas em andamento."
                 />
               ) : (
                 <div className="space-y-3">
@@ -633,7 +712,7 @@ export default function DashboardPage() {
                             {stage.label}
                           </p>
                           <p className="text-xs text-slate-500">
-                            {stage.total} proposta(s) concentradas nesta etapa
+                            {stage.total} proposta(s)
                           </p>
                         </div>
                         <DataPill tone={STAGE_STYLES[stage.key].tone}>
@@ -646,26 +725,34 @@ export default function DashboardPage() {
               )}
             </FieldBox>
           </div>
-        </SectionCard>
+        </DashboardSection>
 
-        <SectionCard
+        <DashboardSection
+          panelKey="actions"
+          expanded={panelState.actions}
+          onToggle={togglePanel}
           eyebrow="Atalhos"
-          title="Acione o proximo passo"
-          description="Os acessos mais usados ficam em uma trilha curta e com sentido operacional."
+          title="Acoes rapidas"
+          description="Entradas principais."
+          summary={`${quickActions.length} atalhos`}
         >
           <div className="grid gap-3">
             {quickActions.map((action) => (
               <QuickActionCard key={action.href} {...action} />
             ))}
           </div>
-        </SectionCard>
+        </DashboardSection>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.62fr)_380px]">
-        <SectionCard
-          eyebrow="Pipeline Comercial"
-          title="Distribuicao das propostas por etapa"
-          description="O quadro principal foi deixado mais limpo para leitura e arraste entre etapas, com uma coluna lateral separada para fila executiva, feed e governanca."
+        <DashboardSection
+          panelKey="pipeline"
+          expanded={panelState.pipeline}
+          onToggle={togglePanel}
+          eyebrow="Pipeline"
+          title="Propostas por etapa"
+          description="Lista e arraste."
+          summary={`${stats.total} propostas  |  ${topStages[0]?.label || "Sem fila"}`}
           actions={
             <div className="flex flex-wrap gap-2">
               {pipelineCounts
@@ -682,8 +769,7 @@ export default function DashboardPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm leading-6 text-slate-600">
-                Use o arraste para mover propostas entre etapas ou as setas laterais para
-                percorrer o quadro em telas menores.
+                Arraste entre etapas ou role lateralmente.
               </p>
               <div className="flex items-center gap-2">
                 {canScrollPipelineLeft ? (
@@ -705,12 +791,12 @@ export default function DashboardPage() {
 
             <div className="relative">
               <div
-                className={`pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-16 bg-gradient-to-r from-[#eef4fa] via-[#eef4fa]/88 to-transparent transition duration-200 sm:block ${
+                className={`pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-16 bg-gradient-to-r from-[#edf1f4] via-[#edf1f4]/88 to-transparent transition duration-200 sm:block ${
                   canScrollPipelineLeft ? "opacity-100" : "opacity-0"
                 }`}
               />
               <div
-                className={`pointer-events-none absolute inset-y-0 right-0 z-10 hidden w-16 bg-gradient-to-l from-[#eef4fa] via-[#eef4fa]/88 to-transparent transition duration-200 sm:block ${
+                className={`pointer-events-none absolute inset-y-0 right-0 z-10 hidden w-16 bg-gradient-to-l from-[#edf1f4] via-[#edf1f4]/88 to-transparent transition duration-200 sm:block ${
                   canScrollPipelineRight ? "opacity-100" : "opacity-0"
                 }`}
               />
@@ -733,13 +819,28 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-        </SectionCard>
+        </DashboardSection>
 
         <div className="space-y-6">
-          {isBoard ? <BoardPendingCard boardPending={boardPending} /> : null}
-          <UpdatesFeedCard updates={myUpdates} />
+          {isBoard ? (
+            <BoardPendingCard
+              boardPending={boardPending}
+              collapsed={!panelState.board}
+              onToggle={() => togglePanel("board")}
+            />
+          ) : null}
+          <UpdatesFeedCard
+            updates={myUpdates}
+            collapsed={!panelState.updates}
+            onToggle={() => togglePanel("updates")}
+          />
           {canManageUsers ? (
-            <GovernanceSnapshotCard adminStats={adminStats} adminUsers={adminUsers} />
+            <GovernanceSnapshotCard
+              adminStats={adminStats}
+              adminUsers={adminUsers}
+              collapsed={!panelState.governance}
+              onToggle={() => togglePanel("governance")}
+            />
           ) : null}
         </div>
       </div>
@@ -769,37 +870,33 @@ function DailySnapshotPanel({
   openOrders: number;
 }) {
   return (
-    <div className="rounded-[26px] border border-white/80 bg-white/88 p-4 shadow-[0_20px_50px_-36px_rgba(15,31,50,0.4)]">
-      <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-slate-500">
-        Sala de decisao
+    <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-sm">
+      <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-slate-200">
+        Resumo
       </p>
       <div className="mt-4 space-y-3">
         <SnapshotLine
           label="Desconto"
           value={String(stats.discountQueue)}
-          helper="negociacoes pedindo alcada comercial"
+          helper="pendentes"
           tone="amber"
         />
         <SnapshotLine
           label={isBoard ? "Board" : "Feed"}
           value={String(isBoard ? boardPending : updates)}
-          helper={
-            isBoard
-              ? "propostas aguardando decisao executiva"
-              : "movimentacoes recentes da sua carteira"
-          }
+          helper={isBoard ? "aguardando decisao" : "novidades"}
           tone={isBoard ? "rose" : "slate"}
         />
         <SnapshotLine
           label="Ordens"
           value={String(openOrders)}
-          helper="frente tecnica com chamados ativos"
+          helper="abertas"
           tone="emerald"
         />
         <SnapshotLine
           label="Win rate"
           value={`${stats.conversion}%`}
-          helper={`${stats.won} ganhas e ${stats.lost} perdidas`}
+          helper={`${stats.won} ganhas`}
           tone="blue"
         />
       </div>
@@ -819,14 +916,14 @@ function SnapshotLine({
   tone: Tone;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 shadow-[0_16px_34px_-30px_rgba(15,31,50,0.35)]">
+    <div className="rounded-2xl border border-white/10 bg-white/6 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-200">
           {label}
         </p>
         <DataPill tone={tone}>{value}</DataPill>
       </div>
-      <p className="mt-2 text-xs leading-5 text-slate-600">{helper}</p>
+      <p className="mt-2 text-xs leading-5 text-slate-200">{helper}</p>
     </div>
   );
 }
@@ -846,8 +943,9 @@ function PriorityCard({
 
   return (
     <article
-      className={`rounded-[24px] border px-4 py-4 shadow-[0_18px_40px_-34px_rgba(15,31,50,0.35)] ${style.shell}`}
+      className={`relative overflow-hidden rounded-[24px] border px-4 py-4 shadow-[0_22px_42px_-34px_rgba(15,23,42,0.3)] ${style.shell}`}
     >
+      <div className={`absolute inset-x-0 top-0 h-1.5 ${style.accent}`} />
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
@@ -857,7 +955,7 @@ function PriorityCard({
         </div>
         <span className={`mt-1 h-3 w-3 rounded-full ${style.accent}`} />
       </div>
-      <p className="mt-3 text-sm leading-6 text-slate-600">{subtitle}</p>
+      <p className="mt-3 text-sm text-slate-600">{subtitle}</p>
     </article>
   );
 }
@@ -878,19 +976,20 @@ function QuickActionCard({
   return (
     <Link
       href={href}
-      className={`rounded-[24px] border px-4 py-4 shadow-[0_18px_40px_-34px_rgba(15,31,50,0.28)] transition hover:-translate-y-0.5 ${style.shell}`}
+      className={`group relative overflow-hidden rounded-[24px] border px-4 py-4 shadow-[0_18px_40px_-34px_rgba(15,31,50,0.28)] transition hover:-translate-y-1 ${style.shell}`}
     >
+      <div className={`absolute inset-y-0 left-0 w-1.5 ${style.accent}`} />
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-bold text-slate-950">{title}</p>
-          <p className="mt-1 text-sm leading-6 text-slate-600">{subtitle}</p>
+          <p className="mt-1 text-sm text-slate-600">{subtitle}</p>
         </div>
-        <span className={`mt-1 h-3 w-3 rounded-full ${style.accent}`} />
+        <span className={`mt-1 h-3 w-3 rounded-full ${style.accent} shadow-[0_0_0_6px_rgba(255,255,255,0.45)]`} />
       </div>
       <span
         className={`mt-4 inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.16em] ${style.badge}`}
       >
-        Abrir area
+        Abrir
       </span>
     </Link>
   );
@@ -955,7 +1054,7 @@ function PipelineColumnCard({
               event.dataTransfer.setData("text/proposal-id", item.id);
               event.dataTransfer.effectAllowed = "move";
             }}
-            className={`rounded-2xl border border-white/80 bg-white/96 p-3.5 text-sm shadow-[0_18px_35px_-28px_rgba(15,31,50,0.4)] transition hover:-translate-y-0.5 ${style.hover}`}
+            className={`rounded-2xl border border-white/80 bg-white/96 p-3.5 text-sm shadow-[0_14px_28px_-24px_rgba(15,23,42,0.22)] transition hover:-translate-y-0.5 ${style.hover}`}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -1004,95 +1103,121 @@ function PipelineColumnCard({
   );
 }
 
-function BoardPendingCard({ boardPending }: { boardPending: Proposal[] }) {
+function BoardPendingCard({
+  boardPending,
+  collapsed,
+  onToggle,
+}: {
+  boardPending: Proposal[];
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
   return (
     <SectionCard
-      eyebrow="Diretoria"
-      title="Pendencias para aprovacao"
-      description="Fila separada do resto do dashboard para deixar evidente o que esta esperando decisao executiva."
+      eyebrow="Board"
+      title="Pendencias"
+      description="Itens aguardando aprovacao."
+      actions={<PanelToggleButton collapsed={collapsed} onClick={onToggle} />}
     >
-      <div className="space-y-3">
-        {boardPending.length === 0 ? (
-          <EmptyState
-            title="Fila executiva limpa"
-            description="Nenhuma proposta aguardando diretoria no momento."
-          />
-        ) : (
-          boardPending.slice(0, 6).map((proposal) => (
-            <Link
-              key={proposal.id}
-              href={`/dashboard/proposals/${proposal.id}`}
-              className="block rounded-2xl border border-amber-100 bg-[linear-gradient(180deg,#fffdf6_0%,#ffffff_100%)] p-4 transition hover:-translate-y-0.5 hover:border-amber-200"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-bold text-slate-950">
-                    {proposal.code}
-                  </p>
-                  <p className="mt-1 text-xs leading-5 text-slate-600">
-                    {proposal.client?.companyName || "Sem cliente"} •{" "}
-                    {statusLabel(proposal.status)}
-                  </p>
+      {collapsed ? (
+        <CollapsedSectionSummary summary={`${boardPending.length} em fila`} />
+      ) : (
+        <div className="space-y-3">
+          {boardPending.length === 0 ? (
+            <EmptyState
+              title="Fila limpa"
+              description="Nenhuma proposta aguardando diretoria."
+            />
+          ) : (
+            boardPending.slice(0, 6).map((proposal) => (
+              <Link
+                key={proposal.id}
+                href={`/dashboard/proposals/${proposal.id}`}
+                className="block rounded-2xl border border-stone-200 bg-[linear-gradient(180deg,#fffdf9_0%,#ffffff_100%)] p-4 transition hover:-translate-y-0.5 hover:border-stone-300"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-slate-950">
+                      {proposal.code}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">
+                      {proposal.client?.companyName || "Sem cliente"} |{" "}
+                      {statusLabel(proposal.status)}
+                    </p>
+                  </div>
+                  <DataPill tone="amber">Board</DataPill>
                 </div>
-                <DataPill tone="amber">Board</DataPill>
-              </div>
-              <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Valor
-              </p>
-              <p className="mt-1 text-sm font-bold text-slate-900">
-                {formatCurrency(proposal.totalValue || 0)}
-              </p>
-            </Link>
-          ))
-        )}
-      </div>
+                <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Valor
+                </p>
+                <p className="mt-1 text-sm font-bold text-slate-900">
+                  {formatCurrency(proposal.totalValue || 0)}
+                </p>
+              </Link>
+            ))
+          )}
+        </div>
+      )}
     </SectionCard>
   );
 }
 
-function UpdatesFeedCard({ updates }: { updates: Movement[] }) {
+function UpdatesFeedCard({
+  updates,
+  collapsed,
+  onToggle,
+}: {
+  updates: Movement[];
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
   return (
     <SectionCard
-      eyebrow="Feed Pessoal"
-      title="Atualizacoes para voce"
-      description="O acompanhamento pessoal fica em uma coluna exclusiva para nao disputar atencao com o quadro comercial."
+      eyebrow="Feed"
+      title="Atualizacoes"
+      description="Movimentos recentes."
+      actions={<PanelToggleButton collapsed={collapsed} onClick={onToggle} />}
     >
-      <div className="space-y-3">
-        {updates.length === 0 ? (
-          <EmptyState
-            title="Sem atualizacoes recentes"
-            description="Sua conta ainda nao recebeu novas movimentacoes."
-          />
-        ) : (
-          updates.slice(0, 8).map((update) => (
-            <Link
-              key={update.id}
-              href={`/dashboard/proposals/${update.proposal.id}`}
-              className="block rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-4 transition hover:-translate-y-0.5 hover:border-sky-200"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-bold text-slate-950">
-                    {update.proposal.code}
-                  </p>
-                  <p className="mt-1 text-xs leading-5 text-slate-600">
-                    {statusLabel(update.proposal.status)}
-                  </p>
+      {collapsed ? (
+        <CollapsedSectionSummary summary={`${updates.length} atualizacao(oes)`} />
+      ) : (
+        <div className="space-y-3">
+          {updates.length === 0 ? (
+            <EmptyState
+              title="Sem atualizacoes"
+              description="Nenhum movimento recente."
+            />
+          ) : (
+            updates.slice(0, 8).map((update) => (
+              <Link
+                key={update.id}
+                href={`/dashboard/proposals/${update.proposal.id}`}
+                className="block rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f7f9fb_100%)] p-4 transition hover:-translate-y-0.5 hover:border-slate-300"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-slate-950">
+                      {update.proposal.code}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">
+                      {statusLabel(update.proposal.status)}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600">
+                    {update.actorUser?.name || "Sistema"}
+                  </span>
                 </div>
-                <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600">
-                  {update.actorUser?.name || "Sistema"}
-                </span>
-              </div>
-              {update.note ? (
-                <p className="mt-3 text-sm leading-6 text-slate-700">{update.note}</p>
-              ) : null}
-              <p className="mt-3 text-xs text-slate-500">
-                {new Date(update.createdAt).toLocaleString("pt-BR")}
-              </p>
-            </Link>
-          ))
-        )}
-      </div>
+                {update.note ? (
+                  <p className="mt-3 text-sm leading-6 text-slate-700">{update.note}</p>
+                ) : null}
+                <p className="mt-3 text-xs text-slate-500">
+                  {new Date(update.createdAt).toLocaleString("pt-BR")}
+                </p>
+              </Link>
+            ))
+          )}
+        </div>
+      )}
     </SectionCard>
   );
 }
@@ -1100,6 +1225,8 @@ function UpdatesFeedCard({ updates }: { updates: Movement[] }) {
 function GovernanceSnapshotCard({
   adminStats,
   adminUsers,
+  collapsed,
+  onToggle,
 }: {
   adminStats: {
     total: number;
@@ -1109,77 +1236,158 @@ function GovernanceSnapshotCard({
     masters: number;
   };
   adminUsers: AdminUser[];
+  collapsed: boolean;
+  onToggle: () => void;
 }) {
   return (
     <SectionCard
       eyebrow="Governanca"
-      title="Usuarios, acessos e protecao"
-      description="O resumo administrativo aparece como apoio ao cockpit, enquanto a gestao detalhada continua centralizada no modulo de controle."
+      title="Usuarios e acessos"
+      description="Resumo administrativo."
       actions={
-        <Link href="/dashboard/control" className={SECONDARY_BUTTON}>
-          Abrir painel
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/dashboard/control" className={SECONDARY_BUTTON}>
+            Abrir painel
+          </Link>
+          <PanelToggleButton collapsed={collapsed} onClick={onToggle} />
+        </div>
       }
     >
-      <div className="grid gap-3 sm:grid-cols-2">
-        <SnapshotLine
-          label="Ativos"
-          value={String(adminStats.active)}
-          helper="contas disponiveis para operacao"
-          tone="emerald"
+      {collapsed ? (
+        <CollapsedSectionSummary
+          summary={`Ativos ${adminStats.active}  |  Admins ${adminStats.admins}`}
         />
-        <SnapshotLine
-          label="Inativos"
-          value={String(adminStats.inactive)}
-          helper="cadastros pausados ou bloqueados"
-          tone="amber"
-        />
-        <SnapshotLine
-          label="Admins"
-          value={String(adminStats.admins)}
-          helper="usuarios com governanca ampliada"
-          tone="blue"
-        />
-        <SnapshotLine
-          label="Masters"
-          value={String(adminStats.masters)}
-          helper="perfis sistemicos protegidos"
-          tone="slate"
-        />
-      </div>
+      ) : (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SnapshotLine
+              label="Ativos"
+              value={String(adminStats.active)}
+              helper="disponiveis"
+              tone="emerald"
+            />
+            <SnapshotLine
+              label="Inativos"
+              value={String(adminStats.inactive)}
+              helper="bloqueados"
+              tone="amber"
+            />
+            <SnapshotLine
+              label="Admins"
+              value={String(adminStats.admins)}
+              helper="com gestao"
+              tone="blue"
+            />
+            <SnapshotLine
+              label="Masters"
+              value={String(adminStats.masters)}
+              helper="protegidos"
+              tone="slate"
+            />
+          </div>
 
-      <div className="mt-4 space-y-3">
-        {adminUsers.length === 0 ? (
-          <EmptyState
-            title="Nenhum usuario carregado"
-            description="Quando a base estiver disponivel, os perfis aparecem aqui."
-          />
-        ) : (
-          adminUsers.slice(0, 4).map((user) => (
-            <div
-              key={user.id}
-              className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-3"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-slate-900">
-                  {user.name}
-                </p>
-                <p className="truncate text-xs text-slate-500">{user.email}</p>
-              </div>
-              <span
-                className={`ml-3 rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                  user.isActive
-                    ? "bg-emerald-100 text-emerald-700"
-                    : "bg-zinc-200 text-zinc-600"
-                }`}
-              >
-                {user.isActive ? user.role : "INATIVO"}
-              </span>
-            </div>
-          ))
-        )}
-      </div>
+          <div className="mt-4 space-y-3">
+            {adminUsers.length === 0 ? (
+              <EmptyState
+                title="Nenhum usuario"
+                description="Os perfis aparecem aqui quando a base carregar."
+              />
+            ) : (
+              adminUsers.slice(0, 4).map((user) => (
+                <div
+                  key={user.id}
+                  className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">
+                      {user.name}
+                    </p>
+                    <p className="truncate text-xs text-slate-500">{user.email}</p>
+                  </div>
+                  <span
+                    className={`ml-3 rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                      user.isActive
+                        ? "bg-stone-100 text-stone-700"
+                        : "bg-zinc-200 text-zinc-600"
+                    }`}
+                  >
+                    {user.isActive ? user.role : "INATIVO"}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      )}
     </SectionCard>
+  );
+}
+
+function DashboardSection({
+  panelKey,
+  expanded,
+  onToggle,
+  summary,
+  actions,
+  eyebrow,
+  title,
+  description,
+  children,
+}: {
+  panelKey: DashboardPanelKey;
+  expanded: boolean;
+  onToggle: (panel: DashboardPanelKey) => void;
+  summary: string;
+  actions?: ReactNode;
+  eyebrow?: string;
+  title: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  return (
+    <SectionCard
+      eyebrow={eyebrow}
+      title={title}
+      description={description}
+      actions={
+        <div className="flex flex-wrap gap-2">
+          {actions}
+          <PanelToggleButton
+            collapsed={!expanded}
+            onClick={() => onToggle(panelKey)}
+          />
+        </div>
+      }
+    >
+      {expanded ? children : <CollapsedSectionSummary summary={summary} />}
+    </SectionCard>
+  );
+}
+
+function PanelToggleButton({
+  collapsed,
+  onClick,
+}: {
+  collapsed: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" onClick={onClick} className={PANEL_TOGGLE_BUTTON}>
+      <span>{collapsed ? "Expandir" : "Recolher"}</span>
+      <span
+        className={`transition-transform duration-200 ${collapsed ? "-rotate-90" : ""}`}
+      >
+        v
+      </span>
+    </button>
+  );
+}
+
+function CollapsedSectionSummary({ summary }: { summary: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 px-4 py-3 text-sm text-slate-600">
+      {summary}
+    </div>
   );
 }
 
@@ -1199,7 +1407,7 @@ function PipelineScrollButton({
       type="button"
       onClick={onClick}
       aria-label={label}
-      className="group inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/88 text-slate-700 shadow-[0_18px_38px_-22px_rgba(15,31,50,0.45)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:bg-white"
+      className="group inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white/96 text-slate-700 shadow-[0_18px_38px_-22px_rgba(15,31,50,0.28)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white"
     >
       <svg
         viewBox="0 0 24 24"

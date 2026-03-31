@@ -280,7 +280,7 @@ export default function SidebarNavigation({
 
   return (
     <aside
-      className={`z-20 hidden border-r border-white/10 bg-[linear-gradient(180deg,#0c2034_0%,#102844_48%,#132d47_100%)] shadow-[14px_0_34px_-24px_rgba(2,8,20,0.78)] transition-[width] duration-300 md:flex md:flex-col ${
+      className={`dashboard-sidebar z-20 hidden border-r border-white/10 bg-[linear-gradient(180deg,#0c2034_0%,#102844_48%,#132d47_100%)] shadow-[14px_0_34px_-24px_rgba(2,8,20,0.78)] transition-[width] duration-300 md:flex md:flex-col ${
         collapsed ? "w-24" : "w-[18.5rem]"
       }`}
     >
@@ -301,7 +301,7 @@ export default function SidebarNavigation({
         <button
           type="button"
           onClick={onToggleCollapsed}
-          className="rounded-xl border border-white/10 bg-white/8 px-2.5 py-1.5 text-xs font-bold text-slate-100 hover:bg-white/14"
+          className="dashboard-sidebar-toggle rounded-xl border border-white/10 bg-white/8 px-2.5 py-1.5 text-xs font-bold text-slate-100 hover:bg-white/14"
           title={collapsed ? "Expandir menu" : "Minimizar menu"}
         >
           {collapsed ? ">" : "<"}
@@ -310,7 +310,7 @@ export default function SidebarNavigation({
 
       <div className={`flex-1 overflow-y-auto py-4 ${collapsed ? "px-2.5" : "px-3"}`}>
         {!collapsed && favoriteItems.length > 0 && (
-          <section className="mb-4 rounded-[22px] border border-white/10 bg-white/[0.04] p-2.5">
+          <section className="dashboard-sidebar-panel mb-4 rounded-[22px] border border-white/10 bg-white/[0.04] p-2.5">
             <div className="mb-2 flex items-center justify-between px-1">
               <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-300">
                 Atalhos
@@ -328,7 +328,7 @@ export default function SidebarNavigation({
                     href={item.href || "/dashboard"}
                     className={`flex items-center justify-between rounded-2xl border px-3 py-2.5 text-sm ${
                       active
-                        ? "border-sky-300 bg-sky-500 text-white"
+                        ? "dashboard-accent-surface text-white"
                         : "border-white/10 bg-white/[0.06] text-slate-100 hover:border-white/18 hover:bg-white/[0.09]"
                     }`}
                   >
@@ -351,9 +351,9 @@ export default function SidebarNavigation({
                 <button
                   type="button"
                   onClick={() => toggleSection(section.id)}
-                  className={`flex w-full items-center justify-center rounded-xl border px-2 py-3 ${
+                  className={`dashboard-sidebar-toggle flex w-full items-center justify-center rounded-xl border px-2 py-3 ${
                     hasActive
-                      ? "border-sky-300 bg-sky-500 text-white"
+                      ? "dashboard-accent-surface text-white"
                       : "border-white/10 bg-white/[0.05] text-slate-200 hover:bg-white/[0.1]"
                   }`}
                   title={section.title}
@@ -365,14 +365,14 @@ export default function SidebarNavigation({
           }
 
           return (
-            <div key={section.id} className="mb-2 rounded-[22px] border border-white/10 bg-white/[0.04]">
+            <div key={section.id} className="dashboard-sidebar-panel mb-2 rounded-[22px] border border-white/10 bg-white/[0.04]">
               <button
                 type="button"
                 onClick={() => toggleSection(section.id)}
                 className="flex w-full items-center justify-between rounded-[22px] px-3 py-3 text-left"
               >
                 <span className="flex items-center gap-2">
-                  <span className={`inline-flex h-9 w-9 items-center justify-center rounded-xl ${hasActive ? "bg-sky-500 text-white" : "bg-white/[0.08] text-slate-100"}`}>
+                  <span className={`inline-flex h-9 w-9 items-center justify-center rounded-xl ${hasActive ? "dashboard-accent-surface text-white" : "bg-white/[0.08] text-slate-100"}`}>
                     <SidebarIcon icon={section.icon} />
                   </span>
                   <span className="text-sm font-bold text-slate-100">{section.title}</span>
@@ -391,7 +391,7 @@ export default function SidebarNavigation({
                     const active = isItemActive(pathname, item.href);
                     const badgeValue = item.badgeKey ? counters[item.badgeKey] : 0;
                     const content = (
-                      <span className={`flex w-full items-center justify-between rounded-2xl border px-3 py-2.5 text-sm transition ${active ? "border-sky-300 bg-sky-500 font-semibold text-white" : "border-white/10 bg-white/[0.05] text-slate-100 hover:border-white/16 hover:bg-white/[0.08]"}`}>
+                      <span className={`flex w-full items-center justify-between rounded-2xl border px-3 py-2.5 text-sm transition ${active ? "dashboard-accent-surface font-semibold text-white" : "border-white/10 bg-white/[0.05] text-slate-100 hover:border-white/16 hover:bg-white/[0.08]"}`}>
                         <span className="truncate">{item.label}</span>
                         <span className="ml-2 flex items-center gap-1">
                           {badgeValue > 0 && !item.soon ? <span className="rounded-full bg-white/85 px-1.5 py-0.5 text-[10px] font-bold text-slate-900">{badgeValue}</span> : null}
@@ -427,11 +427,11 @@ export default function SidebarNavigation({
         })}
       </div>
 
-      <div className={`border-t border-white/10 bg-black/10 ${collapsed ? "px-2.5 py-3" : "p-3"}`}>
+      <div className={`dashboard-sidebar-footer border-t border-white/10 bg-black/10 ${collapsed ? "px-2.5 py-3" : "p-3"}`}>
         {collapsed ? (
           <div className="space-y-2">
             {ADMIN_ITEMS.filter((item) => isItemAllowed(item.href, access)).map((item) => (
-              <Link key={item.key} href={item.href || "/dashboard/profile"} title={item.label} className={`flex h-10 items-center justify-center rounded-xl border ${isItemActive(pathname, item.href) ? "border-sky-300 bg-sky-500 text-white" : "border-white/10 bg-white/[0.05] text-slate-100"}`}>
+              <Link key={item.key} href={item.href || "/dashboard/profile"} title={item.label} className={`flex h-10 items-center justify-center rounded-xl border ${isItemActive(pathname, item.href) ? "dashboard-accent-surface text-white" : "border-white/10 bg-white/[0.05] text-slate-100"}`}>
                 <SidebarIcon icon="overview" />
               </Link>
             ))}
@@ -441,7 +441,7 @@ export default function SidebarNavigation({
             <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-[0.22em] text-slate-300">Conta</p>
             <div className="space-y-1">
               {ADMIN_ITEMS.filter((item) => isItemAllowed(item.href, access)).map((item) => (
-                <Link key={item.key} href={item.href || "/dashboard/profile"} className={`flex items-center justify-between rounded-2xl border px-3 py-2.5 text-sm ${isItemActive(pathname, item.href) ? "border-sky-300 bg-sky-500 font-semibold text-white" : "border-white/10 bg-white/[0.05] text-slate-100 hover:border-white/16"}`}>
+                <Link key={item.key} href={item.href || "/dashboard/profile"} className={`flex items-center justify-between rounded-2xl border px-3 py-2.5 text-sm ${isItemActive(pathname, item.href) ? "dashboard-accent-surface font-semibold text-white" : "border-white/10 bg-white/[0.05] text-slate-100 hover:border-white/16"}`}>
                   <span>{item.label}</span>
                   {item.soon ? <span className="rounded bg-white/12 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-100">Em breve</span> : null}
                 </Link>

@@ -249,7 +249,7 @@ export default function AutomationPage() {
   return (
     <div className="space-y-6 p-6 md:p-8">
       <section className="rounded-[30px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.16),_transparent_34%),radial-gradient(circle_at_85%_18%,_rgba(14,116,144,0.16),_transparent_32%),linear-gradient(135deg,#f8fafc_0%,#eef8f7_55%,#ffffff_100%)] p-6 shadow-[0_24px_70px_-45px_rgba(15,23,42,0.45)]">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+        <div className="grid items-end gap-5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr))]">
           <div className="max-w-3xl">
             <span className="inline-flex rounded-full border border-emerald-200 bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-800">
               Fase 2
@@ -262,7 +262,7 @@ export default function AutomationPage() {
             </p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,10.5rem),1fr))]">
             <MetricCard
               label="Status atual"
               value={status?.isRunning ? "Em execucao" : "Disponivel"}
@@ -334,7 +334,7 @@ export default function AutomationPage() {
             />
           </div>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-5 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))]">
             <ConfigPill label="Timezone" value={status?.config.timezone || "-"} />
             <ConfigPill label="Cron diario" value={status?.config.dailyCron || "-"} />
             <ConfigPill label="Cron horario" value={status?.config.hourlyCron || "-"} />
