@@ -293,7 +293,14 @@ export default function LoginPage() {
               </button>
             ) : (
               <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-center">
-                <img src={setupData.qrCodeDataUrl} alt="QR Code MFA" className="mx-auto h-44 w-44 rounded-md border border-zinc-200 bg-white p-1" />
+                <Image
+                  src={setupData.qrCodeDataUrl}
+                  alt="QR Code MFA"
+                  width={176}
+                  height={176}
+                  unoptimized
+                  className="mx-auto h-44 w-44 rounded-md border border-zinc-200 bg-white p-1"
+                />
                 <p className="mt-2 break-all text-[11px] text-zinc-500">{setupData.otpAuthUrl}</p>
               </div>
             )}

@@ -1,5 +1,6 @@
 "use client";
 
+import Image, { type ImageLoaderProps } from "next/image";
 import { FormEvent, InputHTMLAttributes, ReactNode, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 
@@ -93,6 +94,10 @@ const EMPTY_FORM: CompanyForm = {
 };
 
 const TAX_REGIMES = ["", "Simples Nacional", "Lucro Presumido", "Lucro Real", "MEI", "Isento"];
+
+function passthroughImageLoader({ src }: ImageLoaderProps) {
+  return src;
+}
 
 function formatCnpj(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 14);
@@ -326,7 +331,19 @@ export default function CompanySettingsPage() {
               <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex items-center gap-4">
                   <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-white/70 bg-white text-lg font-black text-slate-900 shadow-sm" style={{ color: form.primaryColor || EMPTY_FORM.primaryColor }}>
-                    {form.logoUrl ? <img src={form.logoUrl} alt="Logo da empresa" className="h-full w-full object-cover" /> : (form.tradeName || form.companyName || "EM").slice(0, 2).toUpperCase()}
+                    {form.logoUrl ? (
+                      <Image
+                        src={form.logoUrl}
+                        alt="Logo da empresa"
+                        width={64}
+                        height={64}
+                        unoptimized
+                        loader={passthroughImageLoader}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      (form.tradeName || form.companyName || "EM").slice(0, 2).toUpperCase()
+                    )}
                   </div>
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -394,7 +411,21 @@ export default function CompanySettingsPage() {
                   <div className="rounded-[28px] border border-slate-200 p-5 text-white" style={{ backgroundImage: `linear-gradient(135deg, ${form.primaryColor || EMPTY_FORM.primaryColor} 0%, ${form.secondaryColor || EMPTY_FORM.secondaryColor} 100%)` }}>
                     <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/80">Preview</p>
                     <div className="mt-6 flex items-center gap-3">
-                      <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-white/40 bg-white/15 text-lg font-black">{form.logoUrl ? <img src={form.logoUrl} alt="Logo da empresa" className="h-full w-full object-cover" /> : (form.tradeName || form.companyName || "EM").slice(0, 2).toUpperCase()}</div>
+                      <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-white/40 bg-white/15 text-lg font-black">
+                        {form.logoUrl ? (
+                          <Image
+                            src={form.logoUrl}
+                            alt="Logo da empresa"
+                            width={56}
+                            height={56}
+                            unoptimized
+                            loader={passthroughImageLoader}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          (form.tradeName || form.companyName || "EM").slice(0, 2).toUpperCase()
+                        )}
+                      </div>
                       <div className="min-w-0">
                         <p className="truncate text-lg font-black">{form.tradeName || form.companyName || "Empresa"}</p>
                         <p className="truncate text-sm text-white/75">{form.companyName || "Razao social nao informada"}</p>
