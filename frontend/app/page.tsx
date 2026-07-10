@@ -6,6 +6,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { apiFetch, apiUrl } from "@/lib/api";
 import {
   clearAuthSession,
+  decodeJwtPayload,
   ensureValidSession,
   getDeviceName,
   getOrCreateDeviceId,
@@ -39,7 +40,9 @@ export default function LoginPage() {
     async function resumeSession() {
       const hasSession = await ensureValidSession();
       if (!cancelled && hasSession) {
-        router.replace("/dashboard");
+        const token = getStoredAccessToken();
+        const payload = token ? decodeJwtPayload<{ role?: string }>(token) : null;
+        router.replace(payload?.role === "CLIENT" ? "/portal" : "/dashboard");
       }
     }
 
@@ -89,7 +92,7 @@ export default function LoginPage() {
       }
 
       persistAuthenticatedSession(data);
-      router.push("/dashboard");
+      router.push(data?.user?.role === "CLIENT" ? "/portal" : "/dashboard");
     } catch {
       setError("Erro de conexao com o servidor. Verifique se o backend esta ativo.");
     } finally {
@@ -121,7 +124,7 @@ export default function LoginPage() {
       }
 
       persistAuthenticatedSession(data);
-      router.push("/dashboard");
+      router.push(data?.user?.role === "CLIENT" ? "/portal" : "/dashboard");
     } catch {
       setError("Falha ao validar MFA.");
     } finally {
@@ -176,7 +179,7 @@ export default function LoginPage() {
         setRecoveryCodes(data.recoveryCodes);
       }
       persistAuthenticatedSession(data);
-      router.push("/dashboard");
+      router.push(data?.user?.role === "CLIENT" ? "/portal" : "/dashboard");
     } catch {
       setError("Falha ao concluir setup MFA.");
     } finally {

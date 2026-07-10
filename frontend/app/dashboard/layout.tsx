@@ -87,14 +87,14 @@ export default function DashboardLayout({
   useEffect(() => {
     if (!accessReady) return;
     if (!canAccessDashboardPath(pathname, visiblePages)) {
-      router.replace(currentRole === "CLIENT" ? "/dashboard/client-portal" : "/dashboard");
+      router.replace(currentRole === "CLIENT" ? "/portal" : "/dashboard");
     }
   }, [accessReady, currentRole, pathname, router, visiblePages]);
 
   useEffect(() => {
     if (!accessReady || currentRole !== "CLIENT") return;
-    if (pathname === "/dashboard") {
-      router.replace("/dashboard/client-portal");
+    if (pathname.startsWith("/dashboard")) {
+      router.replace("/portal");
     }
   }, [accessReady, currentRole, pathname, router]);
 
@@ -184,7 +184,7 @@ export default function DashboardLayout({
   const navItems = useMemo(
     () => [
       {
-        href: currentRole === "CLIENT" ? "/dashboard/client-portal" : "/dashboard",
+        href: currentRole === "CLIENT" ? "/portal" : "/dashboard",
         label: currentRole === "CLIENT" ? "Portal" : "Dashboard",
         mobileLabel: currentRole === "CLIENT" ? "Portal" : "Painel",
         icon: "OV",

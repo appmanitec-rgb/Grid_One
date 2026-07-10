@@ -30,6 +30,7 @@ import { DocumentsModule } from './modules/documents/documents.module';
 import { DeliveriesModule } from './modules/deliveries/deliveries.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { CustomerPortalModule } from './modules/customer-portal/customer-portal.module';
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     DeliveriesModule,
     NotificationsModule,
     ReportsModule,
+    CustomerPortalModule,
   ],
   controllers: [],
   providers: [

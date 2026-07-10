@@ -59,6 +59,7 @@ enum AuditDomain {
   PURCHASE_ORDERS
   FINANCE
   PEOPLE
+  OPPORTUNITIES
 }
 
 enum UserCertificationScope {
@@ -416,6 +417,7 @@ model User {
   managedUsers           User[]                       @relation("UserManagementHierarchy")
   linkedClient           Client?                      @relation("ClientPortalUsers", fields: [linkedClientId], references: [id], onDelete: SetNull)
   proposals              Proposal[]
+  customerProposalDecisions Proposal[]                 @relation("ProposalCustomerDecisionBy")
   proposalMovements      ProposalMovement[]
   presences              UserPresence[]
   certifications         UserCertification[]
@@ -964,6 +966,10 @@ model Proposal {
   revision                 Int?           @default(0)
   requestedDiscountPercent Float?
   requestedDiscountReason  String?
+  customerDecisionAt       DateTime?
+  customerDecisionByUserId String?
+  customerDecisionSource   String?
+  customerDecisionNote     String?
 
   scope                   String?
   freight                 String?    @default("FOB")
@@ -992,6 +998,7 @@ model Proposal {
 
   userId String
   user   User   @relation(fields: [userId], references: [id])
+  customerDecisionByUser User? @relation("ProposalCustomerDecisionBy", fields: [customerDecisionByUserId], references: [id], onDelete: SetNull)
 
   items             ProposalItem[]
   movements         ProposalMovement[]
