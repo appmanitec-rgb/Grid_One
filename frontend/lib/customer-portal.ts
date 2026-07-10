@@ -20,6 +20,9 @@ export type PortalDashboard = {
     openOrders: number;
     openQuoteRequests: number;
     activeContracts: number;
+    openTickets?: number;
+    waitingCustomerTickets?: number;
+    convertedTickets?: number;
     recentDocuments: number;
   };
   recentOrders: PortalOrder[];
@@ -136,7 +139,12 @@ export type PortalOrder = {
   };
   site?: { id: string; name: string; code?: string | null } | null;
   technician?: { user?: { id: string; name: string } | null } | null;
-  contract?: { id: string; code: string; title?: string | null; status: string } | null;
+  contract?: {
+    id: string;
+    code: string;
+    title?: string | null;
+    status: string;
+  } | null;
   updatedAt: string;
 };
 
@@ -182,7 +190,9 @@ export type PortalQuoteRequest = {
 export async function customerPortalGet<T>(path: string) {
   const response = await apiFetch(`/customer-portal${path}`);
   if (!response.ok) {
-    throw new Error(await readApiErrorMessage(response, "Falha ao carregar o portal."));
+    throw new Error(
+      await readApiErrorMessage(response, "Falha ao carregar o portal."),
+    );
   }
   return (await response.json()) as T;
 }
@@ -194,7 +204,9 @@ export async function customerPortalPost<T>(path: string, body: unknown) {
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    throw new Error(await readApiErrorMessage(response, "Falha ao enviar dados."));
+    throw new Error(
+      await readApiErrorMessage(response, "Falha ao enviar dados."),
+    );
   }
   return (await response.json()) as T;
 }

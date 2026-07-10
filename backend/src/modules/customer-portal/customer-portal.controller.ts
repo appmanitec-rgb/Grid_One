@@ -9,6 +9,12 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
+import { TicketsService } from '../tickets/tickets.service';
+import {
+  CreateCustomerTicketDto,
+  CustomerTicketCommentDto,
+  TicketActionNoteDto,
+} from '../tickets/dto/ticket.dto';
 import { CustomerPortalService } from './customer-portal.service';
 import {
   CreateCustomerQuoteRequestDto,
@@ -24,7 +30,10 @@ type AuthenticatedRequest = Request & {
 @Controller('customer-portal')
 @UseGuards(AuthGuard)
 export class CustomerPortalController {
-  constructor(private readonly customerPortalService: CustomerPortalService) {}
+  constructor(
+    private readonly customerPortalService: CustomerPortalService,
+    private readonly ticketsService: TicketsService,
+  ) {}
 
   @Get('me')
   me(@Req() req: AuthenticatedRequest) {
@@ -111,6 +120,56 @@ export class CustomerPortalController {
   @Get('orders/:id')
   orderDetail(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.customerPortalService.getOrder(this.extractUserId(req), id);
+  }
+
+  @Get('tickets')
+  tickets(@Req() req: AuthenticatedRequest) {
+    return this.ticketsService.listCustomerTickets(this.extractUserId(req));
+  }
+
+  @Get('tickets/:id')
+  ticketDetail(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.ticketsService.getCustomerTicket(this.extractUserId(req), id);
+  }
+
+  @Post('tickets')
+  createTicket(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: CreateCustomerTicketDto,
+  ) {
+    return this.ticketsService.createCustomerTicket(
+      this.extractUserId(req),
+      dto,
+      this.extractMetadata(req),
+    );
+  }
+
+  @Post('tickets/:id/comment')
+  commentTicket(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: CustomerTicketCommentDto,
+  ) {
+    return this.ticketsService.addCustomerComment(
+      this.extractUserId(req),
+      id,
+      dto,
+      this.extractMetadata(req),
+    );
+  }
+
+  @Post('tickets/:id/cancel')
+  cancelTicket(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: TicketActionNoteDto,
+  ) {
+    return this.ticketsService.cancelCustomerTicket(
+      this.extractUserId(req),
+      id,
+      dto,
+      this.extractMetadata(req),
+    );
   }
 
   @Get('documents')

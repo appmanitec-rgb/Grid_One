@@ -13,6 +13,7 @@ import {
   Prisma,
   ProposalStatus,
   SalesOpportunityStage,
+  TicketStatus,
   UserRole,
 } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
@@ -82,6 +83,9 @@ export class CustomerPortalService {
       openOrders,
       openQuoteRequests,
       activeContracts,
+      openTickets,
+      waitingCustomerTickets,
+      convertedTickets,
       recentDocuments,
       recentOrders,
       recentProposals,
@@ -109,6 +113,33 @@ export class CustomerPortalService {
       }),
       this.prisma.serviceContract.count({
         where: { clientId: scope.clientId, status: 'ACTIVE' },
+      }),
+      this.prisma.serviceTicket.count({
+        where: {
+          clientId: scope.clientId,
+          customerVisible: true,
+          status: {
+            notIn: [
+              TicketStatus.RESOLVED,
+              TicketStatus.CLOSED,
+              TicketStatus.CANCELED,
+            ],
+          },
+        },
+      }),
+      this.prisma.serviceTicket.count({
+        where: {
+          clientId: scope.clientId,
+          customerVisible: true,
+          status: TicketStatus.WAITING_CUSTOMER,
+        },
+      }),
+      this.prisma.serviceTicket.count({
+        where: {
+          clientId: scope.clientId,
+          customerVisible: true,
+          maintenanceOrderId: { not: null },
+        },
       }),
       this.prisma.documentDelivery.findMany({
         where: { clientId: scope.clientId },
@@ -167,6 +198,9 @@ export class CustomerPortalService {
         openOrders,
         openQuoteRequests,
         activeContracts,
+        openTickets,
+        waitingCustomerTickets,
+        convertedTickets,
         recentDocuments: recentDocuments.length,
       },
       recentOrders,

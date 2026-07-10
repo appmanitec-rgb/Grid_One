@@ -8,5 +8,6 @@ import { MaintenanceOrdersController } from './maintenance-orders.controller';
   imports: [ApprovalsModule, AuditLogsModule],
   controllers: [MaintenanceOrdersController],
   providers: [MaintenanceOrdersService],
+  exports: [MaintenanceOrdersService],
 })
 export class MaintenanceOrdersModule {}

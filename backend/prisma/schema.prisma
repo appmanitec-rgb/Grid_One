@@ -60,6 +60,7 @@ enum AuditDomain {
   FINANCE
   PEOPLE
   OPPORTUNITIES
+  TICKETS
 }
 
 enum UserCertificationScope {
@@ -226,6 +227,54 @@ enum MaintenanceOrderType {
   INSTALLATION
   DEMOBILIZATION
   REFUELING
+}
+
+enum TicketStatus {
+  OPEN
+  TRIAGE
+  WAITING_CUSTOMER
+  WAITING_INTERNAL
+  SCHEDULED
+  IN_PROGRESS
+  CONVERTED_TO_ORDER
+  RESOLVED
+  CLOSED
+  CANCELED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TicketOrigin {
+  CUSTOMER_PORTAL
+  INTERNAL
+  PHONE
+  WHATSAPP
+  EMAIL
+  COMMERCIAL
+  MONITORING
+}
+
+enum TicketCategory {
+  CORRECTIVE_MAINTENANCE
+  PREVENTIVE_REQUEST
+  EMERGENCY
+  QUOTE_REQUEST
+  DOCUMENT_REQUEST
+  FINANCIAL
+  CONTRACT
+  TECHNICAL_SUPPORT
+  OTHER
+}
+
+enum TicketCommentAuthorType {
+  INTERNAL
+  CUSTOMER
+  SYSTEM
 }
 
 enum TelemetryAlarmType {
@@ -443,6 +492,9 @@ model User {
   requestedAutomationRuns AutomationRun[]           @relation("AutomationRunRequestedBy")
   createdDocumentShareTokens DocumentShareToken[]   @relation("DocumentShareCreatedBy")
   createdDocumentDeliveries  DocumentDelivery[]     @relation("DocumentDeliveryCreatedBy")
+  openedTickets          ServiceTicket[]           @relation("TicketOpenedBy")
+  assignedTickets        ServiceTicket[]           @relation("TicketAssignedTo")
+  ticketComments         ServiceTicketComment[]    @relation("TicketCommentAuthor")
 
   @@index([linkedClientId])
   @@map("users")
@@ -636,6 +688,7 @@ model Technician {
 
   orders         MaintenanceOrder[]
   certifications TechnicianCertification[]
+  serviceTickets ServiceTicket[]
 
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
@@ -686,6 +739,7 @@ model Client {
   costCenters           CostCenter[]
   documentShareTokens   DocumentShareToken[]
   documentDeliveries    DocumentDelivery[]
+  serviceTickets        ServiceTicket[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -793,6 +847,7 @@ model Generator {
   clientId          String
   client            Client                       @relation(fields: [clientId], references: [id])
   orders            MaintenanceOrder[]
+  serviceTickets    ServiceTicket[]
   telemetryEvents   TelemetryEvent[]
   baseItems         GeneratorBaseItem[]
   contractLinks     ContractEquipment[]
@@ -1175,10 +1230,77 @@ model MaintenanceOrder {
   timeEntries       TimeEntry[]
   commissions       CommissionEntry[]
   fleetAllocations  FleetAllocation[]
+  sourceTickets     ServiceTicket[]
 
   updatedAt DateTime @updatedAt
 
   @@map("maintenance_orders")
+}
+
+model ServiceTicket {
+  id                 String            @id @default(uuid())
+  code               String            @unique
+  clientId           String
+  client             Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  openedByUserId     String?
+  openedByUser       User?             @relation("TicketOpenedBy", fields: [openedByUserId], references: [id], onDelete: SetNull)
+  assignedToUserId   String?
+  assignedToUser     User?             @relation("TicketAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  technicianId       String?
+  technician         Technician?       @relation(fields: [technicianId], references: [id], onDelete: SetNull)
+  generatorId        String?
+  generator          Generator?        @relation(fields: [generatorId], references: [id], onDelete: SetNull)
+  siteId             String?
+  site               Site?             @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  contractId         String?
+  contract           ServiceContract?  @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  maintenanceOrderId String?           @unique
+  maintenanceOrder   MaintenanceOrder? @relation(fields: [maintenanceOrderId], references: [id], onDelete: SetNull)
+  title              String
+  description        String
+  category           TicketCategory
+  priority           TicketPriority    @default(MEDIUM)
+  status             TicketStatus      @default(OPEN)
+  origin             TicketOrigin      @default(INTERNAL)
+  slaResponseDueAt   DateTime?
+  slaResolutionDueAt DateTime?
+  firstResponseAt    DateTime?
+  resolvedAt         DateTime?
+  closedAt           DateTime?
+  canceledAt         DateTime?
+  customerVisible    Boolean           @default(true)
+  contactName        String?
+  contactPhone       String?
+  contactEmail       String?
+  internalNotes      String?
+  comments           ServiceTicketComment[]
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([clientId, status, createdAt])
+  @@index([priority, status])
+  @@index([assignedToUserId, status])
+  @@index([generatorId, status])
+  @@index([contractId, status])
+  @@index([slaResponseDueAt])
+  @@index([slaResolutionDueAt])
+  @@map("service_tickets")
+}
+
+model ServiceTicketComment {
+  id              String                  @id @default(uuid())
+  ticketId        String
+  ticket          ServiceTicket           @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorUserId    String?
+  authorUser      User?                   @relation("TicketCommentAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
+  authorType      TicketCommentAuthorType
+  message         String
+  customerVisible Boolean                 @default(false)
+  createdAt       DateTime                @default(now())
+
+  @@index([ticketId, createdAt])
+  @@index([authorUserId, createdAt])
+  @@map("service_ticket_comments")
 }
 
 model ServiceContract {
@@ -1215,6 +1337,7 @@ model ServiceContract {
   maintenanceOrders MaintenanceOrder[]
   receivableEntries AccountsReceivable[]
   commissions       CommissionEntry[]
+  serviceTickets    ServiceTicket[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1294,6 +1417,7 @@ model Site {
   opportunities     SalesOpportunity[]
   inspections       CommercialInspection[]
   maintenanceOrders MaintenanceOrder[]
+  serviceTickets    ServiceTicket[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -110,6 +110,10 @@ export class CreateMaintenanceOrderDto {
 
   @IsUUID()
   @IsOptional()
+  contractId?: string;
+
+  @IsUUID()
+  @IsOptional()
   technicianId?: string;
 
   @IsString()

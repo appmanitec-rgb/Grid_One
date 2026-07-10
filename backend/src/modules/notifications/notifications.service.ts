@@ -11,6 +11,8 @@ import {
   ContractStatus,
   OrderStatus,
   ProposalStatus,
+  TicketPriority,
+  TicketStatus,
   UserRole,
 } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
@@ -23,6 +25,7 @@ type NotificationCategory =
   | 'proposal'
   | 'contract'
   | 'order'
+  | 'ticket'
   | 'finance'
   | 'update';
 
@@ -115,6 +118,7 @@ export class NotificationsService {
       proposalUpdates,
       contractAlerts,
       orderAlerts,
+      ticketAlerts,
       receivableAlerts,
     ] = await Promise.all([
       this.fetchPendingApprovals(input.id, input.role),
@@ -129,6 +133,9 @@ export class NotificationsService {
         : Promise.resolve([]),
       input.access.pages.orders
         ? this.fetchOrderAlerts(input.role, input.technicianProfile?.id)
+        : Promise.resolve([]),
+      input.access.pages.tickets
+        ? this.fetchInternalTicketAlerts(now, dueSoon)
         : Promise.resolve([]),
       input.access.pages.contracts
         ? this.fetchReceivableAlerts(now, dueSoon)
@@ -148,6 +155,9 @@ export class NotificationsService {
       ),
       ...orderAlerts.map((order) =>
         this.mapInternalOrderNotification(order, input.role),
+      ),
+      ...ticketAlerts.map((ticket) =>
+        this.mapInternalTicketNotification(ticket, now, dueSoon),
       ),
       ...receivableAlerts.map((entry) =>
         this.mapReceivableNotification(entry, false),
@@ -169,126 +179,155 @@ export class NotificationsService {
     const dueSoon = new Date(now);
     dueSoon.setDate(dueSoon.getDate() + 7);
 
-    const [proposals, contracts, orders, receivables] = await Promise.all([
-      this.prisma.proposal.findMany({
-        where: {
-          clientId: linkedClientId,
-          status: {
-            in: [
-              ProposalStatus.CLIENT_REVIEW,
-              ProposalStatus.REVISION_REQUIRED,
-              ProposalStatus.WON,
-            ],
-          },
-        },
-        include: {
-          client: {
-            select: { companyName: true, tradeName: true },
-          },
-          generator: {
-            select: { id: true, name: true, serialNumber: true },
-          },
-        },
-        orderBy: { updatedAt: 'desc' },
-        take: 8,
-      }),
-      this.prisma.serviceContract.findMany({
-        where: {
-          clientId: linkedClientId,
-          OR: [
-            {
-              status: {
-                in: [ContractStatus.SUSPENDED, ContractStatus.RENEWAL],
-              },
-            },
-            {
-              invoices: {
-                some: {
-                  status: ContractInvoiceStatus.OVERDUE,
-                },
-              },
-            },
-          ],
-        },
-        include: {
-          client: {
-            select: { companyName: true, tradeName: true },
-          },
-          invoices: {
-            where: {
-              status: {
-                in: [
-                  ContractInvoiceStatus.OVERDUE,
-                  ContractInvoiceStatus.PENDING,
-                ],
-              },
-            },
-            orderBy: { dueDate: 'asc' },
-            take: 2,
-          },
-        },
-        orderBy: { updatedAt: 'desc' },
-        take: 6,
-      }),
-      this.prisma.maintenanceOrder.findMany({
-        where: {
-          generator: {
+    const [proposals, contracts, orders, tickets, receivables] =
+      await Promise.all([
+        this.prisma.proposal.findMany({
+          where: {
             clientId: linkedClientId,
-          },
-          status: {
-            in: [
-              OrderStatus.OPEN,
-              OrderStatus.IN_PROGRESS,
-              OrderStatus.COMPLETED,
-            ],
-          },
-        },
-        include: {
-          generator: {
-            include: {
-              client: {
-                select: { companyName: true, tradeName: true },
-              },
+            status: {
+              in: [
+                ProposalStatus.CLIENT_REVIEW,
+                ProposalStatus.REVISION_REQUIRED,
+                ProposalStatus.WON,
+              ],
             },
           },
-          technician: {
-            include: {
-              user: {
-                select: {
-                  name: true,
+          include: {
+            client: {
+              select: { companyName: true, tradeName: true },
+            },
+            generator: {
+              select: { id: true, name: true, serialNumber: true },
+            },
+          },
+          orderBy: { updatedAt: 'desc' },
+          take: 8,
+        }),
+        this.prisma.serviceContract.findMany({
+          where: {
+            clientId: linkedClientId,
+            OR: [
+              {
+                status: {
+                  in: [ContractStatus.SUSPENDED, ContractStatus.RENEWAL],
+                },
+              },
+              {
+                invoices: {
+                  some: {
+                    status: ContractInvoiceStatus.OVERDUE,
+                  },
+                },
+              },
+            ],
+          },
+          include: {
+            client: {
+              select: { companyName: true, tradeName: true },
+            },
+            invoices: {
+              where: {
+                status: {
+                  in: [
+                    ContractInvoiceStatus.OVERDUE,
+                    ContractInvoiceStatus.PENDING,
+                  ],
+                },
+              },
+              orderBy: { dueDate: 'asc' },
+              take: 2,
+            },
+          },
+          orderBy: { updatedAt: 'desc' },
+          take: 6,
+        }),
+        this.prisma.maintenanceOrder.findMany({
+          where: {
+            generator: {
+              clientId: linkedClientId,
+            },
+            status: {
+              in: [
+                OrderStatus.OPEN,
+                OrderStatus.IN_PROGRESS,
+                OrderStatus.COMPLETED,
+              ],
+            },
+          },
+          include: {
+            generator: {
+              include: {
+                client: {
+                  select: { companyName: true, tradeName: true },
+                },
+              },
+            },
+            technician: {
+              include: {
+                user: {
+                  select: {
+                    name: true,
+                  },
                 },
               },
             },
           },
-        },
-        orderBy: [{ updatedAt: 'desc' }],
-        take: 8,
-      }),
-      this.prisma.accountsReceivable.findMany({
-        where: {
-          clientId: linkedClientId,
-          status: {
-            in: [
-              AccountsReceivableStatus.OPEN,
-              AccountsReceivableStatus.OVERDUE,
-            ],
+          orderBy: [{ updatedAt: 'desc' }],
+          take: 8,
+        }),
+        this.prisma.serviceTicket.findMany({
+          where: {
+            clientId: linkedClientId,
+            customerVisible: true,
+            status: {
+              in: [
+                TicketStatus.OPEN,
+                TicketStatus.TRIAGE,
+                TicketStatus.WAITING_CUSTOMER,
+                TicketStatus.WAITING_INTERNAL,
+                TicketStatus.SCHEDULED,
+                TicketStatus.IN_PROGRESS,
+                TicketStatus.CONVERTED_TO_ORDER,
+                TicketStatus.RESOLVED,
+              ],
+            },
           },
-        },
-        include: {
-          client: {
-            select: { companyName: true, tradeName: true },
+          include: {
+            generator: {
+              select: { id: true, name: true, serialNumber: true },
+            },
+            maintenanceOrder: {
+              select: { id: true, title: true, status: true },
+            },
           },
-          contract: {
-            select: { id: true, code: true },
+          orderBy: { updatedAt: 'desc' },
+          take: 8,
+        }),
+        this.prisma.accountsReceivable.findMany({
+          where: {
+            clientId: linkedClientId,
+            status: {
+              in: [
+                AccountsReceivableStatus.OPEN,
+                AccountsReceivableStatus.OVERDUE,
+              ],
+            },
           },
-          maintenanceOrder: {
-            select: { id: true, title: true },
+          include: {
+            client: {
+              select: { companyName: true, tradeName: true },
+            },
+            contract: {
+              select: { id: true, code: true },
+            },
+            maintenanceOrder: {
+              select: { id: true, title: true },
+            },
           },
-        },
-        orderBy: [{ dueDate: 'asc' }],
-        take: 8,
-      }),
-    ]);
+          orderBy: [{ dueDate: 'asc' }],
+          take: 8,
+        }),
+      ]);
 
     return [
       ...proposals.map((proposal) =>
@@ -298,6 +337,7 @@ export class NotificationsService {
         this.mapClientContractNotification(contract),
       ),
       ...orders.map((order) => this.mapClientOrderNotification(order)),
+      ...tickets.map((ticket) => this.mapClientTicketNotification(ticket, now)),
       ...receivables.map((entry) =>
         this.mapReceivableNotification(entry, true, now, dueSoon),
       ),
@@ -446,6 +486,46 @@ export class NotificationsService {
       },
       orderBy: [{ scheduledTo: 'asc' }, { updatedAt: 'desc' }],
       take: 6,
+    });
+  }
+
+  private async fetchInternalTicketAlerts(now: Date, dueSoon: Date) {
+    return this.prisma.serviceTicket.findMany({
+      where: {
+        status: {
+          notIn: [
+            TicketStatus.RESOLVED,
+            TicketStatus.CLOSED,
+            TicketStatus.CANCELED,
+            TicketStatus.CONVERTED_TO_ORDER,
+          ],
+        },
+        OR: [
+          { priority: TicketPriority.CRITICAL },
+          {
+            firstResponseAt: null,
+            slaResponseDueAt: { lte: dueSoon },
+          },
+          {
+            resolvedAt: null,
+            slaResolutionDueAt: { lte: dueSoon },
+          },
+          {
+            origin: 'CUSTOMER_PORTAL',
+            status: TicketStatus.OPEN,
+          },
+        ],
+      },
+      include: {
+        client: {
+          select: { companyName: true, tradeName: true },
+        },
+        generator: {
+          select: { id: true, name: true, serialNumber: true },
+        },
+      },
+      orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
+      take: 12,
     });
   }
 
@@ -732,6 +812,78 @@ export class NotificationsService {
     };
   }
 
+  private mapInternalTicketNotification(
+    ticket: {
+      id: string;
+      code: string;
+      title: string;
+      status: TicketStatus;
+      priority: TicketPriority;
+      origin: string;
+      createdAt: Date;
+      updatedAt: Date;
+      slaResponseDueAt: Date | null;
+      slaResolutionDueAt: Date | null;
+      firstResponseAt: Date | null;
+      resolvedAt: Date | null;
+      client: { companyName: string; tradeName: string | null };
+      generator: {
+        id: string;
+        name: string | null;
+        serialNumber: string | null;
+      } | null;
+    },
+    now: Date,
+    dueSoon: Date,
+  ): NotificationItem {
+    const clientName = ticket.client.tradeName || ticket.client.companyName;
+    const responseOverdue =
+      !ticket.firstResponseAt &&
+      !!ticket.slaResponseDueAt &&
+      ticket.slaResponseDueAt < now;
+    const resolutionOverdue =
+      !ticket.resolvedAt &&
+      !!ticket.slaResolutionDueAt &&
+      ticket.slaResolutionDueAt < now;
+    const slaSoon =
+      !responseOverdue &&
+      !resolutionOverdue &&
+      [ticket.slaResponseDueAt, ticket.slaResolutionDueAt].some(
+        (date) => date && date <= dueSoon,
+      );
+    const critical = ticket.priority === TicketPriority.CRITICAL;
+
+    return {
+      id: `ticket:${ticket.id}`,
+      category: 'ticket',
+      title:
+        responseOverdue || resolutionOverdue
+          ? `SLA vencido no chamado ${ticket.code}`
+          : critical
+            ? `Chamado critico ${ticket.code}`
+            : `Chamado ${ticket.code} precisa de atencao`,
+      message: `${ticket.title} - ${clientName}.`,
+      createdAt: (
+        ticket.slaResponseDueAt ||
+        ticket.updatedAt ||
+        ticket.createdAt
+      ).toISOString(),
+      href: `/dashboard/atendimento/${ticket.id}`,
+      entityType: 'SERVICE_TICKET',
+      entityId: ticket.id,
+      tone:
+        responseOverdue || resolutionOverdue || critical
+          ? 'rose'
+          : slaSoon
+            ? 'amber'
+            : 'blue',
+      priority:
+        responseOverdue || resolutionOverdue || critical ? 'high' : 'medium',
+      statusLabel: this.labelTicketStatus(ticket.status),
+      actionLabel: 'Abrir chamado',
+    };
+  }
+
   private mapClientProposalNotification(proposal: {
     id: string;
     code: string;
@@ -851,6 +1003,75 @@ export class NotificationsService {
     };
   }
 
+  private mapClientTicketNotification(
+    ticket: {
+      id: string;
+      code: string;
+      title: string;
+      status: TicketStatus;
+      priority: TicketPriority;
+      updatedAt: Date;
+      slaResponseDueAt: Date | null;
+      slaResolutionDueAt: Date | null;
+      firstResponseAt: Date | null;
+      resolvedAt: Date | null;
+      generator: {
+        id: string;
+        name: string | null;
+        serialNumber: string | null;
+      } | null;
+      maintenanceOrder: {
+        id: string;
+        title: string;
+        status: OrderStatus;
+      } | null;
+    },
+    now: Date,
+  ): NotificationItem {
+    const responseOverdue =
+      !ticket.firstResponseAt &&
+      !!ticket.slaResponseDueAt &&
+      ticket.slaResponseDueAt < now;
+    const resolutionOverdue =
+      !ticket.resolvedAt &&
+      !!ticket.slaResolutionDueAt &&
+      ticket.slaResolutionDueAt < now;
+    const linkedOrder = ticket.maintenanceOrder;
+
+    return {
+      id: `client-ticket:${ticket.id}`,
+      category: 'ticket',
+      title: linkedOrder
+        ? `Chamado ${ticket.code} virou OS`
+        : ticket.status === TicketStatus.WAITING_CUSTOMER
+          ? `Chamado ${ticket.code} aguarda sua resposta`
+          : `Chamado ${ticket.code} em acompanhamento`,
+      message: linkedOrder
+        ? `${ticket.title} foi convertido para ${linkedOrder.title}.`
+        : responseOverdue || resolutionOverdue
+          ? `${ticket.title} esta com SLA em atencao.`
+          : `${ticket.title} segue registrado para acompanhamento.`,
+      createdAt: ticket.updatedAt.toISOString(),
+      href: `/portal/chamados/${ticket.id}`,
+      entityType: 'SERVICE_TICKET',
+      entityId: ticket.id,
+      tone:
+        responseOverdue || resolutionOverdue
+          ? 'rose'
+          : ticket.status === TicketStatus.RESOLVED
+            ? 'emerald'
+            : 'blue',
+      priority:
+        responseOverdue ||
+        resolutionOverdue ||
+        ticket.priority === TicketPriority.CRITICAL
+          ? 'high'
+          : 'medium',
+      statusLabel: this.labelTicketStatus(ticket.status),
+      actionLabel: 'Abrir chamado',
+    };
+  }
+
   private mapReceivableNotification(
     entry: {
       id: string;
@@ -912,6 +1133,7 @@ export class NotificationsService {
         proposal: 0,
         contract: 0,
         order: 0,
+        ticket: 0,
         finance: 0,
         update: 0,
       },
@@ -952,6 +1174,23 @@ export class NotificationsService {
       SUSPENDED: 'Suspenso',
       CANCELED: 'Cancelado',
       RENEWAL: 'Renovacao',
+    };
+
+    return labels[status];
+  }
+
+  private labelTicketStatus(status: TicketStatus) {
+    const labels: Record<TicketStatus, string> = {
+      OPEN: 'Aberto',
+      TRIAGE: 'Triagem',
+      WAITING_CUSTOMER: 'Aguardando cliente',
+      WAITING_INTERNAL: 'Aguardando equipe',
+      SCHEDULED: 'Agendado',
+      IN_PROGRESS: 'Em atendimento',
+      CONVERTED_TO_ORDER: 'Convertido em OS',
+      RESOLVED: 'Resolvido',
+      CLOSED: 'Fechado',
+      CANCELED: 'Cancelado',
     };
 
     return labels[status];

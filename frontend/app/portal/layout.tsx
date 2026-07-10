@@ -14,12 +14,17 @@ const NAV_ITEMS = [
   { href: "/portal/dashboard", label: "Resumo" },
   { href: "/portal/equipamentos", label: "Equipamentos" },
   { href: "/portal/propostas", label: "Propostas" },
+  { href: "/portal/chamados", label: "Chamados" },
   { href: "/portal/solicitacoes", label: "Solicitacoes" },
   { href: "/portal/documentos", label: "Documentos" },
   { href: "/portal/financeiro", label: "Financeiro" },
 ];
 
-export default function PortalLayout({ children }: { children: React.ReactNode }) {
+export default function PortalLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const [ready, setReady] = useState(false);
@@ -77,7 +82,10 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <Link href="/portal/dashboard" className="text-lg font-extrabold text-slate-950">
+            <Link
+              href="/portal/dashboard"
+              className="text-lg font-extrabold text-slate-950"
+            >
               MANITEC Portal
             </Link>
             <p className="text-sm font-medium text-slate-500">{clientName}</p>
@@ -85,7 +93,8 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
           <nav className="flex gap-2 overflow-x-auto">
             {NAV_ITEMS.map((item) => {
-              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+              const active =
+                pathname === item.href || pathname.startsWith(`${item.href}/`);
               return (
                 <Link
                   key={item.href}

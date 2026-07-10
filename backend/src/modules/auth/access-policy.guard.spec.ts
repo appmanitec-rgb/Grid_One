@@ -122,4 +122,34 @@ describe('AccessPolicyGuard', () => {
       ),
     ).toBe(true);
   });
+
+  it('blocks tickets endpoint when tickets.view is missing', () => {
+    jest
+      .spyOn(reflector, 'getAllAndOverride')
+      .mockReturnValue(['tickets.view'] as any);
+
+    expect(() =>
+      guard.canActivate(
+        makeContext({
+          role: 'SALES',
+          accessPolicy: { pages: { tickets: true }, tickets: { view: false } },
+        }),
+      ),
+    ).toThrow(ForbiddenException);
+  });
+
+  it('allows tickets endpoint when tickets.view is present', () => {
+    jest
+      .spyOn(reflector, 'getAllAndOverride')
+      .mockReturnValue(['tickets.view'] as any);
+
+    expect(
+      guard.canActivate(
+        makeContext({
+          role: 'MANAGER',
+          accessPolicy: { tickets: { view: true } },
+        }),
+      ),
+    ).toBe(true);
+  });
 });

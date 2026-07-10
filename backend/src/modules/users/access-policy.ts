@@ -13,6 +13,7 @@ export type AccessPolicy = {
     inventory: boolean;
     people: boolean;
     usersControl: boolean;
+    tickets: boolean;
   };
   clients: {
     view: boolean;
@@ -64,6 +65,17 @@ export type AccessPolicy = {
     submitVisitReport: boolean;
     approveVisitReport: boolean;
     assignWithOverride: boolean;
+  };
+  tickets: {
+    view: boolean;
+    create: boolean;
+    update: boolean;
+    assign: boolean;
+    comment: boolean;
+    convertToOrder: boolean;
+    resolve: boolean;
+    close: boolean;
+    cancel: boolean;
   };
   inventory: {
     view: boolean;
@@ -131,6 +143,7 @@ const emptyAccessPolicy: AccessPolicy = {
     inventory: false,
     people: false,
     usersControl: false,
+    tickets: false,
   },
   clients: {
     view: false,
@@ -182,6 +195,17 @@ const emptyAccessPolicy: AccessPolicy = {
     submitVisitReport: false,
     approveVisitReport: false,
     assignWithOverride: false,
+  },
+  tickets: {
+    view: false,
+    create: false,
+    update: false,
+    assign: false,
+    comment: false,
+    convertToOrder: false,
+    resolve: false,
+    close: false,
+    cancel: false,
   },
   inventory: {
     view: false,
@@ -254,6 +278,7 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         inventory: true,
         people: true,
         usersControl: true,
+        tickets: true,
       },
       clients: allClientActions(),
       catalog: {
@@ -299,6 +324,7 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         approveVisitReport: true,
         assignWithOverride: true,
       },
+      tickets: allTicketActions(),
       inventory: {
         view: true,
         create: true,
@@ -356,6 +382,7 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         catalog: true,
         clients: true,
         equipments: true,
+        tickets: true,
       },
       clients: {
         view: true,
@@ -368,6 +395,12 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         create: true,
         update: true,
         requestDiscountAboveLimit: true,
+      },
+      tickets: {
+        view: true,
+        create: true,
+        update: true,
+        comment: true,
       },
       contracts: { view: true },
       reports: { view: true },
@@ -393,6 +426,9 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
       maintenanceOrders: {
         submitVisitReport: true,
       },
+      tickets: {
+        comment: true,
+      },
       inventory: { view: true },
       technicians: {
         view: true,
@@ -415,6 +451,7 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         clients: true,
         equipments: true,
         inventory: true,
+        tickets: true,
       },
       clients: { view: true },
       catalog: {
@@ -438,6 +475,17 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
       maintenanceOrders: {
         submitVisitReport: true,
         assignWithOverride: true,
+      },
+      tickets: {
+        view: true,
+        create: true,
+        update: true,
+        assign: true,
+        comment: true,
+        convertToOrder: true,
+        resolve: true,
+        close: true,
+        cancel: true,
       },
       inventory: {
         view: true,
@@ -467,6 +515,7 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         clients: true,
         equipments: true,
         inventory: true,
+        tickets: role === UserRole.LOGISTICS,
       },
       clients: { view: true },
       catalog: {
@@ -481,6 +530,18 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         view: true,
         dispatch: true,
       },
+      tickets:
+        role === UserRole.LOGISTICS
+          ? {
+              view: true,
+              update: true,
+              assign: true,
+              comment: true,
+              convertToOrder: true,
+              resolve: true,
+              close: true,
+            }
+          : undefined,
       inventory: {
         view: true,
         create: true,
@@ -514,6 +575,7 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         contracts: true,
         clients: true,
         finance: true,
+        tickets: true,
       },
       clients: { view: true },
       contracts: { view: true },
@@ -524,6 +586,11 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         pay: true,
         cancel: true,
         reconcile: true,
+      },
+      tickets: {
+        view: true,
+        create: true,
+        comment: true,
       },
       reports: {
         view: true,
@@ -539,6 +606,7 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         dashboard: true,
         orders: true,
         people: true,
+        tickets: true,
       },
       orders: { view: true },
       people: {
@@ -550,6 +618,9 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
       technicians: {
         view: true,
         schedule: true,
+      },
+      tickets: {
+        view: true,
       },
       users: {
         manageCertifications: true,
@@ -573,6 +644,7 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         finance: true,
         inventory: true,
         people: true,
+        tickets: true,
       },
       clients: { view: true },
       catalog: { view: true, viewCosts: true },
@@ -584,6 +656,7 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
       finance: { view: true },
       people: { view: true },
       technicians: { view: true },
+      tickets: { view: true },
       reports: { view: true, export: true },
       audit: { read: true },
     });
@@ -646,6 +719,20 @@ function allClientActions() {
   };
 }
 
+function allTicketActions() {
+  return {
+    view: true,
+    create: true,
+    update: true,
+    assign: true,
+    comment: true,
+    convertToOrder: true,
+    resolve: true,
+    close: true,
+    cancel: true,
+  };
+}
+
 function mergeAccessPolicy(
   base: AccessPolicy,
   overrides: AccessPolicyOverrides,
@@ -662,6 +749,7 @@ function mergeAccessPolicy(
       base.maintenanceOrders,
       overrides.maintenanceOrders,
     ),
+    tickets: mergeSection(base.tickets, overrides.tickets),
     inventory: mergeSection(base.inventory, overrides.inventory),
     purchaseOrders: mergeSection(base.purchaseOrders, overrides.purchaseOrders),
     finance: mergeSection(base.finance, overrides.finance),
@@ -700,6 +788,7 @@ function mapAccessPolicy(
     contracts: mapSection(input.contracts, mapper),
     orders: mapSection(input.orders, mapper),
     maintenanceOrders: mapSection(input.maintenanceOrders, mapper),
+    tickets: mapSection(input.tickets, mapper),
     inventory: mapSection(input.inventory, mapper),
     purchaseOrders: mapSection(input.purchaseOrders, mapper),
     finance: mapSection(input.finance, mapper),

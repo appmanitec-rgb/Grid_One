@@ -45,6 +45,7 @@ export class MaintenanceOrdersService {
         tx,
         dto.generatorId,
         dto.siteId,
+        dto.contractId,
       );
       const assignmentValidation = await this.ensureTechnicianAssignmentRules(
         tx,
@@ -93,6 +94,7 @@ export class MaintenanceOrdersService {
           hourMeterAfter: dto.hourMeterAfter,
           generatorId: dto.generatorId,
           siteId: dto.siteId,
+          contractId: dto.contractId,
           technicianId: dto.technicianId,
           materials: dto.materials?.length
             ? {
@@ -218,6 +220,7 @@ export class MaintenanceOrdersService {
         tx,
         targetGeneratorId,
         dto.siteId,
+        dto.contractId,
       );
       const assignmentValidation = await this.ensureTechnicianAssignmentRules(
         tx,
@@ -297,6 +300,7 @@ export class MaintenanceOrdersService {
           hourMeterAfter: dto.hourMeterAfter,
           generatorId: dto.generatorId,
           siteId: dto.siteId,
+          contractId: dto.contractId,
           technicianId: dto.technicianId,
           materials: undefined,
         },
@@ -489,6 +493,7 @@ export class MaintenanceOrdersService {
     tx: Prisma.TransactionClient,
     generatorId: string,
     siteId?: string,
+    contractId?: string,
   ) {
     const generator = await tx.generator.findUnique({
       where: { id: generatorId },
@@ -498,17 +503,32 @@ export class MaintenanceOrdersService {
       throw new NotFoundException('Gerador nao encontrado.');
     }
 
-    if (!siteId) return generator;
+    if (!siteId && !contractId) return generator;
 
-    const site = await tx.site.findUnique({
-      where: { id: siteId },
-      select: { id: true, clientId: true },
-    });
-    if (!site || site.clientId !== generator.clientId) {
-      throw new BadRequestException(
-        'Local/obra invalido para o cliente do gerador.',
-      );
+    if (siteId) {
+      const site = await tx.site.findUnique({
+        where: { id: siteId },
+        select: { id: true, clientId: true },
+      });
+      if (!site || site.clientId !== generator.clientId) {
+        throw new BadRequestException(
+          'Local/obra invalido para o cliente do gerador.',
+        );
+      }
     }
+
+    if (contractId) {
+      const contract = await tx.serviceContract.findUnique({
+        where: { id: contractId },
+        select: { id: true, clientId: true },
+      });
+      if (!contract || contract.clientId !== generator.clientId) {
+        throw new BadRequestException(
+          'Contrato invalido para o cliente do gerador.',
+        );
+      }
+    }
+
     return generator;
   }
 

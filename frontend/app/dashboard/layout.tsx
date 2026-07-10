@@ -4,7 +4,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import TopBar from "./components/TopBar";
-import SidebarNavigation, { SidebarAccess } from "./components/SidebarNavigation";
+import SidebarNavigation, {
+  SidebarAccess,
+} from "./components/SidebarNavigation";
 import { canAccessDashboardPath, getAccessFromToken } from "@/lib/access";
 import {
   applyDashboardTheme,
@@ -31,7 +33,8 @@ export default function DashboardLayout({
   const router = useRouter();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [accessReady, setAccessReady] = useState(false);
-  const [appearanceTheme, setAppearanceTheme] = useState<DashboardThemeId>("mist");
+  const [appearanceTheme, setAppearanceTheme] =
+    useState<DashboardThemeId>("mist");
   const [currentRole, setCurrentRole] = useState("NORMAL");
   const [visiblePages, setVisiblePages] = useState<VisiblePages>({
     dashboard: true,
@@ -45,6 +48,7 @@ export default function DashboardLayout({
     inventory: false,
     people: false,
     usersControl: false,
+    tickets: false,
   });
 
   useEffect(() => {
@@ -164,7 +168,10 @@ export default function DashboardLayout({
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("manitec_sidebar_collapsed", isSidebarCollapsed ? "1" : "0");
+    localStorage.setItem(
+      "manitec_sidebar_collapsed",
+      isSidebarCollapsed ? "1" : "0",
+    );
   }, [isSidebarCollapsed]);
 
   useEffect(() => {
@@ -211,17 +218,83 @@ export default function DashboardLayout({
         icon: "AL",
         enabled: visiblePages.dashboard,
       },
-      { href: "/dashboard/proposals", label: "Propostas", mobileLabel: "Propostas", icon: "PP", enabled: visiblePages.proposals },
-      { href: "/dashboard/orders", label: "Ordens", mobileLabel: "Ordens", icon: "OS", enabled: visiblePages.orders },
-      { href: "/dashboard/contracts", label: "Contratos", mobileLabel: "Contratos", icon: "CT", enabled: visiblePages.contracts },
-      { href: "/dashboard/clients", label: "Clientes", mobileLabel: "Clientes", icon: "CL", enabled: visiblePages.clients },
-      { href: "/dashboard/equipments", label: "Equipamentos", mobileLabel: "Ativos", icon: "EQ", enabled: visiblePages.equipments },
-      { href: "/dashboard/catalog", label: "Catalogo", mobileLabel: "Catalogo", icon: "CG", enabled: visiblePages.catalog },
-      { href: "/dashboard/suppliers", label: "Fornecedores", mobileLabel: "Parceiros", icon: "FR", enabled: visiblePages.catalog },
-      { href: "/dashboard/finance/cash-flow", label: "Financeiro", mobileLabel: "Financeiro", icon: "FN", enabled: visiblePages.contracts },
-      { href: "/dashboard/hr/collaborators", label: "RH", mobileLabel: "Pessoas", icon: "RH", enabled: visiblePages.orders },
-      { href: "/dashboard/automation", label: "Automacoes", mobileLabel: "Automacao", icon: "AU", enabled: visiblePages.usersControl },
-      { href: "/dashboard/control", label: "Gestao", mobileLabel: "Gestao", icon: "AC", enabled: visiblePages.usersControl },
+      {
+        href: "/dashboard/proposals",
+        label: "Propostas",
+        mobileLabel: "Propostas",
+        icon: "PP",
+        enabled: visiblePages.proposals,
+      },
+      {
+        href: "/dashboard/orders",
+        label: "Ordens",
+        mobileLabel: "Ordens",
+        icon: "OS",
+        enabled: visiblePages.orders,
+      },
+      {
+        href: "/dashboard/contracts",
+        label: "Contratos",
+        mobileLabel: "Contratos",
+        icon: "CT",
+        enabled: visiblePages.contracts,
+      },
+      {
+        href: "/dashboard/clients",
+        label: "Clientes",
+        mobileLabel: "Clientes",
+        icon: "CL",
+        enabled: visiblePages.clients,
+      },
+      {
+        href: "/dashboard/equipments",
+        label: "Equipamentos",
+        mobileLabel: "Ativos",
+        icon: "EQ",
+        enabled: visiblePages.equipments,
+      },
+      {
+        href: "/dashboard/catalog",
+        label: "Catalogo",
+        mobileLabel: "Catalogo",
+        icon: "CG",
+        enabled: visiblePages.catalog,
+      },
+      {
+        href: "/dashboard/suppliers",
+        label: "Fornecedores",
+        mobileLabel: "Parceiros",
+        icon: "FR",
+        enabled: visiblePages.catalog,
+      },
+      {
+        href: "/dashboard/finance/cash-flow",
+        label: "Financeiro",
+        mobileLabel: "Financeiro",
+        icon: "FN",
+        enabled: visiblePages.contracts,
+      },
+      {
+        href: "/dashboard/hr/collaborators",
+        label: "RH",
+        mobileLabel: "Pessoas",
+        icon: "RH",
+        enabled: visiblePages.orders,
+      },
+      {
+        href: "/dashboard/automation",
+        label: "Automacoes",
+        mobileLabel: "Automacao",
+        icon: "AU",
+        enabled: visiblePages.usersControl,
+      },
+      {
+        href: "/dashboard/control",
+        label: "Gestao",
+        mobileLabel: "Gestao",
+        icon: "AC",
+        enabled: visiblePages.usersControl,
+      },
     ],
     [currentRole, visiblePages],
   );
