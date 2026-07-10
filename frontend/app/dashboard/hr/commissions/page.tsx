@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch, apiUrl } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 type Commission = {
   id: string;
@@ -13,16 +13,12 @@ type Commission = {
   maintenanceOrder?: { title?: string } | null;
 };
 
-const API_URL = apiUrl("");
-
 export default function CommissionsPage() {
   const [items, setItems] = useState<Commission[]>([]);
 
   useEffect(() => {
     async function load() {
-      const token = localStorage.getItem("manitec_token");
-      const res = await apiFetch(`${API_URL}/hr-admin/commissions`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      const res = await apiFetch("/hr-admin/commissions", {
         cache: "no-store",
       });
       if (!res.ok) return;

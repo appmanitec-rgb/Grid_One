@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { fetchDashboardNotificationInbox } from "@/lib/dashboard-notifications";
 import type { DashboardThemeId } from "@/lib/dashboard-appearance";
 import {
   clearAuthSession,
@@ -19,6 +20,10 @@ type TopBarProps = {
 };
 
 const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
+  "/dashboard/client-portal": { title: "Portal do Cliente", subtitle: "Propostas, contratos, ordens e cobranca em uma visao unica." },
+  "/dashboard/documents": { title: "Central Documental", subtitle: "Versoes prontas para imprimir, salvar em PDF e compartilhar." },
+  "/dashboard/deliveries": { title: "Historico de Envios", subtitle: "Rastreamento de compartilhamentos, abertura do link e falhas." },
+  "/dashboard/notifications": { title: "Central de Alertas", subtitle: "Aprovacoes, operacao, comercial e financeiro em uma fila unica." },
   "/dashboard": { title: "Gestao e Operacoes", subtitle: "KPIs executivos, pipeline comercial e execucao tecnica." },
   "/dashboard/opportunities": { title: "Funil de Vendas", subtitle: "Pipeline por fase, temperatura e previsao de receita." },
   "/dashboard/commercial-inspections": { title: "Vistorias Comerciais", subtitle: "Checklists tecnicos e midias para dimensionamento." },
@@ -57,6 +62,10 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
 };
 
 function getRouteFamily(pathname: string) {
+  if (pathname.startsWith("/dashboard/client-portal")) return "Portal";
+  if (pathname.startsWith("/dashboard/documents")) return "Painel";
+  if (pathname.startsWith("/dashboard/deliveries")) return "Painel";
+  if (pathname.startsWith("/dashboard/notifications")) return "Painel";
   if (pathname.startsWith("/dashboard/finance")) return "Financeiro";
   if (pathname.startsWith("/dashboard/hr")) return "Pessoas";
   if (pathname.startsWith("/dashboard/catalog") || pathname.startsWith("/dashboard/suppliers") || pathname.startsWith("/dashboard/inventory") || pathname.startsWith("/dashboard/purchase-orders")) {
@@ -74,7 +83,28 @@ function getRouteFamily(pathname: string) {
   return "Painel";
 }
 
-function getQuickAction(pathname: string) {
+function getQuickAction(pathname: string, roleCode: string) {
+  if (pathname.startsWith("/dashboard/client-portal")) {
+    return { href: "/dashboard/proposals", label: "Minhas propostas" };
+  }
+  if (pathname.startsWith("/dashboard/documents")) {
+    return roleCode === "CLIENT"
+      ? { href: "/dashboard/client-portal", label: "Voltar ao portal" }
+      : { href: "/dashboard", label: "Voltar ao painel" };
+  }
+  if (pathname.startsWith("/dashboard/deliveries")) {
+    return roleCode === "CLIENT"
+      ? { href: "/dashboard/client-portal", label: "Voltar ao portal" }
+      : { href: "/dashboard/documents", label: "Central documental" };
+  }
+  if (pathname.startsWith("/dashboard/notifications")) {
+    return roleCode === "CLIENT"
+      ? { href: "/dashboard/client-portal", label: "Voltar ao portal" }
+      : { href: "/dashboard", label: "Voltar ao painel" };
+  }
+  if (roleCode === "CLIENT" && pathname.startsWith("/dashboard/proposals")) {
+    return { href: "/dashboard/client-portal", label: "Voltar ao portal" };
+  }
   if (pathname === "/dashboard" || pathname.startsWith("/dashboard/proposals")) {
     return { href: "/dashboard/proposals/new", label: "Nova proposta" };
   }
@@ -127,6 +157,12 @@ export default function TopBar({
   const router = useRouter();
   const [userName, setUserName] = useState("Usuario");
   const [userRole, setUserRole] = useState("Operador");
+  const [userRoleCode, setUserRoleCode] = useState("NORMAL");
+  const [notificationSummary, setNotificationSummary] = useState({
+    total: 0,
+    actionRequired: 0,
+    highPriority: 0,
+  });
 
   useEffect(() => {
     const token = getStoredAccessToken();
@@ -152,7 +188,51 @@ export default function TopBar({
       NORMAL: "Usuario",
     };
     setUserName(payload.name || payload.email || "Usuario");
+    setUserRoleCode(payload.role || "NORMAL");
     setUserRole(roleMap[payload.role || ""] || payload.role || "Usuario");
+  }, [router]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadNotifications() {
+      try {
+        const payload = await fetchDashboardNotificationInbox(12);
+        if (!active) return;
+
+        setNotificationSummary({
+          total: payload.summary.total,
+          actionRequired: payload.summary.actionRequired,
+          highPriority: payload.summary.highPriority,
+        });
+      } catch (error: unknown) {
+        if ((error as { status?: number })?.status === 401) {
+          clearAuthSession();
+          router.replace("/");
+        }
+      }
+    }
+
+    const handleRefresh = () => {
+      if (document.visibilityState === "visible") {
+        void loadNotifications();
+      }
+    };
+
+    void loadNotifications();
+    const intervalId = window.setInterval(() => {
+      void loadNotifications();
+    }, 60_000);
+
+    window.addEventListener("focus", handleRefresh);
+    document.addEventListener("visibilitychange", handleRefresh);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleRefresh);
+      document.removeEventListener("visibilitychange", handleRefresh);
+    };
   }, [router]);
 
   const heading = useMemo(() => {
@@ -164,7 +244,11 @@ export default function TopBar({
   }, [pathname]);
 
   const routeFamily = useMemo(() => getRouteFamily(pathname), [pathname]);
-  const quickAction = useMemo(() => getQuickAction(pathname), [pathname]);
+  const quickAction = useMemo(
+    () => getQuickAction(pathname, userRoleCode),
+    [pathname, userRoleCode],
+  );
+  const isNotificationsPage = pathname.startsWith("/dashboard/notifications");
   const todayLabel = useMemo(
     () =>
       new Intl.DateTimeFormat("pt-BR", {
@@ -218,6 +302,37 @@ export default function TopBar({
             themeId={appearanceTheme}
             onChange={onChangeAppearanceTheme}
           />
+
+          <Link
+            href="/dashboard/notifications"
+            className={`dashboard-topbar-chip hidden items-center gap-3 rounded-2xl border px-3 py-2 shadow-sm transition hover:border-white/20 md:inline-flex ${
+              isNotificationsPage ? "dashboard-accent-surface" : ""
+            }`}
+          >
+            <div className="text-left">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-200/80">
+                Alertas
+              </p>
+              <p className="mt-1 text-sm font-semibold text-white">
+                {notificationSummary.highPriority > 0
+                  ? "Prioridade alta"
+                  : notificationSummary.actionRequired > 0
+                    ? "Requer acao"
+                    : "Tudo em dia"}
+              </p>
+            </div>
+            <span
+              className={`inline-flex min-w-8 items-center justify-center rounded-full px-2 py-1 text-xs font-bold ${
+                isNotificationsPage
+                  ? "bg-white/18 text-white"
+                  : notificationSummary.highPriority > 0
+                    ? "bg-rose-500/20 text-rose-100"
+                    : "bg-white/10 text-white"
+              }`}
+            >
+              {notificationSummary.actionRequired}
+            </span>
+          </Link>
 
           {quickAction ? (
             <Link

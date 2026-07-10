@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch, apiUrl } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 type Collaborator = {
   id: string;
@@ -12,16 +12,12 @@ type Collaborator = {
   hourCost?: number | null;
 };
 
-const API_URL = apiUrl("");
-
 export default function CollaboratorsPage() {
   const [items, setItems] = useState<Collaborator[]>([]);
 
   useEffect(() => {
     async function load() {
-      const token = localStorage.getItem("manitec_token");
-      const res = await apiFetch(`${API_URL}/hr-admin/collaborators`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      const res = await apiFetch("/hr-admin/collaborators", {
         cache: "no-store",
       });
       if (!res.ok) return;

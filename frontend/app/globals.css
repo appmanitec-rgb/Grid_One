@@ -506,6 +506,39 @@ h3 {
     box-shadow 220ms ease;
 }
 
+@media print {
+  body {
+    background: #ffffff !important;
+  }
+
+  .dashboard-sidebar,
+  .dashboard-topbar,
+  .glass-surface,
+  .document-print-toolbar {
+    display: none !important;
+  }
+
+  .dashboard-main {
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  .dashboard-container,
+  .slide-fade-in {
+    max-width: none !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .document-print-page {
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+  }
+}
+
 @keyframes slideFadeIn {
   from {
     opacity: 0;

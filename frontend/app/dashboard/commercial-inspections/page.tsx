@@ -1,9 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { apiFetch, apiUrl } from "@/lib/api";
-
-const API_URL = apiUrl("");
+import { apiFetch, readApiErrorMessage } from "@/lib/api";
 
 const STATUS_OPTIONS = [
   "DRAFT",
@@ -52,14 +50,6 @@ type Inspection = {
   media: Array<{ id: string; fileUrl: string }>;
 };
 
-function authHeaders(json = false) {
-  const token = localStorage.getItem("manitec_token");
-  return {
-    ...(json ? { "Content-Type": "application/json" } : {}),
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
 function toIso(value: string) {
   return value ? new Date(value).toISOString() : undefined;
 }
@@ -90,16 +80,13 @@ export default function CommercialInspectionsPage() {
     try {
       const [inspectionsRes, opportunitiesRes, collaboratorsRes] =
         await Promise.all([
-          apiFetch(`${API_URL}/crm/inspections`, {
-            headers: authHeaders(),
+          apiFetch("/crm/inspections", {
             cache: "no-store",
           }),
-          apiFetch(`${API_URL}/crm/opportunities`, {
-            headers: authHeaders(),
+          apiFetch("/crm/opportunities", {
             cache: "no-store",
           }),
-          apiFetch(`${API_URL}/hr-admin/collaborators`, {
-            headers: authHeaders(),
+          apiFetch("/hr-admin/collaborators", {
             cache: "no-store",
           }),
         ]);
@@ -136,9 +123,11 @@ export default function CommercialInspectionsPage() {
     setMessage("");
 
     try {
-      const res = await apiFetch(`${API_URL}/crm/inspections`, {
+      const res = await apiFetch("/crm/inspections", {
         method: "POST",
-        headers: authHeaders(true),
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           opportunityId,
           inspectorUserId: inspectorUserId || undefined,
@@ -155,10 +144,7 @@ export default function CommercialInspectionsPage() {
       });
 
       if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as
-          | { message?: string }
-          | null;
-        throw new Error(body?.message || "Falha ao criar vistoria.");
+        throw new Error(await readApiErrorMessage(res, "Falha ao criar vistoria."));
       }
 
       setOpportunityId("");
@@ -187,17 +173,16 @@ export default function CommercialInspectionsPage() {
     setError("");
     setMessage("");
     try {
-      const res = await apiFetch(`${API_URL}/crm/inspections/${id}`, {
+      const res = await apiFetch(`/crm/inspections/${id}`, {
         method: "PATCH",
-        headers: authHeaders(true),
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ status }),
       });
 
       if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as
-          | { message?: string }
-          | null;
-        throw new Error(body?.message || "Falha ao atualizar status.");
+        throw new Error(await readApiErrorMessage(res, "Falha ao atualizar status."));
       }
 
       setMessage("Status da vistoria atualizado.");
@@ -219,17 +204,16 @@ export default function CommercialInspectionsPage() {
     setMessage("");
 
     try {
-      const res = await apiFetch(`${API_URL}/crm/inspections/${inspectionId}/media`, {
+      const res = await apiFetch(`/crm/inspections/${inspectionId}/media`, {
         method: "POST",
-        headers: authHeaders(true),
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ fileUrl }),
       });
 
       if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as
-          | { message?: string }
-          | null;
-        throw new Error(body?.message || "Falha ao anexar midia.");
+        throw new Error(await readApiErrorMessage(res, "Falha ao anexar midia."));
       }
 
       setMediaInputById((prev) => ({ ...prev, [inspectionId]: "" }));

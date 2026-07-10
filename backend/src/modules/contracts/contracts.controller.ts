@@ -22,11 +22,12 @@ import { UpdateContractDto } from './dto/update-contract.dto';
 
 @Controller('contracts')
 @UseGuards(AuthGuard, AccessPolicyGuard)
-@RequireAccessPolicy('pages.contracts')
+@RequireAccessPolicy('contracts.view')
 export class ContractsController {
   constructor(private readonly contractsService: ContractsService) {}
 
   @UseGuards(AuthGuard)
+  @RequireAccessPolicy('contracts.create')
   @Post()
   create(@Body() dto: CreateContractDto, @Req() req: Request) {
     const userId = (req['user'] as any)?.sub as string | undefined;
@@ -34,24 +35,33 @@ export class ContractsController {
   }
 
   @UseGuards(AuthGuard)
+  @RequireAccessPolicy('contracts.view')
   @Get()
-  findAll() {
-    return this.contractsService.findAll();
+  findAll(@Req() req: Request) {
+    const userId = (req['user'] as any)?.sub as string | undefined;
+    return this.contractsService.findAll(userId);
   }
 
   @UseGuards(AuthGuard)
+  @RequireAccessPolicy('contracts.view')
   @Get('invoices/all')
-  findAllInvoices(@Query('status') status?: ContractInvoiceStatus) {
-    return this.contractsService.findAllInvoices(status);
+  findAllInvoices(
+    @Req() req: Request,
+    @Query('status') status?: ContractInvoiceStatus,
+  ) {
+    const userId = (req['user'] as any)?.sub as string | undefined;
+    return this.contractsService.findAllInvoices(status, userId);
   }
 
   @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.reconcile')
   @Post('automation/delinquency-sync')
   syncDelinquency() {
     return this.contractsService.syncDelinquencyStatuses();
   }
 
   @UseGuards(AuthGuard)
+  @RequireAccessPolicy('orders.create')
   @Post('automation/preventive-run')
   runPreventiveAutomation(@Query('daysAhead') daysAhead?: string) {
     const parsed = daysAhead ? Number(daysAhead) : 45;
@@ -59,40 +69,60 @@ export class ContractsController {
   }
 
   @UseGuards(AuthGuard)
+  @RequireAccessPolicy('contracts.view')
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.contractsService.findOne(id);
+  findOne(@Req() req: Request, @Param('id') id: string) {
+    const userId = (req['user'] as any)?.sub as string | undefined;
+    return this.contractsService.findOne(id, userId);
   }
 
   @UseGuards(AuthGuard)
+  @RequireAccessPolicy('contracts.update')
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateContractDto) {
-    return this.contractsService.update(id, dto);
+  update(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: UpdateContractDto,
+  ) {
+    const userId = (req['user'] as any)?.sub as string | undefined;
+    return this.contractsService.update(id, dto, userId);
   }
 
   @UseGuards(AuthGuard)
+  @RequireAccessPolicy('contracts.activate')
   @Post(':id/activate')
-  activate(@Param('id') id: string) {
-    return this.contractsService.activate(id);
+  activate(@Req() req: Request, @Param('id') id: string) {
+    const userId = (req['user'] as any)?.sub as string | undefined;
+    return this.contractsService.activate(id, userId);
   }
 
   @UseGuards(AuthGuard)
+  @RequireAccessPolicy('contracts.update')
   @Post(':id/suspend')
-  suspend(@Param('id') id: string, @Body() body: { note?: string }) {
-    return this.contractsService.suspendForDelinquency(id, body?.note);
+  suspend(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() body: { note?: string },
+  ) {
+    const userId = (req['user'] as any)?.sub as string | undefined;
+    return this.contractsService.suspendForDelinquency(id, body?.note, userId);
   }
 
   @UseGuards(AuthGuard)
+  @RequireAccessPolicy('orders.create')
   @Post(':id/generate-orders')
   async generateOrders(
+    @Req() req: Request,
     @Param('id') id: string,
     @Query('daysAhead') daysAhead?: string,
   ) {
     try {
+      const userId = (req['user'] as any)?.sub as string | undefined;
       const parsed = daysAhead ? Number(daysAhead) : 30;
       return await this.contractsService.generateUpcomingPreventiveOrders(
         id,
         parsed,
+        userId,
       );
     } catch (error: any) {
       throw new BadRequestException(error.message);
@@ -100,17 +130,26 @@ export class ContractsController {
   }
 
   @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.pay')
   @Patch('invoices/:invoiceId/pay')
   markInvoicePaid(
+    @Req() req: Request,
     @Param('invoiceId') invoiceId: string,
     @Body() body: { paidAt?: string },
   ) {
-    return this.contractsService.markInvoicePaid(invoiceId, body?.paidAt);
+    const userId = (req['user'] as any)?.sub as string | undefined;
+    return this.contractsService.markInvoicePaid(
+      invoiceId,
+      body?.paidAt,
+      userId,
+    );
   }
 
   @UseGuards(AuthGuard)
+  @RequireAccessPolicy('contracts.cancel')
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.contractsService.remove(id);
+  remove(@Req() req: Request, @Param('id') id: string) {
+    const userId = (req['user'] as any)?.sub as string | undefined;
+    return this.contractsService.remove(id, userId);
   }
 }

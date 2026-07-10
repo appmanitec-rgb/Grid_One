@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch, apiUrl } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 type Vehicle = {
   id: string;
@@ -12,16 +12,12 @@ type Vehicle = {
   status: "AVAILABLE" | "IN_USE" | "MAINTENANCE" | "BLOCKED";
 };
 
-const API_URL = apiUrl("");
-
 export default function FleetPage() {
   const [items, setItems] = useState<Vehicle[]>([]);
 
   useEffect(() => {
     async function load() {
-      const token = localStorage.getItem("manitec_token");
-      const res = await apiFetch(`${API_URL}/hr-admin/fleet/vehicles`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      const res = await apiFetch("/hr-admin/fleet/vehicles", {
         cache: "no-store",
       });
       if (!res.ok) return;

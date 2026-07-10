@@ -1,26 +1,34 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import {
   AccountsReceivableStatus,
+  AuditDomain,
   ClientType,
   ContractInvoiceStatus,
   ContractStatus,
   GeneratorLifecycleStatus,
   PaymentMethod,
   Prisma,
+  UserRole,
 } from '@prisma/client';
 import { DatabaseService } from 'src/database/database.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 import { UpdateContractDto } from './dto/update-contract.dto';
 
 @Injectable()
 export class ContractsService {
-  constructor(private readonly prisma: DatabaseService) {}
+  constructor(
+    private readonly prisma: DatabaseService,
+    private readonly auditLogsService: AuditLogsService,
+  ) {}
 
   async create(dto: CreateContractDto, actorUserId?: string) {
+    await this.assertInternalActor(actorUserId);
     this.validateDates(dto.startDate, dto.endDate);
 
     return this.prisma.$transaction(async (tx) => {
@@ -57,6 +65,22 @@ export class ContractsService {
       });
 
       await this.syncContractAutomation(tx, contract.id);
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.CONTRACTS,
+          entityType: 'SERVICE_CONTRACT',
+          entityId: contract.id,
+          action: 'CREATE',
+          actorUserId,
+          afterPayload: {
+            code: contract.code,
+            clientId: contract.clientId,
+            status: contract.status,
+            recurringAmount: contract.recurringAmount,
+          },
+        },
+        tx,
+      );
 
       return tx.serviceContract.findUnique({
         where: { id: contract.id },
@@ -65,15 +89,20 @@ export class ContractsService {
     });
   }
 
-  async findAll() {
+  async findAll(actorUserId?: string) {
     await this.syncDelinquencyStatuses();
+    const scope = await this.getActorScope(actorUserId);
     return this.prisma.serviceContract.findMany({
+      where:
+        scope?.role === UserRole.CLIENT
+          ? { clientId: this.requireLinkedClientId(scope) }
+          : undefined,
       include: this.contractInclude(),
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, actorUserId?: string) {
     await this.syncDelinquencyStatuses();
     const contract = await this.prisma.serviceContract.findUnique({
       where: { id },
@@ -81,11 +110,13 @@ export class ContractsService {
     });
 
     if (!contract) throw new NotFoundException('Contrato nao encontrado.');
+    await this.assertContractScope(contract.clientId, actorUserId);
     return contract;
   }
 
-  async update(id: string, dto: UpdateContractDto) {
-    const existing = await this.findOne(id);
+  async update(id: string, dto: UpdateContractDto, actorUserId?: string) {
+    await this.assertInternalActor(actorUserId);
+    const existing = await this.findOne(id, actorUserId);
 
     if (dto.startDate || dto.endDate) {
       this.validateDates(
@@ -139,6 +170,18 @@ export class ContractsService {
       }
 
       await this.syncContractAutomation(tx, id);
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.CONTRACTS,
+          entityType: 'SERVICE_CONTRACT',
+          entityId: id,
+          action: 'UPDATE',
+          actorUserId,
+          beforePayload: existing as unknown as Prisma.InputJsonValue,
+          afterPayload: dto as unknown as Prisma.InputJsonValue,
+        },
+        tx,
+      );
 
       return tx.serviceContract.findUnique({
         where: { id },
@@ -147,8 +190,9 @@ export class ContractsService {
     });
   }
 
-  async suspendForDelinquency(id: string, note?: string) {
-    const contract = await this.findOne(id);
+  async suspendForDelinquency(id: string, note?: string, actorUserId?: string) {
+    await this.assertInternalActor(actorUserId);
+    const contract = await this.findOne(id, actorUserId);
     return this.prisma.$transaction(async (tx) => {
       await tx.serviceContract.update({
         where: { id },
@@ -161,6 +205,17 @@ export class ContractsService {
       });
 
       await this.syncContractAutomation(tx, id);
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.CONTRACTS,
+          entityType: 'SERVICE_CONTRACT',
+          entityId: id,
+          action: 'SUSPEND',
+          actorUserId,
+          reason: note,
+        },
+        tx,
+      );
       return tx.serviceContract.findUnique({
         where: { id },
         include: this.contractInclude(),
@@ -168,8 +223,9 @@ export class ContractsService {
     });
   }
 
-  async activate(id: string) {
-    await this.findOne(id);
+  async activate(id: string, actorUserId?: string) {
+    await this.assertInternalActor(actorUserId);
+    await this.findOne(id, actorUserId);
 
     return this.prisma.$transaction(async (tx) => {
       await tx.serviceContract.update({
@@ -177,6 +233,16 @@ export class ContractsService {
         data: { status: ContractStatus.ACTIVE },
       });
       await this.syncContractAutomation(tx, id);
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.CONTRACTS,
+          entityType: 'SERVICE_CONTRACT',
+          entityId: id,
+          action: 'ACTIVATE',
+          actorUserId,
+        },
+        tx,
+      );
       return tx.serviceContract.findUnique({
         where: { id },
         include: this.contractInclude(),
@@ -184,9 +250,14 @@ export class ContractsService {
     });
   }
 
-  async generateUpcomingPreventiveOrders(id: string, daysAhead = 30) {
+  async generateUpcomingPreventiveOrders(
+    id: string,
+    daysAhead = 30,
+    actorUserId?: string,
+  ) {
+    await this.assertInternalActor(actorUserId);
     await this.syncDelinquencyStatuses();
-    await this.findOne(id);
+    await this.findOne(id, actorUserId);
 
     return this.prisma.$transaction(async (tx) => {
       const until = new Date();
@@ -229,6 +300,23 @@ export class ContractsService {
             status: 'ORDER_CREATED',
           },
         });
+      }
+
+      if (createdOrders.length > 0) {
+        await this.auditLogsService.record(
+          {
+            domain: AuditDomain.CONTRACTS,
+            entityType: 'SERVICE_CONTRACT',
+            entityId: id,
+            action: 'GENERATE_PREVENTIVE_ORDERS',
+            actorUserId,
+            afterPayload: {
+              createdOrderIds: createdOrders.map((order) => order.id),
+              daysAhead,
+            },
+          },
+          tx,
+        );
       }
 
       return {
@@ -319,8 +407,9 @@ export class ContractsService {
     });
   }
 
-  async remove(id: string) {
-    await this.findOne(id);
+  async remove(id: string, actorUserId?: string) {
+    await this.assertInternalActor(actorUserId);
+    await this.findOne(id, actorUserId);
 
     return this.prisma.$transaction(async (tx) => {
       await tx.serviceContract.update({
@@ -328,14 +417,32 @@ export class ContractsService {
         data: { status: ContractStatus.CANCELED },
       });
       await this.syncContractAutomation(tx, id);
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.CONTRACTS,
+          entityType: 'SERVICE_CONTRACT',
+          entityId: id,
+          action: 'CANCEL',
+          actorUserId,
+        },
+        tx,
+      );
       return { id, canceled: true };
     });
   }
 
-  async findAllInvoices(status?: ContractInvoiceStatus) {
+  async findAllInvoices(status?: ContractInvoiceStatus, actorUserId?: string) {
     await this.syncDelinquencyStatuses();
+    const scope = await this.getActorScope(actorUserId);
     return this.prisma.contractInvoice.findMany({
       where: {
+        ...(scope?.role === UserRole.CLIENT
+          ? {
+              contract: {
+                clientId: this.requireLinkedClientId(scope),
+              },
+            }
+          : {}),
         ...(status ? { status } : {}),
       },
       include: {
@@ -355,7 +462,12 @@ export class ContractsService {
     });
   }
 
-  async markInvoicePaid(invoiceId: string, paidAt?: string) {
+  async markInvoicePaid(
+    invoiceId: string,
+    paidAt?: string,
+    actorUserId?: string,
+  ) {
+    await this.assertInternalActor(actorUserId);
     const effectivePaidAt = paidAt ? new Date(paidAt) : new Date();
     const updated = await this.prisma.$transaction(async (tx) => {
       const invoice = await tx.contractInvoice.findUnique({
@@ -399,6 +511,7 @@ export class ContractsService {
               amount: outstanding,
               method: PaymentMethod.OTHER,
               paidAt: effectivePaidAt,
+              actorUserId,
               notes:
                 'Baixa automatica a partir da quitacao da fatura contratual.',
             },
@@ -420,7 +533,7 @@ export class ContractsService {
         }
       }
 
-      return tx.contractInvoice.update({
+      const paidInvoice = await tx.contractInvoice.update({
         where: { id: invoiceId },
         data: {
           status: ContractInvoiceStatus.PAID,
@@ -434,6 +547,24 @@ export class ContractsService {
           },
         },
       });
+
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.FINANCE,
+          entityType: 'CONTRACT_INVOICE',
+          entityId: invoiceId,
+          action: 'PAY',
+          actorUserId,
+          afterPayload: {
+            contractId: invoice.contractId,
+            receivableId: receivable?.id,
+            paidAt: effectivePaidAt.toISOString(),
+          },
+        },
+        tx,
+      );
+
+      return paidInvoice;
     });
 
     await this.syncDelinquencyStatuses();
@@ -542,6 +673,57 @@ export class ContractsService {
       totalOrdersCreated: result.reduce((acc, item) => acc + item.created, 0),
       details: result,
     };
+  }
+
+  private async getActorScope(actorUserId?: string) {
+    if (!actorUserId) {
+      return null;
+    }
+
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: {
+        id: true,
+        role: true,
+        linkedClientId: true,
+      },
+    });
+
+    if (!actor) {
+      throw new NotFoundException('Usuario nao encontrado.');
+    }
+
+    return actor;
+  }
+
+  private requireLinkedClientId(actor: { linkedClientId: string | null }) {
+    if (!actor.linkedClientId) {
+      throw new ForbiddenException(
+        'Conta de cliente sem empresa vinculada ao portal.',
+      );
+    }
+
+    return actor.linkedClientId;
+  }
+
+  private async assertInternalActor(actorUserId?: string) {
+    const actor = await this.getActorScope(actorUserId);
+    if (actor?.role === UserRole.CLIENT) {
+      throw new ForbiddenException(
+        'Usuarios do portal do cliente nao podem executar esta acao.',
+      );
+    }
+  }
+
+  private async assertContractScope(clientId: string, actorUserId?: string) {
+    const actor = await this.getActorScope(actorUserId);
+    if (actor?.role !== UserRole.CLIENT) {
+      return;
+    }
+
+    if (clientId !== this.requireLinkedClientId(actor)) {
+      throw new NotFoundException('Contrato nao encontrado.');
+    }
   }
 
   private validateDates(startDate: string, endDate: string) {

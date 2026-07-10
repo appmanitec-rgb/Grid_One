@@ -89,4 +89,37 @@ describe('AccessPolicyGuard', () => {
       ),
     ).toBe(true);
   });
+
+  it('blocks finance endpoint when finance.view is missing', () => {
+    jest
+      .spyOn(reflector, 'getAllAndOverride')
+      .mockReturnValue(['finance.view'] as any);
+
+    expect(() =>
+      guard.canActivate(
+        makeContext({
+          role: 'SALES',
+          accessPolicy: {
+            pages: { contracts: true },
+            finance: { view: false },
+          },
+        }),
+      ),
+    ).toThrow(ForbiddenException);
+  });
+
+  it('allows finance endpoint when finance.view is present', () => {
+    jest
+      .spyOn(reflector, 'getAllAndOverride')
+      .mockReturnValue(['finance.view'] as any);
+
+    expect(
+      guard.canActivate(
+        makeContext({
+          role: 'FINANCE',
+          accessPolicy: { finance: { view: true } },
+        }),
+      ),
+    ).toBe(true);
+  });
 });

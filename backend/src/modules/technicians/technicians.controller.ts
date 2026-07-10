@@ -17,25 +17,29 @@ import { TechniciansService } from './technicians.service';
 
 @Controller('technicians')
 @UseGuards(AuthGuard, AccessPolicyGuard)
-@RequireAccessPolicy('pages.orders')
+@RequireAccessPolicy('technicians.view')
 export class TechniciansController {
   constructor(private readonly techniciansService: TechniciansService) {}
 
+  @RequireAccessPolicy('people.create')
   @Post()
   create(@Body() createTechnicianDto: CreateTechnicianDto) {
     return this.techniciansService.create(createTechnicianDto);
   }
 
+  @RequireAccessPolicy('technicians.view')
   @Get()
   findAll() {
     return this.techniciansService.findAll();
   }
 
+  @RequireAccessPolicy('technicians.view')
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.techniciansService.findOne(id);
   }
 
+  @RequireAccessPolicy('people.update')
   @Patch(':id')
   update(
     @Param('id') id: string,
@@ -44,6 +48,7 @@ export class TechniciansController {
     return this.techniciansService.update(id, updateTechnicianDto);
   }
 
+  @RequireAccessPolicy('people.delete')
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.techniciansService.remove(id);

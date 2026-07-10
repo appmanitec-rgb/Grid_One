@@ -40,6 +40,30 @@ export class CompanySettingsService {
       : normalized;
   }
 
+  private normalizeUrl(value?: string) {
+    const normalized = this.normalizeText(value);
+    if (normalized == null) return normalized;
+
+    try {
+      const url = new URL(normalized);
+      if (!['http:', 'https:'].includes(url.protocol)) {
+        throw new Error('invalid-protocol');
+      }
+      return url.toString();
+    } catch {
+      throw new BadRequestException('Informe uma URL valida.');
+    }
+  }
+
+  private normalizeDeliveryTemplates(value?: Record<string, unknown>) {
+    if (value === undefined) return undefined;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new BadRequestException('Templates de envio invalidos.');
+    }
+
+    return value as object;
+  }
+
   private buildCompanyData(dto: UpdateCompanySettingsDto) {
     return {
       companyName: this.normalizeText(dto.companyName),
@@ -66,6 +90,17 @@ export class CompanySettingsService {
       logoUrl: this.normalizeText(dto.logoUrl),
       primaryColor: this.normalizeText(dto.primaryColor),
       secondaryColor: this.normalizeText(dto.secondaryColor),
+      deliverySenderName: this.normalizeText(dto.deliverySenderName),
+      deliveryFromEmail: this.normalizeEmail(dto.deliveryFromEmail),
+      deliveryReplyToEmail: this.normalizeEmail(dto.deliveryReplyToEmail),
+      deliveryDefaultWhatsapp: this.normalizeText(dto.deliveryDefaultWhatsapp),
+      deliveryDefaultWebhookUrl: this.normalizeUrl(
+        dto.deliveryDefaultWebhookUrl,
+      ),
+      deliveryEmailFooter: this.normalizeText(dto.deliveryEmailFooter),
+      deliveryTemplatesJson: this.normalizeDeliveryTemplates(
+        dto.deliveryTemplatesJson,
+      ),
       notes: this.normalizeText(dto.notes),
     };
   }

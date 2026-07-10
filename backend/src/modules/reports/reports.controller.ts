@@ -6,7 +6,7 @@ import { ReportsService } from './reports.service';
 
 @Controller('reports')
 @UseGuards(AuthGuard, AccessPolicyGuard)
-@RequireAccessPolicy('pages.dashboard')
+@RequireAccessPolicy('reports.view')
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 

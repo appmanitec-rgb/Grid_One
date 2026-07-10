@@ -2,9 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { apiFetch, apiUrl } from "@/lib/api";
-
-const API_URL = apiUrl("");
+import { apiFetch, readApiErrorMessage } from "@/lib/api";
 
 const STAGE_ORDER = [
   "PROSPECTION",
@@ -102,14 +100,6 @@ type Collaborator = {
   name: string;
 };
 
-function authHeaders(json = false) {
-  const token = localStorage.getItem("manitec_token");
-  return {
-    ...(json ? { "Content-Type": "application/json" } : {}),
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
 export default function OpportunitiesPage() {
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [pipeline, setPipeline] = useState<PipelineRow[]>([]);
@@ -139,19 +129,16 @@ export default function OpportunitiesPage() {
     try {
       const [opportunitiesRes, pipelineRes, clientsRes, sellersRes] =
         await Promise.all([
-          apiFetch(`${API_URL}/crm/opportunities`, {
-            headers: authHeaders(),
+          apiFetch("/crm/opportunities", {
             cache: "no-store",
           }),
-          apiFetch(`${API_URL}/crm/opportunities/pipeline`, {
-            headers: authHeaders(),
+          apiFetch("/crm/opportunities/pipeline", {
             cache: "no-store",
           }),
-          apiFetch(`${API_URL}/clients`, {
+          apiFetch("/clients", {
             cache: "no-store",
           }),
-          apiFetch(`${API_URL}/hr-admin/collaborators`, {
-            headers: authHeaders(),
+          apiFetch("/hr-admin/collaborators", {
             cache: "no-store",
           }),
         ]);
@@ -197,9 +184,11 @@ export default function OpportunitiesPage() {
     setMessage("");
 
     try {
-      const res = await apiFetch(`${API_URL}/crm/opportunities`, {
+      const res = await apiFetch("/crm/opportunities", {
         method: "POST",
-        headers: authHeaders(true),
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           title: title.trim(),
           clientId,
@@ -211,10 +200,9 @@ export default function OpportunitiesPage() {
       });
 
       if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as
-          | { message?: string }
-          | null;
-        throw new Error(body?.message || "Falha ao criar oportunidade.");
+        throw new Error(
+          await readApiErrorMessage(res, "Falha ao criar oportunidade."),
+        );
       }
 
       setTitle("");
@@ -271,16 +259,15 @@ export default function OpportunitiesPage() {
     setError("");
     setMessage("");
     try {
-      const res = await apiFetch(`${API_URL}/crm/opportunities/${item.id}/stage`, {
+      const res = await apiFetch(`/crm/opportunities/${item.id}/stage`, {
         method: "PATCH",
-        headers: authHeaders(true),
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as
-          | { message?: string }
-          | null;
-        throw new Error(body?.message || "Falha ao atualizar fase.");
+        throw new Error(await readApiErrorMessage(res, "Falha ao atualizar fase."));
       }
 
       setMessage("Fase da oportunidade atualizada.");

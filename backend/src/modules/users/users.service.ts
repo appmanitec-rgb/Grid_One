@@ -4,8 +4,13 @@ import {
   Injectable,
 } from '@nestjs/common';
 import {
+  AccountsReceivableStatus,
   AuditDomain,
+  ContractInvoiceStatus,
+  ContractStatus,
+  OrderStatus,
   Prisma,
+  ProposalStatus,
   UserAvailabilityStatus,
   UserRole,
 } from '@prisma/client';
@@ -38,6 +43,7 @@ const userPublicSelect = {
   documentId: true,
   profilePhotoUrl: true,
   managerId: true,
+  linkedClientId: true,
   availabilityStatus: true,
   availabilityUpdatedAt: true,
   skillLevel: true,
@@ -48,6 +54,13 @@ const userPublicSelect = {
   mfaEnabled: true,
   createdAt: true,
   updatedAt: true,
+  linkedClient: {
+    select: {
+      id: true,
+      companyName: true,
+      tradeName: true,
+    },
+  },
 } as const;
 
 @Injectable()
@@ -67,6 +80,10 @@ export class UsersService {
     }
 
     await this.validateManager(createUserDto.managerId, undefined);
+    const linkedClientId = await this.validateLinkedClientAccess(
+      createUserDto.role,
+      createUserDto.linkedClientId,
+    );
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(createUserDto.password, salt);
@@ -78,6 +95,7 @@ export class UsersService {
     delete userData.role;
     delete userData.managerId;
     delete userData.kpiTargetJson;
+    delete userData.linkedClientId;
 
     const createData: Prisma.UserUncheckedCreateInput = {
       ...(userData as Omit<
@@ -86,6 +104,7 @@ export class UsersService {
       >),
       role,
       managerId: managerId ?? null,
+      linkedClientId,
       availabilityStatus:
         createUserDto.availabilityStatus ?? UserAvailabilityStatus.AVAILABLE,
       regionTags: createUserDto.regionTags || [],
@@ -157,6 +176,7 @@ export class UsersService {
         role: true,
         accessPolicy: true,
         isSystemMaster: true,
+        linkedClientId: true,
       },
     });
     if (!currentUser) {
@@ -167,9 +187,17 @@ export class UsersService {
     }
 
     await this.validateManager(updateUserDto.managerId, id);
+    const targetRole = role ?? currentUser.role;
+    const targetLinkedClientId = await this.validateLinkedClientAccess(
+      targetRole,
+      updateUserDto.linkedClientId !== undefined
+        ? updateUserDto.linkedClientId
+        : currentUser.linkedClientId,
+    );
 
-    const dataToUpdate: Prisma.UserUpdateInput = {
-      ...(updateData as Prisma.UserUpdateInput),
+    const dataToUpdate: Prisma.UserUncheckedUpdateInput = {
+      ...(updateData as Prisma.UserUncheckedUpdateInput),
+      linkedClientId: targetLinkedClientId,
     };
 
     if (password) {
@@ -182,7 +210,6 @@ export class UsersService {
     }
 
     if (accessPolicy || role) {
-      const targetRole = role ?? currentUser.role;
       dataToUpdate.accessPolicy = effectiveAccessPolicy(
         targetRole,
         accessPolicy ?? currentUser.accessPolicy,
@@ -273,6 +300,7 @@ export class UsersService {
     delete (allowed as Partial<UpdateUserDto>).isActive;
     delete (allowed as Partial<UpdateUserDto>).accessPolicy;
     delete (allowed as Partial<UpdateUserDto>).mfaEnabled;
+    delete (allowed as Partial<UpdateUserDto>).linkedClientId;
 
     if (allowed.email && allowed.email !== currentUser.email) {
       const exists = await this.prisma.user.findUnique({
@@ -597,6 +625,184 @@ export class UsersService {
     }
   }
 
+  async getClientPortalOverview(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        role: true,
+        linkedClientId: true,
+        linkedClient: {
+          select: {
+            id: true,
+            companyName: true,
+            tradeName: true,
+            city: true,
+            state: true,
+            contactName: true,
+            phone: true,
+            email: true,
+            isDelinquent: true,
+            paymentTermDefault: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Usuario nao encontrado.');
+    }
+
+    if (user.role !== UserRole.CLIENT) {
+      throw new ForbiddenException(
+        'Este painel exclusivo e destinado apenas ao portal do cliente.',
+      );
+    }
+
+    if (!user.linkedClientId || !user.linkedClient) {
+      throw new ForbiddenException(
+        'Conta de cliente sem empresa vinculada. Ajuste o cadastro antes de acessar o portal.',
+      );
+    }
+
+    const [proposals, contracts, orders, receivables] = await Promise.all([
+      this.prisma.proposal.findMany({
+        where: { clientId: user.linkedClientId },
+        orderBy: { updatedAt: 'desc' },
+        take: 8,
+        include: {
+          generator: {
+            select: { id: true, name: true, serialNumber: true },
+          },
+          generatedContract: {
+            select: { id: true, code: true, status: true },
+          },
+        },
+      }),
+      this.prisma.serviceContract.findMany({
+        where: { clientId: user.linkedClientId },
+        orderBy: { updatedAt: 'desc' },
+        take: 4,
+        include: {
+          equipments: {
+            include: {
+              generator: {
+                select: { id: true, name: true, serialNumber: true },
+              },
+            },
+          },
+          invoices: {
+            where: {
+              status: {
+                in: [
+                  ContractInvoiceStatus.PENDING,
+                  ContractInvoiceStatus.OVERDUE,
+                ],
+              },
+            },
+            orderBy: { dueDate: 'asc' },
+            take: 4,
+          },
+        },
+      }),
+      this.prisma.maintenanceOrder.findMany({
+        where: {
+          generator: {
+            clientId: user.linkedClientId,
+          },
+        },
+        orderBy: [{ scheduledTo: 'asc' }, { updatedAt: 'desc' }],
+        take: 8,
+        include: {
+          generator: {
+            select: { id: true, name: true, serialNumber: true },
+          },
+          technician: {
+            include: {
+              user: {
+                select: { id: true, name: true, skillLevel: true },
+              },
+            },
+          },
+          contract: {
+            select: { id: true, code: true, status: true },
+          },
+        },
+      }),
+      this.prisma.accountsReceivable.findMany({
+        where: {
+          clientId: user.linkedClientId,
+          status: { not: AccountsReceivableStatus.CANCELED },
+        },
+        orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
+        take: 8,
+        include: {
+          contract: {
+            select: { id: true, code: true, status: true },
+          },
+          maintenanceOrder: {
+            select: { id: true, title: true, status: true },
+          },
+        },
+      }),
+    ]);
+
+    const activeProposals = proposals.filter((proposal) =>
+      (
+        [
+          ProposalStatus.DRAFT,
+          ProposalStatus.BOARD_REVIEW,
+          ProposalStatus.REVISION_REQUIRED,
+          ProposalStatus.CLIENT_REVIEW,
+          ProposalStatus.DISCOUNT_REVIEW,
+        ] as ProposalStatus[]
+      ).includes(proposal.status),
+    );
+    const openOrders = orders.filter((order) =>
+      ([OrderStatus.OPEN, OrderStatus.IN_PROGRESS] as OrderStatus[]).includes(
+        order.status,
+      ),
+    );
+    const activeContracts = contracts.filter(
+      (contract) => contract.status === ContractStatus.ACTIVE,
+    );
+    const overdueReceivables = receivables.filter(
+      (entry) => entry.status === AccountsReceivableStatus.OVERDUE,
+    );
+    const receivableExposure = receivables.reduce(
+      (sum, entry) =>
+        sum +
+        Math.max(
+          0,
+          Number(entry.netAmount || 0) - Number(entry.paidAmount || 0),
+        ),
+      0,
+    );
+
+    return {
+      profile: {
+        id: user.id,
+        name: user.name,
+      },
+      client: user.linkedClient,
+      stats: {
+        activeProposals: activeProposals.length,
+        awaitingClientDecision: proposals.filter(
+          (proposal) => proposal.status === ProposalStatus.CLIENT_REVIEW,
+        ).length,
+        activeContracts: activeContracts.length,
+        openOrders: openOrders.length,
+        overdueReceivables: overdueReceivables.length,
+        receivableExposure,
+      },
+      proposals,
+      contracts,
+      orders,
+      receivables,
+    };
+  }
+
   private async validateManager(managerId?: string, userId?: string) {
     if (!managerId) return;
     if (userId && managerId === userId) {
@@ -611,6 +817,31 @@ export class UsersService {
     if (!manager || !manager.isActive) {
       throw new BadRequestException('Gestor direto invalido.');
     }
+  }
+
+  private async validateLinkedClientAccess(
+    role: UserRole,
+    linkedClientId?: string | null,
+  ) {
+    if (role !== UserRole.CLIENT) {
+      return null;
+    }
+
+    if (!linkedClientId) {
+      throw new BadRequestException(
+        'Usuarios do portal do cliente precisam de um cliente vinculado.',
+      );
+    }
+
+    const client = await this.prisma.client.findUnique({
+      where: { id: linkedClientId },
+      select: { id: true },
+    });
+    if (!client) {
+      throw new BadRequestException('Cliente vinculado invalido.');
+    }
+
+    return linkedClientId;
   }
 
   private async ensureUserExists(userId: string) {

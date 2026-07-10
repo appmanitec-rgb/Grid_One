@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { apiFetch, apiUrl } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 type Supplier = { id: string; companyName: string; paymentTerm?: string | null };
 type Warehouse = { id: string; code: string; name: string };
@@ -37,8 +37,6 @@ type PurchaseOrder = {
   items: PurchaseOrderItem[];
 };
 
-const API_URL = apiUrl("");
-
 export default function PurchaseOrdersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -54,14 +52,11 @@ export default function PurchaseOrdersPage() {
   const [receiveWarehouseId, setReceiveWarehouseId] = useState("");
 
   async function loadData() {
-    const token = localStorage.getItem("manitec_token");
-    const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
-
     const [supRes, whRes, draftRes, poRes] = await Promise.all([
-      apiFetch(`${API_URL}/suppliers`, { headers, cache: "no-store" }),
-      apiFetch(`${API_URL}/inventory/warehouses`, { headers, cache: "no-store" }),
-      apiFetch(`${API_URL}/inventory/replenishment-drafts`, { headers, cache: "no-store" }),
-      apiFetch(`${API_URL}/purchase-orders`, { headers, cache: "no-store" }),
+      apiFetch("/suppliers", { cache: "no-store" }),
+      apiFetch("/inventory/warehouses", { cache: "no-store" }),
+      apiFetch("/inventory/replenishment-drafts", { cache: "no-store" }),
+      apiFetch("/purchase-orders", { cache: "no-store" }),
     ]);
 
     if (supRes.ok) setSuppliers((await supRes.json()) as Supplier[]);
@@ -93,11 +88,10 @@ export default function PurchaseOrdersPage() {
 
     const supplier = suppliers.find((item) => item.id === supplierId);
 
-    const res = await apiFetch(`${API_URL}/purchase-orders`, {
+    const res = await apiFetch("/purchase-orders", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(localStorage.getItem("manitec_token") ? { Authorization: `Bearer ${localStorage.getItem("manitec_token")}` } : {}),
       },
       body: JSON.stringify({
         supplierId,
@@ -127,11 +121,10 @@ export default function PurchaseOrdersPage() {
   }
 
   async function updateStatus(orderId: string, status: PurchaseOrder["status"]) {
-    const res = await apiFetch(`${API_URL}/purchase-orders/${orderId}/status`, {
+    const res = await apiFetch(`/purchase-orders/${orderId}/status`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
-        ...(localStorage.getItem("manitec_token") ? { Authorization: `Bearer ${localStorage.getItem("manitec_token")}` } : {}),
       },
       body: JSON.stringify({ status }),
     });
@@ -163,11 +156,10 @@ export default function PurchaseOrdersPage() {
       return;
     }
 
-    const res = await apiFetch(`${API_URL}/purchase-orders/${order.id}/receive`, {
+    const res = await apiFetch(`/purchase-orders/${order.id}/receive`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(localStorage.getItem("manitec_token") ? { Authorization: `Bearer ${localStorage.getItem("manitec_token")}` } : {}),
       },
       body: JSON.stringify({
         warehouseId: receiveWarehouseId,

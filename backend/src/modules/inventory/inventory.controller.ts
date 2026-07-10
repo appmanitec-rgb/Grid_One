@@ -11,40 +11,47 @@ import { InventoryService } from './inventory.service';
 
 @Controller('inventory')
 @UseGuards(AuthGuard, AccessPolicyGuard)
-@RequireAccessPolicy('pages.catalog')
+@RequireAccessPolicy('inventory.view')
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
 
+  @RequireAccessPolicy('inventory.view')
   @Get('warehouses')
   warehouses() {
     return this.inventoryService.warehouses();
   }
 
+  @RequireAccessPolicy('inventory.view')
   @Get('summary')
   summary(@Query('warehouseId') warehouseId?: string) {
     return this.inventoryService.summary(warehouseId);
   }
 
+  @RequireAccessPolicy('inventory.view')
   @Get('replenishment-drafts')
   replenishmentDrafts(@Query('warehouseId') warehouseId?: string) {
     return this.inventoryService.replenishmentDrafts(warehouseId);
   }
 
+  @RequireAccessPolicy('inventory.adjust')
   @Post('adjust')
   adjust(@Body() dto: StockAdjustmentDto) {
     return this.inventoryService.adjustStock(dto);
   }
 
+  @RequireAccessPolicy('inventory.update')
   @Post('transfer')
   transfer(@Body() dto: StockTransferDto) {
     return this.inventoryService.transfer(dto);
   }
 
+  @RequireAccessPolicy('inventory.reserve')
   @Post('reserve')
   reserve(@Body() dto: StockReservationDto) {
     return this.inventoryService.reserve(dto);
   }
 
+  @RequireAccessPolicy('inventory.reserve')
   @Post('release')
   release(@Body() dto: StockReservationDto) {
     return this.inventoryService.release(dto);

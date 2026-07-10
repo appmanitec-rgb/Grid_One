@@ -88,7 +88,9 @@ export default function ProposalDetailPage() {
     return decodeJwtPayload<{ role?: string }>(token);
   }, []);
 
-  const isBoard = tokenPayload?.role === "ADMIN";
+  const viewerRole = tokenPayload?.role || "NORMAL";
+  const isBoard = viewerRole === "ADMIN";
+  const isClient = viewerRole === "CLIENT";
   const handleUnauthorized = useCallback(
     async (res: Response) => {
       if (res.status !== 401) return false;
@@ -290,14 +292,14 @@ export default function ProposalDetailPage() {
   if (proposal.status === "CLIENT_REVIEW") {
     flowActions.push(
       {
-        label: "Marcar como ganho",
+        label: isClient ? "Aprovar proposta" : "Marcar como ganho",
         tone: "primary",
         run: async () => {
           await runAction("client-approve");
         },
       },
       {
-        label: "Marcar como perdido",
+        label: isClient ? "Recusar proposta" : "Marcar como perdido",
         tone: "danger",
         run: async () => {
           await runAction("client-reject", {
@@ -305,7 +307,10 @@ export default function ProposalDetailPage() {
           });
         },
       },
-      {
+    );
+
+    if (!isClient) {
+      flowActions.push({
         label: "Solicitar desconto",
         tone: "amber",
         run: async () => {
@@ -313,8 +318,8 @@ export default function ProposalDetailPage() {
           setNotice("");
           setShowDiscountForm((current) => !current);
         },
-      },
-    );
+      });
+    }
   }
 
   return (
@@ -322,7 +327,11 @@ export default function ProposalDetailPage() {
       <PageHero
         eyebrow="Proposta comercial"
         title={`Proposta ${proposal.code}`}
-        description={`Status atual: ${statusLabel(proposal.status)}. Esta visao organiza fluxo, condicoes comerciais, itens e historico em uma leitura unica.`}
+        description={
+          isClient
+            ? `Status atual: ${statusLabel(proposal.status)}. Revise condicoes, itens e responda quando a proposta estiver pronta para sua decisao.`
+            : `Status atual: ${statusLabel(proposal.status)}. Fluxo, condicoes comerciais, itens e historico em uma leitura unica.`
+        }
         stats={[
           {
             label: "Valor total",
@@ -351,12 +360,12 @@ export default function ProposalDetailPage() {
         ]}
         actions={
           <>
-            {proposal.status === "WON" && !proposal.generatedContract ? (
+            {proposal.status === "WON" && !proposal.generatedContract && !isClient ? (
               <ActionButton busy={isBusy} onClick={() => runAction("convert-contract")}>
                 Converter em contrato
               </ActionButton>
             ) : null}
-            {proposal.generatedContract ? (
+            {proposal.generatedContract && !isClient ? (
               <Link
                 href={`/dashboard/contracts/${proposal.generatedContract.id}`}
                 className={PRIMARY_BUTTON}
@@ -364,9 +373,17 @@ export default function ProposalDetailPage() {
                 Ver contrato {proposal.generatedContract.code}
               </Link>
             ) : null}
-            <ActionButton busy={isBusy} onClick={() => runAction("revise", undefined, true)}>
-              Revisar proposta
-            </ActionButton>
+            <Link
+              href={`/dashboard/documents/proposals/${proposal.id}`}
+              className={SECONDARY_BUTTON}
+            >
+              Documento
+            </Link>
+            {!isClient ? (
+              <ActionButton busy={isBusy} onClick={() => runAction("revise", undefined, true)}>
+                Revisar proposta
+              </ActionButton>
+            ) : null}
             <Link href="/dashboard/proposals" className={SECONDARY_BUTTON}>
               Voltar para carteira
             </Link>
@@ -409,25 +426,29 @@ export default function ProposalDetailPage() {
       {notice ? <StatusBanner tone="emerald">{notice}</StatusBanner> : null}
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
 
-      {proposal.salesOpportunity ? (
+      {proposal.salesOpportunity && !isClient ? (
         <SectionCard
           eyebrow="Origem CRM"
           title={proposal.salesOpportunity.title}
           description={`Oportunidade vinculada ao funil comercial. Etapa atual: ${opportunityStageLabel(proposal.salesOpportunity.stage)}.`}
           actions={
             <>
-              <Link
-                href={`/dashboard/opportunities?opportunityId=${proposal.salesOpportunity.id}`}
-                className={SECONDARY_BUTTON}
-              >
-                Abrir oportunidade
-              </Link>
-              <Link
-                href={`/dashboard/proposals/new?opportunityId=${proposal.salesOpportunity.id}`}
-                className={SECONDARY_BUTTON}
-              >
-                Nova proposta vinculada
-              </Link>
+              {!isClient ? (
+                <Link
+                  href={`/dashboard/opportunities?opportunityId=${proposal.salesOpportunity.id}`}
+                  className={SECONDARY_BUTTON}
+                >
+                  Abrir oportunidade
+                </Link>
+              ) : null}
+              {!isClient ? (
+                <Link
+                  href={`/dashboard/proposals/new?opportunityId=${proposal.salesOpportunity.id}`}
+                  className={SECONDARY_BUTTON}
+                >
+                  Nova proposta vinculada
+                </Link>
+              ) : null}
             </>
           }
         >
@@ -441,7 +462,11 @@ export default function ProposalDetailPage() {
       <SectionCard
         eyebrow="Governanca do fluxo"
         title="Ritmo comercial e aprovacoes"
-        description="Acompanhe o passo atual da proposta, acione mudancas de etapa e trate solicitacoes de desconto sem perder o contexto."
+        description={
+          isClient
+            ? "Acompanhe a etapa atual e responda quando a proposta estiver em analise do cliente."
+            : "Acompanhe o passo atual da proposta, acione mudancas de etapa e trate solicitacoes de desconto sem perder o contexto."
+        }
         actions={
           proposal.status === "REVISION_REQUIRED" ? (
             <DataPill tone="amber">Em revisao para diretoria</DataPill>

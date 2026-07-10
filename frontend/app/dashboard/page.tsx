@@ -12,7 +12,7 @@ import {
   useState,
 } from "react";
 import { getAccessFromToken } from "@/lib/access";
-import { apiFetch, apiUrl } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 import {
   clearAuthSession,
   decodeJwtPayload,
@@ -384,22 +384,18 @@ export default function DashboardPage() {
       setAdminUsers([]);
 
       try {
-        const token = localStorage.getItem("manitec_token");
-        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
-
         const [proposalsResult, ordersResult, updatesResult, boardResult, usersResult] =
           await Promise.allSettled([
-            apiFetch(apiUrl("/proposals"), { headers, cache: "no-store" }),
-            apiFetch(apiUrl("/maintenance-orders"), { headers, cache: "no-store" }),
-            apiFetch(apiUrl("/proposals/my/updates"), { headers, cache: "no-store" }),
+            apiFetch("/proposals", { cache: "no-store" }),
+            apiFetch("/maintenance-orders", { cache: "no-store" }),
+            apiFetch("/proposals/my/updates", { cache: "no-store" }),
             isBoard
-              ? apiFetch(apiUrl("/proposals/board/pending"), {
-                  headers,
+              ? apiFetch("/proposals/board/pending", {
                   cache: "no-store",
                 })
               : Promise.resolve(new Response(null, { status: 204 })),
             canManageUsers
-              ? apiFetch(apiUrl("/users"), { headers, cache: "no-store" })
+              ? apiFetch("/users", { cache: "no-store" })
               : Promise.resolve(new Response(null, { status: 204 })),
           ]);
 
@@ -525,14 +521,10 @@ export default function DashboardPage() {
     );
 
     try {
-      const token = localStorage.getItem("manitec_token");
-      if (!token) throw new Error("Sessao expirada.");
-
-      const res = await apiFetch(apiUrl(`/proposals/${proposalId}`), {
+      const res = await apiFetch(`/proposals/${proposalId}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ status: nextStatus }),
       });

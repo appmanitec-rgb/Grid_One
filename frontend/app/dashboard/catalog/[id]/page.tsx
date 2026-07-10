@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { apiFetch, apiUrl } from "@/lib/api";
+import { apiFetch, readApiErrorMessage } from "@/lib/api";
 
 type SupplierItem = {
   id: string;
@@ -60,15 +60,21 @@ export default function CatalogItemDetailPage() {
   useEffect(() => {
     if (!id) return;
     (async () => {
-      const token = localStorage.getItem("manitec_token");
       try {
-        const res = await apiFetch(apiUrl(`/catalogs/${id}`), {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (!res.ok) throw new Error("Nao foi possivel carregar a peca/servico.");
+        const res = await apiFetch(`/catalogs/${id}`);
+        if (!res.ok) {
+          throw new Error(
+            await readApiErrorMessage(
+              res,
+              "Nao foi possivel carregar a peca/servico.",
+            ),
+          );
+        }
         setItem(await res.json());
-      } catch (e: any) {
-        setError(e.message || "Erro ao carregar item.");
+      } catch (loadError: unknown) {
+        setError(
+          loadError instanceof Error ? loadError.message : "Erro ao carregar item.",
+        );
       }
     })();
   }, [id]);

@@ -273,6 +273,12 @@ export default function ContractDetailPage() {
             <Link href="/dashboard/contracts" className={SECONDARY_BUTTON}>
               Voltar para carteira
             </Link>
+            <Link
+              href={`/dashboard/documents/contracts/${contract.id}`}
+              className={SECONDARY_BUTTON}
+            >
+              Documento
+            </Link>
             <button
               type="button"
               onClick={() => void generateOrders()}

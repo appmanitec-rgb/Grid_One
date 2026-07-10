@@ -19,26 +19,30 @@ import { UpdateClientDto } from './dto/update-client.dto';
 
 @Controller('clients')
 @UseGuards(AuthGuard, AccessPolicyGuard)
-@RequireAccessPolicy('pages.clients')
+@RequireAccessPolicy('clients.view')
 export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
 
+  @RequireAccessPolicy('clients.create')
   @Post()
   create(@Body() createClientDto: CreateClientDto, @Req() req: Request) {
     const userId = (req as any).user?.sub as string | undefined;
     return this.clientsService.create(createClientDto, userId);
   }
 
+  @RequireAccessPolicy('clients.view')
   @Get()
   findAll() {
     return this.clientsService.findAll();
   }
 
+  @RequireAccessPolicy('clients.view')
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.clientsService.findOne(id);
   }
 
+  @RequireAccessPolicy('clients.update')
   @Patch(':id')
   update(
     @Param('id') id: string,
@@ -49,6 +53,7 @@ export class ClientsController {
     return this.clientsService.update(id, updateClientDto, userId);
   }
 
+  @RequireAccessPolicy('clients.delete')
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.clientsService.remove(id);

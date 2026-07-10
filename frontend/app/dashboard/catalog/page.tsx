@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getAccessFromToken } from "@/lib/access";
-import { apiFetch, apiUrl } from "@/lib/api";
+import { apiFetch, readApiErrorMessage } from "@/lib/api";
 
 type CatalogItem = {
   id: string;
@@ -32,20 +32,19 @@ export default function CatalogPage() {
   }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem("manitec_token");
-    if (!token) return;
-
     async function load() {
       try {
-        const res = await apiFetch(apiUrl("/catalogs"), {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await apiFetch("/catalogs");
         if (!res.ok) {
-          throw new Error("Falha ao carregar catalogo.");
+          throw new Error(await readApiErrorMessage(res, "Falha ao carregar catalogo."));
         }
         setItems(await res.json());
-      } catch (e: any) {
-        setError(e.message || "Erro ao carregar catalogo.");
+      } catch (loadError: unknown) {
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Erro ao carregar catalogo.",
+        );
       } finally {
         setLoading(false);
       }

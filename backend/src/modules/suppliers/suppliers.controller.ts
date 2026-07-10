@@ -17,30 +17,35 @@ import { SuppliersService } from './suppliers.service';
 
 @Controller('suppliers')
 @UseGuards(AuthGuard, AccessPolicyGuard)
-@RequireAccessPolicy('pages.catalog')
+@RequireAccessPolicy('purchaseOrders.view')
 export class SuppliersController {
   constructor(private readonly suppliersService: SuppliersService) {}
 
+  @RequireAccessPolicy('purchaseOrders.create')
   @Post()
   create(@Body() dto: CreateSupplierDto) {
     return this.suppliersService.create(dto);
   }
 
+  @RequireAccessPolicy('purchaseOrders.view')
   @Get()
   findAll() {
     return this.suppliersService.findAll();
   }
 
+  @RequireAccessPolicy('purchaseOrders.view')
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.suppliersService.findOne(id);
   }
 
+  @RequireAccessPolicy('purchaseOrders.update')
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateSupplierDto) {
     return this.suppliersService.update(id, dto);
   }
 
+  @RequireAccessPolicy('purchaseOrders.cancel')
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.suppliersService.remove(id);

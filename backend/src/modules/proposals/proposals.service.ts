@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   ApprovalType,
   AuditDomain,
@@ -41,7 +45,8 @@ export class ProposalsService {
     private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  async create(createProposalDto: CreateProposalDto) {
+  async create(createProposalDto: CreateProposalDto, actorUserId?: string) {
+    await this.assertInternalActor(actorUserId);
     const subtotal = this.calculateTotal(createProposalDto.items);
     const discountValue = Math.max(0, Number(createProposalDto.discount || 0));
     const calculatedTotal = Math.max(0, subtotal - discountValue);
@@ -164,6 +169,7 @@ export class ProposalsService {
   }
 
   async revise(id: string, revisedByUserId?: string) {
+    await this.assertInternalActor(revisedByUserId);
     return this.prisma.$transaction(async (tx) => {
       const source = await tx.proposal.findUnique({
         where: { id },
@@ -235,7 +241,8 @@ export class ProposalsService {
   }
 
   async submitForBoardReview(id: string, actorUserId?: string) {
-    const proposal = await this.requireProposal(id);
+    await this.assertInternalActor(actorUserId);
+    const proposal = await this.requireProposal(id, actorUserId);
     if (
       proposal.status !== ProposalStatus.DRAFT &&
       proposal.status !== ProposalStatus.REVISION_REQUIRED
@@ -255,7 +262,8 @@ export class ProposalsService {
   }
 
   async boardApprove(id: string, actorUserId?: string) {
-    const proposal = await this.requireProposal(id);
+    await this.assertInternalActor(actorUserId);
+    const proposal = await this.requireProposal(id, actorUserId);
     if (proposal.status !== ProposalStatus.BOARD_REVIEW) {
       throw new Error('A proposta precisa estar em analise da diretoria.');
     }
@@ -270,7 +278,8 @@ export class ProposalsService {
   }
 
   async boardReject(id: string, actorUserId?: string, note?: string) {
-    const proposal = await this.requireProposal(id);
+    await this.assertInternalActor(actorUserId);
+    const proposal = await this.requireProposal(id, actorUserId);
     if (proposal.status !== ProposalStatus.BOARD_REVIEW) {
       throw new Error('A proposta precisa estar em analise da diretoria.');
     }
@@ -285,7 +294,7 @@ export class ProposalsService {
   }
 
   async clientApprove(id: string, actorUserId?: string) {
-    const proposal = await this.requireProposal(id);
+    const proposal = await this.requireProposal(id, actorUserId);
     if (proposal.status !== ProposalStatus.CLIENT_REVIEW) {
       throw new Error('A proposta precisa estar em analise do cliente.');
     }
@@ -326,7 +335,7 @@ export class ProposalsService {
   }
 
   async clientReject(id: string, actorUserId?: string, note?: string) {
-    const proposal = await this.requireProposal(id);
+    const proposal = await this.requireProposal(id, actorUserId);
     if (proposal.status !== ProposalStatus.CLIENT_REVIEW) {
       throw new Error('A proposta precisa estar em analise do cliente.');
     }
@@ -346,7 +355,8 @@ export class ProposalsService {
     actorUserId?: string,
     reason?: string,
   ) {
-    const proposal = await this.requireProposal(id);
+    await this.assertInternalActor(actorUserId);
+    const proposal = await this.requireProposal(id, actorUserId);
     if (proposal.status !== ProposalStatus.CLIENT_REVIEW) {
       throw new Error(
         'Somente propostas em analise do cliente podem solicitar desconto.',
@@ -442,6 +452,7 @@ export class ProposalsService {
   }
 
   async convertWonProposalToContract(id: string, actorUserId?: string) {
+    await this.assertInternalActor(actorUserId);
     return this.prisma.$transaction(async (tx) => {
       const proposal = await tx.proposal.findUnique({
         where: { id },
@@ -516,6 +527,23 @@ export class ProposalsService {
         `Proposta convertida em contrato ${createdContract.code}.`,
       );
 
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.PROPOSALS,
+          entityType: 'PROPOSAL',
+          entityId: proposal.id,
+          action: 'CONVERT_TO_CONTRACT',
+          actorUserId,
+          afterPayload: {
+            contractId: createdContract.id,
+            contractCode: createdContract.code,
+            clientId: proposal.clientId,
+            generatorId: proposal.generatorId,
+          },
+        },
+        tx,
+      );
+
       return {
         message: 'Proposta convertida em contrato com sucesso.',
         contract: createdContract,
@@ -523,8 +551,13 @@ export class ProposalsService {
     });
   }
 
-  async findAll() {
+  async findAll(actorUserId?: string) {
+    const scope = await this.getActorScope(actorUserId);
     return this.prisma.proposal.findMany({
+      where:
+        scope?.role === UserRole.CLIENT
+          ? { clientId: this.requireLinkedClientId(scope) }
+          : undefined,
       include: {
         items: true,
         client: true,
@@ -537,8 +570,8 @@ export class ProposalsService {
     });
   }
 
-  async findOne(id: string) {
-    return this.prisma.proposal.findUnique({
+  async findOne(id: string, actorUserId?: string) {
+    const proposal = await this.prisma.proposal.findUnique({
       where: { id },
       include: {
         items: {
@@ -572,6 +605,13 @@ export class ProposalsService {
         },
       },
     });
+
+    if (!proposal) {
+      throw new NotFoundException('Proposta nao encontrada.');
+    }
+
+    await this.assertProposalScope(proposal.clientId, actorUserId);
+    return proposal;
   }
 
   async getBoardPending(actorUserId?: string) {
@@ -600,14 +640,23 @@ export class ProposalsService {
   }
 
   async getMyUpdates(actorUserId: string) {
+    const scope = await this.getActorScope(actorUserId);
     return this.prisma.proposalMovement.findMany({
       where: {
-        proposal: {
-          userId: actorUserId,
-        },
-        actorUserId: {
-          not: actorUserId,
-        },
+        ...(scope?.role === UserRole.CLIENT
+          ? {
+              proposal: {
+                clientId: this.requireLinkedClientId(scope),
+              },
+            }
+          : {
+              proposal: {
+                userId: actorUserId,
+              },
+              actorUserId: {
+                not: actorUserId,
+              },
+            }),
       },
       include: {
         proposal: {
@@ -632,7 +681,8 @@ export class ProposalsService {
     updateProposalDto: UpdateProposalDto,
     actorUserId?: string,
   ) {
-    const current = await this.requireProposal(id);
+    await this.assertInternalActor(actorUserId);
+    const current = await this.requireProposal(id, actorUserId);
     let actorIsAdmin = false;
     if (updateProposalDto.status && actorUserId) {
       const actor = await this.prisma.user.findUnique({
@@ -709,7 +759,9 @@ export class ProposalsService {
     });
   }
 
-  async remove(id: string) {
+  async remove(id: string, actorUserId?: string) {
+    await this.assertInternalActor(actorUserId);
+    await this.requireProposal(id, actorUserId);
     return this.prisma.$transaction(async (tx) => {
       const before = await tx.proposal.findUnique({ where: { id } });
       const removed = await tx.proposal.delete({ where: { id } });
@@ -727,8 +779,8 @@ export class ProposalsService {
     });
   }
 
-  async approve(id: string) {
-    return this.clientApprove(id);
+  async approve(id: string, actorUserId?: string) {
+    return this.clientApprove(id, actorUserId);
   }
 
   private async changeStatus(
@@ -787,11 +839,12 @@ export class ProposalsService {
     });
   }
 
-  private async requireProposal(id: string) {
+  private async requireProposal(id: string, actorUserId?: string) {
     const proposal = await this.prisma.proposal.findUnique({ where: { id } });
     if (!proposal) {
       throw new NotFoundException('Proposta nao encontrada.');
     }
+    await this.assertProposalScope(proposal.clientId, actorUserId);
     return proposal;
   }
 
@@ -842,6 +895,60 @@ export class ProposalsService {
     items: Array<{ quantity: number; unitPrice: number }>,
   ) {
     return items.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0);
+  }
+
+  private async getActorScope(actorUserId?: string) {
+    if (!actorUserId) {
+      return null;
+    }
+
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: {
+        id: true,
+        role: true,
+        linkedClientId: true,
+      },
+    });
+
+    if (!actor) {
+      throw new NotFoundException('Usuario nao encontrado.');
+    }
+
+    return actor;
+  }
+
+  private requireLinkedClientId(actor: { linkedClientId: string | null }) {
+    if (!actor.linkedClientId) {
+      throw new ForbiddenException(
+        'Conta de cliente sem empresa vinculada ao portal.',
+      );
+    }
+
+    return actor.linkedClientId;
+  }
+
+  private async assertInternalActor(actorUserId?: string) {
+    const actor = await this.getActorScope(actorUserId);
+    if (actor?.role === UserRole.CLIENT) {
+      throw new ForbiddenException(
+        'Usuarios do portal do cliente nao podem executar esta acao.',
+      );
+    }
+  }
+
+  private async assertProposalScope(
+    proposalClientId: string,
+    actorUserId?: string,
+  ) {
+    const actor = await this.getActorScope(actorUserId);
+    if (actor?.role !== UserRole.CLIENT) {
+      return;
+    }
+
+    if (proposalClientId !== this.requireLinkedClientId(actor)) {
+      throw new NotFoundException('Proposta nao encontrada.');
+    }
   }
 
   private parseProposalCode(code: string) {

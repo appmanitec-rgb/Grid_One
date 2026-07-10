@@ -71,12 +71,14 @@ export default function ProposalsPage() {
   const [dropTarget, setDropTarget] = useState<string | null>(null);
 
   const kanbanScrollRef = useRef<HTMLDivElement | null>(null);
-  const isAdmin = useMemo(() => {
+  const viewerRole = useMemo(() => {
     const token = getStoredAccessToken();
-    if (!token) return false;
+    if (!token) return "NORMAL";
     const payload = decodeJwtPayload<{ role?: string }>(token);
-    return payload?.role === "ADMIN";
+    return payload?.role || "NORMAL";
   }, []);
+  const isAdmin = viewerRole === "ADMIN";
+  const isClient = viewerRole === "CLIENT";
 
   const handleUnauthorized = useCallback(
     async (res: Response) => {
@@ -125,10 +127,22 @@ export default function ProposalsPage() {
   }, [viewMode]);
 
   useEffect(() => {
+    if (isClient && viewMode !== "list") {
+      setViewMode("list");
+    }
+  }, [isClient, viewMode]);
+
+  useEffect(() => {
     void loadProposals();
   }, [loadProposals]);
 
   async function moveProposalToStatus(proposalId: string, nextStatus: string) {
+    if (isClient) {
+      setError("O portal do cliente movimenta propostas apenas pela tela de detalhe.");
+      setNotice("");
+      return;
+    }
+
     if (movingId) return;
 
     const current = proposals.find((proposal) => proposal.id === proposalId);
@@ -247,8 +261,12 @@ export default function ProposalsPage() {
     <div className="space-y-6">
       <PageHero
         eyebrow="Modulo comercial"
-        title="Propostas com mais ordem, leitura e ritmo de aprovacao."
-        description="A carteira agora fica organizada por contexto, volume e etapa decisoria. Voce alterna entre lista e kanban sem perder busca, regras de fluxo ou velocidade operacional."
+        title={isClient ? "Minhas propostas" : "Central de propostas"}
+        description={
+          isClient
+            ? "Acompanhe suas propostas, revisoes e itens prontos para decisao."
+            : "Carteira comercial organizada por etapa, valor e prioridade de aprovacao."
+        }
         stats={[
           {
             label: "Carteira total",
@@ -283,12 +301,14 @@ export default function ProposalsPage() {
             >
               Lista executiva
             </ViewModeButton>
-            <ViewModeButton
-              active={viewMode === "kanban"}
-              onClick={() => setViewMode("kanban")}
-            >
-              Kanban comercial
-            </ViewModeButton>
+            {!isClient ? (
+              <ViewModeButton
+                active={viewMode === "kanban"}
+                onClick={() => setViewMode("kanban")}
+              >
+                Kanban comercial
+              </ViewModeButton>
+            ) : null}
             <button
               type="button"
               onClick={() => void loadProposals()}
@@ -296,9 +316,11 @@ export default function ProposalsPage() {
             >
               Atualizar carteira
             </button>
-            <Link href="/dashboard/proposals/new" className={PRIMARY_BUTTON}>
-              Nova proposta
-            </Link>
+            {!isClient ? (
+              <Link href="/dashboard/proposals/new" className={PRIMARY_BUTTON}>
+                Nova proposta
+              </Link>
+            ) : null}
           </>
         }
         aside={
@@ -329,6 +351,10 @@ export default function ProposalsPage() {
             {isAdmin ? (
               <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
                 Modo admin ativo: a movimentacao no kanban aceita override manual de etapa.
+              </div>
+            ) : isClient ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                O portal concentra leitura e decisao final. Para aprovar ou recusar, abra a proposta.
               </div>
             ) : (
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
@@ -374,10 +400,18 @@ export default function ProposalsPage() {
 
       <SectionCard
         eyebrow={viewMode === "list" ? "Vista de carteira" : "Vista de operacao"}
-        title={viewMode === "list" ? "Carteira de propostas" : "Kanban de aprovacao"}
+        title={
+          viewMode === "list"
+            ? isClient
+              ? "Minhas propostas"
+              : "Carteira de propostas"
+            : "Kanban de aprovacao"
+        }
         description={
           viewMode === "list"
-            ? "Uma leitura mais limpa para navegar pelo portfolio comercial sem a poluicao de uma tabela pesada."
+            ? isClient
+              ? "Acompanhe revisoes, liberacoes e propostas prontas para sua decisao sem entrar no fluxo interno."
+              : "Uma leitura mais limpa para navegar pelo portfolio comercial sem a poluicao de uma tabela pesada."
             : "Arraste as propostas entre as colunas permitidas para manter o funil vivo e visivel."
         }
         actions={
@@ -388,7 +422,7 @@ export default function ProposalsPage() {
               placeholder="Buscar por codigo, cliente ou equipamento..."
               className="xl:min-w-[320px]"
             />
-            {viewMode === "kanban" ? (
+            {viewMode === "kanban" && !isClient ? (
               <>
                 <button
                   type="button"

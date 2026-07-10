@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { apiFetch, apiUrl } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 type Profile = {
   id: string;
@@ -14,8 +14,6 @@ type Profile = {
   hourCost?: number | null;
 };
 
-const API_URL = apiUrl("");
-
 export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [password, setPassword] = useState("");
@@ -23,11 +21,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     async function load() {
-      const token = localStorage.getItem("manitec_token");
-      if (!token) return;
-
-      const res = await apiFetch(`${API_URL}/users/me`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await apiFetch("/users/me", {
         cache: "no-store",
       });
       if (!res.ok) {
@@ -45,12 +39,6 @@ export default function ProfilePage() {
     event.preventDefault();
     if (!profile) return;
 
-    const token = localStorage.getItem("manitec_token");
-    if (!token) {
-      setMessage("Sessao expirada. Faca login novamente.");
-      return;
-    }
-
     const body: Record<string, unknown> = {
       name: profile.name,
       email: profile.email,
@@ -61,11 +49,10 @@ export default function ProfilePage() {
     };
     if (password) body.password = password;
 
-    const res = await apiFetch(`${API_URL}/users/me`, {
+    const res = await apiFetch("/users/me", {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(body),
     });

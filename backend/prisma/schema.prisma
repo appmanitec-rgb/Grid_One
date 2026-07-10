@@ -1,6 +1,6 @@
 generator client {
   provider   = "prisma-client-js"
-  engineType = "binary"
+  engineType = "library"
 }
 
 datasource db {
@@ -10,11 +10,16 @@ datasource db {
 
 enum UserRole {
   ADMIN
+  MANAGER
   NORMAL
   TECHNICIAN
   SALES
   ENGINEER_APPLICATION
   LOGISTICS
+  FINANCE
+  SUPPLIES
+  HR
+  AUDITOR
   CLIENT
 }
 
@@ -49,6 +54,11 @@ enum AuditDomain {
   USERS
   MAINTENANCE_ORDERS
   PROPOSALS
+  CONTRACTS
+  INVENTORY
+  PURCHASE_ORDERS
+  FINANCE
+  PEOPLE
 }
 
 enum UserCertificationScope {
@@ -350,6 +360,26 @@ enum AutomationRunStatus {
   SKIPPED
 }
 
+enum DeliveryChannel {
+  EMAIL
+  WHATSAPP
+  WEBHOOK
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+  CANCELED
+}
+
+enum DeliveryDocumentType {
+  PROPOSAL
+  CONTRACT
+  ORDER
+}
+
 model User {
   id                    String   @id @default(uuid())
   name                  String
@@ -363,6 +393,7 @@ model User {
   documentId            String?
   profilePhotoUrl       String?
   managerId             String?
+  linkedClientId        String?
   availabilityStatus    UserAvailabilityStatus @default(AVAILABLE)
   availabilityUpdatedAt DateTime?
   skillLevel            SkillLevel             @default(JUNIOR)
@@ -383,6 +414,7 @@ model User {
   technicianProfile      Technician?
   manager                User?                        @relation("UserManagementHierarchy", fields: [managerId], references: [id], onDelete: SetNull)
   managedUsers           User[]                       @relation("UserManagementHierarchy")
+  linkedClient           Client?                      @relation("ClientPortalUsers", fields: [linkedClientId], references: [id], onDelete: SetNull)
   proposals              Proposal[]
   proposalMovements      ProposalMovement[]
   presences              UserPresence[]
@@ -407,7 +439,10 @@ model User {
   fleetAllocations       FleetAllocation[]
   authSessions           AuthSession[]
   requestedAutomationRuns AutomationRun[]           @relation("AutomationRunRequestedBy")
+  createdDocumentShareTokens DocumentShareToken[]   @relation("DocumentShareCreatedBy")
+  createdDocumentDeliveries  DocumentDelivery[]     @relation("DocumentDeliveryCreatedBy")
 
+  @@index([linkedClientId])
   @@map("users")
 }
 
@@ -566,6 +601,13 @@ model CompanySettings {
   logoUrl         String?
   primaryColor    String?
   secondaryColor  String?
+  deliverySenderName       String?
+  deliveryFromEmail        String?
+  deliveryReplyToEmail     String?
+  deliveryDefaultWhatsapp  String?
+  deliveryDefaultWebhookUrl String?
+  deliveryEmailFooter      String?
+  deliveryTemplatesJson    Json?
   notes           String?
   isPrimary       Boolean  @default(false)
   updatedByUserId String?
@@ -626,7 +668,8 @@ model Client {
   withholdsIss          Boolean          @default(false)
   salesOwnerId          String?
 
-  salesOwner User? @relation("ClientSalesOwner", fields: [salesOwnerId], references: [id], onDelete: SetNull)
+  salesOwner  User?   @relation("ClientSalesOwner", fields: [salesOwnerId], references: [id], onDelete: SetNull)
+  portalUsers User[]  @relation("ClientPortalUsers")
 
   addresses             ClientAddress[]
   contacts              ClientContact[]
@@ -639,6 +682,8 @@ model Client {
   contracts             ServiceContract[]
   accountsReceivable    AccountsReceivable[]
   costCenters           CostCenter[]
+  documentShareTokens   DocumentShareToken[]
+  documentDeliveries    DocumentDelivery[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1712,4 +1757,69 @@ model FleetAllocation {
   @@index([vehicleId, assignedAt])
   @@index([userId, assignedAt])
   @@map("fleet_allocations")
+}
+
+model DocumentShareToken {
+  id              String               @id @default(uuid())
+  tokenHash       String               @unique
+  documentType    DeliveryDocumentType
+  documentId      String
+  documentCode    String?
+  documentTitle   String?
+  clientId        String?
+  counterpartName String?
+  recipientName   String?
+  recipientEmail  String?
+  createdByUserId String?
+  expiresAt       DateTime
+  lastOpenedAt    DateTime?
+  openedCount     Int                  @default(0)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  client        Client?           @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  createdByUser User?             @relation("DocumentShareCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  delivery      DocumentDelivery?
+
+  @@index([documentType, documentId])
+  @@index([clientId, expiresAt])
+  @@map("document_share_tokens")
+}
+
+model DocumentDelivery {
+  id               String               @id @default(uuid())
+  documentType     DeliveryDocumentType
+  documentId       String
+  documentCode     String?
+  documentTitle    String?
+  clientId         String?
+  counterpartName  String?
+  channel          DeliveryChannel
+  status           DeliveryStatus       @default(PENDING)
+  recipientName    String?
+  recipientTarget  String
+  subject          String?
+  message          String?
+  provider         String?
+  providerMessageId String?
+  shareTokenId     String?              @unique
+  payloadSnapshot  Json?
+  errorMessage     String?
+  sentAt           DateTime?
+  deliveredAt      DateTime?
+  failedAt         DateTime?
+  expiresAt        DateTime?
+  createdByUserId  String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  client        Client?             @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  createdByUser User?               @relation("DocumentDeliveryCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  shareToken    DocumentShareToken? @relation(fields: [shareTokenId], references: [id], onDelete: SetNull)
+
+  @@index([documentType, documentId])
+  @@index([clientId, createdAt])
+  @@index([createdByUserId, createdAt])
+  @@index([status, createdAt])
+  @@map("document_deliveries")
 }

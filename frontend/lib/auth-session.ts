@@ -12,6 +12,7 @@ export type AuthTokenPayload = {
   email?: string;
   name?: string;
   role?: string;
+  linkedClientId?: string | null;
   exp?: number;
   accessPolicy?: unknown;
   isSystemMaster?: boolean;

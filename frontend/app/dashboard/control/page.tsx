@@ -12,7 +12,7 @@ import {
   useState,
 } from "react";
 import { AccessPolicy, defaultAccessByRole, getAccessFromToken } from "@/lib/access";
-import { apiFetch, apiUrl } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 import { clearAuthSession } from "@/lib/auth-session";
 import {
   DataPill,
@@ -29,11 +29,16 @@ import {
 
 type UserRole =
   | "ADMIN"
+  | "MANAGER"
   | "NORMAL"
   | "TECHNICIAN"
   | "SALES"
   | "ENGINEER_APPLICATION"
   | "LOGISTICS"
+  | "FINANCE"
+  | "SUPPLIES"
+  | "HR"
+  | "AUDITOR"
   | "CLIENT";
 type SkillLevel = "TRAINEE" | "JUNIOR" | "PLENO" | "SENIOR" | "MASTER";
 type UserAvailabilityStatus =
@@ -42,7 +47,15 @@ type UserAvailabilityStatus =
   | "IN_TRANSIT"
   | "OFF_DUTY"
   | "VACATION";
-type AuditDomain = "USERS" | "MAINTENANCE_ORDERS" | "PROPOSALS";
+type AuditDomain =
+  | "USERS"
+  | "MAINTENANCE_ORDERS"
+  | "PROPOSALS"
+  | "CONTRACTS"
+  | "INVENTORY"
+  | "PURCHASE_ORDERS"
+  | "FINANCE"
+  | "PEOPLE";
 type Tone = "blue" | "emerald" | "amber" | "rose" | "slate";
 
 type UserRow = {
@@ -65,8 +78,22 @@ type UserRow = {
   mfaEnabled?: boolean;
   salesTargetMonthly?: number | null;
   createdAt?: string;
+  linkedClientId?: string | null;
+  linkedClient?: {
+    id: string;
+    companyName: string;
+    tradeName?: string | null;
+  } | null;
   manager?: { id: string; name: string; role: UserRole } | null;
   accessPolicy?: AccessPolicy;
+};
+
+type ClientOption = {
+  id: string;
+  companyName: string;
+  tradeName?: string | null;
+  city?: string | null;
+  state?: string | null;
 };
 
 type PresenceRow = {
@@ -113,6 +140,7 @@ type NewUserForm = {
   password: string;
   role: UserRole;
   isActive: boolean;
+  linkedClientId: string;
   department: string;
   branch: string;
   approvalDiscountLimit: string;
@@ -124,12 +152,19 @@ type PermissionItem<TKey extends string> = {
   label: string;
 };
 
+type PermissionSectionSetter = <Section extends keyof AccessPolicy>(
+  section: Section,
+  key: keyof AccessPolicy[Section],
+  value: boolean,
+) => void;
+
 const EMPTY_NEW_USER: NewUserForm = {
   name: "",
   email: "",
   password: "",
   role: "NORMAL",
   isActive: true,
+  linkedClientId: "",
   department: "",
   branch: "",
   approvalDiscountLimit: "",
@@ -139,10 +174,15 @@ const EMPTY_NEW_USER: NewUserForm = {
 const ROLE_OPTIONS: UserRole[] = [
   "NORMAL",
   "ADMIN",
+  "MANAGER",
   "SALES",
   "TECHNICIAN",
   "ENGINEER_APPLICATION",
   "LOGISTICS",
+  "FINANCE",
+  "SUPPLIES",
+  "HR",
+  "AUDITOR",
   "CLIENT",
 ];
 const SKILL_OPTIONS: SkillLevel[] = ["TRAINEE", "JUNIOR", "PLENO", "SENIOR", "MASTER"];
@@ -156,11 +196,16 @@ const AVAILABILITY_OPTIONS: UserAvailabilityStatus[] = [
 
 const ROLE_LABELS: Record<UserRole, string> = {
   ADMIN: "Administrador",
+  MANAGER: "Gestor",
   NORMAL: "Usuario",
   TECHNICIAN: "Tecnico",
   SALES: "Comercial",
   ENGINEER_APPLICATION: "Engenharia",
   LOGISTICS: "Logistica",
+  FINANCE: "Financeiro",
+  SUPPLIES: "Suprimentos",
+  HR: "Pessoas/RH",
+  AUDITOR: "Auditor",
   CLIENT: "Cliente",
 };
 const SKILL_LABELS: Record<SkillLevel, string> = {
@@ -185,19 +230,37 @@ const AUDIT_LABELS: Record<AuditDomain, string> = {
   USERS: "Usuarios",
   MAINTENANCE_ORDERS: "Ordens",
   PROPOSALS: "Propostas",
+  CONTRACTS: "Contratos",
+  INVENTORY: "Estoque",
+  PURCHASE_ORDERS: "Compras",
+  FINANCE: "Financeiro",
+  PEOPLE: "Pessoas",
 };
 
 const PAGE_ITEMS = [
   { key: "dashboard", label: "Dashboard executivo" },
   { key: "proposals", label: "Modulo de propostas" },
   { key: "orders", label: "Ordens e execucao" },
-  { key: "contracts", label: "Contratos e financeiro" },
-  { key: "catalog", label: "Catalogo e suprimentos" },
+  { key: "contracts", label: "Contratos" },
+  { key: "catalog", label: "Catalogo" },
   { key: "clients", label: "Clientes e sites" },
   { key: "equipments", label: "Equipamentos" },
+  { key: "finance", label: "Financeiro" },
+  { key: "inventory", label: "Estoque e compras" },
+  { key: "people", label: "Pessoas/RH" },
   { key: "usersControl", label: "Governanca de usuarios" },
 ] as const satisfies ReadonlyArray<PermissionItem<keyof AccessPolicy["pages"]>>;
+const CLIENT_ITEMS = [
+  { key: "view", label: "Visualizar clientes" },
+  { key: "create", label: "Criar clientes" },
+  { key: "update", label: "Editar clientes" },
+  { key: "delete", label: "Excluir clientes" },
+] as const satisfies ReadonlyArray<PermissionItem<keyof AccessPolicy["clients"]>>;
 const CATALOG_ITEMS = [
+  { key: "view", label: "Visualizar catalogo" },
+  { key: "create", label: "Criar itens" },
+  { key: "update", label: "Editar itens" },
+  { key: "delete", label: "Excluir itens" },
   { key: "viewCosts", label: "Ver custos e margem" },
   { key: "manageItems", label: "Editar itens e estruturas" },
 ] as const satisfies ReadonlyArray<PermissionItem<keyof AccessPolicy["catalog"]>>;
@@ -210,12 +273,32 @@ const USER_ITEMS = [
   { key: "viewLiveLocation", label: "Localizacao ao vivo" },
 ] as const satisfies ReadonlyArray<PermissionItem<keyof AccessPolicy["users"]>>;
 const PROPOSAL_ITEMS = [
+  { key: "view", label: "Visualizar propostas" },
+  { key: "create", label: "Criar propostas" },
+  { key: "update", label: "Editar propostas" },
+  { key: "approve", label: "Aprovar proposta" },
+  { key: "cancel", label: "Cancelar/reprovar proposta" },
   {
     key: "requestDiscountAboveLimit",
     label: "Solicitar desconto acima do limite",
   },
   { key: "approveBudget", label: "Aprovar proposta" },
 ] as const satisfies ReadonlyArray<PermissionItem<keyof AccessPolicy["proposals"]>>;
+const CONTRACT_ITEMS = [
+  { key: "view", label: "Visualizar contratos" },
+  { key: "create", label: "Criar contratos" },
+  { key: "update", label: "Editar contratos" },
+  { key: "activate", label: "Ativar contratos" },
+  { key: "cancel", label: "Cancelar contratos" },
+] as const satisfies ReadonlyArray<PermissionItem<keyof AccessPolicy["contracts"]>>;
+const ORDER_ACTION_ITEMS = [
+  { key: "view", label: "Visualizar OS" },
+  { key: "create", label: "Criar OS" },
+  { key: "update", label: "Editar OS" },
+  { key: "dispatch", label: "Despachar OS" },
+  { key: "finish", label: "Finalizar OS" },
+  { key: "cancel", label: "Cancelar OS" },
+] as const satisfies ReadonlyArray<PermissionItem<keyof AccessPolicy["orders"]>>;
 const ORDER_ITEMS = [
   { key: "submitVisitReport", label: "Enviar relatorio de visita" },
   { key: "approveVisitReport", label: "Aprovar relatorio de visita" },
@@ -223,6 +306,50 @@ const ORDER_ITEMS = [
 ] as const satisfies ReadonlyArray<
   PermissionItem<keyof AccessPolicy["maintenanceOrders"]>
 >;
+const INVENTORY_ITEMS = [
+  { key: "view", label: "Visualizar estoque" },
+  { key: "create", label: "Criar saldo/estrutura" },
+  { key: "update", label: "Transferir/atualizar estoque" },
+  { key: "reserve", label: "Reservar/liberar material" },
+  { key: "consume", label: "Consumir material" },
+  { key: "adjust", label: "Ajustar saldo" },
+] as const satisfies ReadonlyArray<PermissionItem<keyof AccessPolicy["inventory"]>>;
+const PURCHASE_ORDER_ITEMS = [
+  { key: "view", label: "Visualizar compras" },
+  { key: "create", label: "Criar compras" },
+  { key: "update", label: "Editar compras" },
+  { key: "approve", label: "Aprovar compras" },
+  { key: "receive", label: "Receber compras" },
+  { key: "cancel", label: "Cancelar compras" },
+] as const satisfies ReadonlyArray<PermissionItem<keyof AccessPolicy["purchaseOrders"]>>;
+const FINANCE_ITEMS = [
+  { key: "view", label: "Visualizar financeiro" },
+  { key: "create", label: "Criar lancamentos" },
+  { key: "update", label: "Editar financeiro" },
+  { key: "pay", label: "Baixar/pagar" },
+  { key: "cancel", label: "Cancelar titulos" },
+  { key: "reconcile", label: "Conciliar/sincronizar" },
+] as const satisfies ReadonlyArray<PermissionItem<keyof AccessPolicy["finance"]>>;
+const PEOPLE_ITEMS = [
+  { key: "view", label: "Visualizar pessoas" },
+  { key: "create", label: "Criar registros de pessoas" },
+  { key: "update", label: "Editar pessoas/RH" },
+  { key: "delete", label: "Excluir registros de pessoas" },
+] as const satisfies ReadonlyArray<PermissionItem<keyof AccessPolicy["people"]>>;
+const TECHNICIAN_ITEMS = [
+  { key: "view", label: "Visualizar tecnicos" },
+  { key: "dispatch", label: "Despachar tecnico" },
+  { key: "schedule", label: "Agenda de tecnicos" },
+] as const satisfies ReadonlyArray<PermissionItem<keyof AccessPolicy["technicians"]>>;
+const REPORT_ITEMS = [
+  { key: "view", label: "Visualizar relatorios" },
+  { key: "export", label: "Exportar relatorios" },
+] as const satisfies ReadonlyArray<PermissionItem<keyof AccessPolicy["reports"]>>;
+const SETTINGS_ITEMS = [
+  { key: "view", label: "Visualizar configuracoes" },
+  { key: "update", label: "Editar configuracoes" },
+  { key: "admin", label: "Administrar automacoes/empresa" },
+] as const satisfies ReadonlyArray<PermissionItem<keyof AccessPolicy["settings"]>>;
 
 const PRIMARY_BUTTON =
   "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
@@ -250,6 +377,7 @@ export default function AccessControlPage() {
     "ALL",
   );
   const [newUser, setNewUser] = useState<NewUserForm>(EMPTY_NEW_USER);
+  const [clients, setClients] = useState<ClientOption[]>([]);
   const [presenceRows, setPresenceRows] = useState<PresenceRow[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<PendingApprovalRow[]>([]);
   const [auditRows, setAuditRows] = useState<AuditRow[]>([]);
@@ -380,18 +508,14 @@ export default function AccessControlPage() {
     setError("");
 
     try {
-      const token = localStorage.getItem("manitec_token");
-      const headers: HeadersInit | undefined = token
-        ? { Authorization: `Bearer ${token}` }
-        : undefined;
-
-      const [res, presenceRes, approvalsRes, auditRes, expiringRes] =
+      const [res, presenceRes, approvalsRes, auditRes, expiringRes, clientsRes] =
         await Promise.all([
-          apiFetch(apiUrl("/users"), { headers }),
-          apiFetch(apiUrl("/users/presence/live"), { headers }),
-          apiFetch(apiUrl("/approvals/pending"), { headers }),
-          apiFetch(apiUrl("/audit-logs?limit=120"), { headers }),
-          apiFetch(apiUrl("/users/certifications/expiring?days=30"), { headers }),
+          apiFetch("/users"),
+          apiFetch("/users/presence/live"),
+          apiFetch("/approvals/pending"),
+          apiFetch("/audit-logs?limit=120"),
+          apiFetch("/users/certifications/expiring?days=30"),
+          apiFetch("/clients"),
         ]);
 
       if (await handleUnauthorized(res)) return;
@@ -416,6 +540,7 @@ export default function AccessControlPage() {
       setExpiringCerts(
         expiringRes.ok ? ((await expiringRes.json()) as ExpiringCertRow[]) : [],
       );
+      setClients(clientsRes.ok ? ((await clientsRes.json()) as ClientOption[]) : []);
     } catch (loadError: unknown) {
       setError(
         loadError instanceof Error ? loadError.message : "Erro ao carregar usuarios.",
@@ -448,9 +573,8 @@ export default function AccessControlPage() {
       return;
     }
 
-    const token = localStorage.getItem("manitec_token");
-    if (!token) {
-      setError("Sessao invalida. Faca login novamente.");
+    if (newUser.role === "CLIENT" && !newUser.linkedClientId) {
+      setError("Selecione o cliente que esta conta externa vai representar.");
       return;
     }
 
@@ -463,6 +587,8 @@ export default function AccessControlPage() {
         password: newUser.password.trim(),
         role: newUser.role,
         isActive: newUser.isActive,
+        linkedClientId:
+          newUser.role === "CLIENT" ? newUser.linkedClientId || undefined : undefined,
         department: newUser.department.trim() || undefined,
         branch: newUser.branch.trim() || undefined,
         approvalDiscountLimit: toNumberOrUndefined(newUser.approvalDiscountLimit),
@@ -470,11 +596,10 @@ export default function AccessControlPage() {
         accessPolicy: defaultAccessByRole(newUser.role),
       };
 
-      const res = await apiFetch(apiUrl("/users"), {
+      const res = await apiFetch("/users", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
       });
@@ -510,22 +635,24 @@ export default function AccessControlPage() {
       return;
     }
 
-    const token = localStorage.getItem("manitec_token");
-    if (!token) {
-      setError("Sessao invalida. Faca login novamente.");
-      return;
-    }
-
     setSaving(true);
     setError("");
     setSuccess("");
 
     try {
+      if (selectedUser.role === "CLIENT" && !selectedUser.linkedClientId) {
+        throw new Error("Selecione o cliente vinculado antes de salvar a conta externa.");
+      }
+
       const payload = {
         name: selectedUser.name.trim(),
         email: selectedUser.email.trim(),
         role: selectedUser.role,
         isActive: selectedUser.isActive,
+        linkedClientId:
+          selectedUser.role === "CLIENT"
+            ? selectedUser.linkedClientId || undefined
+            : null,
         department: (selectedUser.department || "").trim() || undefined,
         branch: (selectedUser.branch || "").trim() || undefined,
         approvalDiscountLimit: toNumberOrUndefined(selectedUser.approvalDiscountLimit),
@@ -541,11 +668,10 @@ export default function AccessControlPage() {
         accessPolicy: policy,
       };
 
-      const res = await apiFetch(apiUrl(`/users/${selectedUser.id}`), {
+      const res = await apiFetch(`/users/${selectedUser.id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
       });
@@ -575,12 +701,6 @@ export default function AccessControlPage() {
       return;
     }
 
-    const token = localStorage.getItem("manitec_token");
-    if (!token) {
-      setError("Sessao invalida. Faca login novamente.");
-      return;
-    }
-
     const targets = users.filter(
       (user) => selectedIds.includes(user.id) && !user.isSystemMaster,
     );
@@ -599,11 +719,10 @@ export default function AccessControlPage() {
       const failures: string[] = [];
 
       for (const user of targets) {
-        const res = await apiFetch(apiUrl(`/users/${user.id}`), {
+        const res = await apiFetch(`/users/${user.id}`, {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(buildPayload(user)),
         });
@@ -644,24 +763,17 @@ export default function AccessControlPage() {
   }
 
   async function decideApproval(id: string, decision: "approve" | "reject") {
-    const token = localStorage.getItem("manitec_token");
-    if (!token) {
-      setError("Sessao invalida. Faca login novamente.");
-      return;
-    }
-
     setSaving(true);
     setError("");
     setSuccess("");
 
     try {
       const res = await apiFetch(
-        apiUrl(`/approvals/${id}/${decision === "approve" ? "approve" : "reject"}`),
+        `/approvals/${id}/${decision === "approve" ? "approve" : "reject"}`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
             decisionNote:
@@ -762,6 +874,18 @@ export default function AccessControlPage() {
     );
   }
 
+  const setSectionPermission: PermissionSectionSetter = (section, key, value) => {
+    setPolicy((prev) =>
+      normalizeEditableAccessPolicy({
+        ...prev,
+        [section]: {
+          ...prev[section],
+          [key]: value,
+        },
+      }),
+    );
+  };
+
   function setAuditRead(value: boolean) {
     setPolicy((prev) =>
       normalizeEditableAccessPolicy({
@@ -807,6 +931,7 @@ export default function AccessControlPage() {
       <div className="grid gap-6 2xl:grid-cols-[minmax(0,0.92fr)_minmax(380px,0.88fr)]">
         <ProvisioningCard
           newUser={newUser}
+          clients={clients}
           saving={saving}
           onChange={setNewUser}
           onSubmit={handleCreateUser}
@@ -838,6 +963,7 @@ export default function AccessControlPage() {
         selectedUserId={selectedUserId}
         selectedUser={selectedUser}
         selectedIds={selectedIds}
+        clients={clients}
         managers={managers}
         policy={policy}
         usersWithExpiringSet={usersWithExpiringSet}
@@ -863,6 +989,7 @@ export default function AccessControlPage() {
         onSetUsersPermission={setUsersPermission}
         onSetProposalPermission={setProposalPermission}
         onSetOrderPermission={setOrderPermission}
+        onSetSectionPermission={setSectionPermission}
         onSetAuditRead={setAuditRead}
         onPolicyChange={setPolicy}
       />
@@ -967,11 +1094,13 @@ function AccessHero({
 
 function ProvisioningCard({
   newUser,
+  clients,
   saving,
   onChange,
   onSubmit,
 }: {
   newUser: NewUserForm;
+  clients: ClientOption[];
   saving: boolean;
   onChange: Dispatch<SetStateAction<NewUserForm>>;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
@@ -1021,6 +1150,8 @@ function ProvisioningCard({
                 onChange((prev) => ({
                   ...prev,
                   role: event.target.value as UserRole,
+                  linkedClientId:
+                    event.target.value === "CLIENT" ? prev.linkedClientId : "",
                 }))
               }
             >
@@ -1031,6 +1162,30 @@ function ProvisioningCard({
               ))}
             </SelectInput>
           </FormField>
+          {newUser.role === "CLIENT" ? (
+            <FormField
+              label="Cliente vinculado"
+              hint="Obrigatorio para o portal externo"
+              className="md:col-span-2"
+            >
+              <SelectInput
+                value={newUser.linkedClientId}
+                onChange={(event) =>
+                  onChange((prev) => ({
+                    ...prev,
+                    linkedClientId: event.target.value,
+                  }))
+                }
+              >
+                <option value="">Selecione um cliente</option>
+                {clients.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.tradeName || client.companyName}
+                  </option>
+                ))}
+              </SelectInput>
+            </FormField>
+          ) : null}
           <FormField label="Departamento">
             <TextInput
               value={newUser.department}
@@ -1350,6 +1505,7 @@ function ManagementSection({
   selectedUserId,
   selectedUser,
   selectedIds,
+  clients,
   managers,
   policy,
   usersWithExpiringSet,
@@ -1375,6 +1531,7 @@ function ManagementSection({
   onSetUsersPermission,
   onSetProposalPermission,
   onSetOrderPermission,
+  onSetSectionPermission,
   onSetAuditRead,
   onPolicyChange,
 }: {
@@ -1391,6 +1548,7 @@ function ManagementSection({
   selectedUserId: string;
   selectedUser: UserRow | null;
   selectedIds: string[];
+  clients: ClientOption[];
   managers: UserRow[];
   policy: AccessPolicy;
   usersWithExpiringSet: Set<string | undefined>;
@@ -1425,6 +1583,7 @@ function ManagementSection({
     key: keyof AccessPolicy["maintenanceOrders"],
     value: boolean,
   ) => void;
+  onSetSectionPermission: PermissionSectionSetter;
   onSetAuditRead: (value: boolean) => void;
   onPolicyChange: Dispatch<SetStateAction<AccessPolicy>>;
 }) {
@@ -1589,6 +1748,7 @@ function ManagementSection({
           />
           <UserEditorCard
             selectedUser={selectedUser}
+            clients={clients}
             managers={managers}
             policy={policy}
             saving={saving}
@@ -1601,6 +1761,7 @@ function ManagementSection({
             onSetUsersPermission={onSetUsersPermission}
             onSetProposalPermission={onSetProposalPermission}
             onSetOrderPermission={onSetOrderPermission}
+            onSetSectionPermission={onSetSectionPermission}
             onSetAuditRead={onSetAuditRead}
             onPolicyChange={onPolicyChange}
           />
@@ -1684,6 +1845,11 @@ function UserListPanel({
                       {user.department ? (
                         <DataPill tone="slate">{user.department}</DataPill>
                       ) : null}
+                      {user.role === "CLIENT" && user.linkedClient ? (
+                        <DataPill tone="blue">
+                          {user.linkedClient.tradeName || user.linkedClient.companyName}
+                        </DataPill>
+                      ) : null}
                       {user.branch ? <DataPill tone="slate">{user.branch}</DataPill> : null}
                       {user.availabilityStatus ? (
                         <DataPill tone={presenceTone(user.availabilityStatus)}>
@@ -1716,6 +1882,7 @@ function UserListPanel({
 
 function UserEditorCard({
   selectedUser,
+  clients,
   managers,
   policy,
   saving,
@@ -1728,10 +1895,12 @@ function UserEditorCard({
   onSetUsersPermission,
   onSetProposalPermission,
   onSetOrderPermission,
+  onSetSectionPermission,
   onSetAuditRead,
   onPolicyChange,
 }: {
   selectedUser: UserRow | null;
+  clients: ClientOption[];
   managers: UserRow[];
   policy: AccessPolicy;
   saving: boolean;
@@ -1753,6 +1922,7 @@ function UserEditorCard({
     key: keyof AccessPolicy["maintenanceOrders"],
     value: boolean,
   ) => void;
+  onSetSectionPermission: PermissionSectionSetter;
   onSetAuditRead: (value: boolean) => void;
   onPolicyChange: Dispatch<SetStateAction<AccessPolicy>>;
 }) {
@@ -1789,9 +1959,19 @@ function UserEditorCard({
 
         <div className="mt-5 grid gap-3 md:grid-cols-3">
           <MiniInfo
-            label="Gestor"
-            value={selectedUser.manager?.name || "Nao definido"}
-            helper="Hierarquia usada para roteamento e aprovacoes."
+            label={selectedUser.role === "CLIENT" ? "Cliente vinculado" : "Gestor"}
+            value={
+              selectedUser.role === "CLIENT"
+                ? selectedUser.linkedClient?.tradeName ||
+                  selectedUser.linkedClient?.companyName ||
+                  "Nao vinculado"
+                : selectedUser.manager?.name || "Nao definido"
+            }
+            helper={
+              selectedUser.role === "CLIENT"
+                ? "Conta externa amarrada ao escopo correto do portal."
+                : "Hierarquia usada para roteamento e aprovacoes."
+            }
             tone="slate"
           />
           <MiniInfo
@@ -1841,7 +2021,13 @@ function UserEditorCard({
               value={selectedUser.role}
               onChange={(event) => {
                 const nextRole = event.target.value as UserRole;
-                onUpdateSelectedUser({ role: nextRole });
+                onUpdateSelectedUser({
+                  role: nextRole,
+                  linkedClientId: nextRole === "CLIENT" ? selectedUser.linkedClientId : null,
+                  linkedClient: nextRole === "CLIENT" ? selectedUser.linkedClient : null,
+                  managerId: nextRole === "CLIENT" ? null : selectedUser.managerId,
+                  manager: nextRole === "CLIENT" ? null : selectedUser.manager,
+                });
                 onPolicyChange(normalizeEditableAccessPolicy(defaultAccessByRole(nextRole)));
               }}
               disabled={isSelectedMaster}
@@ -1883,31 +2069,61 @@ function UserEditorCard({
               disabled={isSelectedMaster}
             />
           </FormField>
-          <FormField label="Gestor direto">
-            <SelectInput
-              value={selectedUser.managerId || ""}
-              onChange={(event) => {
-                const nextManagerId = event.target.value || null;
-                const manager = managers.find((item) => item.id === nextManagerId);
-                onUpdateSelectedUser({
-                  managerId: nextManagerId,
-                  manager: manager
-                    ? { id: manager.id, name: manager.name, role: manager.role }
-                    : null,
-                });
-              }}
-              disabled={isSelectedMaster}
-            >
-              <option value="">Sem gestor</option>
-              {managers
-                .filter((manager) => manager.id !== selectedUser.id)
-                .map((manager) => (
-                  <option key={manager.id} value={manager.id}>
-                    {manager.name} • {ROLE_LABELS[manager.role]}
+          {selectedUser.role === "CLIENT" ? (
+            <FormField label="Cliente do portal" hint="Obrigatorio para o escopo externo">
+              <SelectInput
+                value={selectedUser.linkedClientId || ""}
+                onChange={(event) => {
+                  const nextClientId = event.target.value || null;
+                  const client = clients.find((item) => item.id === nextClientId);
+                  onUpdateSelectedUser({
+                    linkedClientId: nextClientId,
+                    linkedClient: client
+                      ? {
+                          id: client.id,
+                          companyName: client.companyName,
+                          tradeName: client.tradeName || null,
+                        }
+                      : null,
+                  });
+                }}
+                disabled={isSelectedMaster}
+              >
+                <option value="">Selecione um cliente</option>
+                {clients.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.tradeName || client.companyName}
                   </option>
                 ))}
-            </SelectInput>
-          </FormField>
+              </SelectInput>
+            </FormField>
+          ) : (
+            <FormField label="Gestor direto">
+              <SelectInput
+                value={selectedUser.managerId || ""}
+                onChange={(event) => {
+                  const nextManagerId = event.target.value || null;
+                  const manager = managers.find((item) => item.id === nextManagerId);
+                  onUpdateSelectedUser({
+                    managerId: nextManagerId,
+                    manager: manager
+                      ? { id: manager.id, name: manager.name, role: manager.role }
+                      : null,
+                  });
+                }}
+                disabled={isSelectedMaster}
+              >
+                <option value="">Sem gestor</option>
+                {managers
+                  .filter((manager) => manager.id !== selectedUser.id)
+                  .map((manager) => (
+                    <option key={manager.id} value={manager.id}>
+                      {manager.name} • {ROLE_LABELS[manager.role]}
+                    </option>
+                  ))}
+              </SelectInput>
+            </FormField>
+          )}
           <FormField label="Disponibilidade">
             <SelectInput
               value={selectedUser.availabilityStatus || ""}
@@ -2045,6 +2261,14 @@ function UserEditorCard({
           disabled={isSelectedMaster}
         />
         <PermissionBlock
+          title="Clientes"
+          description="Cadastro e manutencao de clientes."
+          items={CLIENT_ITEMS}
+          values={policy.clients}
+          onToggle={(key, value) => onSetSectionPermission("clients", key, value)}
+          disabled={isSelectedMaster}
+        />
+        <PermissionBlock
           title="Catalogo"
           description="Custos, margem e manutencao de itens."
           items={CATALOG_ITEMS}
@@ -2069,11 +2293,83 @@ function UserEditorCard({
           disabled={isSelectedMaster}
         />
         <PermissionBlock
+          title="Contratos"
+          description="Cadastro, ativacao e cancelamento contratual."
+          items={CONTRACT_ITEMS}
+          values={policy.contracts}
+          onToggle={(key, value) => onSetSectionPermission("contracts", key, value)}
+          disabled={isSelectedMaster}
+        />
+        <PermissionBlock
+          title="Ordens - acoes"
+          description="Criacao, despacho, finalizacao e cancelamento de OS."
+          items={ORDER_ACTION_ITEMS}
+          values={policy.orders}
+          onToggle={(key, value) => onSetSectionPermission("orders", key, value)}
+          disabled={isSelectedMaster}
+        />
+        <PermissionBlock
           title="Ordens"
           description="Visita, relatorio e override de alocacao."
           items={ORDER_ITEMS}
           values={policy.maintenanceOrders}
           onToggle={onSetOrderPermission}
+          disabled={isSelectedMaster}
+        />
+        <PermissionBlock
+          title="Estoque"
+          description="Reserva, consumo e ajuste de materiais."
+          items={INVENTORY_ITEMS}
+          values={policy.inventory}
+          onToggle={(key, value) => onSetSectionPermission("inventory", key, value)}
+          disabled={isSelectedMaster}
+        />
+        <PermissionBlock
+          title="Compras"
+          description="Pedidos, aprovacao e recebimento."
+          items={PURCHASE_ORDER_ITEMS}
+          values={policy.purchaseOrders}
+          onToggle={(key, value) => onSetSectionPermission("purchaseOrders", key, value)}
+          disabled={isSelectedMaster}
+        />
+        <PermissionBlock
+          title="Financeiro"
+          description="Titulos, pagamentos, cancelamentos e conciliacao."
+          items={FINANCE_ITEMS}
+          values={policy.finance}
+          onToggle={(key, value) => onSetSectionPermission("finance", key, value)}
+          disabled={isSelectedMaster}
+        />
+        <PermissionBlock
+          title="Pessoas"
+          description="Colaboradores, comissoes, banco de horas e ativos."
+          items={PEOPLE_ITEMS}
+          values={policy.people}
+          onToggle={(key, value) => onSetSectionPermission("people", key, value)}
+          disabled={isSelectedMaster}
+        />
+        <PermissionBlock
+          title="Tecnicos"
+          description="Visualizacao, despacho e agenda tecnica."
+          items={TECHNICIAN_ITEMS}
+          values={policy.technicians}
+          onToggle={(key, value) => onSetSectionPermission("technicians", key, value)}
+          disabled={isSelectedMaster}
+        />
+        <PermissionBlock
+          title="Relatorios"
+          description="Leitura e exportacao de indicadores."
+          items={REPORT_ITEMS}
+          values={policy.reports}
+          onToggle={(key, value) => onSetSectionPermission("reports", key, value)}
+          disabled={isSelectedMaster}
+        />
+        <PermissionBlock
+          title="Configuracoes"
+          description="Empresa, automacoes e parametros administrativos."
+          items={SETTINGS_ITEMS}
+          values={policy.settings}
+          onToggle={(key, value) => onSetSectionPermission("settings", key, value)}
           disabled={isSelectedMaster}
         />
         <div className="rounded-[24px] border border-slate-200 bg-white/92 p-4 shadow-[0_18px_40px_-34px_rgba(15,31,50,0.25)]">
@@ -2149,6 +2445,10 @@ function normalizeEditableAccessPolicy(access: AccessPolicy): AccessPolicy {
       ...base.pages,
       ...access.pages,
     },
+    clients: {
+      ...base.clients,
+      ...access.clients,
+    },
     catalog: {
       ...base.catalog,
       ...access.catalog,
@@ -2161,9 +2461,45 @@ function normalizeEditableAccessPolicy(access: AccessPolicy): AccessPolicy {
       ...base.proposals,
       ...access.proposals,
     },
+    contracts: {
+      ...base.contracts,
+      ...access.contracts,
+    },
+    orders: {
+      ...base.orders,
+      ...access.orders,
+    },
     maintenanceOrders: {
       ...base.maintenanceOrders,
       ...access.maintenanceOrders,
+    },
+    inventory: {
+      ...base.inventory,
+      ...access.inventory,
+    },
+    purchaseOrders: {
+      ...base.purchaseOrders,
+      ...access.purchaseOrders,
+    },
+    finance: {
+      ...base.finance,
+      ...access.finance,
+    },
+    people: {
+      ...base.people,
+      ...access.people,
+    },
+    technicians: {
+      ...base.technicians,
+      ...access.technicians,
+    },
+    reports: {
+      ...base.reports,
+      ...access.reports,
+    },
+    settings: {
+      ...base.settings,
+      ...access.settings,
     },
     audit: {
       ...base.audit,

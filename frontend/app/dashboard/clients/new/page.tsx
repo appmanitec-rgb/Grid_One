@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { apiFetch, apiUrl } from "@/lib/api";
+import { apiFetch, readApiErrorMessage } from "@/lib/api";
 
 type ContactStatus = "ACTIVE" | "INACTIVE" | "LEFT_COMPANY";
 type PersonType = "INDIVIDUAL" | "LEGAL_ENTITY";
@@ -213,7 +213,7 @@ export default function NewClientPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const res = await apiFetch(apiUrl("/generators"), { cache: "no-store" });
+        const res = await apiFetch("/generators", { cache: "no-store" });
         if (!res.ok) return;
         setExistingGenerators((await res.json()) as ExistingGeneratorOption[]);
       } catch {
@@ -231,7 +231,7 @@ export default function NewClientPage() {
 
     (async () => {
       try {
-        const res = await apiFetch(apiUrl(`/clients/${id}`), { cache: "no-store" });
+        const res = await apiFetch(`/clients/${id}`, { cache: "no-store" });
         if (!res.ok) {
           setError("Nao foi possivel carregar os dados do cliente para edicao.");
           return;
@@ -330,7 +330,6 @@ export default function NewClientPage() {
 
     setIsLoading(true);
 
-    const token = localStorage.getItem("manitec_token");
     const primaryContact = validContacts.find((c) => c.status === "ACTIVE") ?? validContacts[0];
     const normalizedDocument = formData.document.replace(/\D/g, "");
 
@@ -388,22 +387,18 @@ export default function NewClientPage() {
     };
 
     try {
-      const clientUrl = isEditing
-        ? apiUrl(`/clients/${editClientId}`)
-        : apiUrl("/clients");
+      const clientUrl = isEditing ? `/clients/${editClientId}` : "/clients";
 
       const clientRes = await apiFetch(clientUrl, {
         method: isEditing ? "PATCH" : "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(clientPayload),
       });
 
       if (!clientRes.ok) {
-        const errData = await clientRes.json();
-        setError(Array.isArray(errData.message) ? errData.message.join(", ") : errData.message || "Erro ao registar o cliente.");
+        setError(await readApiErrorMessage(clientRes, "Erro ao registar o cliente."));
         return;
       }
 
@@ -419,21 +414,20 @@ export default function NewClientPage() {
             clientId: savedClient.id,
           };
 
-          const machineRes = await apiFetch(apiUrl("/generators"), {
+          const machineRes = await apiFetch("/generators", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
             },
             body: JSON.stringify(machinePayload),
           });
 
           if (!machineRes.ok) {
-            const machineErr = await machineRes.json();
             setError(
-              `Cliente salvo, mas falhou ao cadastrar uma maquina: ${
-                Array.isArray(machineErr.message) ? machineErr.message.join(", ") : machineErr.message || "erro desconhecido"
-              }`,
+              `Cliente salvo, mas falhou ao cadastrar uma maquina: ${await readApiErrorMessage(
+                machineRes,
+                "erro desconhecido",
+              )}`,
             );
             return;
           }

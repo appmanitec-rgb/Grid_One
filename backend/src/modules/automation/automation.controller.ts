@@ -7,7 +7,7 @@ import { AutomationSchedulerService } from './automation-scheduler.service';
 
 @Controller('automation')
 @UseGuards(AuthGuard, AccessPolicyGuard)
-@RequireAccessPolicy('users.manage')
+@RequireAccessPolicy('settings.admin')
 export class AutomationController {
   constructor(
     private readonly automationSchedulerService: AutomationSchedulerService,

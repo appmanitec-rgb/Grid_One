@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { apiFetch, apiUrl } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 type Warehouse = {
   id: string;
@@ -43,8 +43,6 @@ type ReplenishmentDraft = {
   } | null;
 };
 
-const API_URL = apiUrl("");
-
 export default function InventoryPage() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [warehouseId, setWarehouseId] = useState("");
@@ -57,14 +55,12 @@ export default function InventoryPage() {
   const [message, setMessage] = useState("");
 
   async function fetchAll(selectedWarehouseId?: string) {
-    const token = localStorage.getItem("manitec_token");
-    const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
     const warehouseQuery = selectedWarehouseId ? `?warehouseId=${selectedWarehouseId}` : "";
 
     const [whRes, summaryRes, draftRes] = await Promise.all([
-      apiFetch(`${API_URL}/inventory/warehouses`, { headers, cache: "no-store" }),
-      apiFetch(`${API_URL}/inventory/summary${warehouseQuery}`, { headers, cache: "no-store" }),
-      apiFetch(`${API_URL}/inventory/replenishment-drafts${warehouseQuery}`, { headers, cache: "no-store" }),
+      apiFetch("/inventory/warehouses", { cache: "no-store" }),
+      apiFetch(`/inventory/summary${warehouseQuery}`, { cache: "no-store" }),
+      apiFetch(`/inventory/replenishment-drafts${warehouseQuery}`, { cache: "no-store" }),
     ]);
 
     if (whRes.ok) {
@@ -108,15 +104,11 @@ export default function InventoryPage() {
       return;
     }
 
-    const token = localStorage.getItem("manitec_token");
-    const headers: HeadersInit = {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
-
-    const res = await apiFetch(`${API_URL}/inventory/adjust`, {
+    const res = await apiFetch("/inventory/adjust", {
       method: "POST",
-      headers,
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
         warehouseId: adjustWarehouseId,
         reason: "Ajuste manual de inventario",

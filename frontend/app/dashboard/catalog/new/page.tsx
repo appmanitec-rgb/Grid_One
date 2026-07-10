@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { apiFetch, apiUrl } from "@/lib/api";
+import { apiFetch, readApiErrorMessage } from "@/lib/api";
 
 type ItemType = "PART" | "SERVICE";
 type ProductOrigin =
@@ -102,15 +102,17 @@ export default function CatalogFormPage() {
     setIsLoadingItem(true);
 
     (async () => {
-      const token = localStorage.getItem("manitec_token");
-      if (!token) return;
-
       try {
-        const res = await apiFetch(apiUrl(`/catalogs/${editItemId}`), {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await apiFetch(`/catalogs/${editItemId}`);
 
-        if (!res.ok) throw new Error("Nao foi possivel carregar item para edicao.");
+        if (!res.ok) {
+          throw new Error(
+            await readApiErrorMessage(
+              res,
+              "Nao foi possivel carregar item para edicao.",
+            ),
+          );
+        }
 
         const item = await res.json();
         const taxProfile = (item.taxProfile && typeof item.taxProfile === "object") ? item.taxProfile : {};
@@ -158,8 +160,10 @@ export default function CatalogFormPage() {
           csll: taxProfile.csll != null ? String(taxProfile.csll) : "",
           cpp: taxProfile.cpp != null ? String(taxProfile.cpp) : "",
         });
-      } catch (e: any) {
-        setError(e.message || "Erro ao carregar item.");
+      } catch (loadError: unknown) {
+        setError(
+          loadError instanceof Error ? loadError.message : "Erro ao carregar item.",
+        );
       } finally {
         setIsLoadingItem(false);
       }
@@ -175,13 +179,6 @@ export default function CatalogFormPage() {
     e.preventDefault();
     setIsLoading(true);
     setError("");
-
-    const token = localStorage.getItem("manitec_token");
-    if (!token) {
-      setError("Sessao invalida. Faca login novamente.");
-      setIsLoading(false);
-      return;
-    }
 
     const taxProfile = {
       icms: toNumberOrUndefined(formData.icms),
@@ -235,28 +232,28 @@ export default function CatalogFormPage() {
     };
 
     try {
-      const url = isEditing
-        ? apiUrl(`/catalogs/${editItemId}`)
-        : apiUrl("/catalogs");
+      const url = isEditing ? `/catalogs/${editItemId}` : "/catalogs";
       const method = isEditing ? "PATCH" : "POST";
 
       const res = await apiFetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(Array.isArray(errData.message) ? errData.message.join(", ") : errData.message || "Erro ao salvar item.");
+        throw new Error(await readApiErrorMessage(res, "Erro ao salvar item."));
       }
 
       router.push("/dashboard/catalog");
-    } catch (e: any) {
-      setError(e.message || "Erro de ligacao com o servidor.");
+    } catch (submitError: unknown) {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Erro de ligacao com o servidor.",
+      );
     } finally {
       setIsLoading(false);
     }

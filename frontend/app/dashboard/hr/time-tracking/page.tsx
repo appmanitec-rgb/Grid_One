@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch, apiUrl } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 type PayrollRow = {
   userId: string;
@@ -11,8 +11,6 @@ type PayrollRow = {
   extraMinutes: number;
   nightMinutes: number;
 };
-
-const API_URL = apiUrl("");
 
 function currentMonthKey() {
   const now = new Date();
@@ -25,9 +23,7 @@ export default function TimeTrackingPage() {
 
   useEffect(() => {
     async function load() {
-      const token = localStorage.getItem("manitec_token");
-      const res = await apiFetch(`${API_URL}/hr-admin/time-entries/payroll-export?month=${month}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      const res = await apiFetch(`/hr-admin/time-entries/payroll-export?month=${month}`, {
         cache: "no-store",
       });
       if (!res.ok) return;

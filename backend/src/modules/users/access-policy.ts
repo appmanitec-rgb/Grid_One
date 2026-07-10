@@ -9,11 +9,24 @@ export type AccessPolicy = {
     catalog: boolean;
     clients: boolean;
     equipments: boolean;
+    finance: boolean;
+    inventory: boolean;
+    people: boolean;
     usersControl: boolean;
+  };
+  clients: {
+    view: boolean;
+    create: boolean;
+    update: boolean;
+    delete: boolean;
   };
   catalog: {
     viewCosts: boolean;
     manageItems: boolean;
+    view: boolean;
+    create: boolean;
+    update: boolean;
+    delete: boolean;
   };
   users: {
     manage: boolean;
@@ -24,139 +37,375 @@ export type AccessPolicy = {
     viewLiveLocation: boolean;
   };
   proposals: {
+    view: boolean;
+    create: boolean;
+    update: boolean;
+    approve: boolean;
+    cancel: boolean;
     requestDiscountAboveLimit: boolean;
     approveBudget: boolean;
+  };
+  contracts: {
+    view: boolean;
+    create: boolean;
+    update: boolean;
+    activate: boolean;
+    cancel: boolean;
+  };
+  orders: {
+    view: boolean;
+    create: boolean;
+    update: boolean;
+    dispatch: boolean;
+    finish: boolean;
+    cancel: boolean;
   };
   maintenanceOrders: {
     submitVisitReport: boolean;
     approveVisitReport: boolean;
     assignWithOverride: boolean;
   };
+  inventory: {
+    view: boolean;
+    create: boolean;
+    update: boolean;
+    reserve: boolean;
+    consume: boolean;
+    adjust: boolean;
+  };
+  purchaseOrders: {
+    view: boolean;
+    create: boolean;
+    update: boolean;
+    approve: boolean;
+    receive: boolean;
+    cancel: boolean;
+  };
+  finance: {
+    view: boolean;
+    create: boolean;
+    update: boolean;
+    pay: boolean;
+    cancel: boolean;
+    reconcile: boolean;
+  };
+  people: {
+    view: boolean;
+    create: boolean;
+    update: boolean;
+    delete: boolean;
+  };
+  technicians: {
+    view: boolean;
+    dispatch: boolean;
+    schedule: boolean;
+  };
+  reports: {
+    view: boolean;
+    export: boolean;
+  };
+  settings: {
+    view: boolean;
+    update: boolean;
+    admin: boolean;
+  };
   audit: {
     read: boolean;
   };
 };
 
-export const allAccessPolicy: AccessPolicy = {
+type AccessPolicyOverrides = {
+  [Section in keyof AccessPolicy]?: Partial<AccessPolicy[Section]>;
+};
+
+const emptyAccessPolicy: AccessPolicy = {
   pages: {
-    dashboard: true,
-    proposals: true,
-    orders: true,
-    contracts: true,
-    catalog: true,
-    clients: true,
-    equipments: true,
-    usersControl: true,
+    dashboard: false,
+    proposals: false,
+    orders: false,
+    contracts: false,
+    catalog: false,
+    clients: false,
+    equipments: false,
+    finance: false,
+    inventory: false,
+    people: false,
+    usersControl: false,
+  },
+  clients: {
+    view: false,
+    create: false,
+    update: false,
+    delete: false,
   },
   catalog: {
-    viewCosts: true,
-    manageItems: true,
+    viewCosts: false,
+    manageItems: false,
+    view: false,
+    create: false,
+    update: false,
+    delete: false,
   },
   users: {
-    manage: true,
-    manageSecurity: true,
-    manageCertifications: true,
-    manageSpecialties: true,
-    manageHierarchy: true,
-    viewLiveLocation: true,
+    manage: false,
+    manageSecurity: false,
+    manageCertifications: false,
+    manageSpecialties: false,
+    manageHierarchy: false,
+    viewLiveLocation: false,
   },
   proposals: {
-    requestDiscountAboveLimit: true,
-    approveBudget: true,
+    view: false,
+    create: false,
+    update: false,
+    approve: false,
+    cancel: false,
+    requestDiscountAboveLimit: false,
+    approveBudget: false,
+  },
+  contracts: {
+    view: false,
+    create: false,
+    update: false,
+    activate: false,
+    cancel: false,
+  },
+  orders: {
+    view: false,
+    create: false,
+    update: false,
+    dispatch: false,
+    finish: false,
+    cancel: false,
   },
   maintenanceOrders: {
-    submitVisitReport: true,
-    approveVisitReport: true,
-    assignWithOverride: true,
+    submitVisitReport: false,
+    approveVisitReport: false,
+    assignWithOverride: false,
+  },
+  inventory: {
+    view: false,
+    create: false,
+    update: false,
+    reserve: false,
+    consume: false,
+    adjust: false,
+  },
+  purchaseOrders: {
+    view: false,
+    create: false,
+    update: false,
+    approve: false,
+    receive: false,
+    cancel: false,
+  },
+  finance: {
+    view: false,
+    create: false,
+    update: false,
+    pay: false,
+    cancel: false,
+    reconcile: false,
+  },
+  people: {
+    view: false,
+    create: false,
+    update: false,
+    delete: false,
+  },
+  technicians: {
+    view: false,
+    dispatch: false,
+    schedule: false,
+  },
+  reports: {
+    view: false,
+    export: false,
+  },
+  settings: {
+    view: false,
+    update: false,
+    admin: false,
   },
   audit: {
-    read: true,
+    read: false,
   },
 };
+
+export const allAccessPolicy: AccessPolicy = mapAccessPolicy(
+  emptyAccessPolicy,
+  () => true,
+);
 
 export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
   if (role === UserRole.ADMIN) return allAccessPolicy;
 
-  if (role === UserRole.SALES) {
-    return {
+  if (role === UserRole.MANAGER) {
+    return policy({
       pages: {
         dashboard: true,
         proposals: true,
-        orders: false,
+        orders: true,
         contracts: true,
         catalog: true,
         clients: true,
         equipments: true,
-        usersControl: false,
+        finance: true,
+        inventory: true,
+        people: true,
+        usersControl: true,
       },
+      clients: allClientActions(),
       catalog: {
-        viewCosts: false,
-        manageItems: false,
+        viewCosts: true,
+        manageItems: true,
+        view: true,
+        create: true,
+        update: true,
       },
       users: {
-        manage: false,
-        manageSecurity: false,
-        manageCertifications: false,
-        manageSpecialties: false,
-        manageHierarchy: false,
-        viewLiveLocation: false,
+        manage: true,
+        manageCertifications: true,
+        manageSpecialties: true,
+        manageHierarchy: true,
+        viewLiveLocation: true,
       },
       proposals: {
+        view: true,
+        create: true,
+        update: true,
+        approve: true,
+        cancel: true,
         requestDiscountAboveLimit: true,
-        approveBudget: false,
+        approveBudget: true,
+      },
+      contracts: {
+        view: true,
+        create: true,
+        update: true,
+        activate: true,
+        cancel: true,
+      },
+      orders: {
+        view: true,
+        create: true,
+        update: true,
+        dispatch: true,
+        finish: true,
+        cancel: true,
       },
       maintenanceOrders: {
-        submitVisitReport: false,
-        approveVisitReport: false,
-        assignWithOverride: false,
+        submitVisitReport: true,
+        approveVisitReport: true,
+        assignWithOverride: true,
+      },
+      inventory: {
+        view: true,
+        create: true,
+        update: true,
+        reserve: true,
+        consume: true,
+        adjust: true,
+      },
+      purchaseOrders: {
+        view: true,
+        create: true,
+        update: true,
+        approve: true,
+        receive: true,
+        cancel: true,
+      },
+      finance: {
+        view: true,
+        create: true,
+        update: true,
+        pay: true,
+        cancel: true,
+        reconcile: true,
+      },
+      people: {
+        view: true,
+        create: true,
+        update: true,
+      },
+      technicians: {
+        view: true,
+        dispatch: true,
+        schedule: true,
+      },
+      reports: {
+        view: true,
+        export: true,
+      },
+      settings: {
+        view: true,
+        update: true,
       },
       audit: {
-        read: false,
+        read: true,
       },
-    };
+    });
+  }
+
+  if (role === UserRole.SALES) {
+    return policy({
+      pages: {
+        dashboard: true,
+        proposals: true,
+        contracts: true,
+        catalog: true,
+        clients: true,
+        equipments: true,
+      },
+      clients: {
+        view: true,
+        create: true,
+        update: true,
+      },
+      catalog: { view: true },
+      proposals: {
+        view: true,
+        create: true,
+        update: true,
+        requestDiscountAboveLimit: true,
+      },
+      contracts: { view: true },
+      reports: { view: true },
+    });
   }
 
   if (role === UserRole.TECHNICIAN) {
-    return {
+    return policy({
       pages: {
         dashboard: true,
-        proposals: false,
         orders: true,
-        contracts: false,
         catalog: true,
         clients: true,
         equipments: true,
-        usersControl: false,
       },
-      catalog: {
-        viewCosts: false,
-        manageItems: false,
-      },
-      users: {
-        manage: false,
-        manageSecurity: false,
-        manageCertifications: false,
-        manageSpecialties: false,
-        manageHierarchy: false,
-        viewLiveLocation: true,
-      },
-      proposals: {
-        requestDiscountAboveLimit: false,
-        approveBudget: false,
+      clients: { view: true },
+      catalog: { view: true },
+      orders: {
+        view: true,
+        update: true,
+        finish: true,
       },
       maintenanceOrders: {
         submitVisitReport: true,
-        approveVisitReport: false,
-        assignWithOverride: false,
       },
-      audit: {
-        read: false,
+      inventory: { view: true },
+      technicians: {
+        view: true,
+        schedule: true,
       },
-    };
+      users: {
+        viewLiveLocation: true,
+      },
+    });
   }
 
   if (role === UserRole.ENGINEER_APPLICATION) {
-    return {
+    return policy({
       pages: {
         dashboard: true,
         proposals: true,
@@ -165,114 +414,192 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         catalog: true,
         clients: true,
         equipments: true,
-        usersControl: false,
+        inventory: true,
       },
+      clients: { view: true },
       catalog: {
         viewCosts: true,
-        manageItems: false,
-      },
-      users: {
-        manage: false,
-        manageSecurity: false,
-        manageCertifications: false,
-        manageSpecialties: true,
-        manageHierarchy: false,
-        viewLiveLocation: true,
+        view: true,
       },
       proposals: {
+        view: true,
+        create: true,
+        update: true,
         requestDiscountAboveLimit: true,
-        approveBudget: false,
+      },
+      contracts: { view: true },
+      orders: {
+        view: true,
+        create: true,
+        update: true,
+        dispatch: true,
+        finish: true,
       },
       maintenanceOrders: {
         submitVisitReport: true,
-        approveVisitReport: false,
         assignWithOverride: true,
       },
-      audit: {
-        read: false,
+      inventory: {
+        view: true,
+        reserve: true,
+        consume: true,
       },
-    };
+      technicians: {
+        view: true,
+        dispatch: true,
+        schedule: true,
+      },
+      users: {
+        manageSpecialties: true,
+        viewLiveLocation: true,
+      },
+      reports: { view: true },
+    });
   }
 
-  if (role === UserRole.LOGISTICS) {
-    return {
+  if (role === UserRole.LOGISTICS || role === UserRole.SUPPLIES) {
+    return policy({
       pages: {
         dashboard: true,
-        proposals: false,
         orders: true,
         contracts: true,
         catalog: true,
         clients: true,
         equipments: true,
-        usersControl: false,
+        inventory: true,
       },
+      clients: { view: true },
       catalog: {
-        viewCosts: false,
+        view: true,
+        viewCosts: role === UserRole.SUPPLIES,
         manageItems: true,
+        create: true,
+        update: true,
+      },
+      contracts: { view: true },
+      orders: {
+        view: true,
+        dispatch: true,
+      },
+      inventory: {
+        view: true,
+        create: true,
+        update: true,
+        reserve: true,
+        adjust: true,
+      },
+      purchaseOrders: {
+        view: true,
+        create: true,
+        update: true,
+        approve: true,
+        receive: true,
+        cancel: true,
+      },
+      technicians: {
+        view: true,
+        dispatch: true,
       },
       users: {
-        manage: false,
-        manageSecurity: false,
-        manageCertifications: false,
-        manageSpecialties: false,
-        manageHierarchy: false,
         viewLiveLocation: true,
       },
-      proposals: {
-        requestDiscountAboveLimit: false,
-        approveBudget: false,
-      },
-      maintenanceOrders: {
-        submitVisitReport: false,
-        approveVisitReport: false,
-        assignWithOverride: true,
-      },
-      audit: {
-        read: false,
-      },
-    };
+      reports: { view: true },
+    });
   }
 
-  if (role === UserRole.CLIENT) {
-    return {
+  if (role === UserRole.FINANCE) {
+    return policy({
+      pages: {
+        dashboard: true,
+        contracts: true,
+        clients: true,
+        finance: true,
+      },
+      clients: { view: true },
+      contracts: { view: true },
+      finance: {
+        view: true,
+        create: true,
+        update: true,
+        pay: true,
+        cancel: true,
+        reconcile: true,
+      },
+      reports: {
+        view: true,
+        export: true,
+      },
+      audit: { read: true },
+    });
+  }
+
+  if (role === UserRole.HR) {
+    return policy({
+      pages: {
+        dashboard: true,
+        orders: true,
+        people: true,
+      },
+      orders: { view: true },
+      people: {
+        view: true,
+        create: true,
+        update: true,
+        delete: true,
+      },
+      technicians: {
+        view: true,
+        schedule: true,
+      },
+      users: {
+        manageCertifications: true,
+        manageSpecialties: true,
+      },
+      reports: { view: true },
+      audit: { read: true },
+    });
+  }
+
+  if (role === UserRole.AUDITOR) {
+    return policy({
       pages: {
         dashboard: true,
         proposals: true,
-        orders: false,
-        contracts: false,
-        catalog: false,
-        clients: false,
-        equipments: false,
-        usersControl: false,
+        orders: true,
+        contracts: true,
+        catalog: true,
+        clients: true,
+        equipments: true,
+        finance: true,
+        inventory: true,
+        people: true,
       },
-      catalog: {
-        viewCosts: false,
-        manageItems: false,
-      },
-      users: {
-        manage: false,
-        manageSecurity: false,
-        manageCertifications: false,
-        manageSpecialties: false,
-        manageHierarchy: false,
-        viewLiveLocation: false,
-      },
-      proposals: {
-        requestDiscountAboveLimit: false,
-        approveBudget: false,
-      },
-      maintenanceOrders: {
-        submitVisitReport: false,
-        approveVisitReport: false,
-        assignWithOverride: false,
-      },
-      audit: {
-        read: false,
-      },
-    };
+      clients: { view: true },
+      catalog: { view: true, viewCosts: true },
+      proposals: { view: true },
+      contracts: { view: true },
+      orders: { view: true },
+      inventory: { view: true },
+      purchaseOrders: { view: true },
+      finance: { view: true },
+      people: { view: true },
+      technicians: { view: true },
+      reports: { view: true, export: true },
+      audit: { read: true },
+    });
   }
 
-  return {
+  if (role === UserRole.CLIENT) {
+    return policy({
+      pages: {
+        dashboard: true,
+        proposals: true,
+      },
+      proposals: { view: true, approve: true, cancel: true },
+    });
+  }
+
+  return policy({
     pages: {
       dashboard: true,
       proposals: true,
@@ -281,33 +608,17 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
       catalog: true,
       clients: true,
       equipments: true,
-      usersControl: false,
     },
-    catalog: {
-      viewCosts: false,
-      manageItems: false,
-    },
-    users: {
-      manage: false,
-      manageSecurity: false,
-      manageCertifications: false,
-      manageSpecialties: false,
-      manageHierarchy: false,
-      viewLiveLocation: false,
-    },
-    proposals: {
-      requestDiscountAboveLimit: false,
-      approveBudget: false,
-    },
-    maintenanceOrders: {
-      submitVisitReport: true,
-      approveVisitReport: false,
-      assignWithOverride: false,
-    },
-    audit: {
-      read: false,
-    },
-  };
+    clients: { view: true },
+    catalog: { view: true },
+    proposals: { view: true, create: true, update: true },
+    contracts: { view: true },
+    orders: { view: true, update: true },
+    maintenanceOrders: { submitVisitReport: true },
+    inventory: { view: true },
+    technicians: { view: true },
+    reports: { view: true },
+  });
 }
 
 export function effectiveAccessPolicy(
@@ -319,96 +630,94 @@ export function effectiveAccessPolicy(
     return defaults;
   }
 
-  const policy = customPolicy as any;
+  return mergeAccessPolicy(defaults, customPolicy as AccessPolicyOverrides);
+}
+
+function policy(overrides: AccessPolicyOverrides): AccessPolicy {
+  return mergeAccessPolicy(emptyAccessPolicy, overrides);
+}
+
+function allClientActions() {
   return {
-    pages: {
-      dashboard: boolOrDefault(
-        policy?.pages?.dashboard,
-        defaults.pages.dashboard,
-      ),
-      proposals: boolOrDefault(
-        policy?.pages?.proposals,
-        defaults.pages.proposals,
-      ),
-      orders: boolOrDefault(policy?.pages?.orders, defaults.pages.orders),
-      contracts: boolOrDefault(
-        policy?.pages?.contracts,
-        defaults.pages.contracts,
-      ),
-      catalog: boolOrDefault(policy?.pages?.catalog, defaults.pages.catalog),
-      clients: boolOrDefault(policy?.pages?.clients, defaults.pages.clients),
-      equipments: boolOrDefault(
-        policy?.pages?.equipments,
-        defaults.pages.equipments,
-      ),
-      usersControl: boolOrDefault(
-        policy?.pages?.usersControl,
-        defaults.pages.usersControl,
-      ),
-    },
-    catalog: {
-      viewCosts: boolOrDefault(
-        policy?.catalog?.viewCosts,
-        defaults.catalog.viewCosts,
-      ),
-      manageItems: boolOrDefault(
-        policy?.catalog?.manageItems,
-        defaults.catalog.manageItems,
-      ),
-    },
-    users: {
-      manage: boolOrDefault(policy?.users?.manage, defaults.users.manage),
-      manageSecurity: boolOrDefault(
-        policy?.users?.manageSecurity,
-        defaults.users.manageSecurity,
-      ),
-      manageCertifications: boolOrDefault(
-        policy?.users?.manageCertifications,
-        defaults.users.manageCertifications,
-      ),
-      manageSpecialties: boolOrDefault(
-        policy?.users?.manageSpecialties,
-        defaults.users.manageSpecialties,
-      ),
-      manageHierarchy: boolOrDefault(
-        policy?.users?.manageHierarchy,
-        defaults.users.manageHierarchy,
-      ),
-      viewLiveLocation: boolOrDefault(
-        policy?.users?.viewLiveLocation,
-        defaults.users.viewLiveLocation,
-      ),
-    },
-    proposals: {
-      requestDiscountAboveLimit: boolOrDefault(
-        policy?.proposals?.requestDiscountAboveLimit,
-        defaults.proposals.requestDiscountAboveLimit,
-      ),
-      approveBudget: boolOrDefault(
-        policy?.proposals?.approveBudget,
-        defaults.proposals.approveBudget,
-      ),
-    },
-    maintenanceOrders: {
-      submitVisitReport: boolOrDefault(
-        policy?.maintenanceOrders?.submitVisitReport,
-        defaults.maintenanceOrders.submitVisitReport,
-      ),
-      approveVisitReport: boolOrDefault(
-        policy?.maintenanceOrders?.approveVisitReport,
-        defaults.maintenanceOrders.approveVisitReport,
-      ),
-      assignWithOverride: boolOrDefault(
-        policy?.maintenanceOrders?.assignWithOverride,
-        defaults.maintenanceOrders.assignWithOverride,
-      ),
-    },
-    audit: {
-      read: boolOrDefault(policy?.audit?.read, defaults.audit.read),
-    },
+    view: true,
+    create: true,
+    update: true,
+    delete: true,
   };
 }
 
-function boolOrDefault(value: unknown, fallback: boolean) {
-  return typeof value === 'boolean' ? value : fallback;
+function mergeAccessPolicy(
+  base: AccessPolicy,
+  overrides: AccessPolicyOverrides,
+): AccessPolicy {
+  return {
+    pages: mergeSection(base.pages, overrides.pages),
+    clients: mergeSection(base.clients, overrides.clients),
+    catalog: mergeSection(base.catalog, overrides.catalog),
+    users: mergeSection(base.users, overrides.users),
+    proposals: mergeSection(base.proposals, overrides.proposals),
+    contracts: mergeSection(base.contracts, overrides.contracts),
+    orders: mergeSection(base.orders, overrides.orders),
+    maintenanceOrders: mergeSection(
+      base.maintenanceOrders,
+      overrides.maintenanceOrders,
+    ),
+    inventory: mergeSection(base.inventory, overrides.inventory),
+    purchaseOrders: mergeSection(base.purchaseOrders, overrides.purchaseOrders),
+    finance: mergeSection(base.finance, overrides.finance),
+    people: mergeSection(base.people, overrides.people),
+    technicians: mergeSection(base.technicians, overrides.technicians),
+    reports: mergeSection(base.reports, overrides.reports),
+    settings: mergeSection(base.settings, overrides.settings),
+    audit: mergeSection(base.audit, overrides.audit),
+  };
+}
+
+function mergeSection<T extends Record<string, boolean>>(
+  base: T,
+  overrides?: Partial<T>,
+): T {
+  const merged = { ...base };
+  for (const key of Object.keys(base) as Array<keyof T>) {
+    const value = overrides?.[key];
+    if (typeof value === 'boolean') {
+      merged[key] = value as T[keyof T];
+    }
+  }
+  return merged;
+}
+
+function mapAccessPolicy(
+  input: AccessPolicy,
+  mapper: (value: boolean) => boolean,
+): AccessPolicy {
+  return {
+    pages: mapSection(input.pages, mapper),
+    clients: mapSection(input.clients, mapper),
+    catalog: mapSection(input.catalog, mapper),
+    users: mapSection(input.users, mapper),
+    proposals: mapSection(input.proposals, mapper),
+    contracts: mapSection(input.contracts, mapper),
+    orders: mapSection(input.orders, mapper),
+    maintenanceOrders: mapSection(input.maintenanceOrders, mapper),
+    inventory: mapSection(input.inventory, mapper),
+    purchaseOrders: mapSection(input.purchaseOrders, mapper),
+    finance: mapSection(input.finance, mapper),
+    people: mapSection(input.people, mapper),
+    technicians: mapSection(input.technicians, mapper),
+    reports: mapSection(input.reports, mapper),
+    settings: mapSection(input.settings, mapper),
+    audit: mapSection(input.audit, mapper),
+  };
+}
+
+function mapSection<T extends Record<string, boolean>>(
+  input: T,
+  mapper: (value: boolean) => boolean,
+): T {
+  const output = { ...input };
+  for (const key of Object.keys(input) as Array<keyof T>) {
+    output[key] = mapper(input[key]) as T[keyof T];
+  }
+  return output;
 }

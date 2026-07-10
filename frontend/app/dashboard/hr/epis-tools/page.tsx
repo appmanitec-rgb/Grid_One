@@ -1,9 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { apiFetch, apiUrl } from "@/lib/api";
-
-const API_URL = apiUrl("");
+import { apiFetch, readApiErrorMessage } from "@/lib/api";
 
 const ASSET_TYPES = ["EPI", "TOOL"] as const;
 type AssetType = (typeof ASSET_TYPES)[number];
@@ -48,14 +46,6 @@ type CatalogItem = {
   type: string;
 };
 
-function authHeaders(json = false) {
-  const token = localStorage.getItem("manitec_token");
-  return {
-    ...(json ? { "Content-Type": "application/json" } : {}),
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
 function formatDate(value?: string | null) {
   if (!value) return "-";
   return new Date(value).toLocaleDateString("pt-BR");
@@ -87,20 +77,16 @@ export default function EpisToolsPage() {
     try {
       const [assetsRes, expiringRes, collaboratorsRes, catalogsRes] =
         await Promise.all([
-          apiFetch(`${API_URL}/hr-admin/assets`, {
-            headers: authHeaders(),
+          apiFetch("/hr-admin/assets", {
             cache: "no-store",
           }),
-          apiFetch(`${API_URL}/hr-admin/assets/expiring?days=30`, {
-            headers: authHeaders(),
+          apiFetch("/hr-admin/assets/expiring?days=30", {
             cache: "no-store",
           }),
-          apiFetch(`${API_URL}/hr-admin/collaborators`, {
-            headers: authHeaders(),
+          apiFetch("/hr-admin/collaborators", {
             cache: "no-store",
           }),
-          apiFetch(`${API_URL}/catalogs`, {
-            headers: authHeaders(),
+          apiFetch("/catalogs", {
             cache: "no-store",
           }),
         ]);
@@ -138,9 +124,11 @@ export default function EpisToolsPage() {
     setMessage("");
 
     try {
-      const res = await apiFetch(`${API_URL}/hr-admin/assets`, {
+      const res = await apiFetch("/hr-admin/assets", {
         method: "POST",
-        headers: authHeaders(true),
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           userId,
           catalogItemId: catalogItemId || undefined,
@@ -154,10 +142,7 @@ export default function EpisToolsPage() {
       });
 
       if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as
-          | { message?: string }
-          | null;
-        throw new Error(body?.message || "Falha ao registrar entrega.");
+        throw new Error(await readApiErrorMessage(res, "Falha ao registrar entrega."));
       }
 
       setUserId("");
@@ -185,17 +170,18 @@ export default function EpisToolsPage() {
     setError("");
     setMessage("");
     try {
-      const res = await apiFetch(`${API_URL}/hr-admin/assets/${id}/status`, {
+      const res = await apiFetch(`/hr-admin/assets/${id}/status`, {
         method: "PATCH",
-        headers: authHeaders(true),
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ status }),
       });
 
       if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as
-          | { message?: string }
-          | null;
-        throw new Error(body?.message || "Falha ao atualizar status do item.");
+        throw new Error(
+          await readApiErrorMessage(res, "Falha ao atualizar status do item."),
+        );
       }
 
       setMessage("Status do item atualizado.");

@@ -30,6 +30,12 @@ type CompanyRecord = {
   logoUrl?: string | null;
   primaryColor?: string | null;
   secondaryColor?: string | null;
+  deliverySenderName?: string | null;
+  deliveryFromEmail?: string | null;
+  deliveryReplyToEmail?: string | null;
+  deliveryDefaultWhatsapp?: string | null;
+  deliveryDefaultWebhookUrl?: string | null;
+  deliveryEmailFooter?: string | null;
   notes?: string | null;
   isPrimary: boolean;
   updatedAt: string;
@@ -60,6 +66,12 @@ type CompanyForm = {
   logoUrl: string;
   primaryColor: string;
   secondaryColor: string;
+  deliverySenderName: string;
+  deliveryFromEmail: string;
+  deliveryReplyToEmail: string;
+  deliveryDefaultWhatsapp: string;
+  deliveryDefaultWebhookUrl: string;
+  deliveryEmailFooter: string;
   notes: string;
   isPrimary: boolean;
 };
@@ -89,6 +101,12 @@ const EMPTY_FORM: CompanyForm = {
   logoUrl: "",
   primaryColor: "#0f4c81",
   secondaryColor: "#f97316",
+  deliverySenderName: "",
+  deliveryFromEmail: "",
+  deliveryReplyToEmail: "",
+  deliveryDefaultWhatsapp: "",
+  deliveryDefaultWebhookUrl: "",
+  deliveryEmailFooter: "",
   notes: "",
   isPrimary: false,
 };
@@ -147,6 +165,12 @@ function toForm(company?: CompanyRecord | null): CompanyForm {
     logoUrl: company.logoUrl ?? "",
     primaryColor: company.primaryColor ?? EMPTY_FORM.primaryColor,
     secondaryColor: company.secondaryColor ?? EMPTY_FORM.secondaryColor,
+    deliverySenderName: company.deliverySenderName ?? "",
+    deliveryFromEmail: company.deliveryFromEmail ?? "",
+    deliveryReplyToEmail: company.deliveryReplyToEmail ?? "",
+    deliveryDefaultWhatsapp: formatPhone(company.deliveryDefaultWhatsapp ?? ""),
+    deliveryDefaultWebhookUrl: company.deliveryDefaultWebhookUrl ?? "",
+    deliveryEmailFooter: company.deliveryEmailFooter ?? "",
     notes: company.notes ?? "",
     isPrimary: company.isPrimary,
   };
@@ -271,7 +295,7 @@ export default function CompanySettingsPage() {
           <div className="max-w-3xl">
             <span className="inline-flex rounded-full border border-blue-200 bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-blue-800">Multiempresa</span>
             <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-950 md:text-4xl">Configuracoes da Empresa</h1>
-            <p className="mt-2 text-sm text-slate-600 md:text-base">Agora o sistema aceita mais de um CNPJ. Cada empresa pode ter dados fiscais, contatos, endereco e identidade visual proprios.</p>
+            <p className="mt-2 text-sm text-slate-600 md:text-base">Agora o sistema aceita mais de um CNPJ. Cada empresa pode ter dados fiscais, contatos, identidade visual e padroes proprios para envios externos.</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <Metric label="Cadastros" value={String(companies.length || 0)} hint="Empresas ativas" />
@@ -321,6 +345,7 @@ export default function CompanySettingsPage() {
               <li>Cadastre matriz e filial separadamente.</li>
               <li>Marque a empresa principal para padroes do sistema.</li>
               <li>Preencha e-mail financeiro e inscricoes para faturamento.</li>
+              <li>Defina remetente, WhatsApp e webhook padrao para a central de envios.</li>
             </ul>
           </div>
         </aside>
@@ -438,6 +463,20 @@ export default function CompanySettingsPage() {
                     </div>
                   </div>
                 </div>
+              </Section>
+
+              <Section title="Entrega externa" description="Padroes usados pela central de documentos para e-mail, WhatsApp e webhook.">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  <Field label="Nome do remetente" value={form.deliverySenderName} onChange={(value) => updateField("deliverySenderName", value)} placeholder="Manitec Operacoes" />
+                  <Field label="E-mail remetente" type="email" value={form.deliveryFromEmail} onChange={(value) => updateField("deliveryFromEmail", value)} placeholder="documentos@empresa.com.br" />
+                  <Field label="Reply-to" type="email" value={form.deliveryReplyToEmail} onChange={(value) => updateField("deliveryReplyToEmail", value)} placeholder="comercial@empresa.com.br" />
+                  <Field label="WhatsApp padrao" value={form.deliveryDefaultWhatsapp} onChange={(value) => updateField("deliveryDefaultWhatsapp", formatPhone(value))} inputMode="tel" placeholder="(11) 99999-0000" />
+                  <Field label="Webhook padrao" type="url" value={form.deliveryDefaultWebhookUrl} onChange={(value) => updateField("deliveryDefaultWebhookUrl", value)} placeholder="https://cliente.com/webhooks/manitec" className="md:col-span-2 xl:col-span-2" />
+                </div>
+                <label className="mt-4 block text-sm font-semibold text-slate-700">
+                  <span>Assinatura / rodape do envio</span>
+                  <textarea value={form.deliveryEmailFooter} onChange={(event) => updateField("deliveryEmailFooter", event.target.value)} rows={4} className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" placeholder="Equipe Manitec&#10;11 99999-0000&#10;www.seusite.com.br" />
+                </label>
               </Section>
 
               <Section title="Observacoes internas" description="Anotacoes administrativas, fiscais e operacionais.">

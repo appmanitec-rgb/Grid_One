@@ -4,7 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { canAccessDashboardPath } from "@/lib/access";
-import { apiFetch, apiUrl } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
+import { decodeJwtPayload, getStoredAccessToken } from "@/lib/auth-session";
 
 export type SidebarAccess = {
   dashboard: boolean;
@@ -14,6 +15,9 @@ export type SidebarAccess = {
   catalog: boolean;
   clients: boolean;
   equipments: boolean;
+  finance: boolean;
+  inventory: boolean;
+  people: boolean;
   usersControl: boolean;
 };
 
@@ -54,6 +58,9 @@ const MAIN_SECTIONS: NavSection[] = [
     icon: "overview",
     items: [
       { key: "overview_dash", label: "Dashboard", href: "/dashboard", enabled: true },
+      { key: "overview_documents", label: "Documentos", href: "/dashboard/documents", enabled: true },
+      { key: "overview_deliveries", label: "Envios", href: "/dashboard/deliveries", enabled: true },
+      { key: "overview_alerts", label: "Alertas", href: "/dashboard/notifications", enabled: true },
       { key: "overview_reports", label: "Relatorios", href: "/dashboard/reports", enabled: true },
       { key: "overview_management", label: "Gestao", href: "/dashboard/control", enabled: true },
       { key: "overview_automation", label: "Automacao", href: "/dashboard/automation", enabled: true },
@@ -130,6 +137,21 @@ const MAIN_SECTIONS: NavSection[] = [
   },
 ];
 
+const CLIENT_SECTIONS: NavSection[] = [
+  {
+    id: "client_portal",
+    title: "Portal",
+    icon: "overview",
+    items: [
+      { key: "client_home", label: "Visao geral", href: "/dashboard/client-portal", enabled: true },
+      { key: "client_documents", label: "Documentos", href: "/dashboard/documents", enabled: true },
+      { key: "client_deliveries", label: "Envios", href: "/dashboard/deliveries", enabled: true },
+      { key: "client_alerts", label: "Alertas", href: "/dashboard/notifications", enabled: true },
+      { key: "client_proposals", label: "Minhas propostas", href: "/dashboard/proposals", enabled: true, badgeKey: "proposalsQueue" },
+    ],
+  },
+];
+
 const ADMIN_ITEMS: NavItem[] = [
   { key: "admin_profile", label: "Meu Perfil", href: "/dashboard/profile", enabled: true },
 ];
@@ -141,9 +163,18 @@ export default function SidebarNavigation({
   onToggleCollapsed,
   onLogout,
 }: SidebarNavigationProps) {
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  const [favoriteKeys, setFavoriteKeys] = useState<string[]>([]);
+  const [userRole, setUserRole] = useState("NORMAL");
+  const [counters, setCounters] = useState<SidebarCounters>({
+    proposalsQueue: 0,
+    ordersOpen: 0,
+    contractsAttention: 0,
+  });
+
   const filteredSections = useMemo(
     () =>
-      MAIN_SECTIONS.map((section) => {
+      (userRole === "CLIENT" ? CLIENT_SECTIONS : MAIN_SECTIONS).map((section) => {
         const dynamicTitle =
           section.id === "overview" && access.usersControl ? "Painel & Acesso" : section.title;
 
@@ -153,7 +184,7 @@ export default function SidebarNavigation({
           items: section.items.filter((item) => isItemAllowed(item.href, access)),
         };
       }).filter((section) => section.items.length > 0),
-    [access],
+    [access, userRole],
   );
 
   const allAllowedItems = useMemo(
@@ -161,13 +192,12 @@ export default function SidebarNavigation({
     [filteredSections, access],
   );
 
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
-  const [favoriteKeys, setFavoriteKeys] = useState<string[]>([]);
-  const [counters, setCounters] = useState<SidebarCounters>({
-    proposalsQueue: 0,
-    ordersOpen: 0,
-    contractsAttention: 0,
-  });
+  useEffect(() => {
+    const token = getStoredAccessToken();
+    if (!token) return;
+    const payload = decodeJwtPayload<{ role?: string }>(token);
+    setUserRole(payload?.role || "NORMAL");
+  }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem("manitec_sidebar_sections");
@@ -217,11 +247,14 @@ export default function SidebarNavigation({
       if (!token) return;
 
       try {
-        const headers = { Authorization: `Bearer ${token}` };
         const [proposalsRes, ordersRes, contractsRes] = await Promise.allSettled([
-          apiFetch(apiUrl("/proposals"), { headers, cache: "no-store" }),
-          apiFetch(apiUrl("/maintenance-orders"), { headers, cache: "no-store" }),
-          apiFetch(apiUrl("/contracts"), { headers, cache: "no-store" }),
+          apiFetch("/proposals", { cache: "no-store" }),
+          userRole === "CLIENT"
+            ? Promise.resolve(new Response("[]", { status: 204 }))
+            : apiFetch("/maintenance-orders", { cache: "no-store" }),
+          userRole === "CLIENT"
+            ? Promise.resolve(new Response("[]", { status: 204 }))
+            : apiFetch("/contracts", { cache: "no-store" }),
         ]);
 
         const next: SidebarCounters = {
@@ -232,7 +265,11 @@ export default function SidebarNavigation({
 
         if (proposalsRes.status === "fulfilled" && proposalsRes.value.ok) {
           const proposals = await proposalsRes.value.json();
-          next.proposalsQueue = (proposals || []).filter((p: any) => p.status === "BOARD_REVIEW" || p.status === "DISCOUNT_REVIEW").length;
+          next.proposalsQueue = (proposals || []).filter((p: any) =>
+            userRole === "CLIENT"
+              ? p.status === "CLIENT_REVIEW" || p.status === "REVISION_REQUIRED"
+              : p.status === "BOARD_REVIEW" || p.status === "DISCOUNT_REVIEW",
+          ).length;
         }
 
         if (ordersRes.status === "fulfilled" && ordersRes.value.ok) {
@@ -260,7 +297,7 @@ export default function SidebarNavigation({
       mounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [userRole]);
 
   const favoriteItems = useMemo(() => {
     const map = new Map(allAllowedItems.map((item) => [item.key, item]));

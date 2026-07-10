@@ -27,8 +27,7 @@ export class CreateUserDto {
   password: string;
 
   @IsEnum(UserRole, {
-    message:
-      'O cargo deve ser ADMIN, NORMAL, TECHNICIAN, SALES, ENGINEER_APPLICATION, LOGISTICS ou CLIENT',
+    message: 'O cargo deve ser um UserRole valido.',
   })
   role: UserRole;
 
@@ -71,6 +70,10 @@ export class CreateUserDto {
   @IsUUID()
   @IsOptional()
   managerId?: string;
+
+  @IsUUID()
+  @IsOptional()
+  linkedClientId?: string;
 
   @IsEnum(UserAvailabilityStatus)
   @IsOptional()

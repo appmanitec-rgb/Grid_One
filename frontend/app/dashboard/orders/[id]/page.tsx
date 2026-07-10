@@ -269,6 +269,12 @@ export default function OrderDetailPage() {
             <Link href="/dashboard/orders" className={SECONDARY_BUTTON}>
               Voltar para ordens
             </Link>
+            <Link
+              href={`/dashboard/documents/orders/${order.id}`}
+              className={SECONDARY_BUTTON}
+            >
+              Documento
+            </Link>
             {order.contract ? (
               <Link href={`/dashboard/contracts/${order.contract.id}`} className={SECONDARY_BUTTON}>
                 Abrir contrato

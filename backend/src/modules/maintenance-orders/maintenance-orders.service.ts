@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -7,6 +8,7 @@ import {
   ApprovalStatus,
   ApprovalType,
   AuditDomain,
+  CostCenterEntryType,
   GeneratorCriticality,
   GeneratorLifecycleStatus,
   GeneratorOperationalStatus,
@@ -15,6 +17,8 @@ import {
   OrderStatus,
   Prisma,
   SkillLevel,
+  TimeEntryStatus,
+  UserRole,
 } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
 import { ApprovalsService } from '../approvals/approvals.service';
@@ -35,6 +39,7 @@ export class MaintenanceOrdersService {
   ) {}
 
   async create(dto: CreateMaintenanceOrderDto, actorUserId?: string) {
+    await this.assertInternalActor(actorUserId);
     return this.prisma.$transaction(async (tx) => {
       const generator = await this.ensureGeneratorAndSite(
         tx,
@@ -113,6 +118,10 @@ export class MaintenanceOrdersService {
         dto.hourMeterAfter,
       );
 
+      if ((dto.status ?? OrderStatus.OPEN) === OrderStatus.COMPLETED) {
+        await this.finalizeCompletedOrder(tx, order.id, actorUserId);
+      }
+
       const fullOrder = await tx.maintenanceOrder.findUnique({
         where: { id: order.id },
         include: this.orderInclude(),
@@ -144,17 +153,33 @@ export class MaintenanceOrdersService {
     });
   }
 
-  async findAll() {
+  async findAll(actorUserId?: string) {
+    const scope = await this.getActorScope(actorUserId);
     return this.prisma.maintenanceOrder.findMany({
+      where:
+        scope?.role === UserRole.CLIENT
+          ? {
+              generator: {
+                clientId: this.requireLinkedClientId(scope),
+              },
+            }
+          : undefined,
       include: this.orderInclude(),
     });
   }
 
-  async findOne(id: string) {
-    return this.prisma.maintenanceOrder.findUnique({
+  async findOne(id: string, actorUserId?: string) {
+    const order = await this.prisma.maintenanceOrder.findUnique({
       where: { id },
       include: this.orderInclude(),
     });
+
+    if (!order) {
+      throw new NotFoundException('OS nao encontrada.');
+    }
+
+    await this.assertOrderScope(order.generator.client.id, actorUserId);
+    return order;
   }
 
   async update(
@@ -162,6 +187,7 @@ export class MaintenanceOrdersService {
     dto: UpdateMaintenanceOrderDto,
     actorUserId?: string,
   ) {
+    await this.assertInternalActor(actorUserId);
     const current = await this.prisma.maintenanceOrder.findUnique({
       where: { id },
       select: {
@@ -176,6 +202,14 @@ export class MaintenanceOrdersService {
 
     if (!current) {
       throw new NotFoundException('OS nao encontrada.');
+    }
+    if (current.status === OrderStatus.CANCELED) {
+      throw new BadRequestException('OS cancelada nao pode ser alterada.');
+    }
+    if (dto.materials?.length && current.status === OrderStatus.COMPLETED) {
+      throw new BadRequestException(
+        'Materiais de OS concluida ou cancelada nao podem ser alterados.',
+      );
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -251,6 +285,13 @@ export class MaintenanceOrdersService {
           startedAt: dto.startedAt ? new Date(dto.startedAt) : undefined,
           pausedAt: dto.pausedAt ? new Date(dto.pausedAt) : undefined,
           finishedAt: dto.finishedAt ? new Date(dto.finishedAt) : undefined,
+          closedAt:
+            dto.status === OrderStatus.COMPLETED ||
+            dto.status === OrderStatus.CANCELED
+              ? dto.finishedAt
+                ? new Date(dto.finishedAt)
+                : new Date()
+              : undefined,
           scheduledTo: dto.scheduledTo ? new Date(dto.scheduledTo) : undefined,
           laborHours: dto.laborHours,
           hourMeterAfter: dto.hourMeterAfter,
@@ -268,6 +309,20 @@ export class MaintenanceOrdersService {
         dto.status ?? current.status,
         dto.hourMeterAfter,
       );
+
+      if (
+        updated.status === OrderStatus.CANCELED &&
+        current.status !== OrderStatus.CANCELED
+      ) {
+        await this.releaseMaterialsByOrder(tx, id);
+      }
+
+      if (
+        updated.status === OrderStatus.COMPLETED &&
+        current.status !== OrderStatus.COMPLETED
+      ) {
+        await this.finalizeCompletedOrder(tx, id, actorUserId);
+      }
 
       const fullOrder = await tx.maintenanceOrder.findUnique({
         where: { id },
@@ -305,6 +360,7 @@ export class MaintenanceOrdersService {
     report: string,
     note?: string,
   ) {
+    await this.assertInternalActor(actorUserId);
     const current = await this.prisma.maintenanceOrder.findUnique({
       where: { id },
       select: { id: true, status: true },
@@ -350,6 +406,7 @@ export class MaintenanceOrdersService {
   }
 
   async remove(id: string, actorUserId?: string) {
+    await this.assertInternalActor(actorUserId);
     return this.prisma.$transaction(async (tx) => {
       const before = await tx.maintenanceOrder.findUnique({
         where: { id },
@@ -375,6 +432,57 @@ export class MaintenanceOrdersService {
 
       return removed;
     });
+  }
+
+  private async getActorScope(actorUserId?: string) {
+    if (!actorUserId) {
+      return null;
+    }
+
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: {
+        id: true,
+        role: true,
+        linkedClientId: true,
+      },
+    });
+
+    if (!actor) {
+      throw new NotFoundException('Usuario nao encontrado.');
+    }
+
+    return actor;
+  }
+
+  private requireLinkedClientId(actor: { linkedClientId: string | null }) {
+    if (!actor.linkedClientId) {
+      throw new ForbiddenException(
+        'Conta de cliente sem empresa vinculada ao portal.',
+      );
+    }
+
+    return actor.linkedClientId;
+  }
+
+  private async assertInternalActor(actorUserId?: string) {
+    const actor = await this.getActorScope(actorUserId);
+    if (actor?.role === UserRole.CLIENT) {
+      throw new ForbiddenException(
+        'Usuarios do portal do cliente nao podem executar esta acao.',
+      );
+    }
+  }
+
+  private async assertOrderScope(clientId: string, actorUserId?: string) {
+    const actor = await this.getActorScope(actorUserId);
+    if (actor?.role !== UserRole.CLIENT) {
+      return;
+    }
+
+    if (clientId !== this.requireLinkedClientId(actor)) {
+      throw new NotFoundException('OS nao encontrada.');
+    }
   }
 
   private async ensureGeneratorAndSite(
@@ -687,6 +795,320 @@ export class MaintenanceOrdersService {
     return map[level] ?? 0;
   }
 
+  private async finalizeCompletedOrder(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+    actorUserId?: string,
+  ) {
+    await this.consumeOrderMaterials(tx, orderId, actorUserId);
+    await this.createTimeEntryForFinishedOrder(tx, orderId, actorUserId);
+    await this.auditLogsService.record(
+      {
+        domain: AuditDomain.MAINTENANCE_ORDERS,
+        entityType: 'MAINTENANCE_ORDER',
+        entityId: orderId,
+        action: 'FINALIZE',
+        actorUserId,
+      },
+      tx,
+    );
+  }
+
+  private async consumeOrderMaterials(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+    actorUserId?: string,
+  ) {
+    const order = await tx.maintenanceOrder.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        costCenterId: true,
+        materials: {
+          where: { appliedAt: null },
+          include: {
+            catalogItem: {
+              select: {
+                id: true,
+                name: true,
+                stockCurrent: true,
+                averageCost: true,
+                costPrice: true,
+                lastCost: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!order) throw new NotFoundException('OS nao encontrada.');
+    if (order.status === OrderStatus.CANCELED) {
+      throw new BadRequestException('OS cancelada nao pode consumir estoque.');
+    }
+    if (order.materials.length === 0) return;
+
+    const consumed: Array<{
+      catalogItemId: string;
+      warehouseId: string;
+      quantity: number;
+      unitCost: number | null;
+    }> = [];
+
+    for (const material of order.materials) {
+      const quantity = Number(material.quantity || 0);
+      if (quantity <= 0) {
+        throw new BadRequestException(
+          'Materiais da OS precisam ter quantidade maior que zero.',
+        );
+      }
+      if (!material.warehouseId) {
+        throw new BadRequestException(
+          'Material da OS precisa ter almoxarifado para baixa.',
+        );
+      }
+
+      const balance = await tx.inventoryBalance.findUnique({
+        where: {
+          warehouseId_catalogItemId: {
+            warehouseId: material.warehouseId,
+            catalogItemId: material.catalogItemId,
+          },
+        },
+      });
+      if (!balance) {
+        throw new BadRequestException(
+          'Saldo de estoque nao encontrado para material da OS.',
+        );
+      }
+
+      const physicalQty = Number(balance.physicalQty || 0);
+      const reservedQty = Number(balance.reservedQty || 0);
+      const reservedToConsume = Math.min(reservedQty, quantity);
+      const additionalNeeded = Math.max(0, quantity - reservedToConsume);
+      const availableQty = Math.max(0, physicalQty - reservedQty);
+
+      if (physicalQty < quantity || availableQty < additionalNeeded) {
+        throw new BadRequestException(
+          'Estoque disponivel insuficiente para consumir material da OS.',
+        );
+      }
+
+      const unitCost =
+        material.unitCost ??
+        material.catalogItem.averageCost ??
+        material.catalogItem.lastCost ??
+        material.catalogItem.costPrice ??
+        null;
+
+      await tx.inventoryBalance.update({
+        where: { id: balance.id },
+        data: {
+          physicalQty: { decrement: quantity },
+          reservedQty:
+            reservedToConsume > 0
+              ? { decrement: reservedToConsume }
+              : undefined,
+        },
+      });
+
+      await tx.catalogItem.update({
+        where: { id: material.catalogItemId },
+        data: {
+          stockCurrent: Math.max(
+            0,
+            Number(material.catalogItem.stockCurrent || 0) - quantity,
+          ),
+        },
+      });
+
+      await tx.inventoryMovement.create({
+        data: {
+          movementType: InventoryMovementType.OS_CONSUMPTION,
+          warehouseId: material.warehouseId,
+          catalogItemId: material.catalogItemId,
+          quantity,
+          unitCost,
+          referenceType: 'MAINTENANCE_ORDER',
+          referenceId: orderId,
+          note: `Consumo na finalizacao da OS ${order.title}`,
+        },
+      });
+
+      await tx.maintenanceOrderMaterial.update({
+        where: { id: material.id },
+        data: { appliedAt: new Date() },
+      });
+
+      if (order.costCenterId && unitCost && unitCost > 0) {
+        await tx.costCenterEntry.create({
+          data: {
+            costCenterId: order.costCenterId,
+            entryType: CostCenterEntryType.COST,
+            sourceType: 'MAINTENANCE_ORDER_MATERIAL',
+            sourceId: material.id,
+            amount: Number((quantity * unitCost).toFixed(2)),
+            competenceDate: new Date(),
+            notes: `Peca aplicada na OS ${order.title}`,
+          },
+        });
+      }
+
+      consumed.push({
+        catalogItemId: material.catalogItemId,
+        warehouseId: material.warehouseId,
+        quantity,
+        unitCost,
+      });
+    }
+
+    await this.auditLogsService.record(
+      {
+        domain: AuditDomain.INVENTORY,
+        entityType: 'MAINTENANCE_ORDER',
+        entityId: orderId,
+        action: 'OS_STOCK_CONSUMED',
+        actorUserId,
+        afterPayload: consumed as unknown as Prisma.InputJsonValue,
+      },
+      tx,
+    );
+  }
+
+  private async createTimeEntryForFinishedOrder(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+    actorUserId?: string,
+  ) {
+    const order = await tx.maintenanceOrder.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        startedAt: true,
+        finishedAt: true,
+        costCenterId: true,
+        technician: {
+          select: {
+            userId: true,
+            user: {
+              select: { hourCost: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!order) throw new NotFoundException('OS nao encontrada.');
+    if (order.status === OrderStatus.CANCELED) return;
+    if (!order.technician?.userId) {
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.PEOPLE,
+          entityType: 'MAINTENANCE_ORDER',
+          entityId: orderId,
+          action: 'TIME_ENTRY_SKIPPED',
+          actorUserId,
+          reason: 'OS finalizada sem tecnico atribuido.',
+        },
+        tx,
+      );
+      return;
+    }
+    if (!order.startedAt || !order.finishedAt) {
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.PEOPLE,
+          entityType: 'MAINTENANCE_ORDER',
+          entityId: orderId,
+          action: 'TIME_ENTRY_PENDING',
+          actorUserId,
+          reason: 'OS finalizada sem inicio/fim confiaveis.',
+        },
+        tx,
+      );
+      return;
+    }
+
+    const workMinutes = Math.max(
+      0,
+      Math.round(
+        (order.finishedAt.getTime() - order.startedAt.getTime()) / 60000,
+      ),
+    );
+    if (workMinutes <= 0) {
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.PEOPLE,
+          entityType: 'MAINTENANCE_ORDER',
+          entityId: orderId,
+          action: 'TIME_ENTRY_PENDING',
+          actorUserId,
+          reason: 'OS finalizada com duracao invalida.',
+        },
+        tx,
+      );
+      return;
+    }
+
+    const existing = await tx.timeEntry.findFirst({
+      where: {
+        maintenanceOrderId: orderId,
+        userId: order.technician.userId,
+      },
+      select: { id: true },
+    });
+    if (existing) return;
+
+    const entry = await tx.timeEntry.create({
+      data: {
+        userId: order.technician.userId,
+        maintenanceOrderId: orderId,
+        status: TimeEntryStatus.WORK,
+        startedAt: order.startedAt,
+        endedAt: order.finishedAt,
+        workMinutes,
+      },
+    });
+
+    if (order.costCenterId && Number(order.technician.user.hourCost || 0) > 0) {
+      const hours = workMinutes / 60;
+      const cost = hours * Number(order.technician.user.hourCost || 0);
+      if (cost > 0) {
+        await tx.costCenterEntry.create({
+          data: {
+            costCenterId: order.costCenterId,
+            entryType: CostCenterEntryType.COST,
+            sourceType: 'TIME_ENTRY',
+            sourceId: entry.id,
+            amount: Number(cost.toFixed(2)),
+            competenceDate: order.startedAt,
+            notes: 'Custo de homem-hora gerado pela finalizacao da OS',
+          },
+        });
+      }
+    }
+
+    await this.auditLogsService.record(
+      {
+        domain: AuditDomain.PEOPLE,
+        entityType: 'TIME_ENTRY',
+        entityId: entry.id,
+        action: 'CREATE_FROM_MAINTENANCE_ORDER',
+        actorUserId,
+        afterPayload: {
+          maintenanceOrderId: orderId,
+          userId: order.technician.userId,
+          workMinutes,
+        },
+      },
+      tx,
+    );
+  }
+
   private async reserveMaterials(
     tx: Prisma.TransactionClient,
     materials: Array<{
@@ -754,8 +1176,13 @@ export class MaintenanceOrdersService {
     orderId: string,
   ) {
     const rows = await tx.maintenanceOrderMaterial.findMany({
-      where: { orderId },
+      where: {
+        orderId,
+        appliedAt: null,
+        reservedAt: { not: null },
+      },
       select: {
+        id: true,
         warehouseId: true,
         catalogItemId: true,
         quantity: true,
@@ -764,15 +1191,24 @@ export class MaintenanceOrdersService {
 
     for (const row of rows) {
       if (!row.warehouseId) continue;
-      await tx.inventoryBalance.updateMany({
+      const balance = await tx.inventoryBalance.findUnique({
         where: {
-          warehouseId: row.warehouseId,
-          catalogItemId: row.catalogItemId,
-          reservedQty: { gt: 0 },
+          warehouseId_catalogItemId: {
+            warehouseId: row.warehouseId,
+            catalogItemId: row.catalogItemId,
+          },
         },
-        data: {
-          reservedQty: { decrement: row.quantity },
-        },
+      });
+      if (!balance) continue;
+      const releaseQty = Math.min(
+        Number(row.quantity || 0),
+        Number(balance.reservedQty || 0),
+      );
+      if (releaseQty <= 0) continue;
+
+      await tx.inventoryBalance.update({
+        where: { id: balance.id },
+        data: { reservedQty: { decrement: releaseQty } },
       });
 
       await tx.inventoryMovement.create({
@@ -780,10 +1216,15 @@ export class MaintenanceOrdersService {
           movementType: InventoryMovementType.RELEASE,
           warehouseId: row.warehouseId,
           catalogItemId: row.catalogItemId,
-          quantity: row.quantity,
+          quantity: releaseQty,
           referenceType: 'MAINTENANCE_ORDER',
           referenceId: orderId,
         },
+      });
+
+      await tx.maintenanceOrderMaterial.update({
+        where: { id: row.id },
+        data: { reservedAt: null },
       });
     }
   }

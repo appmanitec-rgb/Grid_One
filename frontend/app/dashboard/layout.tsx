@@ -15,6 +15,7 @@ import {
 } from "@/lib/dashboard-appearance";
 import {
   clearAuthSession,
+  decodeJwtPayload,
   ensureValidSession,
   getStoredAccessToken,
 } from "@/lib/auth-session";
@@ -31,6 +32,7 @@ export default function DashboardLayout({
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [accessReady, setAccessReady] = useState(false);
   const [appearanceTheme, setAppearanceTheme] = useState<DashboardThemeId>("mist");
+  const [currentRole, setCurrentRole] = useState("NORMAL");
   const [visiblePages, setVisiblePages] = useState<VisiblePages>({
     dashboard: true,
     proposals: true,
@@ -39,6 +41,9 @@ export default function DashboardLayout({
     catalog: true,
     clients: true,
     equipments: true,
+    finance: false,
+    inventory: false,
+    people: false,
     usersControl: false,
   });
 
@@ -58,10 +63,12 @@ export default function DashboardLayout({
       }
 
       try {
+        const payload = decodeJwtPayload<{ role?: string }>(token);
+        setCurrentRole(payload?.role || "NORMAL");
         const access = getAccessFromToken();
         setVisiblePages({
           ...(access.pages as VisiblePages),
-          usersControl: access.users.manage,
+          usersControl: access.pages.usersControl || access.users.manage,
         });
         setAccessReady(true);
       } catch {
@@ -80,9 +87,23 @@ export default function DashboardLayout({
   useEffect(() => {
     if (!accessReady) return;
     if (!canAccessDashboardPath(pathname, visiblePages)) {
+      router.replace(currentRole === "CLIENT" ? "/dashboard/client-portal" : "/dashboard");
+    }
+  }, [accessReady, currentRole, pathname, router, visiblePages]);
+
+  useEffect(() => {
+    if (!accessReady || currentRole !== "CLIENT") return;
+    if (pathname === "/dashboard") {
+      router.replace("/dashboard/client-portal");
+    }
+  }, [accessReady, currentRole, pathname, router]);
+
+  useEffect(() => {
+    if (!accessReady || currentRole === "CLIENT") return;
+    if (pathname.startsWith("/dashboard/client-portal")) {
       router.replace("/dashboard");
     }
-  }, [accessReady, pathname, router, visiblePages]);
+  }, [accessReady, currentRole, pathname, router]);
 
   useEffect(() => {
     if (!accessReady) return;
@@ -101,10 +122,12 @@ export default function DashboardLayout({
       }
 
       try {
+        const payload = decodeJwtPayload<{ role?: string }>(token);
+        setCurrentRole(payload?.role || "NORMAL");
         const access = getAccessFromToken();
         setVisiblePages({
           ...(access.pages as VisiblePages),
-          usersControl: access.users.manage,
+          usersControl: access.pages.usersControl || access.users.manage,
         });
       } catch {
         clearAuthSession();
@@ -160,7 +183,34 @@ export default function DashboardLayout({
 
   const navItems = useMemo(
     () => [
-      { href: "/dashboard", label: "Dashboard", mobileLabel: "Painel", icon: "OV", enabled: visiblePages.dashboard },
+      {
+        href: currentRole === "CLIENT" ? "/dashboard/client-portal" : "/dashboard",
+        label: currentRole === "CLIENT" ? "Portal" : "Dashboard",
+        mobileLabel: currentRole === "CLIENT" ? "Portal" : "Painel",
+        icon: "OV",
+        enabled: visiblePages.dashboard,
+      },
+      {
+        href: "/dashboard/documents",
+        label: "Documentos",
+        mobileLabel: "Docs",
+        icon: "DC",
+        enabled: visiblePages.dashboard,
+      },
+      {
+        href: "/dashboard/deliveries",
+        label: "Envios",
+        mobileLabel: "Envios",
+        icon: "EV",
+        enabled: visiblePages.dashboard,
+      },
+      {
+        href: "/dashboard/notifications",
+        label: "Alertas",
+        mobileLabel: "Alertas",
+        icon: "AL",
+        enabled: visiblePages.dashboard,
+      },
       { href: "/dashboard/proposals", label: "Propostas", mobileLabel: "Propostas", icon: "PP", enabled: visiblePages.proposals },
       { href: "/dashboard/orders", label: "Ordens", mobileLabel: "Ordens", icon: "OS", enabled: visiblePages.orders },
       { href: "/dashboard/contracts", label: "Contratos", mobileLabel: "Contratos", icon: "CT", enabled: visiblePages.contracts },
@@ -173,7 +223,7 @@ export default function DashboardLayout({
       { href: "/dashboard/automation", label: "Automacoes", mobileLabel: "Automacao", icon: "AU", enabled: visiblePages.usersControl },
       { href: "/dashboard/control", label: "Gestao", mobileLabel: "Gestao", icon: "AC", enabled: visiblePages.usersControl },
     ],
-    [visiblePages],
+    [currentRole, visiblePages],
   );
 
   const allowedItems = navItems.filter((item) => item.enabled);

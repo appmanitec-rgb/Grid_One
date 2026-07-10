@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { apiFetch, apiUrl } from "@/lib/api";
+import { apiFetch, readApiErrorMessage } from "@/lib/api";
 
 type CatalogItem = { id: string; name: string; type: string; basePrice: number };
 type ModelBaseItem = { catalogItemId: string; serviceGroup: "TOF" | "TM" | "TB" | "TMA" | "OUTROS"; defaultQuantity: number };
@@ -30,11 +30,9 @@ export default function EquipmentModelsPage() {
 
   async function load() {
     try {
-      const token = localStorage.getItem("manitec_token");
-      const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
       const [catalogRes, modelsRes] = await Promise.all([
-        apiFetch(apiUrl("/catalogs"), { headers }),
-        apiFetch(apiUrl("/generators/models"), { headers }),
+        apiFetch("/catalogs"),
+        apiFetch("/generators/models"),
       ]);
       if (catalogRes.ok) setCatalog((await catalogRes.json()) as CatalogItem[]);
       if (modelsRes.ok) setModels((await modelsRes.json()) as ModelRow[]);
@@ -62,12 +60,10 @@ export default function EquipmentModelsPage() {
     setSaving(true);
     setError("");
     try {
-      const token = localStorage.getItem("manitec_token");
-      const res = await apiFetch(apiUrl("/generators/models"), {
+      const res = await apiFetch("/generators/models", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           name,
@@ -77,8 +73,7 @@ export default function EquipmentModelsPage() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(Array.isArray(data?.message) ? data.message.join(", ") : data?.message || "Falha ao salvar modelo.");
+        throw new Error(await readApiErrorMessage(res, "Falha ao salvar modelo."));
       }
 
       setName("");

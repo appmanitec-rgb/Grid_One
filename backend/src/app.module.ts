@@ -26,6 +26,9 @@ import { HealthModule } from './modules/health/health.module';
 import { AutomationModule } from './modules/automation/automation.module';
 import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
+import { DocumentsModule } from './modules/documents/documents.module';
+import { DeliveriesModule } from './modules/deliveries/deliveries.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ReportsModule } from './modules/reports/reports.module';
 
 @Module({
@@ -64,6 +67,9 @@ import { ReportsModule } from './modules/reports/reports.module';
     AutomationModule,
     ApprovalsModule,
     AuditLogsModule,
+    DocumentsModule,
+    DeliveriesModule,
+    NotificationsModule,
     ReportsModule,
   ],
   controllers: [],

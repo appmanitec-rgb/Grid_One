@@ -6,6 +6,7 @@
 import {
   AccountsPayableStatus,
   AccountsReceivableStatus,
+  AuditDomain,
   CommissionStatus,
   ContractInvoiceStatus,
   CostCenterEntryType,
@@ -13,6 +14,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { DatabaseService } from 'src/database/database.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import {
   CreateAccountsPayableDto,
   CreateAccountsReceivableDto,
@@ -28,7 +30,10 @@ import {
 
 @Injectable()
 export class FinanceService {
-  constructor(private readonly prisma: DatabaseService) {}
+  constructor(
+    private readonly prisma: DatabaseService,
+    private readonly auditLogsService: AuditLogsService,
+  ) {}
 
   listReceivables() {
     return this.prisma.accountsReceivable.findMany({
@@ -51,6 +56,11 @@ export class FinanceService {
       const gross = Number(dto.grossAmount || 0);
       const discount = Number(dto.discountAmount || 0);
       const net = Math.max(0, gross - discount);
+      if (gross <= 0 || net <= 0) {
+        throw new BadRequestException(
+          'Conta a receber precisa ter valor maior que zero.',
+        );
+      }
 
       const receivable = await tx.accountsReceivable.create({
         data: {
@@ -276,7 +286,13 @@ export class FinanceService {
   async syncReceivablesFromContractInvoices() {
     return this.prisma.$transaction(async (tx) => {
       const invoices = await tx.contractInvoice.findMany({
-        where: { status: { in: ['PENDING', 'OVERDUE'] } },
+        where: {
+          status: { in: ['PENDING', 'OVERDUE'] },
+          amount: { gt: 0 },
+          contract: {
+            status: { not: 'CANCELED' },
+          },
+        },
         include: {
           contract: {
             select: {
@@ -295,14 +311,13 @@ export class FinanceService {
           where: {
             contractId: invoice.contractId,
             competenceDate: invoice.competenceDate,
-            grossAmount: invoice.amount,
             status: { not: AccountsReceivableStatus.CANCELED },
           },
           select: { id: true },
         });
         if (exists) continue;
 
-        await tx.accountsReceivable.create({
+        const receivable = await tx.accountsReceivable.create({
           data: {
             clientId: invoice.contract.clientId,
             contractId: invoice.contractId,
@@ -319,6 +334,31 @@ export class FinanceService {
                 : AccountsReceivableStatus.OPEN,
           },
         });
+
+        if (invoice.contract.costCenterId) {
+          await tx.costCenterEntry.create({
+            data: {
+              costCenterId: invoice.contract.costCenterId,
+              entryType: CostCenterEntryType.REVENUE,
+              sourceType: 'ACCOUNTS_RECEIVABLE',
+              sourceId: receivable.id,
+              amount: invoice.amount,
+              competenceDate: invoice.competenceDate,
+            },
+          });
+        }
+
+        await this.audit(tx, {
+          module: 'FINANCE',
+          entityType: 'ACCOUNTS_RECEIVABLE',
+          entityId: receivable.id,
+          action: 'CREATE_FROM_CONTRACT_INVOICE',
+          payload: {
+            contractId: invoice.contractId,
+            competenceDate: invoice.competenceDate.toISOString(),
+            amount: invoice.amount,
+          },
+        });
         created += 1;
       }
 
@@ -329,6 +369,7 @@ export class FinanceService {
   async createReceivableFromOrder(
     orderId: string,
     dto: SyncOrderReceivableDto,
+    actorUserId?: string,
   ) {
     return this.prisma.$transaction(async (tx) => {
       const order = await tx.maintenanceOrder.findUnique({
@@ -338,8 +379,36 @@ export class FinanceService {
         },
       });
       if (!order) throw new NotFoundException('OS nao encontrada.');
+      if (order.status === 'CANCELED') {
+        throw new BadRequestException('OS cancelada nao pode gerar cobranca.');
+      }
+      if (!order.generator.clientId) {
+        throw new BadRequestException('OS precisa ter cliente para faturar.');
+      }
+      if (Number(dto.amount || 0) <= 0) {
+        throw new BadRequestException(
+          'Valor da cobranca deve ser maior que zero.',
+        );
+      }
 
-      return tx.accountsReceivable.create({
+      const existing = await tx.accountsReceivable.findFirst({
+        where: {
+          maintenanceOrderId: orderId,
+          status: { not: AccountsReceivableStatus.CANCELED },
+        },
+        select: { id: true },
+      });
+      if (existing) {
+        return tx.accountsReceivable.findUnique({
+          where: { id: existing.id },
+          include: {
+            client: { select: { id: true, companyName: true } },
+            maintenanceOrder: { select: { id: true, title: true } },
+          },
+        });
+      }
+
+      const receivable = await tx.accountsReceivable.create({
         data: {
           clientId: order.generator.clientId,
           maintenanceOrderId: orderId,
@@ -355,6 +424,34 @@ export class FinanceService {
           status: AccountsReceivableStatus.OPEN,
         },
       });
+
+      if (order.costCenterId) {
+        await tx.costCenterEntry.create({
+          data: {
+            costCenterId: order.costCenterId,
+            entryType: CostCenterEntryType.REVENUE,
+            sourceType: 'ACCOUNTS_RECEIVABLE',
+            sourceId: receivable.id,
+            amount: dto.amount,
+            competenceDate: new Date(),
+          },
+        });
+      }
+
+      await this.audit(tx, {
+        actorUserId,
+        module: 'FINANCE',
+        entityType: 'ACCOUNTS_RECEIVABLE',
+        entityId: receivable.id,
+        action: 'CREATE_FROM_MAINTENANCE_ORDER',
+        payload: {
+          maintenanceOrderId: orderId,
+          clientId: order.generator.clientId,
+          amount: dto.amount,
+        },
+      });
+
+      return receivable;
     });
   }
 
@@ -820,6 +917,19 @@ export class FinanceService {
         payload: input.payload,
       },
     });
+
+    await this.auditLogsService.record(
+      {
+        domain: AuditDomain.FINANCE,
+        entityType: input.entityType,
+        entityId: input.entityId,
+        action: input.action,
+        actorUserId: input.actorUserId,
+        reason: input.reason,
+        afterPayload: input.payload,
+      },
+      tx,
+    );
   }
 
   private async prepareCostCenterData(

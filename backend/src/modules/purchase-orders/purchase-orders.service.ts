@@ -4,12 +4,15 @@
   NotFoundException,
 } from '@nestjs/common';
 import {
+  AuditDomain,
   AccountsPayableStatus,
   InventoryMovementType,
+  PayableCategory,
   Prisma,
   PurchaseOrderStatus,
 } from '@prisma/client';
 import { DatabaseService } from 'src/database/database.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import {
   CreatePurchaseOrderDto,
   ReceivePurchaseOrderDto,
@@ -17,9 +20,12 @@ import {
 
 @Injectable()
 export class PurchaseOrdersService {
-  constructor(private readonly prisma: DatabaseService) {}
+  constructor(
+    private readonly prisma: DatabaseService,
+    private readonly auditLogsService: AuditLogsService,
+  ) {}
 
-  async create(dto: CreatePurchaseOrderDto) {
+  async create(dto: CreatePurchaseOrderDto, actorUserId?: string) {
     return this.prisma.$transaction(async (tx) => {
       const supplier = await tx.supplier.findUnique({
         where: { id: dto.supplierId },
@@ -39,7 +45,7 @@ export class PurchaseOrdersService {
         Number(dto.freightAmount || 0) +
         Number(dto.taxAmount || 0);
 
-      return tx.purchaseOrder.create({
+      const created = await tx.purchaseOrder.create({
         data: {
           code,
           supplierId: dto.supplierId,
@@ -64,6 +70,24 @@ export class PurchaseOrdersService {
         },
         include: this.include(),
       });
+
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.PURCHASE_ORDERS,
+          entityType: 'PURCHASE_ORDER',
+          entityId: created.id,
+          action: 'CREATE',
+          actorUserId,
+          afterPayload: {
+            code: created.code,
+            supplierId: created.supplierId,
+            totalAmount: created.totalAmount,
+          },
+        },
+        tx,
+      );
+
+      return created;
     });
   }
 
@@ -83,10 +107,19 @@ export class PurchaseOrdersService {
     return order;
   }
 
-  async updateStatus(id: string, status: PurchaseOrderStatus) {
+  async updateStatus(
+    id: string,
+    status: PurchaseOrderStatus,
+    actorUserId?: string,
+  ) {
     await this.findOne(id);
 
     return this.prisma.$transaction(async (tx) => {
+      const before = await tx.purchaseOrder.findUnique({
+        where: { id },
+        select: { id: true, status: true, totalAmount: true },
+      });
+
       const updated = await tx.purchaseOrder.update({
         where: { id },
         data: {
@@ -98,14 +131,34 @@ export class PurchaseOrdersService {
       });
 
       if (status === PurchaseOrderStatus.APPROVED) {
-        await this.ensureAccountsPayable(tx, updated);
+        await this.ensureAccountsPayable(tx, updated, actorUserId);
       }
+
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.PURCHASE_ORDERS,
+          entityType: 'PURCHASE_ORDER',
+          entityId: id,
+          action: 'STATUS_UPDATE',
+          actorUserId,
+          beforePayload: before as unknown as Prisma.InputJsonValue,
+          afterPayload: {
+            status,
+            approvedAt: updated.approvedAt,
+          },
+        },
+        tx,
+      );
 
       return updated;
     });
   }
 
-  async receive(id: string, dto: ReceivePurchaseOrderDto) {
+  async receive(
+    id: string,
+    dto: ReceivePurchaseOrderDto,
+    actorUserId?: string,
+  ) {
     return this.prisma.$transaction(async (tx) => {
       const order = await tx.purchaseOrder.findUnique({
         where: { id },
@@ -119,6 +172,19 @@ export class PurchaseOrdersService {
       if (order.status === PurchaseOrderStatus.CANCELED) {
         throw new BadRequestException(
           'Pedido cancelado nao pode receber material.',
+        );
+      }
+      if (
+        order.status !== PurchaseOrderStatus.APPROVED &&
+        order.status !== PurchaseOrderStatus.PARTIALLY_RECEIVED
+      ) {
+        throw new BadRequestException(
+          'Pedido precisa estar aprovado para receber material.',
+        );
+      }
+      if (Number(order.totalAmount || 0) <= 0) {
+        throw new BadRequestException(
+          'Pedido precisa ter valor total valido para gerar financeiro.',
         );
       }
 
@@ -217,7 +283,7 @@ export class PurchaseOrdersService {
         }
       }
 
-      await tx.purchaseOrderReceipt.create({
+      const receipt = await tx.purchaseOrderReceipt.create({
         data: {
           purchaseOrderId: id,
           warehouseId: dto.warehouseId,
@@ -243,7 +309,29 @@ export class PurchaseOrdersService {
 
       await tx.purchaseOrder.update({ where: { id }, data: { status } });
 
-      return this.findOne(id);
+      const payable = await this.ensureAccountsPayable(tx, order, actorUserId);
+
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.PURCHASE_ORDERS,
+          entityType: 'PURCHASE_ORDER',
+          entityId: id,
+          action: 'RECEIVE',
+          actorUserId,
+          afterPayload: {
+            receiptId: receipt.id,
+            warehouseId: dto.warehouseId,
+            status,
+            payableId: payable?.id,
+          },
+        },
+        tx,
+      );
+
+      return tx.purchaseOrder.findUnique({
+        where: { id },
+        include: this.include(),
+      });
     });
   }
 
@@ -278,26 +366,70 @@ export class PurchaseOrdersService {
       code: string;
       paymentTerm: string | null;
       totalAmount: number;
+      status?: PurchaseOrderStatus;
     },
+    actorUserId?: string,
   ) {
+    if (order.status === PurchaseOrderStatus.CANCELED) {
+      throw new BadRequestException(
+        'Pedido cancelado nao pode gerar conta a pagar.',
+      );
+    }
+    if (!order.supplierId) {
+      throw new BadRequestException(
+        'Pedido precisa ter fornecedor para gerar conta a pagar.',
+      );
+    }
+    if (Number(order.totalAmount || 0) <= 0) {
+      throw new BadRequestException(
+        'Pedido precisa ter valor total valido para gerar conta a pagar.',
+      );
+    }
+
     const existing = await tx.accountsPayable.findFirst({
       where: { purchaseOrderId: order.id },
-      select: { id: true },
+      select: { id: true, status: true },
     });
-    if (existing) return;
+    if (existing) return existing;
 
     const dueDate = this.computeDueDate(order.paymentTerm || '30');
+    const duplicateHash = this.buildPayableDuplicateHash(
+      order.supplierId,
+      dueDate,
+      Number(order.totalAmount || 0),
+    );
 
-    await tx.accountsPayable.create({
+    const payable = await tx.accountsPayable.create({
       data: {
         purchaseOrderId: order.id,
         supplierId: order.supplierId,
         description: `Pedido de Compra ${order.code}`,
         dueDate,
         amount: Number(order.totalAmount || 0),
+        category: PayableCategory.SUPPLIERS,
+        duplicateHash,
         status: AccountsPayableStatus.OPEN,
       },
     });
+
+    await this.auditLogsService.record(
+      {
+        domain: AuditDomain.FINANCE,
+        entityType: 'ACCOUNTS_PAYABLE',
+        entityId: payable.id,
+        action: 'CREATE_FROM_PURCHASE_ORDER',
+        actorUserId,
+        afterPayload: {
+          purchaseOrderId: order.id,
+          supplierId: order.supplierId,
+          amount: payable.amount,
+          dueDate: payable.dueDate,
+        },
+      },
+      tx,
+    );
+
+    return payable;
   }
 
   private computeDueDate(paymentTerm: string) {
@@ -306,6 +438,14 @@ export class PurchaseOrdersService {
     const date = new Date();
     date.setDate(date.getDate() + days);
     return date;
+  }
+
+  private buildPayableDuplicateHash(
+    supplierId: string,
+    dueDate: Date,
+    amount: number,
+  ) {
+    return `${supplierId}|${dueDate.toISOString().slice(0, 10)}|${Number(amount).toFixed(2)}`;
   }
 
   private nextAverageCost(

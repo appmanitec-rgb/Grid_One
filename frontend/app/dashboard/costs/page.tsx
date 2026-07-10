@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { apiFetch, apiUrl } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 type Order = {
   id: string;
@@ -19,8 +19,6 @@ type CatalogItem = {
   costPrice?: number | null;
 };
 
-const API_URL = apiUrl("");
-
 export default function CostsPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
@@ -28,11 +26,9 @@ export default function CostsPage() {
 
   useEffect(() => {
     async function load() {
-      const token = localStorage.getItem("manitec_token");
-      const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
       const [ordersRes, catalogRes] = await Promise.allSettled([
-        apiFetch(`${API_URL}/maintenance-orders`, { cache: "no-store" }),
-        apiFetch(`${API_URL}/catalogs`, { headers, cache: "no-store" }),
+        apiFetch("/maintenance-orders", { cache: "no-store" }),
+        apiFetch("/catalogs", { cache: "no-store" }),
       ]);
 
       if (ordersRes.status === "fulfilled" && ordersRes.value.ok) {

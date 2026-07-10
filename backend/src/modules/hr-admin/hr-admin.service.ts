@@ -4,12 +4,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  AuditDomain,
   CommissionStatus,
   FleetVehicleStatus,
   HrAssetStatus,
   Prisma,
 } from '@prisma/client';
 import { DatabaseService } from 'src/database/database.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import {
   AllocateFleetDto,
   AssignHrAssetDto,
@@ -20,7 +22,10 @@ import {
 
 @Injectable()
 export class HrAdminService {
-  constructor(private readonly prisma: DatabaseService) {}
+  constructor(
+    private readonly prisma: DatabaseService,
+    private readonly auditLogsService: AuditLogsService,
+  ) {}
 
   listCollaborators() {
     return this.prisma.user.findMany({
@@ -153,34 +158,102 @@ export class HrAdminService {
     });
   }
 
-  createCommission(dto: CreateCommissionDto) {
+  createCommission(dto: CreateCommissionDto, actorUserId?: string) {
+    this.assertCommissionOrigin(dto);
+
     const amount = Number(
       (Number(dto.baseAmount || 0) * Number(dto.percent || 0)) / 100,
     );
-    return this.prisma.commissionEntry.create({
-      data: {
-        userId: dto.userId,
-        receivableId: dto.receivableId,
-        maintenanceOrderId: dto.maintenanceOrderId,
-        contractId: dto.contractId,
-        baseAmount: dto.baseAmount,
-        percent: dto.percent,
-        amount,
-        notes: dto.notes,
-      },
+
+    return this.prisma.$transaction(async (tx) => {
+      const commission = await tx.commissionEntry.create({
+        data: {
+          userId: dto.userId,
+          receivableId: dto.receivableId,
+          maintenanceOrderId: dto.maintenanceOrderId,
+          contractId: dto.contractId,
+          baseAmount: dto.baseAmount,
+          percent: dto.percent,
+          amount,
+          notes: dto.notes,
+        },
+      });
+
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.PEOPLE,
+          entityType: 'COMMISSION_ENTRY',
+          entityId: commission.id,
+          action: 'CREATE_COMMISSION',
+          actorUserId,
+          afterPayload: {
+            userId: commission.userId,
+            receivableId: commission.receivableId,
+            maintenanceOrderId: commission.maintenanceOrderId,
+            contractId: commission.contractId,
+            status: commission.status,
+            amount: commission.amount,
+          },
+        },
+        tx,
+      );
+
+      return commission;
     });
   }
 
-  updateCommissionStatus(id: string, status: CommissionStatus) {
-    return this.prisma.commissionEntry.update({
-      where: { id },
-      data: {
-        status,
-        releasedAt:
-          status === CommissionStatus.RELEASED ? new Date() : undefined,
-        paidAt: status === CommissionStatus.PAID ? new Date() : undefined,
-      },
+  updateCommissionStatus(
+    id: string,
+    status: CommissionStatus,
+    actorUserId?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const current = await tx.commissionEntry.findUnique({
+        where: { id },
+      });
+
+      if (!current) {
+        throw new NotFoundException('Comissao nao encontrada.');
+      }
+
+      const updated = await tx.commissionEntry.update({
+        where: { id },
+        data: {
+          status,
+          releasedAt:
+            status === CommissionStatus.RELEASED ? new Date() : undefined,
+          paidAt: status === CommissionStatus.PAID ? new Date() : undefined,
+        },
+      });
+
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.PEOPLE,
+          entityType: 'COMMISSION_ENTRY',
+          entityId: id,
+          action: 'UPDATE_COMMISSION_STATUS',
+          actorUserId,
+          beforePayload: { status: current.status },
+          afterPayload: { status: updated.status },
+        },
+        tx,
+      );
+
+      return updated;
     });
+  }
+
+  private assertCommissionOrigin(dto: CreateCommissionDto) {
+    const hasOrigin =
+      Boolean(dto.receivableId) ||
+      Boolean(dto.maintenanceOrderId) ||
+      Boolean(dto.contractId);
+
+    if (!hasOrigin) {
+      throw new BadRequestException(
+        'Comissao precisa ter origem rastreavel: recebivel, contrato ou OS.',
+      );
+    }
   }
 
   listHrAssets() {

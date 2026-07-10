@@ -1,4 +1,4 @@
-import { IsBoolean, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsObject, IsOptional, IsString } from 'class-validator';
 
 export class UpdateCompanySettingsDto {
   @IsString()
@@ -96,6 +96,34 @@ export class UpdateCompanySettingsDto {
   @IsString()
   @IsOptional()
   secondaryColor?: string;
+
+  @IsString()
+  @IsOptional()
+  deliverySenderName?: string;
+
+  @IsString()
+  @IsOptional()
+  deliveryFromEmail?: string;
+
+  @IsString()
+  @IsOptional()
+  deliveryReplyToEmail?: string;
+
+  @IsString()
+  @IsOptional()
+  deliveryDefaultWhatsapp?: string;
+
+  @IsString()
+  @IsOptional()
+  deliveryDefaultWebhookUrl?: string;
+
+  @IsString()
+  @IsOptional()
+  deliveryEmailFooter?: string;
+
+  @IsObject()
+  @IsOptional()
+  deliveryTemplatesJson?: Record<string, unknown>;
 
   @IsString()
   @IsOptional()

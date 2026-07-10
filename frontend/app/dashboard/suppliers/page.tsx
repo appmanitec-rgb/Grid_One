@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { apiFetch, apiUrl } from "@/lib/api";
+import { apiFetch, readApiErrorMessage } from "@/lib/api";
 
 type Supplier = {
   id: string;
@@ -26,18 +26,21 @@ export default function SuppliersPage() {
   }, []);
 
   async function load() {
-    const token = localStorage.getItem("manitec_token");
-    if (!token) return;
-
     try {
-      const res = await apiFetch(apiUrl("/suppliers"), {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiFetch("/suppliers");
 
-      if (!res.ok) throw new Error("Nao foi possivel carregar fornecedores.");
+      if (!res.ok) {
+        throw new Error(
+          await readApiErrorMessage(res, "Nao foi possivel carregar fornecedores."),
+        );
+      }
       setItems(await res.json());
-    } catch (e: any) {
-      setError(e.message || "Erro ao carregar fornecedores.");
+    } catch (loadError: unknown) {
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Erro ao carregar fornecedores.",
+      );
     }
   }
 

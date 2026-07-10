@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiFetch, apiUrl } from "@/lib/api";
+import { apiFetch, readApiErrorMessage } from "@/lib/api";
 
 type ClientRow = { id: string; companyName: string; cnpj?: string | null };
 type ModelBaseItem = { id: string; serviceGroup: string; defaultQuantity: number; catalogItem: { id: string; name: string } };
@@ -33,11 +33,9 @@ export default function NewEquipmentPage() {
 
     (async () => {
       try {
-        const token = localStorage.getItem("manitec_token");
-        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
         const [clientsRes, modelsRes] = await Promise.all([
-          apiFetch(apiUrl("/clients"), { headers }),
-          apiFetch(apiUrl("/generators/models"), { headers }),
+          apiFetch("/clients"),
+          apiFetch("/generators/models"),
         ]);
 
         if (clientsRes.ok) setClients((await clientsRes.json()) as ClientRow[]);
@@ -74,12 +72,10 @@ export default function NewEquipmentPage() {
 
     setIsSubmitting(true);
     try {
-      const token = localStorage.getItem("manitec_token");
-      const res = await apiFetch(apiUrl("/generators"), {
+      const res = await apiFetch("/generators", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           clientId,
@@ -95,8 +91,9 @@ export default function NewEquipmentPage() {
       });
 
       if (!res.ok) {
-        const body = await res.json();
-        throw new Error(Array.isArray(body?.message) ? body.message.join(", ") : body?.message || "Falha ao cadastrar equipamento.");
+        throw new Error(
+          await readApiErrorMessage(res, "Falha ao cadastrar equipamento."),
+        );
       }
 
       router.push("/dashboard/equipments");

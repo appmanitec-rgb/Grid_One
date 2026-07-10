@@ -9,7 +9,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { apiFetch, apiUrl } from "@/lib/api";
+import { apiFetch, readApiErrorMessage } from "@/lib/api";
 import {
   DataPill,
   EmptyState,
@@ -84,13 +84,8 @@ export default function SupplierFormPage() {
   );
 
   async function loadCatalogItems() {
-    const token = localStorage.getItem("manitec_token");
-    if (!token) return;
-
     try {
-      const res = await apiFetch(apiUrl("/catalogs"), {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiFetch("/catalogs");
       if (!res.ok) return;
       const data = (await res.json()) as Array<{
         id: string;
@@ -104,15 +99,17 @@ export default function SupplierFormPage() {
   }
 
   async function loadSupplier(id: string) {
-    const token = localStorage.getItem("manitec_token");
-    if (!token) return;
-
     setLoadingSupplier(true);
     try {
-      const res = await apiFetch(apiUrl(`/suppliers/${id}`), {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error("Nao foi possivel carregar fornecedor para edicao.");
+      const res = await apiFetch(`/suppliers/${id}`);
+      if (!res.ok) {
+        throw new Error(
+          await readApiErrorMessage(
+            res,
+            "Nao foi possivel carregar fornecedor para edicao.",
+          ),
+        );
+      }
       const data = await res.json();
 
       setFormData({
@@ -195,13 +192,6 @@ export default function SupplierFormPage() {
     setLoading(true);
     setError("");
 
-    const token = localStorage.getItem("manitec_token");
-    if (!token) {
-      setError("Sessao invalida. Faca login novamente.");
-      setLoading(false);
-      return;
-    }
-
     const payload = {
       companyName: formData.companyName,
       tradeName: formData.tradeName || undefined,
@@ -239,9 +229,7 @@ export default function SupplierFormPage() {
     };
 
     try {
-      const url = isEditing
-        ? apiUrl(`/suppliers/${editSupplierId}`)
-        : apiUrl("/suppliers");
+      const url = isEditing ? `/suppliers/${editSupplierId}` : "/suppliers";
 
       const method = isEditing ? "PATCH" : "POST";
 
@@ -249,20 +237,12 @@ export default function SupplierFormPage() {
         method,
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
-        const errData = (await res.json().catch(() => null)) as
-          | { message?: string | string[] }
-          | null;
-        throw new Error(
-          Array.isArray(errData?.message)
-            ? errData.message.join(", ")
-            : errData?.message || "Falha ao salvar fornecedor.",
-        );
+        throw new Error(await readApiErrorMessage(res, "Falha ao salvar fornecedor."));
       }
 
       router.push("/dashboard/suppliers");

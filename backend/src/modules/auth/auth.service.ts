@@ -24,6 +24,7 @@ type LoginContext = {
   role: string;
   isSystemMaster: boolean;
   accessPolicy: unknown;
+  linkedClientId?: string | null;
 };
 
 @Injectable()
@@ -66,6 +67,7 @@ export class AuthService {
         role: user.role,
         isSystemMaster: user.isSystemMaster,
         accessPolicy,
+        linkedClientId: user.linkedClientId,
         mfaSetupRequired: true,
       });
 
@@ -88,6 +90,7 @@ export class AuthService {
             role: user.role,
             isSystemMaster: user.isSystemMaster,
             accessPolicy,
+            linkedClientId: user.linkedClientId,
           },
           device,
         );
@@ -118,6 +121,7 @@ export class AuthService {
         role: user.role,
         isSystemMaster: user.isSystemMaster,
         accessPolicy,
+        linkedClientId: user.linkedClientId,
       },
       device,
     );
@@ -160,6 +164,7 @@ export class AuthService {
         role: user.role,
         isSystemMaster: user.isSystemMaster,
         accessPolicy,
+        linkedClientId: user.linkedClientId,
       },
       device,
     );
@@ -242,6 +247,7 @@ export class AuthService {
       role: session.user.role,
       isSystemMaster: session.user.isSystemMaster,
       accessPolicy,
+      linkedClientId: session.user.linkedClientId,
       mfaSetupRequired: false,
     });
 
@@ -282,6 +288,7 @@ export class AuthService {
       role: params.role,
       isSystemMaster: params.isSystemMaster,
       accessPolicy: params.accessPolicy,
+      linkedClientId: params.linkedClientId,
       mfaSetupRequired: false,
     });
     const refreshSession = await this.createOrRotateRefreshSession(
@@ -308,6 +315,7 @@ export class AuthService {
     role: string;
     isSystemMaster: boolean;
     accessPolicy: unknown;
+    linkedClientId?: string | null;
     mfaSetupRequired: boolean;
   }) {
     const payload = {
@@ -317,6 +325,7 @@ export class AuthService {
       role: params.role,
       isSystemMaster: params.isSystemMaster,
       accessPolicy: params.accessPolicy,
+      linkedClientId: params.linkedClientId,
       mfaSetupRequired: params.mfaSetupRequired,
     };
     return this.jwtService.signAsync(payload, {
@@ -341,6 +350,7 @@ export class AuthService {
       role: string;
       isSystemMaster: boolean;
       mfaEnabled?: boolean | null;
+      linkedClientId?: string | null;
     },
     accessPolicy: unknown,
   ) {
@@ -351,6 +361,7 @@ export class AuthService {
       isSystemMaster: user.isSystemMaster,
       accessPolicy,
       mfaEnabled: user.mfaEnabled,
+      linkedClientId: user.linkedClientId,
     };
   }
 

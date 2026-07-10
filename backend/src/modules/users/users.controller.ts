@@ -57,6 +57,13 @@ export class UsersController {
   }
 
   @RequireAccessPolicy('pages.dashboard')
+  @Get('me/client-portal')
+  getClientPortalOverview(@Req() req: Request) {
+    const userId = this.extractUserId(req);
+    return this.usersService.getClientPortalOverview(userId);
+  }
+
+  @RequireAccessPolicy('pages.dashboard')
   @Patch('me')
   updateMyProfile(@Req() req: Request, @Body() updateUserDto: UpdateUserDto) {
     const userId = this.extractUserId(req);
