@@ -7,7 +7,11 @@ import type {
 } from "./dashboard-documents";
 
 export type DeliveryChannel = "EMAIL" | "WHATSAPP" | "WEBHOOK";
-export type DeliveryDocumentType = "PROPOSAL" | "CONTRACT" | "ORDER";
+export type DeliveryDocumentType =
+  | "PROPOSAL"
+  | "CONTRACT"
+  | "ORDER"
+  | "SERVICE_REPORT";
 
 export type DocumentDeliveryItem = {
   id: string;
@@ -92,6 +96,7 @@ export const DELIVERY_DOCUMENT_OPTIONS: DeliveryDocumentType[] = [
   "PROPOSAL",
   "CONTRACT",
   "ORDER",
+  "SERVICE_REPORT",
 ];
 
 export const DEFAULT_DELIVERY_TEMPLATES: DeliveryTemplateMap = {
@@ -139,6 +144,23 @@ export const DEFAULT_DELIVERY_TEMPLATES: DeliveryTemplateMap = {
       subject: null,
       message:
         "{companyLabel} compartilhou a {documentLabel}.\n\nConta: {counterpartName}\nLink:\n{shareUrl}",
+    },
+    WEBHOOK: {
+      subject: null,
+      message:
+        "Payload automatico de {documentLabel} preparado para {counterpartName}.",
+    },
+  },
+  SERVICE_REPORT: {
+    EMAIL: {
+      subject: "{documentLabel} - compartilhamento seguro",
+      message:
+        "Ola, {recipientName}.\n\n{companyLabel} compartilhou o {documentLabel} para {counterpartName}.\n\nAcesse pelo link:\n{shareUrl}",
+    },
+    WHATSAPP: {
+      subject: null,
+      message:
+        "{companyLabel} compartilhou o {documentLabel}.\n\nConta: {counterpartName}\nLink:\n{shareUrl}",
     },
     WEBHOOK: {
       subject: null,
@@ -371,6 +393,7 @@ export function labelDeliveryDocumentType(type: DeliveryDocumentType) {
     PROPOSAL: "Proposta",
     CONTRACT: "Contrato",
     ORDER: "O.S.",
+    SERVICE_REPORT: "Laudo tecnico",
   };
 
   return labels[type];

@@ -32,6 +32,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { ReportsModule } from './modules/reports/reports.module';
 import { CustomerPortalModule } from './modules/customer-portal/customer-portal.module';
 import { TicketsModule } from './modules/tickets/tickets.module';
+import { ServiceReportsModule } from './modules/service-reports/service-reports.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { TicketsModule } from './modules/tickets/tickets.module';
     NotificationsModule,
     ReportsModule,
     TicketsModule,
+    ServiceReportsModule,
     CustomerPortalModule,
   ],
   controllers: [],

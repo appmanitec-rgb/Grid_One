@@ -49,6 +49,7 @@ export default function DashboardLayout({
     people: false,
     usersControl: false,
     tickets: false,
+    serviceReports: false,
   });
 
   useEffect(() => {
@@ -231,6 +232,13 @@ export default function DashboardLayout({
         mobileLabel: "Ordens",
         icon: "OS",
         enabled: visiblePages.orders,
+      },
+      {
+        href: "/dashboard/relatorios-tecnicos",
+        label: "Laudos",
+        mobileLabel: "Laudos",
+        icon: "LD",
+        enabled: visiblePages.serviceReports,
       },
       {
         href: "/dashboard/contracts",

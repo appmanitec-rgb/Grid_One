@@ -1,0 +1,749 @@
+"use client";
+
+import Link from "next/link";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
+import { getAccessFromToken } from "@/lib/access";
+import {
+  CHECKLIST_RESULT_LABELS,
+  ChecklistResult,
+  EVIDENCE_TYPE_LABELS,
+  EvidenceType,
+  REPORT_STATUS_LABELS,
+  ServiceReport,
+  ServiceReportChecklistItem,
+  formatServiceReportDate,
+  reportStatusTone,
+  serviceReportsGet,
+  serviceReportsPatch,
+  serviceReportsPost,
+} from "@/lib/service-reports";
+import {
+  DataPill,
+  FormField,
+  PageHero,
+  SectionCard,
+  StatusBanner,
+  TextAreaInput,
+  TextInput,
+} from "../../components/DashboardPageKit";
+
+const PRIMARY_BUTTON =
+  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
+const SECONDARY_BUTTON =
+  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+const DANGER_BUTTON =
+  "inline-flex items-center justify-center rounded-2xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50";
+
+const CHECKLIST_RESULTS = Object.keys(CHECKLIST_RESULT_LABELS) as ChecklistResult[];
+const EVIDENCE_TYPES = Object.keys(EVIDENCE_TYPE_LABELS) as EvidenceType[];
+
+const EMPTY_EVIDENCE = {
+  type: "PHOTO" as EvidenceType,
+  title: "",
+  description: "",
+  fileUrl: "",
+  fileName: "",
+  mimeType: "",
+  customerVisible: false,
+};
+
+const EMPTY_SIGNATURE = {
+  signedByName: "",
+  signedByDocument: "",
+  signatureData: "",
+};
+
+export default function ServiceReportDetailPage() {
+  const params = useParams<{ id: string }>();
+  const reportId = params.id;
+  const access = useMemo(() => getAccessFromToken(), []);
+  const [report, setReport] = useState<ServiceReport | null>(null);
+  const [form, setForm] = useState({
+    title: "",
+    diagnosis: "",
+    performedServices: "",
+    recommendations: "",
+    observations: "",
+    safetyNotes: "",
+    customerNotes: "",
+  });
+  const [checklist, setChecklist] = useState<ServiceReportChecklistItem[]>([]);
+  const [evidenceForm, setEvidenceForm] = useState(EMPTY_EVIDENCE);
+  const [signatureForm, setSignatureForm] = useState(EMPTY_SIGNATURE);
+  const [loading, setLoading] = useState(true);
+  const [busyKey, setBusyKey] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const payload = await serviceReportsGet<ServiceReport>(`/${reportId}`);
+      setReport(payload);
+      setForm({
+        title: payload.title || "",
+        diagnosis: payload.diagnosis || "",
+        performedServices: payload.performedServices || "",
+        recommendations: payload.recommendations || "",
+        observations: payload.observations || "",
+        safetyNotes: payload.safetyNotes || "",
+        customerNotes: payload.customerNotes || "",
+      });
+      setChecklist(payload.checklistItems || []);
+      setSignatureForm({
+        signedByName: payload.signedByName || "",
+        signedByDocument: payload.signedByDocument || "",
+        signatureData: payload.signatureData || "",
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao carregar laudo.");
+    } finally {
+      setLoading(false);
+    }
+  }, [reportId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const editable = report
+    ? report.status === "DRAFT" || report.status === "IN_REVIEW"
+    : false;
+  const canEdit = editable && access.serviceReports.update;
+  const canAddEvidence = editable && access.serviceReports.addEvidence;
+  const canSign =
+    report?.status !== "CANCELED" &&
+    report?.status !== "RELEASED_TO_CUSTOMER" &&
+    access.serviceReports.sign;
+  const canApprove =
+    report &&
+    !["APPROVED", "RELEASED_TO_CUSTOMER", "CANCELED"].includes(report.status) &&
+    access.serviceReports.approve;
+  const canRelease = report?.status === "APPROVED" && access.serviceReports.releaseToCustomer;
+  const canCancel = report?.status !== "CANCELED" && access.serviceReports.cancel;
+
+  async function saveReport(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await runAction("save", async () => {
+      const updated = await serviceReportsPatch<ServiceReport>(`/${reportId}`, {
+        ...form,
+        recommendations: form.recommendations.trim() || undefined,
+        observations: form.observations.trim() || undefined,
+        safetyNotes: form.safetyNotes.trim() || undefined,
+        customerNotes: form.customerNotes.trim() || undefined,
+      });
+      setReport(updated);
+      setSuccess("Laudo atualizado.");
+    });
+  }
+
+  async function saveChecklist() {
+    await runAction("checklist", async () => {
+      const updated = await serviceReportsPost<ServiceReport>(
+        `/${reportId}/checklist`,
+        { items: checklist },
+      );
+      setReport(updated);
+      setChecklist(updated.checklistItems || []);
+      setSuccess("Checklist salvo.");
+    });
+  }
+
+  async function addEvidence(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!evidenceForm.title.trim()) {
+      setError("Informe o titulo da evidencia.");
+      return;
+    }
+    await runAction("evidence", async () => {
+      const updated = await serviceReportsPost<ServiceReport>(
+        `/${reportId}/evidence`,
+        {
+          ...evidenceForm,
+          description: evidenceForm.description.trim() || undefined,
+          fileUrl: evidenceForm.fileUrl.trim() || undefined,
+          fileName: evidenceForm.fileName.trim() || undefined,
+          mimeType: evidenceForm.mimeType.trim() || undefined,
+        },
+      );
+      setReport(updated);
+      setEvidenceForm(EMPTY_EVIDENCE);
+      setSuccess("Evidencia registrada.");
+    });
+  }
+
+  async function signReport(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!signatureForm.signedByName.trim()) {
+      setError("Informe o responsavel pela assinatura.");
+      return;
+    }
+    await runAction("sign", async () => {
+      const updated = await serviceReportsPost<ServiceReport>(
+        `/${reportId}/sign`,
+        {
+          signedByName: signatureForm.signedByName,
+          signedByDocument: signatureForm.signedByDocument.trim() || undefined,
+          signatureData: signatureForm.signatureData.trim() || undefined,
+        },
+      );
+      setReport(updated);
+      setSuccess("Assinatura registrada.");
+    });
+  }
+
+  async function transition(path: string, label: string, confirmText?: string) {
+    if (confirmText && !window.confirm(confirmText)) return;
+    await runAction(path, async () => {
+      const updated = await serviceReportsPost<ServiceReport>(`/${reportId}/${path}`, {});
+      setReport(updated);
+      setChecklist(updated.checklistItems || []);
+      setSuccess(label);
+    });
+  }
+
+  async function cancelReport() {
+    if (!window.confirm("Cancelar este laudo e remover visibilidade no portal?")) return;
+    await runAction("cancel", async () => {
+      const updated = await serviceReportsPost<ServiceReport>(`/${reportId}/cancel`, {
+        reason: "Cancelado pela tela de laudos.",
+      });
+      setReport(updated);
+      setSuccess("Laudo cancelado.");
+    });
+  }
+
+  async function runAction(key: string, action: () => Promise<void>) {
+    setBusyKey(key);
+    setError("");
+    setSuccess("");
+    try {
+      await action();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha na acao solicitada.");
+    } finally {
+      setBusyKey("");
+    }
+  }
+
+  function updateChecklistItem(
+    index: number,
+    patch: Partial<ServiceReportChecklistItem>,
+  ) {
+    setChecklist((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, ...patch } : item,
+      ),
+    );
+  }
+
+  function addChecklistItem() {
+    setChecklist((current) => [
+      ...current,
+      {
+        label: "",
+        result: "PENDING",
+        required: false,
+        notes: "",
+        sortOrder: current.length,
+      },
+    ]);
+  }
+
+  function removeChecklistItem(index: number) {
+    setChecklist((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  }
+
+  if (loading) return <State text="Carregando laudo..." />;
+  if (error && !report) return <State text={error} tone="error" />;
+  if (!report) return <State text="Laudo nao encontrado." />;
+
+  return (
+    <div className="space-y-6">
+      <PageHero
+        eyebrow="Laudo tecnico"
+        title={`${report.code} - ${report.title}`}
+        description={`${report.client?.tradeName || report.client?.companyName || "Cliente"} / ${report.generator?.name || "Equipamento"} / ${report.maintenanceOrder?.title || "OS"}`}
+        actions={
+          <>
+            <Link href="/dashboard/relatorios-tecnicos" className={SECONDARY_BUTTON}>
+              Voltar
+            </Link>
+            {canApprove ? (
+              <button
+                type="button"
+                className={PRIMARY_BUTTON}
+                disabled={busyKey === "approve"}
+                onClick={() => void transition("approve", "Laudo aprovado.")}
+              >
+                {busyKey === "approve" ? "Aprovando..." : "Aprovar"}
+              </button>
+            ) : null}
+            {canRelease ? (
+              <button
+                type="button"
+                className={PRIMARY_BUTTON}
+                disabled={busyKey === "release-to-customer"}
+                onClick={() =>
+                  void transition(
+                    "release-to-customer",
+                    "Laudo liberado ao cliente.",
+                    "Liberar este laudo no Portal do Cliente?",
+                  )
+                }
+              >
+                {busyKey === "release-to-customer" ? "Liberando..." : "Liberar portal"}
+              </button>
+            ) : null}
+            {canCancel ? (
+              <button
+                type="button"
+                className={DANGER_BUTTON}
+                disabled={busyKey === "cancel"}
+                onClick={() => void cancelReport()}
+              >
+                Cancelar
+              </button>
+            ) : null}
+          </>
+        }
+        stats={[
+          {
+            label: "Status",
+            value: REPORT_STATUS_LABELS[report.status],
+            tone: reportStatusTone(report.status),
+          },
+          {
+            label: "Checklist",
+            value: String(report.checklistItems.length),
+            tone: "blue",
+          },
+          {
+            label: "Evidencias",
+            value: String(report.evidences.length),
+            tone: "slate",
+          },
+          {
+            label: "Portal",
+            value: report.customerVisible ? "Liberado" : "Interno",
+            tone: report.customerVisible ? "emerald" : "amber",
+          },
+        ]}
+      />
+
+      {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
+      {success ? <StatusBanner tone="emerald">{success}</StatusBanner> : null}
+
+      <SectionCard
+        title="Dados tecnicos"
+        description={
+          editable
+            ? "Campos internos e externos do laudo antes da aprovacao."
+            : "Laudos aprovados, liberados ou cancelados ficam bloqueados para edicao direta."
+        }
+      >
+        <form onSubmit={saveReport} className="grid gap-4 lg:grid-cols-2">
+          <FormField label="Titulo">
+            <TextInput
+              value={form.title}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, title: event.target.value }))
+              }
+              disabled={!canEdit}
+            />
+          </FormField>
+          <Info label="Atualizado em" value={formatServiceReportDate(report.updatedAt)} />
+          <FormField label="Diagnostico" className="lg:col-span-2">
+            <TextAreaInput
+              value={form.diagnosis}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  diagnosis: event.target.value,
+                }))
+              }
+              rows={4}
+              disabled={!canEdit}
+            />
+          </FormField>
+          <FormField label="Servico realizado" className="lg:col-span-2">
+            <TextAreaInput
+              value={form.performedServices}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  performedServices: event.target.value,
+                }))
+              }
+              rows={4}
+              disabled={!canEdit}
+            />
+          </FormField>
+          <FormField label="Recomendacoes">
+            <TextAreaInput
+              value={form.recommendations}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  recommendations: event.target.value,
+                }))
+              }
+              rows={3}
+              disabled={!canEdit}
+            />
+          </FormField>
+          <FormField label="Observacoes ao cliente">
+            <TextAreaInput
+              value={form.customerNotes}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  customerNotes: event.target.value,
+                }))
+              }
+              rows={3}
+              disabled={!canEdit}
+            />
+          </FormField>
+          <FormField label="Observacoes internas">
+            <TextAreaInput
+              value={form.observations}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  observations: event.target.value,
+                }))
+              }
+              rows={3}
+              disabled={!canEdit}
+            />
+          </FormField>
+          <FormField label="Notas de seguranca internas">
+            <TextAreaInput
+              value={form.safetyNotes}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  safetyNotes: event.target.value,
+                }))
+              }
+              rows={3}
+              disabled={!canEdit}
+            />
+          </FormField>
+          {canEdit ? (
+            <div className="lg:col-span-2">
+              <button type="submit" className={PRIMARY_BUTTON} disabled={busyKey === "save"}>
+                {busyKey === "save" ? "Salvando..." : "Salvar dados tecnicos"}
+              </button>
+            </div>
+          ) : null}
+        </form>
+      </SectionCard>
+
+      <SectionCard
+        title="Checklist"
+        description="Itens obrigatorios pendentes bloqueiam aprovacao; itens nao conformes exigem observacao."
+        actions={
+          canEdit ? (
+            <>
+              <button type="button" className={SECONDARY_BUTTON} onClick={addChecklistItem}>
+                Adicionar item
+              </button>
+              <button
+                type="button"
+                className={PRIMARY_BUTTON}
+                disabled={busyKey === "checklist"}
+                onClick={() => void saveChecklist()}
+              >
+                {busyKey === "checklist" ? "Salvando..." : "Salvar checklist"}
+              </button>
+            </>
+          ) : null
+        }
+      >
+        {checklist.length === 0 ? <EmptyState text="Nenhum item de checklist." /> : null}
+        <div className="grid gap-3">
+          {checklist.map((item, index) => (
+            <div
+              key={`${item.id || "new"}-${index}`}
+              className="grid gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 lg:grid-cols-[1fr_160px_140px_1fr_auto]"
+            >
+              <TextInput
+                value={item.label}
+                onChange={(event) =>
+                  updateChecklistItem(index, { label: event.target.value })
+                }
+                disabled={!canEdit}
+                placeholder="Item verificado"
+              />
+              <select
+                value={item.result}
+                onChange={(event) =>
+                  updateChecklistItem(index, {
+                    result: event.target.value as ChecklistResult,
+                  })
+                }
+                disabled={!canEdit}
+                className="rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none"
+              >
+                {CHECKLIST_RESULTS.map((result) => (
+                  <option key={result} value={result}>
+                    {CHECKLIST_RESULT_LABELS[result]}
+                  </option>
+                ))}
+              </select>
+              <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={item.required}
+                  onChange={(event) =>
+                    updateChecklistItem(index, { required: event.target.checked })
+                  }
+                  disabled={!canEdit}
+                />
+                Obrigatorio
+              </label>
+              <TextInput
+                value={item.notes || ""}
+                onChange={(event) =>
+                  updateChecklistItem(index, { notes: event.target.value })
+                }
+                disabled={!canEdit}
+                placeholder="Observacao"
+              />
+              {canEdit ? (
+                <button
+                  type="button"
+                  className={DANGER_BUTTON}
+                  onClick={() => removeChecklistItem(index)}
+                >
+                  Remover
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Evidencias"
+        description="Somente evidencias marcadas como visiveis aparecem no Portal do Cliente apos liberacao do laudo."
+      >
+        {canAddEvidence ? (
+          <form onSubmit={addEvidence} className="mb-5 grid gap-4 lg:grid-cols-2">
+            <FormField label="Tipo">
+              <select
+                value={evidenceForm.type}
+                onChange={(event) =>
+                  setEvidenceForm((current) => ({
+                    ...current,
+                    type: event.target.value as EvidenceType,
+                  }))
+                }
+                className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none"
+              >
+                {EVIDENCE_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {EVIDENCE_TYPE_LABELS[type]}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+            <FormField label="Titulo">
+              <TextInput
+                value={evidenceForm.title}
+                onChange={(event) =>
+                  setEvidenceForm((current) => ({
+                    ...current,
+                    title: event.target.value,
+                  }))
+                }
+              />
+            </FormField>
+            <FormField label="URL segura">
+              <TextInput
+                value={evidenceForm.fileUrl}
+                onChange={(event) =>
+                  setEvidenceForm((current) => ({
+                    ...current,
+                    fileUrl: event.target.value,
+                  }))
+                }
+                placeholder="https://..."
+              />
+            </FormField>
+            <FormField label="Nome do arquivo">
+              <TextInput
+                value={evidenceForm.fileName}
+                onChange={(event) =>
+                  setEvidenceForm((current) => ({
+                    ...current,
+                    fileName: event.target.value,
+                  }))
+                }
+              />
+            </FormField>
+            <FormField label="Descricao" className="lg:col-span-2">
+              <TextAreaInput
+                value={evidenceForm.description}
+                onChange={(event) =>
+                  setEvidenceForm((current) => ({
+                    ...current,
+                    description: event.target.value,
+                  }))
+                }
+                rows={3}
+              />
+            </FormField>
+            <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+              <input
+                type="checkbox"
+                checked={evidenceForm.customerVisible}
+                onChange={(event) =>
+                  setEvidenceForm((current) => ({
+                    ...current,
+                    customerVisible: event.target.checked,
+                  }))
+                }
+              />
+              Visivel ao cliente apos liberacao
+            </label>
+            <div>
+              <button
+                type="submit"
+                className={PRIMARY_BUTTON}
+                disabled={busyKey === "evidence"}
+              >
+                {busyKey === "evidence" ? "Registrando..." : "Adicionar evidencia"}
+              </button>
+            </div>
+          </form>
+        ) : null}
+
+        {report.evidences.length === 0 ? <EmptyState text="Nenhuma evidencia registrada." /> : null}
+        <div className="grid gap-3 md:grid-cols-2">
+          {report.evidences.map((evidence) => (
+            <article
+              key={evidence.id}
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-3"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <DataPill tone={evidence.customerVisible ? "emerald" : "slate"}>
+                  {evidence.customerVisible ? "Cliente" : "Interna"}
+                </DataPill>
+                <DataPill tone="blue">{EVIDENCE_TYPE_LABELS[evidence.type]}</DataPill>
+              </div>
+              <h3 className="mt-3 text-sm font-bold text-slate-950">
+                {evidence.title}
+              </h3>
+              {evidence.description ? (
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  {evidence.description}
+                </p>
+              ) : null}
+              {evidence.fileUrl ? (
+                <a
+                  href={evidence.fileUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-flex text-sm font-bold text-blue-700 hover:text-blue-900"
+                >
+                  Abrir evidencia
+                </a>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Assinatura"
+        description="Assinatura simples coletada em campo, sem certificado digital avancado neste ciclo."
+      >
+        <form onSubmit={signReport} className="grid gap-4 lg:grid-cols-2">
+          <FormField label="Responsavel">
+            <TextInput
+              value={signatureForm.signedByName}
+              onChange={(event) =>
+                setSignatureForm((current) => ({
+                  ...current,
+                  signedByName: event.target.value,
+                }))
+              }
+              disabled={!canSign}
+            />
+          </FormField>
+          <FormField label="Documento">
+            <TextInput
+              value={signatureForm.signedByDocument}
+              onChange={(event) =>
+                setSignatureForm((current) => ({
+                  ...current,
+                  signedByDocument: event.target.value,
+                }))
+              }
+              disabled={!canSign}
+            />
+          </FormField>
+          <FormField label="Assinatura ou referencia" className="lg:col-span-2">
+            <TextAreaInput
+              value={signatureForm.signatureData}
+              onChange={(event) =>
+                setSignatureForm((current) => ({
+                  ...current,
+                  signatureData: event.target.value,
+                }))
+              }
+              rows={3}
+              disabled={!canSign}
+            />
+          </FormField>
+          <Info label="Assinado em" value={formatServiceReportDate(report.signedAt)} />
+          {canSign ? (
+            <div className="flex items-end">
+              <button type="submit" className={PRIMARY_BUTTON} disabled={busyKey === "sign"}>
+                {busyKey === "sign" ? "Registrando..." : "Registrar assinatura"}
+              </button>
+            </div>
+          ) : null}
+        </form>
+      </SectionCard>
+    </div>
+  );
+}
+
+function Info({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-semibold text-slate-800">{value || "-"}</p>
+    </div>
+  );
+}
+
+function State({ text, tone }: { text: string; tone?: "error" }) {
+  return (
+    <div
+      className={`rounded-2xl border p-5 text-sm font-semibold ${
+        tone === "error"
+          ? "border-red-200 bg-red-50 text-red-700"
+          : "border-slate-200 bg-white text-slate-600"
+      }`}
+    >
+      {text}
+    </div>
+  );
+}
+
+function EmptyState({ text }: { text: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-5 text-sm font-semibold text-slate-600">
+      {text}
+    </div>
+  );
+}

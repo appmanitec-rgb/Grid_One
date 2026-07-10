@@ -20,6 +20,7 @@ export type SidebarAccess = {
   people: boolean;
   usersControl: boolean;
   tickets: boolean;
+  serviceReports: boolean;
 };
 
 type SidebarNavigationProps = {
@@ -163,6 +164,12 @@ const MAIN_SECTIONS: NavSection[] = [
         key: "ops_tickets",
         label: "Atendimento",
         href: "/dashboard/atendimento",
+        enabled: true,
+      },
+      {
+        key: "ops_service_reports",
+        label: "Laudos",
+        href: "/dashboard/relatorios-tecnicos",
         enabled: true,
       },
       {

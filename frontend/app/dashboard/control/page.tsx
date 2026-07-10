@@ -260,6 +260,7 @@ const PAGE_ITEMS = [
   { key: "people", label: "Pessoas/RH" },
   { key: "usersControl", label: "Governanca de usuarios" },
   { key: "tickets", label: "Atendimento/SLA" },
+  { key: "serviceReports", label: "Laudos tecnicos" },
 ] as const satisfies ReadonlyArray<PermissionItem<keyof AccessPolicy["pages"]>>;
 const CLIENT_ITEMS = [
   { key: "view", label: "Visualizar clientes" },
@@ -339,6 +340,18 @@ const TICKET_ITEMS = [
   { key: "cancel", label: "Cancelar chamado" },
 ] as const satisfies ReadonlyArray<
   PermissionItem<keyof AccessPolicy["tickets"]>
+>;
+const SERVICE_REPORT_ITEMS = [
+  { key: "view", label: "Visualizar laudos" },
+  { key: "create", label: "Criar laudos" },
+  { key: "update", label: "Editar laudos" },
+  { key: "addEvidence", label: "Adicionar evidencias" },
+  { key: "sign", label: "Registrar assinatura" },
+  { key: "approve", label: "Aprovar laudos" },
+  { key: "releaseToCustomer", label: "Liberar ao cliente" },
+  { key: "cancel", label: "Cancelar laudos" },
+] as const satisfies ReadonlyArray<
+  PermissionItem<keyof AccessPolicy["serviceReports"]>
 >;
 const INVENTORY_ITEMS = [
   { key: "view", label: "Visualizar estoque" },
@@ -2550,6 +2563,16 @@ function UserEditorCard({
           disabled={isSelectedMaster}
         />
         <PermissionBlock
+          title="Laudos tecnicos"
+          description="Checklist, evidencias, assinatura e liberacao ao portal."
+          items={SERVICE_REPORT_ITEMS}
+          values={policy.serviceReports}
+          onToggle={(key, value) =>
+            onSetSectionPermission("serviceReports", key, value)
+          }
+          disabled={isSelectedMaster}
+        />
+        <PermissionBlock
           title="Estoque"
           description="Reserva, consumo e ajuste de materiais."
           items={INVENTORY_ITEMS}
@@ -2727,6 +2750,10 @@ function normalizeEditableAccessPolicy(access: AccessPolicy): AccessPolicy {
     maintenanceOrders: {
       ...base.maintenanceOrders,
       ...access.maintenanceOrders,
+    },
+    serviceReports: {
+      ...base.serviceReports,
+      ...access.serviceReports,
     },
     tickets: {
       ...base.tickets,

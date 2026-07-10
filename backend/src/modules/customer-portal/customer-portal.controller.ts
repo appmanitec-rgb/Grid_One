@@ -10,6 +10,7 @@ import {
 import type { Request } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
 import { TicketsService } from '../tickets/tickets.service';
+import { ServiceReportsService } from '../service-reports/service-reports.service';
 import {
   CreateCustomerTicketDto,
   CustomerTicketCommentDto,
@@ -33,6 +34,7 @@ export class CustomerPortalController {
   constructor(
     private readonly customerPortalService: CustomerPortalService,
     private readonly ticketsService: TicketsService,
+    private readonly serviceReportsService: ServiceReportsService,
   ) {}
 
   @Get('me')
@@ -120,6 +122,40 @@ export class CustomerPortalController {
   @Get('orders/:id')
   orderDetail(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.customerPortalService.getOrder(this.extractUserId(req), id);
+  }
+
+  @Get('orders/:id/report')
+  orderReport(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.serviceReportsService.getCustomerOrderReport(
+      this.extractUserId(req),
+      id,
+    );
+  }
+
+  @Get('equipment/:id/reports')
+  equipmentReports(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.serviceReportsService.listCustomerEquipmentReports(
+      this.extractUserId(req),
+      id,
+    );
+  }
+
+  @Get('service-reports')
+  serviceReports(@Req() req: AuthenticatedRequest) {
+    return this.serviceReportsService.listCustomerReports(
+      this.extractUserId(req),
+    );
+  }
+
+  @Get('service-reports/:id')
+  serviceReportDetail(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
+    return this.serviceReportsService.getCustomerReport(
+      this.extractUserId(req),
+      id,
+    );
   }
 
   @Get('tickets')

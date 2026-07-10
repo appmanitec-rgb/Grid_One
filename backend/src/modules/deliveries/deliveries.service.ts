@@ -112,6 +112,7 @@ const DELIVERY_DOCUMENT_TYPES: DeliveryDocumentType[] = [
   DeliveryDocumentType.PROPOSAL,
   DeliveryDocumentType.CONTRACT,
   DeliveryDocumentType.ORDER,
+  DeliveryDocumentType.SERVICE_REPORT,
 ];
 
 const DELIVERY_CHANNELS: DeliveryChannel[] = [
@@ -165,6 +166,23 @@ const DEFAULT_DELIVERY_TEMPLATES: DeliveryTemplateMap = {
       subject: null,
       message:
         '{companyLabel} compartilhou a {documentLabel}.\n\nConta: {counterpartName}\nLink:\n{shareUrl}',
+    },
+    WEBHOOK: {
+      subject: null,
+      message:
+        'Payload automatico de {documentLabel} preparado para {counterpartName}.',
+    },
+  },
+  SERVICE_REPORT: {
+    EMAIL: {
+      subject: '{documentLabel} - compartilhamento seguro',
+      message:
+        'Ola, {recipientName}.\n\n{companyLabel} compartilhou o {documentLabel} para {counterpartName}.\n\nAcesse pelo link:\n{shareUrl}',
+    },
+    WHATSAPP: {
+      subject: null,
+      message:
+        '{companyLabel} compartilhou o {documentLabel}.\n\nConta: {counterpartName}\nLink:\n{shareUrl}',
     },
     WEBHOOK: {
       subject: null,
@@ -569,6 +587,11 @@ export class DeliveriesService {
     }
     if (documentType === DeliveryDocumentType.CONTRACT) {
       return this.documentsService.getContractDocument(documentId, actorUserId);
+    }
+    if (documentType === DeliveryDocumentType.SERVICE_REPORT) {
+      throw new BadRequestException(
+        'Laudos tecnicos devem ser liberados pelo modulo de relatorios tecnicos.',
+      );
     }
     return this.documentsService.getOrderDocument(documentId, actorUserId);
   }
@@ -1132,6 +1155,7 @@ export class DeliveriesService {
       PROPOSAL: 'Proposta',
       CONTRACT: 'Contrato',
       ORDER: 'Ordem de servico',
+      SERVICE_REPORT: 'Laudo tecnico',
     };
 
     return labels[documentType];
@@ -1187,6 +1211,10 @@ export class DeliveriesService {
 
     if (documentType === DeliveryDocumentType.CONTRACT) {
       return access.pages.contracts;
+    }
+
+    if (documentType === DeliveryDocumentType.SERVICE_REPORT) {
+      return access.pages.serviceReports;
     }
 
     return access.pages.orders;

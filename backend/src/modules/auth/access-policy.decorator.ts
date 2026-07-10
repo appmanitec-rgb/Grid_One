@@ -15,6 +15,7 @@ export const accessPolicyKeys = [
   'pages.people',
   'pages.usersControl',
   'pages.tickets',
+  'pages.serviceReports',
   'clients.view',
   'clients.create',
   'clients.update',
@@ -91,6 +92,14 @@ export const accessPolicyKeys = [
   'maintenanceOrders.submitVisitReport',
   'maintenanceOrders.approveVisitReport',
   'maintenanceOrders.assignWithOverride',
+  'serviceReports.view',
+  'serviceReports.create',
+  'serviceReports.update',
+  'serviceReports.addEvidence',
+  'serviceReports.sign',
+  'serviceReports.approve',
+  'serviceReports.releaseToCustomer',
+  'serviceReports.cancel',
   'audit.read',
 ] as const;
 

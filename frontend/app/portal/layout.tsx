@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { href: "/portal/propostas", label: "Propostas" },
   { href: "/portal/chamados", label: "Chamados" },
   { href: "/portal/solicitacoes", label: "Solicitacoes" },
+  { href: "/portal/laudos", label: "Laudos" },
   { href: "/portal/documentos", label: "Documentos" },
   { href: "/portal/financeiro", label: "Financeiro" },
 ];
