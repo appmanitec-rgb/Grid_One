@@ -173,6 +173,17 @@ export class CustomerPortalController {
       .then((html) => res.type('text/html').send(html));
   }
 
+  @Get('service-reports/:id/download-pdf')
+  serviceReportPdfDownload(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    return this.serviceReportsService
+      .downloadCustomerPdf(this.extractUserId(req), id)
+      .then((file) => this.sendFile(res, file));
+  }
+
   @Get('service-reports/:id/evidence/:evidenceId/download')
   serviceReportEvidenceDownload(
     @Req() req: AuthenticatedRequest,

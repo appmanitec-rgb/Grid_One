@@ -22,8 +22,10 @@ describe('ServiceReportsService', () => {
   let auditLogsService: { record: jest.Mock };
   let fileStorageService: {
     saveServiceReportFile: jest.Mock;
+    saveServiceReportPdf: jest.Mock;
     load: jest.Mock;
   };
+  let pdfService: { generate: jest.Mock };
 
   beforeEach(() => {
     db = createDbMock();
@@ -39,6 +41,13 @@ describe('ServiceReportsService', () => {
         sizeBytes: 128,
         checksumSha256: 'hash-1',
       }),
+      saveServiceReportPdf: jest.fn().mockResolvedValue({
+        storageKey: 'service-report-pdfs/2026/07/report.pdf',
+        fileName: 'LDT-000001-v1.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: 256,
+        checksumSha256: 'pdf-hash-1',
+      }),
       load: jest.fn().mockResolvedValue({
         storageKey: 'service-reports/2026/07/evidence.jpg',
         fileName: 'evidence.jpg',
@@ -48,10 +57,15 @@ describe('ServiceReportsService', () => {
         buffer: Buffer.from('file'),
       }),
     };
+    pdfService = {
+      generate: jest.fn().mockReturnValue(Buffer.from('%PDF-1.4')),
+    };
+    db.serviceReportTemplate.findFirst.mockResolvedValue(makeTemplate());
     service = new ServiceReportsService(
       db,
       auditLogsService as unknown as AuditLogsService,
       fileStorageService as never,
+      pdfService as never,
     );
   });
 
@@ -503,6 +517,274 @@ describe('ServiceReportsService', () => {
     );
   });
 
+  it('PDF nao gera para DRAFT', async () => {
+    db.serviceReport.findUnique.mockResolvedValue(makeReport());
+
+    await expect(service.generatePdf('report-1', 'user-1')).rejects.toThrow(
+      BadRequestException,
+    );
+  });
+
+  it('PDF gera para APPROVED e fica vinculado ao laudo/documento', async () => {
+    db.serviceReport.findUnique.mockResolvedValue(
+      makeReport({ status: ReportStatus.APPROVED }),
+    );
+    db.serviceReport.update
+      .mockResolvedValueOnce(
+        makeReport({
+          status: ReportStatus.APPROVED,
+          validationToken: 'token-1',
+          documentHash: 'hash-1',
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeReport({
+          status: ReportStatus.APPROVED,
+          generatedDocumentId: 'delivery-1',
+          validationToken: 'token-1',
+          documentHash: 'pdf-hash-1',
+          generatedDocument: makeDocument(),
+        }),
+      );
+    db.documentDelivery.create.mockResolvedValue(makeDocument());
+
+    const result = await service.generatePdf('report-1', 'user-1');
+
+    expect(result.checksumSha256).toBe('pdf-hash-1');
+    expect(fileStorageService.saveServiceReportPdf).toHaveBeenCalled();
+    expect(db.documentDelivery.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          fileStorageKey: 'service-report-pdfs/2026/07/report.pdf',
+          checksumSha256: 'pdf-hash-1',
+        }),
+      }),
+    );
+    expect(db.serviceReport.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          generatedDocumentId: 'delivery-1',
+          documentHash: 'pdf-hash-1',
+        }),
+      }),
+    );
+    expect(auditLogsService.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'GENERATE_PDF' }),
+      db,
+    );
+  });
+
+  it('PDF gera para RELEASED_TO_CUSTOMER com QR/link e sem notas internas no payload', async () => {
+    db.serviceReport.findUnique.mockResolvedValue(
+      makeReleasedReport({
+        validationToken: 'token-1',
+        generatedDocumentId: null,
+        generatedDocument: null,
+      }),
+    );
+    db.serviceReport.update
+      .mockResolvedValueOnce(
+        makeReleasedReport({
+          validationToken: 'token-1',
+          documentHash: 'hash-1',
+          generatedDocumentId: null,
+          generatedDocument: null,
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeReleasedReport({
+          generatedDocumentId: 'delivery-1',
+          documentHash: 'pdf-hash-1',
+          generatedDocument: makeDocument(),
+        }),
+      );
+    db.documentDelivery.create.mockResolvedValue(makeDocument());
+
+    await service.generatePdf('report-1', 'user-1');
+
+    expect(pdfService.generate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        validationUrl: expect.stringContaining(
+          '/public/service-reports/verify/token-1',
+        ),
+      }),
+    );
+    const pdfPayload = pdfService.generate.mock.calls[0][0];
+    expect(pdfPayload).not.toHaveProperty('observations');
+    expect(pdfPayload).not.toHaveProperty('safetyNotes');
+  });
+
+  it('template ativo e usado na geracao do PDF', async () => {
+    db.serviceReport.findUnique.mockResolvedValue(
+      makeReport({ status: ReportStatus.APPROVED }),
+    );
+    db.serviceReport.update
+      .mockResolvedValueOnce(
+        makeReport({
+          status: ReportStatus.APPROVED,
+          validationToken: 'token-1',
+          documentHash: 'hash-1',
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeReport({
+          status: ReportStatus.APPROVED,
+          generatedDocumentId: 'delivery-1',
+        }),
+      );
+    db.serviceReportTemplate.findFirst.mockResolvedValue(
+      makeTemplate({
+        sectionsConfig: [
+          {
+            key: 'diagnosis',
+            label: 'Diagnostico custom',
+            enabled: true,
+            order: 1,
+          },
+        ],
+      }),
+    );
+    db.documentDelivery.create.mockResolvedValue(makeDocument());
+
+    await service.generatePdf('report-1', 'user-1');
+
+    expect(pdfService.generate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sections: expect.arrayContaining([
+          expect.objectContaining({ label: 'Diagnostico custom' }),
+        ]),
+      }),
+    );
+  });
+
+  it('fallback de template funciona quando nao ha template ativo', async () => {
+    db.serviceReport.findUnique.mockResolvedValue(
+      makeReport({ status: ReportStatus.APPROVED }),
+    );
+    db.serviceReport.update
+      .mockResolvedValueOnce(
+        makeReport({
+          status: ReportStatus.APPROVED,
+          validationToken: 'token-1',
+          documentHash: 'hash-1',
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeReport({
+          status: ReportStatus.APPROVED,
+          generatedDocumentId: 'delivery-1',
+        }),
+      );
+    db.serviceReportTemplate.findFirst.mockResolvedValue(null);
+    db.documentDelivery.create.mockResolvedValue(makeDocument());
+
+    await service.generatePdf('report-1', 'user-1');
+
+    expect(
+      pdfService.generate.mock.calls[0][0].sections.length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('portal baixa PDF proprio liberado', async () => {
+    db.user.findUnique.mockResolvedValue(makeClientUser());
+    db.serviceReport.findFirst.mockResolvedValue(
+      makeReleasedReport({ generatedDocument: makeDocument() }),
+    );
+
+    const file = await service.downloadCustomerPdf(
+      'customer-user-1',
+      'report-1',
+    );
+
+    expect(fileStorageService.load).toHaveBeenCalledWith(
+      'service-report-pdfs/2026/07/report.pdf',
+      expect.objectContaining({ mimeType: 'application/pdf' }),
+    );
+    expect(file.buffer).toEqual(Buffer.from('file'));
+  });
+
+  it('portal nao baixa PDF de outro cliente ou laudo nao liberado', async () => {
+    db.user.findUnique.mockResolvedValue(makeClientUser());
+    db.serviceReport.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.downloadCustomerPdf('customer-user-1', 'report-other'),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it('link sem allowPdfDownload bloqueia download publico', async () => {
+    db.serviceReportShareLink.findUnique.mockResolvedValue({
+      id: 'link-1',
+      reportId: 'report-1',
+      revokedAt: null,
+      expiresAt: new Date('2026-08-01T00:00:00.000Z'),
+      allowPdfDownload: false,
+      allowEvidenceDownload: false,
+      report: makeReleasedReport({ generatedDocument: makeDocument() }),
+    });
+
+    await expect(service.downloadPublicSharePdf('raw-token')).rejects.toThrow(
+      ForbiddenException,
+    );
+  });
+
+  it('revisar laudo liberado sem motivo bloqueia', async () => {
+    db.serviceReport.findUnique.mockResolvedValue(makeReleasedReport());
+
+    await expect(
+      service.reviseReleasedReport(
+        'report-1',
+        { changeReason: 'curto' },
+        'user-1',
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('revisao com motivo cria nova versao e AuditLog', async () => {
+    db.serviceReport.findUnique.mockResolvedValue(makeReleasedReport());
+    db.serviceReport.update
+      .mockResolvedValueOnce(
+        makeReleasedReport({
+          versionNumber: 2,
+          generatedDocumentId: null,
+          generatedDocument: null,
+          documentHash: null,
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeReleasedReport({
+          versionNumber: 2,
+          generatedDocumentId: null,
+          generatedDocument: null,
+          validationToken: 'token-1',
+          documentHash: 'hash-v2',
+        }),
+      );
+
+    const result = await service.reviseReleasedReport(
+      'report-1',
+      {
+        title: 'Laudo revisado',
+        changeReason: 'Correcao tecnica solicitada pelo gestor.',
+      },
+      'user-1',
+    );
+
+    expect(result.versionNumber).toBe(2);
+    expect(db.serviceReport.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          versionNumber: { increment: 1 },
+          generatedDocumentId: null,
+        }),
+      }),
+    );
+    expect(auditLogsService.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'REVISE_RELEASED_REPORT' }),
+      db,
+    );
+  });
+
   it('relatorio liberado aparece no portal', async () => {
     db.user.findUnique.mockResolvedValue(makeClientUser());
     db.serviceReport.findMany.mockResolvedValue([makeReleasedReport()]);
@@ -617,8 +899,12 @@ function createDbMock() {
       findUnique: jest.fn(),
       update: jest.fn(),
     },
+    serviceReportTemplate: {
+      findFirst: jest.fn(),
+    },
     documentDelivery: {
       create: jest.fn(),
+      update: jest.fn(),
     },
   };
 }
@@ -690,17 +976,24 @@ function makeReport(overrides: Record<string, unknown> = {}) {
     customerVisible: false,
     releasedToCustomerAt: null,
     generatedDocumentId: null,
+    versionNumber: 1,
+    validationToken: null,
+    validationExpiresAt: null,
+    validationRevokedAt: null,
+    documentHash: null,
+    templateId: null,
     maintenanceOrder: {
       id: 'order-1',
       title: 'OS preventiva',
       status: OrderStatus.IN_PROGRESS,
+      type: 'PREVENTIVE',
     },
     client: {
       id: 'client-1',
       companyName: 'Cliente Um Ltda',
       tradeName: 'Cliente Um',
     },
-    generator: { id: 'generator-1', name: 'GMG 500' },
+    generator: { id: 'generator-1', name: 'GMG 500', modelId: 'model-1' },
     site: { id: 'site-1', name: 'Base A' },
     contract: { id: 'contract-1', code: 'CTR-1', title: 'Contrato' },
     technician: { id: 'tech-1', user: { id: 'tech-user', name: 'Tecnico' } },
@@ -719,15 +1012,52 @@ function makeReleasedReport(overrides: Record<string, unknown> = {}) {
     customerVisible: true,
     releasedToCustomerAt: new Date('2026-07-10T11:00:00.000Z'),
     generatedDocumentId: 'delivery-1',
-    generatedDocument: {
-      id: 'delivery-1',
-      documentType: DeliveryDocumentType.SERVICE_REPORT,
-      documentCode: 'LDT-000001',
-      documentTitle: 'Laudo tecnico',
-      createdAt: new Date('2026-07-10T11:00:00.000Z'),
-    },
+    generatedDocument: makeDocument(),
     ...overrides,
   });
+}
+
+function makeDocument(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'delivery-1',
+    documentType: DeliveryDocumentType.SERVICE_REPORT,
+    documentId: 'report-1',
+    documentCode: 'LDT-000001',
+    documentTitle: 'Laudo tecnico',
+    clientId: 'client-1',
+    fileStorageKey: 'service-report-pdfs/2026/07/report.pdf',
+    fileName: 'LDT-000001-v1.pdf',
+    mimeType: 'application/pdf',
+    sizeBytes: 256,
+    checksumSha256: 'pdf-hash-1',
+    storedAt: new Date('2026-07-10T11:00:00.000Z'),
+    createdAt: new Date('2026-07-10T11:00:00.000Z'),
+    ...overrides,
+  };
+}
+
+function makeTemplate(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'default-manitec-service-report',
+    name: 'Padrao MANITEC',
+    active: true,
+    description: null,
+    defaultForGeneratorModelId: null,
+    defaultForOrderType: null,
+    sectionsConfig: [
+      { key: 'diagnosis', label: 'Diagnostico', enabled: true, order: 1 },
+      {
+        key: 'performedServices',
+        label: 'Servicos realizados',
+        enabled: true,
+        order: 2,
+      },
+      { key: 'validation', label: 'Validacao', enabled: true, order: 3 },
+    ],
+    createdAt: new Date('2026-07-10T10:00:00.000Z'),
+    updatedAt: new Date('2026-07-10T10:00:00.000Z'),
+    ...overrides,
+  };
 }
 
 function makeEvidence(overrides: Record<string, unknown> = {}) {

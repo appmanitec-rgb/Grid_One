@@ -26,6 +26,7 @@ import {
   CreateServiceReportDto,
   ListServiceReportsQueryDto,
   RevokeServiceReportShareLinkDto,
+  ReviseReleasedServiceReportDto,
   SignServiceReportDto,
   UpdateServiceReportChecklistDto,
   UpdateServiceReportDto,
@@ -166,6 +167,37 @@ export class ServiceReportsController {
   generateDocument(@Req() req: Request, @Param('id') id: string) {
     return this.serviceReportsService.generateDocument(
       id,
+      this.extractUserId(req),
+    );
+  }
+
+  @Post(':id/generate-pdf')
+  @RequireAccessPolicy('serviceReports.generateDocument')
+  generatePdf(@Req() req: Request, @Param('id') id: string) {
+    return this.serviceReportsService.generatePdf(id, this.extractUserId(req));
+  }
+
+  @Get(':id/download-pdf')
+  downloadPdf(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    return this.serviceReportsService
+      .downloadPdf(id, this.extractUserId(req))
+      .then((file) => this.sendFile(res, file));
+  }
+
+  @Post(':id/revise')
+  @RequireAccessPolicy('serviceReports.update')
+  reviseReleasedReport(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: ReviseReleasedServiceReportDto,
+  ) {
+    return this.serviceReportsService.reviseReleasedReport(
+      id,
+      dto,
       this.extractUserId(req),
     );
   }

@@ -79,6 +79,7 @@ export default function ServiceReportDetailPage() {
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [signatureForm, setSignatureForm] = useState(EMPTY_SIGNATURE);
   const [shareLinks, setShareLinks] = useState<ServiceReportShareLink[]>([]);
+  const [shareAllowPdfDownload, setShareAllowPdfDownload] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState("");
   const [error, setError] = useState("");
@@ -141,6 +142,8 @@ export default function ServiceReportDetailPage() {
     report &&
     ["APPROVED", "RELEASED_TO_CUSTOMER"].includes(report.status) &&
     access.serviceReports.generateDocument;
+  const canReviseReleased =
+    report?.status === "RELEASED_TO_CUSTOMER" && access.serviceReports.update;
   const canManageShareLinks =
     report?.status === "RELEASED_TO_CUSTOMER" &&
     access.serviceReports.manageShareLinks;
@@ -263,6 +266,44 @@ export default function ServiceReportDetailPage() {
     });
   }
 
+  async function generatePdf() {
+    await runAction("generate-pdf", async () => {
+      const payload = await serviceReportsPost<{ report: ServiceReport }>(
+        `/${reportId}/generate-pdf`,
+        {},
+      );
+      setReport(payload.report);
+      setSuccess("PDF final gerado e armazenado.");
+    });
+  }
+
+  async function downloadPdf() {
+    await runAction("download-pdf", async () => {
+      const blob = await serviceReportsGetBlob(`/${reportId}/download-pdf`);
+      downloadBlob(blob, `${report?.code || "laudo-tecnico"}.pdf`);
+    });
+  }
+
+  async function reviseReleasedReport() {
+    const reason = window.prompt("Informe o motivo da revisao do laudo liberado:");
+    if (!reason?.trim()) return;
+    await runAction("revise", async () => {
+      const updated = await serviceReportsPost<ServiceReport>(
+        `/${reportId}/revise`,
+        {
+          ...form,
+          changeReason: reason.trim(),
+          recommendations: form.recommendations.trim() || undefined,
+          observations: form.observations.trim() || undefined,
+          safetyNotes: form.safetyNotes.trim() || undefined,
+          customerNotes: form.customerNotes.trim() || undefined,
+        },
+      );
+      setReport(updated);
+      setSuccess("Revisao versionada criada. Gere um novo PDF para a versao atual.");
+    });
+  }
+
   async function openPrintPreview() {
     await runAction("print", async () => {
       const html = await serviceReportsGetText(`/${reportId}/print`);
@@ -284,7 +325,7 @@ export default function ServiceReportDetailPage() {
     await runAction("share-link", async () => {
       const created = await serviceReportsPost<ServiceReportShareLink>(
         `/${reportId}/share-links`,
-        {},
+        { allowPdfDownload: shareAllowPdfDownload },
       );
       setShareLinks((current) => [created, ...current]);
       setSuccess("Link publico criado.");
@@ -379,6 +420,36 @@ export default function ServiceReportDetailPage() {
                 {busyKey === "generate-document" ? "Gerando..." : "Gerar documento"}
               </button>
             ) : null}
+            {canGenerateDocument ? (
+              <button
+                type="button"
+                className={PRIMARY_BUTTON}
+                disabled={busyKey === "generate-pdf"}
+                onClick={() => void generatePdf()}
+              >
+                {busyKey === "generate-pdf" ? "Gerando..." : "Gerar PDF"}
+              </button>
+            ) : null}
+            {report.generatedDocument?.hasStoredFile ? (
+              <button
+                type="button"
+                className={SECONDARY_BUTTON}
+                disabled={busyKey === "download-pdf"}
+                onClick={() => void downloadPdf()}
+              >
+                {busyKey === "download-pdf" ? "Baixando..." : "Baixar PDF"}
+              </button>
+            ) : null}
+            {canReviseReleased ? (
+              <button
+                type="button"
+                className={SECONDARY_BUTTON}
+                disabled={busyKey === "revise"}
+                onClick={() => void reviseReleasedReport()}
+              >
+                Revisar versao
+              </button>
+            ) : null}
             {canApprove ? (
               <button
                 type="button"
@@ -454,19 +525,32 @@ export default function ServiceReportDetailPage() {
         description="Documento imprimivel, hash de autenticidade e links publicos expiraveis."
         actions={
           canManageShareLinks ? (
-            <button
-              type="button"
-              className={PRIMARY_BUTTON}
-              disabled={busyKey === "share-link"}
-              onClick={() => void createShareLink()}
-            >
-              {busyKey === "share-link" ? "Criando..." : "Criar link publico"}
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={shareAllowPdfDownload}
+                  onChange={(event) => setShareAllowPdfDownload(event.target.checked)}
+                />
+                Permitir PDF no link
+              </label>
+              <button
+                type="button"
+                className={PRIMARY_BUTTON}
+                disabled={busyKey === "share-link"}
+                onClick={() => void createShareLink()}
+              >
+                {busyKey === "share-link" ? "Criando..." : "Criar link publico"}
+              </button>
+            </div>
           ) : null
         }
       >
         <div className="grid gap-3 md:grid-cols-3">
-          <Info label="Documento" value={report.generatedDocumentId ? "Gerado" : "Pendente"} />
+          <Info
+            label="PDF"
+            value={report.generatedDocument?.hasStoredFile ? "Gerado" : "Pendente"}
+          />
           <Info label="Hash" value={report.documentHash?.slice(0, 24)} />
           <Info label="Validacao" value={report.validationUrl ? "Disponivel" : "Pendente"} />
         </div>
@@ -496,7 +580,7 @@ export default function ServiceReportDetailPage() {
                   <p className="text-xs font-semibold text-slate-500">
                     {link.revokedAt
                       ? `Revogado em ${formatServiceReportDate(link.revokedAt)}`
-                      : `${link.accessCount} acesso(s)`}
+                      : `${link.accessCount} acesso(s) / PDF ${link.allowPdfDownload ? "liberado" : "bloqueado"}`}
                   </p>
                   {link.shareUrl ? (
                     <p className="mt-1 break-all text-xs text-slate-500">{link.shareUrl}</p>

@@ -10,6 +10,7 @@ import {
   IsUUID,
   MaxLength,
   Min,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
 import { ChecklistResult, EvidenceType, ReportStatus } from '@prisma/client';
@@ -251,6 +252,16 @@ export class CreateServiceReportShareLinkDto {
   @IsOptional()
   @IsDateString()
   expiresAt?: string;
+
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsOptional()
+  @IsBoolean()
+  allowPdfDownload?: boolean;
+
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsOptional()
+  @IsBoolean()
+  allowEvidenceDownload?: boolean;
 }
 
 export class RevokeServiceReportShareLinkDto {
@@ -281,4 +292,11 @@ export class CancelServiceReportDto {
   @IsString()
   @MaxLength(1000)
   reason?: string;
+}
+
+export class ReviseReleasedServiceReportDto extends UpdateServiceReportDto {
+  @IsString()
+  @MinLength(8)
+  @MaxLength(1000)
+  changeReason!: string;
 }

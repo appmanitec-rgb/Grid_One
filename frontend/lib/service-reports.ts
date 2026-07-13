@@ -50,6 +50,8 @@ export type ServiceReportShareLink = {
   reportId: string;
   expiresAt: string;
   revokedAt?: string | null;
+  allowPdfDownload: boolean;
+  allowEvidenceDownload: boolean;
   accessCount: number;
   lastAccessedAt?: string | null;
   createdAt: string;
@@ -115,6 +117,12 @@ export type ServiceReport = {
     documentType: string;
     documentCode?: string | null;
     documentTitle?: string | null;
+    fileName?: string | null;
+    mimeType?: string | null;
+    sizeBytes?: number | null;
+    checksumSha256?: string | null;
+    storedAt?: string | null;
+    hasStoredFile?: boolean;
     createdAt?: string | null;
   } | null;
   checklistItems: ServiceReportChecklistItem[];

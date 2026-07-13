@@ -1397,18 +1397,20 @@ model ServiceReportVersion {
 }
 
 model ServiceReportShareLink {
-  id              String        @id @default(uuid())
-  reportId        String
-  report          ServiceReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  tokenHash       String        @unique
-  expiresAt       DateTime
-  revokedAt       DateTime?
-  createdByUserId String?
-  createdByUser   User?         @relation("ServiceReportShareLinkCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  accessCount     Int           @default(0)
-  lastAccessedAt  DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id                    String        @id @default(uuid())
+  reportId              String
+  report                ServiceReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  tokenHash             String        @unique
+  expiresAt             DateTime
+  revokedAt             DateTime?
+  allowPdfDownload      Boolean       @default(false)
+  allowEvidenceDownload Boolean       @default(false)
+  createdByUserId       String?
+  createdByUser         User?         @relation("ServiceReportShareLinkCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  accessCount           Int           @default(0)
+  lastAccessedAt        DateTime?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
 
   @@index([reportId, expiresAt])
   @@index([createdByUserId, createdAt])
@@ -2193,6 +2195,12 @@ model DocumentDelivery {
   providerMessageId String?
   shareTokenId      String?              @unique
   payloadSnapshot   Json?
+  fileStorageKey    String?              @unique
+  fileName          String?
+  mimeType          String?
+  sizeBytes         Int?
+  checksumSha256    String?
+  storedAt          DateTime?
   errorMessage      String?
   sentAt            DateTime?
   deliveredAt       DateTime?
@@ -2211,6 +2219,7 @@ model DocumentDelivery {
   @@index([documentType, documentId])
   @@index([clientId, createdAt])
   @@index([createdByUserId, createdAt])
+  @@index([checksumSha256])
   @@index([status, createdAt])
   @@map("document_deliveries")
 }

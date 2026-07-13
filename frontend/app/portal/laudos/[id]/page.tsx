@@ -81,6 +81,13 @@ export default function PortalServiceReportDetailPage() {
     });
   }
 
+  async function downloadPdf() {
+    await runAction("download-pdf", async () => {
+      const blob = await portalServiceReportsGetBlob(`/${params.id}/download-pdf`);
+      downloadBlob(blob, `${report?.code || "laudo-tecnico"}.pdf`);
+    });
+  }
+
   return (
     <div className="space-y-5">
       <Link href="/portal/laudos" className="text-sm font-bold text-blue-700 hover:text-blue-900">
@@ -122,6 +129,20 @@ export default function PortalServiceReportDetailPage() {
               Validar autenticidade
             </a>
           ) : null}
+          {report.generatedDocument?.hasStoredFile ? (
+            <button
+              type="button"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+              disabled={busyKey === "download-pdf"}
+              onClick={() => void downloadPdf()}
+            >
+              {busyKey === "download-pdf" ? "Baixando..." : "Baixar PDF"}
+            </button>
+          ) : (
+            <span className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-700">
+              PDF ainda nao gerado
+            </span>
+          )}
         </div>
       </header>
 

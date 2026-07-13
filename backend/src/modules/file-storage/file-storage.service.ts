@@ -5,16 +5,10 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes } from 'crypto';
-import { mkdir, readFile, stat, writeFile } from 'fs/promises';
-import {
-  dirname,
-  extname,
-  isAbsolute,
-  join,
-  normalize,
-  relative,
-  resolve,
-} from 'path';
+import { extname, join, resolve } from 'path';
+import { PreparedExternalStorageAdapter } from './external-storage.adapter';
+import { LocalStorageAdapter } from './local-storage.adapter';
+import { StorageAdapter } from './storage-adapter';
 
 type UploadFile = {
   originalname?: string;
@@ -47,13 +41,21 @@ const MIME_EXTENSIONS: Record<string, string> = {
 
 @Injectable()
 export class FileStorageService {
-  private readonly baseDir: string;
+  private readonly adapter: StorageAdapter;
 
   constructor(configService: ConfigService) {
-    this.baseDir = resolve(
-      configService.get<string>('FILE_STORAGE_DIR') ||
-        join(process.cwd(), 'storage', 'private'),
-    );
+    const driver = (
+      configService.get<string>('FILE_STORAGE_DRIVER') || 'local'
+    ).toLowerCase();
+    if (driver === 'local') {
+      const baseDir = resolve(
+        configService.get<string>('FILE_STORAGE_DIR') ||
+          join(process.cwd(), 'storage', 'private'),
+      );
+      this.adapter = new LocalStorageAdapter(baseDir);
+    } else {
+      this.adapter = new PreparedExternalStorageAdapter(driver);
+    }
   }
 
   async saveServiceReportFile(file: UploadFile): Promise<StoredFile> {
@@ -66,9 +68,7 @@ export class FileStorageService {
     const month = String(now.getUTCMonth() + 1).padStart(2, '0');
     const randomName = `${randomBytes(16).toString('hex')}${extension}`;
     const storageKey = ['service-reports', year, month, randomName].join('/');
-    const targetPath = this.resolveStoragePath(storageKey);
-    await mkdir(dirname(targetPath), { recursive: true });
-    await writeFile(targetPath, buffer, { flag: 'wx' });
+    await this.adapter.save({ storageKey, buffer });
 
     return {
       storageKey,
@@ -79,16 +79,37 @@ export class FileStorageService {
     };
   }
 
+  async saveServiceReportPdf(
+    fileName: string,
+    buffer: Buffer,
+  ): Promise<StoredFile> {
+    const file: UploadFile = {
+      originalname: fileName,
+      mimetype: 'application/pdf',
+      size: buffer.length,
+      buffer,
+    };
+    this.validateFile(file);
+    const now = new Date();
+    const year = String(now.getUTCFullYear());
+    const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+    const randomName = `${randomBytes(16).toString('hex')}.pdf`;
+    const storageKey = ['service-report-pdfs', year, month, randomName].join(
+      '/',
+    );
+    await this.adapter.save({ storageKey, buffer });
+    return {
+      storageKey,
+      fileName: this.sanitizeFileName(fileName || randomName),
+      mimeType: 'application/pdf',
+      sizeBytes: buffer.length,
+      checksumSha256: createHash('sha256').update(buffer).digest('hex'),
+    };
+  }
+
   async load(storageKey: string, metadata: Omit<StoredFile, 'storageKey'>) {
-    const targetPath = this.resolveStoragePath(storageKey);
     try {
-      const [buffer, fileStat] = await Promise.all([
-        readFile(targetPath),
-        stat(targetPath),
-      ]);
-      if (!fileStat.isFile()) {
-        throw new NotFoundException('Arquivo nao encontrado.');
-      }
+      const buffer = await this.adapter.load(storageKey);
       return {
         ...metadata,
         storageKey,
@@ -158,21 +179,5 @@ export class FileStorageService {
       .replace(/\s+/g, ' ')
       .trim();
     return sanitized.slice(0, 180) || fallback;
-  }
-
-  private resolveStoragePath(storageKey: string) {
-    if (
-      !storageKey ||
-      storageKey.includes('..') ||
-      storageKey.startsWith('/')
-    ) {
-      throw new BadRequestException('Caminho de arquivo invalido.');
-    }
-    const targetPath = normalize(resolve(this.baseDir, storageKey));
-    const relativePath = relative(this.baseDir, targetPath);
-    if (relativePath.startsWith('..') || isAbsolute(relativePath)) {
-      throw new BadRequestException('Caminho de arquivo invalido.');
-    }
-    return targetPath;
   }
 }

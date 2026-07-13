@@ -8,6 +8,7 @@ import {
   ServiceReport,
   publicServiceReportGet,
 } from "@/lib/service-reports";
+import { apiUrl } from "@/lib/api";
 
 type PublicSharePayload = {
   report: ServiceReport;
@@ -15,6 +16,10 @@ type PublicSharePayload = {
     valid: boolean;
     documentHash?: string | null;
   } | null;
+  permissions?: {
+    allowPdfDownload: boolean;
+    allowEvidenceDownload: boolean;
+  };
 };
 
 export default function PublicServiceReportSharePage() {
@@ -86,6 +91,14 @@ export default function PublicServiceReportSharePage() {
               className="mt-4 inline-flex rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100"
             >
               Validar autenticidade
+            </a>
+          ) : null}
+          {payload.permissions?.allowPdfDownload ? (
+            <a
+              href={apiUrl(`/public/service-reports/share/${params.token}/download-pdf`)}
+              className="ml-2 mt-4 inline-flex rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+            >
+              Baixar PDF
             </a>
           ) : null}
         </header>

@@ -23,6 +23,7 @@ import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import {
   FileStorageService,
   LoadedFile,
+  StoredFile,
 } from '../file-storage/file-storage.service';
 import {
   AddServiceReportEvidenceDto,
@@ -31,11 +32,16 @@ import {
   CreateServiceReportDto,
   ListServiceReportsQueryDto,
   RevokeServiceReportShareLinkDto,
+  ReviseReleasedServiceReportDto,
   SignServiceReportDto,
   UpdateServiceReportChecklistDto,
   UpdateServiceReportDto,
   UploadServiceReportEvidenceDto,
 } from './dto/service-report.dto';
+import {
+  PdfTemplateSection,
+  ServiceReportPdfService,
+} from './service-report-pdf.service';
 
 type RequestMetadata = {
   ip?: string;
@@ -68,6 +74,12 @@ type ReportMap = Record<string, unknown> & {
         documentType?: unknown;
         documentCode?: unknown;
         documentTitle?: unknown;
+        fileName?: unknown;
+        mimeType?: unknown;
+        sizeBytes?: unknown;
+        checksumSha256?: unknown;
+        storedAt?: unknown;
+        fileStorageKey?: unknown;
         createdAt?: unknown;
       })
     | null;
@@ -85,6 +97,8 @@ export class ServiceReportsService {
     private readonly auditLogsService: AuditLogsService,
     @Optional()
     private readonly fileStorageService?: FileStorageService,
+    @Optional()
+    private readonly serviceReportPdfService?: ServiceReportPdfService,
   ) {}
 
   async findAll(query: ListServiceReportsQueryDto, actorUserId?: string) {
@@ -784,6 +798,220 @@ export class ServiceReportsService {
     });
   }
 
+  async generatePdf(id: string, actorUserId?: string) {
+    const actor = await this.assertInternalActor(actorUserId);
+    const storage = this.requireStorage();
+    const pdfService = this.requirePdfService();
+
+    return this.prisma.$transaction(async (tx) => {
+      const current = await this.getReportForMutation(tx, id);
+      this.assertActorReportScope(actor, current);
+      if (
+        current.status !== ReportStatus.APPROVED &&
+        current.status !== ReportStatus.RELEASED_TO_CUSTOMER
+      ) {
+        throw new BadRequestException(
+          'Apenas laudos aprovados ou liberados podem gerar PDF.',
+        );
+      }
+
+      const prepared = await this.ensureValidationToken(tx, current, actor.id);
+      const template = await this.resolveTemplate(prepared, tx);
+      const pdfBuffer = pdfService.generate(
+        this.buildPdfInput(prepared, template),
+      );
+      const versionNumber =
+        typeof prepared.versionNumber === 'number' ? prepared.versionNumber : 1;
+      const fileName = `${this.safeFileSegment(prepared.code)}-v${versionNumber}.pdf`;
+      const stored = await storage.saveServiceReportPdf(fileName, pdfBuffer);
+      const now = new Date();
+      const document = await this.upsertGeneratedPdfDocument(
+        tx,
+        prepared,
+        stored,
+        actor.id,
+        now,
+      );
+
+      const updated = await tx.serviceReport.update({
+        where: { id },
+        data: {
+          generatedDocumentId: document.id,
+          documentHash: stored.checksumSha256,
+          updatedByUserId: actor.id,
+        },
+        include: this.internalInclude(),
+      });
+
+      await this.ensureReportVersion(
+        tx,
+        updated,
+        actor.id,
+        'Geracao de PDF final.',
+        document.id,
+      );
+
+      await this.recordAudit(tx, 'GENERATE_PDF', id, actor.id, undefined, {
+        documentDeliveryId: document.id,
+        fileName: stored.fileName,
+        mimeType: stored.mimeType,
+        sizeBytes: stored.sizeBytes,
+        checksumSha256: stored.checksumSha256,
+        templateId: template?.id ?? null,
+        versionNumber: updated.versionNumber,
+      });
+
+      return {
+        report: updated,
+        documentDeliveryId: document.id,
+        fileName: stored.fileName,
+        sizeBytes: stored.sizeBytes,
+        checksumSha256: stored.checksumSha256,
+      };
+    });
+  }
+
+  async downloadPdf(reportId: string, actorUserId?: string) {
+    const actor = await this.assertInternalActor(actorUserId);
+    const report = await this.prisma.serviceReport.findUnique({
+      where: { id: reportId },
+      include: this.internalInclude(),
+    });
+    if (!report) {
+      throw new NotFoundException('Relatorio tecnico nao encontrado.');
+    }
+    this.assertActorReportScope(actor, report);
+    return this.loadDocumentFile(report.generatedDocument);
+  }
+
+  async downloadCustomerPdf(userId: string | undefined, reportId: string) {
+    const scope = await this.requireCustomerScope(userId);
+    const report = await this.prisma.serviceReport.findFirst({
+      where: {
+        id: reportId,
+        ...this.customerVisibleWhere(scope.clientId),
+      },
+      include: this.customerInclude(),
+    });
+    if (!report) {
+      throw new NotFoundException('Laudo nao encontrado.');
+    }
+    return this.loadDocumentFile(report.generatedDocument);
+  }
+
+  async downloadPublicSharePdf(token: string) {
+    const tokenHash = this.hashToken(token);
+    const link = await this.prisma.serviceReportShareLink.findUnique({
+      where: { tokenHash },
+      include: {
+        report: {
+          include: this.customerInclude(),
+        },
+      },
+    });
+    if (!link) {
+      throw new NotFoundException('Link publico nao encontrado.');
+    }
+    this.assertPublicLinkUsable(link);
+    if (!link.allowPdfDownload) {
+      throw new ForbiddenException(
+        'Download de PDF nao esta liberado para este link.',
+      );
+    }
+    await this.prisma.serviceReportShareLink.update({
+      where: { id: link.id },
+      data: {
+        accessCount: { increment: 1 },
+        lastAccessedAt: new Date(),
+      },
+    });
+    await this.auditLogsService.record({
+      domain: AuditDomain.SERVICE_REPORTS,
+      entityType: 'SERVICE_REPORT',
+      entityId: link.reportId,
+      action: 'PUBLIC_PDF_DOWNLOADED',
+      afterPayload: { linkId: link.id },
+    });
+    return this.loadDocumentFile(link.report.generatedDocument);
+  }
+
+  async reviseReleasedReport(
+    id: string,
+    dto: ReviseReleasedServiceReportDto,
+    actorUserId?: string,
+  ) {
+    const actor = await this.assertInternalActor(actorUserId);
+    return this.prisma.$transaction(async (tx) => {
+      const current = await this.getReportForMutation(tx, id);
+      this.assertActorReportScope(actor, current);
+      if (current.status !== ReportStatus.RELEASED_TO_CUSTOMER) {
+        throw new BadRequestException(
+          'Apenas laudos liberados ao cliente exigem revisao versionada.',
+        );
+      }
+      const changeReason = dto.changeReason?.trim();
+      if (!changeReason || changeReason.length < 8) {
+        throw new BadRequestException('Motivo da revisao e obrigatorio.');
+      }
+
+      await this.ensureReportVersion(
+        tx,
+        current,
+        actor.id,
+        'Versao preservada antes de revisao.',
+        current.generatedDocumentId ?? undefined,
+      );
+
+      const revised = await tx.serviceReport.update({
+        where: { id },
+        data: {
+          title: dto.title,
+          diagnosis: dto.diagnosis,
+          performedServices: dto.performedServices,
+          recommendations: dto.recommendations,
+          observations: dto.observations,
+          safetyNotes: dto.safetyNotes,
+          customerNotes: dto.customerNotes,
+          startedAt:
+            dto.startedAt === undefined
+              ? undefined
+              : this.parseDate(dto.startedAt),
+          finishedAt:
+            dto.finishedAt === undefined
+              ? undefined
+              : this.parseDate(dto.finishedAt),
+          versionNumber: { increment: 1 },
+          generatedDocumentId: null,
+          documentHash: null,
+          updatedByUserId: actor.id,
+        },
+        include: this.internalInclude(),
+      });
+      const prepared = await this.ensureValidationToken(tx, revised, actor.id);
+      await this.ensureReportVersion(tx, prepared, actor.id, changeReason);
+
+      await this.recordAudit(
+        tx,
+        'REVISE_RELEASED_REPORT',
+        id,
+        actor.id,
+        {
+          versionNumber: current.versionNumber,
+          generatedDocumentId: current.generatedDocumentId,
+          documentHash: current.documentHash,
+        },
+        {
+          versionNumber: prepared.versionNumber,
+          generatedDocumentId: prepared.generatedDocumentId,
+          documentHash: prepared.documentHash,
+        },
+        changeReason,
+      );
+
+      return prepared;
+    });
+  }
+
   async getPrintableHtml(id: string, actorUserId?: string) {
     const actor = await this.assertInternalActor(actorUserId);
     const report = await this.prisma.serviceReport.findUnique({
@@ -853,6 +1081,8 @@ export class ServiceReportsService {
         reportId: id,
         tokenHash,
         expiresAt,
+        allowPdfDownload: dto.allowPdfDownload ?? false,
+        allowEvidenceDownload: dto.allowEvidenceDownload ?? false,
         createdByUserId: actor.id,
       },
       select: this.shareLinkSelect(),
@@ -866,6 +1096,8 @@ export class ServiceReportsService {
       afterPayload: {
         linkId: link.id,
         expiresAt: link.expiresAt.toISOString(),
+        allowPdfDownload: link.allowPdfDownload,
+        allowEvidenceDownload: link.allowEvidenceDownload,
       },
     });
     return {
@@ -974,15 +1206,7 @@ export class ServiceReportsService {
     if (!link) {
       throw new NotFoundException('Link publico nao encontrado.');
     }
-    if (link.revokedAt) {
-      throw new ForbiddenException('Link publico revogado.');
-    }
-    if (link.expiresAt.getTime() <= Date.now()) {
-      throw new ForbiddenException('Link publico expirado.');
-    }
-    if (link.report.status !== ReportStatus.RELEASED_TO_CUSTOMER) {
-      throw new ForbiddenException('Laudo nao esta liberado ao cliente.');
-    }
+    this.assertPublicLinkUsable(link);
     await this.prisma.serviceReportShareLink.update({
       where: { id: link.id },
       data: {
@@ -999,6 +1223,10 @@ export class ServiceReportsService {
     });
     return {
       report: this.toCustomerReport(link.report),
+      permissions: {
+        allowPdfDownload: link.allowPdfDownload,
+        allowEvidenceDownload: link.allowEvidenceDownload,
+      },
       validation:
         typeof link.report.validationToken === 'string' &&
         link.report.validationToken
@@ -1298,6 +1526,13 @@ export class ServiceReportsService {
     return this.fileStorageService;
   }
 
+  private requirePdfService() {
+    if (!this.serviceReportPdfService) {
+      throw new BadRequestException('Gerador de PDF nao configurado.');
+    }
+    return this.serviceReportPdfService;
+  }
+
   private async loadEvidenceFile(evidence: {
     storageKey?: string | null;
     fileName?: string | null;
@@ -1316,6 +1551,80 @@ export class ServiceReportsService {
       sizeBytes: evidence.sizeBytes ?? 0,
       checksumSha256: evidence.checksumSha256 || '',
     });
+  }
+
+  private async loadDocumentFile(
+    document:
+      | {
+          fileStorageKey?: string | null;
+          fileName?: string | null;
+          mimeType?: string | null;
+          sizeBytes?: number | null;
+          checksumSha256?: string | null;
+        }
+      | null
+      | undefined,
+  ) {
+    if (!document?.fileStorageKey) {
+      throw new NotFoundException('PDF do laudo ainda nao foi gerado.');
+    }
+    return this.requireStorage().load(document.fileStorageKey, {
+      fileName: document.fileName || 'laudo-tecnico.pdf',
+      mimeType: document.mimeType || 'application/pdf',
+      sizeBytes: document.sizeBytes ?? 0,
+      checksumSha256: document.checksumSha256 || '',
+    });
+  }
+
+  private async upsertGeneratedPdfDocument(
+    tx: Prisma.TransactionClient,
+    report: ReportMap,
+    stored: StoredFile,
+    actorUserId: string | undefined,
+    now: Date,
+  ) {
+    const existingDocumentId =
+      typeof report.generatedDocumentId === 'string'
+        ? report.generatedDocumentId
+        : null;
+    const data = {
+      documentType: DeliveryDocumentType.SERVICE_REPORT,
+      documentId: this.safeText(report.id),
+      documentCode: this.safeText(report.code),
+      documentTitle: this.safeText(report.title, 'Laudo tecnico'),
+      clientId: typeof report.clientId === 'string' ? report.clientId : null,
+      counterpartName: this.resolveClientName(report),
+      channel: DeliveryChannel.WEBHOOK,
+      status: DeliveryStatus.DELIVERED,
+      recipientName: this.resolveClientName(report),
+      recipientTarget: `portal:${this.safeText(report.clientId)}`,
+      subject: `PDF Laudo tecnico ${this.safeText(report.code)}`,
+      message: 'PDF final do laudo tecnico gerado pelo sistema.',
+      provider: 'manitec-pdf',
+      payloadSnapshot: this.buildVersionSnapshot({
+        ...report,
+        documentHash: stored.checksumSha256,
+      }),
+      fileStorageKey: stored.storageKey,
+      fileName: stored.fileName,
+      mimeType: stored.mimeType,
+      sizeBytes: stored.sizeBytes,
+      checksumSha256: stored.checksumSha256,
+      storedAt: now,
+      sentAt: now,
+      deliveredAt: now,
+      errorMessage: null,
+      failedAt: null,
+      createdByUserId: actorUserId,
+    } satisfies Prisma.DocumentDeliveryUncheckedCreateInput;
+
+    if (existingDocumentId) {
+      return tx.documentDelivery.update({
+        where: { id: existingDocumentId },
+        data,
+      });
+    }
+    return tx.documentDelivery.create({ data });
   }
 
   private async ensureValidationToken(
@@ -1510,6 +1819,12 @@ export class ServiceReportsService {
       typeof report.documentHash === 'string' && report.documentHash
         ? report.documentHash
         : this.buildDocumentHash(report);
+    const template = await this.resolveTemplate(report);
+    const enabledSections = new Set(
+      this.normalizeTemplateSections(template.sectionsConfig)
+        .filter((section) => section.enabled !== false)
+        .map((section) => section.key),
+    );
 
     return `<!doctype html>
 <html lang="pt-BR">
@@ -1578,13 +1893,15 @@ export class ServiceReportsService {
         ${this.valueCard('Hash', documentHash.slice(0, 16))}
       </div>
     </header>
-    ${this.textSection('Diagnostico', report.diagnosis)}
-    ${this.textSection('Servicos realizados', report.performedServices)}
-    ${this.textSection('Recomendacoes', report.recommendations)}
-    ${this.textSection('Observacoes ao cliente', report.customerNotes)}
+    ${enabledSections.has('diagnosis') ? this.textSection('Diagnostico', report.diagnosis) : ''}
+    ${enabledSections.has('performedServices') ? this.textSection('Servicos realizados', report.performedServices) : ''}
+    ${enabledSections.has('recommendations') ? this.textSection('Recomendacoes', report.recommendations) : ''}
+    ${enabledSections.has('customerNotes') ? this.textSection('Observacoes ao cliente', report.customerNotes) : ''}
     ${isCustomer ? '' : this.textSection('Observacoes internas', report.observations)}
     ${isCustomer ? '' : this.textSection('Notas internas de seguranca', report.safetyNotes)}
-    <section>
+    ${
+      enabledSections.has('checklist')
+        ? `<section>
       <h2>Checklist</h2>
       ${
         checklist.length === 0
@@ -1596,8 +1913,12 @@ export class ServiceReportsService {
               )
               .join('')}</tbody></table>`
       }
-    </section>
-    <section>
+    </section>`
+        : ''
+    }
+    ${
+      enabledSections.has('evidences')
+        ? `<section>
       <h2>Evidencias</h2>
       ${
         evidences.length === 0
@@ -1608,8 +1929,12 @@ export class ServiceReportsService {
               )
               .join('')}</div>`
       }
-    </section>
-    <section>
+    </section>`
+        : ''
+    }
+    ${
+      enabledSections.has('signature')
+        ? `<section>
       <h2>Assinatura</h2>
       <div class="grid">
         ${this.valueCard('Responsavel', report.signedByName)}
@@ -1621,12 +1946,18 @@ export class ServiceReportsService {
           ? `<p>${this.escapeHtml(report.signatureData)}</p>`
           : ''
       }
-    </section>
-    <section>
+    </section>`
+        : ''
+    }
+    ${
+      enabledSections.has('validation')
+        ? `<section>
       <h2>Autenticidade</h2>
       <p class="muted">Hash SHA-256: ${this.escapeHtml(documentHash)}</p>
       <p class="muted">Este documento foi gerado pelo MANITEC Operacao Integrada. Use o QR Code ou o link de validacao para conferir a autenticidade.</p>
-    </section>
+    </section>`
+        : ''
+    }
   </main>
   <script>window.addEventListener('load',function(){if(location.search.includes('print=1')) window.print();});</script>
 </body>
@@ -1780,11 +2111,231 @@ export class ServiceReportsService {
       reportId: true,
       expiresAt: true,
       revokedAt: true,
+      allowPdfDownload: true,
+      allowEvidenceDownload: true,
       accessCount: true,
       lastAccessedAt: true,
       createdAt: true,
       createdByUser: { select: { id: true, name: true, email: true } },
     } satisfies Prisma.ServiceReportShareLinkSelect;
+  }
+
+  private assertPublicLinkUsable(link: {
+    revokedAt?: Date | null;
+    expiresAt: Date;
+    report: { status: ReportStatus };
+  }) {
+    if (link.revokedAt) {
+      throw new ForbiddenException('Link publico revogado.');
+    }
+    if (link.expiresAt.getTime() <= Date.now()) {
+      throw new ForbiddenException('Link publico expirado.');
+    }
+    if (link.report.status !== ReportStatus.RELEASED_TO_CUSTOMER) {
+      throw new ForbiddenException('Laudo nao esta liberado ao cliente.');
+    }
+  }
+
+  private async resolveTemplate(
+    report: ReportMap,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const db = tx ?? this.prisma;
+    const explicitTemplateId =
+      typeof report.templateId === 'string' ? report.templateId : null;
+    if (explicitTemplateId) {
+      const explicit = await db.serviceReportTemplate.findFirst({
+        where: { id: explicitTemplateId, active: true },
+      });
+      if (explicit) return explicit;
+    }
+
+    const generator = report.generator as
+      | { modelId?: string | null }
+      | undefined;
+    const order = report.maintenanceOrder as
+      | { type?: Prisma.EnumMaintenanceOrderTypeFilter | string | null }
+      | undefined;
+    if (generator?.modelId) {
+      const byModel = await db.serviceReportTemplate.findFirst({
+        where: {
+          active: true,
+          defaultForGeneratorModelId: generator.modelId,
+        },
+        orderBy: { updatedAt: 'desc' },
+      });
+      if (byModel) return byModel;
+    }
+    if (typeof order?.type === 'string') {
+      const byType = await db.serviceReportTemplate.findFirst({
+        where: {
+          active: true,
+          defaultForOrderType: order.type as never,
+        },
+        orderBy: { updatedAt: 'desc' },
+      });
+      if (byType) return byType;
+    }
+    const defaultTemplate = await db.serviceReportTemplate.findFirst({
+      where: {
+        OR: [{ id: 'default-manitec-service-report' }, { active: true }],
+      },
+      orderBy: [{ id: 'asc' }],
+    });
+    return (
+      defaultTemplate ?? {
+        id: 'fallback-manitec-service-report',
+        name: 'Padrao MANITEC',
+        description: 'Fallback interno MANITEC',
+        active: true,
+        defaultForGeneratorModelId: null,
+        defaultForOrderType: null,
+        sectionsConfig: this.defaultTemplateSections(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
+    );
+  }
+
+  private normalizeTemplateSections(value: unknown): PdfTemplateSection[] {
+    const defaults = this.defaultTemplateSections();
+    const configured = Array.isArray(value)
+      ? value
+          .filter((item): item is Record<string, unknown> => Boolean(item))
+          .map((item) => ({
+            key: this.safeText(item.key),
+            label: this.safeText(item.label),
+            enabled:
+              typeof item.enabled === 'boolean' ? item.enabled : undefined,
+            order: typeof item.order === 'number' ? item.order : undefined,
+          }))
+          .filter((item) => item.key)
+      : [];
+    const merged = new Map(defaults.map((section) => [section.key, section]));
+    for (const section of configured) {
+      merged.set(section.key, { ...merged.get(section.key), ...section });
+    }
+    return [...merged.values()].sort(
+      (a, b) => (a.order ?? 999) - (b.order ?? 999),
+    );
+  }
+
+  private defaultTemplateSections(): PdfTemplateSection[] {
+    return [
+      {
+        key: 'identification',
+        label: 'Identificacao',
+        enabled: true,
+        order: 1,
+      },
+      { key: 'diagnosis', label: 'Diagnostico', enabled: true, order: 2 },
+      {
+        key: 'performedServices',
+        label: 'Servicos realizados',
+        enabled: true,
+        order: 3,
+      },
+      { key: 'checklist', label: 'Checklist', enabled: true, order: 4 },
+      { key: 'evidences', label: 'Evidencias', enabled: true, order: 5 },
+      {
+        key: 'recommendations',
+        label: 'Recomendacoes',
+        enabled: true,
+        order: 6,
+      },
+      {
+        key: 'customerNotes',
+        label: 'Observacoes ao cliente',
+        enabled: true,
+        order: 7,
+      },
+      { key: 'signature', label: 'Assinatura', enabled: true, order: 8 },
+      { key: 'validation', label: 'Validacao', enabled: true, order: 9 },
+    ];
+  }
+
+  private buildPdfInput(
+    report: ReportMap,
+    template: { sectionsConfig?: unknown } | null,
+  ) {
+    const generator = report.generator as
+      | { name?: string | null; serialNumber?: string | null }
+      | undefined;
+    const client = report.client as
+      | { companyName?: string | null; tradeName?: string | null }
+      | undefined;
+    const order = report.maintenanceOrder as
+      | { title?: string | null }
+      | undefined;
+    const site = report.site as { name?: string | null } | undefined;
+    const technician = report.technician as
+      | { user?: { name?: string | null } | null }
+      | undefined;
+    const evidences = (report.evidences || []).filter(
+      (evidence) => evidence.customerVisible,
+    );
+    return {
+      code: this.safeText(report.code),
+      title: this.safeText(report.title, 'Laudo tecnico'),
+      clientName: client?.tradeName || client?.companyName || '-',
+      orderTitle: order?.title || '-',
+      generatorName: generator?.name || '-',
+      generatorSerial: generator?.serialNumber || null,
+      siteName: site?.name || null,
+      technicianName: technician?.user?.name || null,
+      diagnosis: this.safeText(report.diagnosis),
+      performedServices: this.safeText(report.performedServices),
+      recommendations: this.safeText(report.recommendations),
+      customerNotes: this.safeText(report.customerNotes),
+      startedAt: this.dateLike(report.startedAt),
+      finishedAt: this.dateLike(report.finishedAt),
+      signedAt: this.dateLike(report.signedAt),
+      signedByName: this.safeText(report.signedByName),
+      signedByDocument: this.safeText(report.signedByDocument),
+      releasedToCustomerAt: this.dateLike(report.releasedToCustomerAt),
+      versionNumber:
+        typeof report.versionNumber === 'number' ? report.versionNumber : 1,
+      documentHash:
+        typeof report.documentHash === 'string' && report.documentHash
+          ? report.documentHash
+          : this.buildDocumentHash(report),
+      validationUrl: this.getValidationUrl(
+        typeof report.validationToken === 'string'
+          ? report.validationToken
+          : null,
+      ),
+      sections: this.normalizeTemplateSections(template?.sectionsConfig),
+      checklistItems: Array.isArray(report.checklistItems)
+        ? report.checklistItems.map((item) => ({
+            label: this.safeText(item.label),
+            result: this.safeText(item.result),
+            notes: this.safeText(item.notes),
+          }))
+        : [],
+      evidences: evidences.map((evidence) => ({
+        title: this.safeText(evidence.title),
+        type: this.safeText(evidence.type),
+        description: this.safeText(evidence.description),
+        fileName: this.safeText(evidence.fileName),
+        checksumSha256: this.safeText(evidence.checksumSha256),
+        customerVisible: Boolean(evidence.customerVisible),
+      })),
+    };
+  }
+
+  private dateLike(value: unknown) {
+    if (value instanceof Date || typeof value === 'string') return value;
+    return null;
+  }
+
+  private safeFileSegment(value: unknown) {
+    return (
+      this.safeText(value, 'laudo')
+        .replace(/[^a-z0-9_-]+/gi, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 80) || 'laudo'
+    );
   }
 
   private toCustomerReport(report: ReportMap) {
@@ -1818,6 +2369,12 @@ export class ServiceReportsService {
             documentType: report.generatedDocument.documentType,
             documentCode: report.generatedDocument.documentCode,
             documentTitle: report.generatedDocument.documentTitle,
+            fileName: report.generatedDocument.fileName,
+            mimeType: report.generatedDocument.mimeType,
+            sizeBytes: report.generatedDocument.sizeBytes,
+            checksumSha256: report.generatedDocument.checksumSha256,
+            storedAt: report.generatedDocument.storedAt,
+            hasStoredFile: Boolean(report.generatedDocument.fileStorageKey),
             createdAt: report.generatedDocument.createdAt,
           }
         : null,
@@ -1874,10 +2431,18 @@ export class ServiceReportsService {
           serialNumber: true,
           brand: true,
           power: true,
+          modelId: true,
         },
       },
       site: { select: { id: true, name: true, code: true } },
       contract: { select: { id: true, code: true, title: true, status: true } },
+      template: {
+        select: {
+          id: true,
+          name: true,
+          sectionsConfig: true,
+        },
+      },
       technician: {
         select: {
           id: true,
@@ -1893,6 +2458,12 @@ export class ServiceReportsService {
           documentTitle: true,
           status: true,
           channel: true,
+          fileName: true,
+          mimeType: true,
+          sizeBytes: true,
+          checksumSha256: true,
+          storedAt: true,
+          fileStorageKey: true,
           createdAt: true,
         },
       },
@@ -1921,6 +2492,7 @@ export class ServiceReportsService {
           serialNumber: true,
           brand: true,
           power: true,
+          modelId: true,
         },
       },
       site: { select: { id: true, name: true, code: true } },
@@ -1937,6 +2509,12 @@ export class ServiceReportsService {
           documentType: true,
           documentCode: true,
           documentTitle: true,
+          fileName: true,
+          mimeType: true,
+          sizeBytes: true,
+          checksumSha256: true,
+          storedAt: true,
+          fileStorageKey: true,
           createdAt: true,
         },
       },
