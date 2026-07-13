@@ -60,6 +60,25 @@ describe('ServiceReportsService', () => {
     );
   });
 
+  it('pagina laudos internos com limite seguro', async () => {
+    db.serviceReport.findMany.mockResolvedValue([]);
+
+    await service.findAll(
+      { page: 3, pageSize: 20, search: 'gerador' },
+      'user-1',
+    );
+
+    expect(db.serviceReport.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skip: 40,
+        take: 20,
+        where: expect.objectContaining({
+          OR: expect.any(Array),
+        }),
+      }),
+    );
+  });
+
   it('nao cria relatorio para OS inexistente', async () => {
     db.maintenanceOrder.findUnique.mockResolvedValue(null);
 

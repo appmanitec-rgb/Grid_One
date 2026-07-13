@@ -21,6 +21,7 @@ export type SidebarAccess = {
   usersControl: boolean;
   tickets: boolean;
   serviceReports: boolean;
+  technicianPortal: boolean;
 };
 
 type SidebarNavigationProps = {
@@ -159,6 +160,12 @@ const MAIN_SECTIONS: NavSection[] = [
         href: "/dashboard/orders",
         enabled: true,
         badgeKey: "ordersOpen",
+      },
+      {
+        key: "ops_field",
+        label: "Campo",
+        href: "/dashboard/tecnico",
+        enabled: true,
       },
       {
         key: "ops_tickets",

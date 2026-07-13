@@ -71,6 +71,9 @@ export class ServiceReportsService {
 
   async findAll(query: ListServiceReportsQueryDto, actorUserId?: string) {
     const actor = await this.assertInternalActor(actorUserId);
+    const page = Math.max(1, Number(query.page ?? 1));
+    const pageSize = Math.min(100, Math.max(1, Number(query.pageSize ?? 100)));
+    const search = query.search?.trim();
     const where: Prisma.ServiceReportWhereInput = {
       status: query.status,
       clientId: query.clientId,
@@ -91,13 +94,32 @@ export class ServiceReportsService {
               lte: query.dateTo ? new Date(query.dateTo) : undefined,
             }
           : undefined,
+      OR: search
+        ? [
+            { code: { contains: search, mode: 'insensitive' } },
+            { title: { contains: search, mode: 'insensitive' } },
+            { diagnosis: { contains: search, mode: 'insensitive' } },
+            { performedServices: { contains: search, mode: 'insensitive' } },
+            {
+              client: {
+                companyName: { contains: search, mode: 'insensitive' },
+              },
+            },
+            {
+              generator: {
+                name: { contains: search, mode: 'insensitive' },
+              },
+            },
+          ]
+        : undefined,
     };
 
     return this.prisma.serviceReport.findMany({
       where,
       include: this.internalInclude(),
       orderBy: { createdAt: 'desc' },
-      take: 200,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
     });
   }
 
@@ -569,13 +591,22 @@ export class ServiceReportsService {
     });
   }
 
-  async listCustomerReports(userId: string | undefined) {
+  async listCustomerReports(
+    userId: string | undefined,
+    query: ListServiceReportsQueryDto = {},
+  ) {
     const scope = await this.requireCustomerScope(userId);
+    const page = Math.max(1, Number(query.page ?? 1));
+    const pageSize = Math.min(100, Math.max(1, Number(query.pageSize ?? 80)));
     const reports = await this.prisma.serviceReport.findMany({
-      where: this.customerVisibleWhere(scope.clientId),
+      where: {
+        ...this.customerVisibleWhere(scope.clientId),
+        generatorId: query.generatorId,
+      },
       include: this.customerInclude(),
       orderBy: { releasedToCustomerAt: 'desc' },
-      take: 80,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
     });
     return reports.map((report) => this.toCustomerReport(report));
   }
@@ -613,8 +644,11 @@ export class ServiceReportsService {
   async listCustomerEquipmentReports(
     userId: string | undefined,
     equipmentId: string,
+    query: ListServiceReportsQueryDto = {},
   ) {
     const scope = await this.requireCustomerScope(userId);
+    const page = Math.max(1, Number(query.page ?? 1));
+    const pageSize = Math.min(100, Math.max(1, Number(query.pageSize ?? 80)));
     const reports = await this.prisma.serviceReport.findMany({
       where: {
         generatorId: equipmentId,
@@ -622,7 +656,8 @@ export class ServiceReportsService {
       },
       include: this.customerInclude(),
       orderBy: { releasedToCustomerAt: 'desc' },
-      take: 80,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
     });
     return reports.map((report) => this.toCustomerReport(report));
   }

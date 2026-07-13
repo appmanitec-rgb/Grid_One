@@ -1187,6 +1187,7 @@ export class NotificationsService {
       WAITING_INTERNAL: 'Aguardando equipe',
       SCHEDULED: 'Agendado',
       IN_PROGRESS: 'Em atendimento',
+      CONVERTING_TO_ORDER: 'Convertendo em OS',
       CONVERTED_TO_ORDER: 'Convertido em OS',
       RESOLVED: 'Resolvido',
       CLOSED: 'Fechado',

@@ -261,6 +261,7 @@ const PAGE_ITEMS = [
   { key: "usersControl", label: "Governanca de usuarios" },
   { key: "tickets", label: "Atendimento/SLA" },
   { key: "serviceReports", label: "Laudos tecnicos" },
+  { key: "technicianPortal", label: "Campo tecnico" },
 ] as const satisfies ReadonlyArray<PermissionItem<keyof AccessPolicy["pages"]>>;
 const CLIENT_ITEMS = [
   { key: "view", label: "Visualizar clientes" },
@@ -330,10 +331,12 @@ const ORDER_ITEMS = [
 >;
 const TICKET_ITEMS = [
   { key: "view", label: "Visualizar chamados" },
+  { key: "viewOwn", label: "Visualizar chamados proprios" },
   { key: "create", label: "Criar chamados" },
   { key: "update", label: "Editar classificacao/status" },
   { key: "assign", label: "Atribuir responsavel" },
   { key: "comment", label: "Comentar/interagir" },
+  { key: "commentOwn", label: "Comentar chamados proprios" },
   { key: "convertToOrder", label: "Converter em OS" },
   { key: "resolve", label: "Resolver chamado" },
   { key: "close", label: "Fechar chamado" },
@@ -397,6 +400,12 @@ const TECHNICIAN_ITEMS = [
   { key: "schedule", label: "Agenda de tecnicos" },
 ] as const satisfies ReadonlyArray<
   PermissionItem<keyof AccessPolicy["technicians"]>
+>;
+const TECHNICIAN_WORK_ITEMS = [
+  { key: "view", label: "Visualizar propria fila tecnica" },
+  { key: "checkInOut", label: "Check-in/check-out em campo" },
+] as const satisfies ReadonlyArray<
+  PermissionItem<keyof AccessPolicy["technicianWork"]>
 >;
 const REPORT_ITEMS = [
   { key: "view", label: "Visualizar relatorios" },
@@ -2623,6 +2632,16 @@ function UserEditorCard({
           disabled={isSelectedMaster}
         />
         <PermissionBlock
+          title="Campo tecnico"
+          description="Fila propria do tecnico e apontamento de presenca."
+          items={TECHNICIAN_WORK_ITEMS}
+          values={policy.technicianWork}
+          onToggle={(key, value) =>
+            onSetSectionPermission("technicianWork", key, value)
+          }
+          disabled={isSelectedMaster}
+        />
+        <PermissionBlock
           title="Relatorios"
           description="Leitura e exportacao de indicadores."
           items={REPORT_ITEMS}
@@ -2778,6 +2797,10 @@ function normalizeEditableAccessPolicy(access: AccessPolicy): AccessPolicy {
     technicians: {
       ...base.technicians,
       ...access.technicians,
+    },
+    technicianWork: {
+      ...base.technicianWork,
+      ...access.technicianWork,
     },
     reports: {
       ...base.reports,

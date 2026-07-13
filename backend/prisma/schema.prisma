@@ -237,6 +237,7 @@ enum TicketStatus {
   WAITING_INTERNAL
   SCHEDULED
   IN_PROGRESS
+  CONVERTING_TO_ORDER
   CONVERTED_TO_ORDER
   RESOLVED
   CLOSED
@@ -397,6 +398,18 @@ enum TimeEntryStatus {
   PAUSE
 }
 
+enum TimeEntrySource {
+  MANUAL
+  MAINTENANCE_ORDER_FINALIZATION
+  CHECK_IN_OUT
+}
+
+enum TechnicianWorkSessionStatus {
+  OPEN
+  CLOSED
+  CANCELED
+}
+
 enum CommissionStatus {
   PENDING
   RELEASED
@@ -521,6 +534,7 @@ model User {
   openedTickets              ServiceTicket[]             @relation("TicketOpenedBy")
   assignedTickets            ServiceTicket[]             @relation("TicketAssignedTo")
   ticketComments             ServiceTicketComment[]      @relation("TicketCommentAuthor")
+  technicianWorkSessions     TechnicianWorkSession[]     @relation("TechnicianWorkSessionUser")
   createdServiceReports      ServiceReport[]             @relation("ServiceReportCreatedBy")
   updatedServiceReports      ServiceReport[]             @relation("ServiceReportUpdatedBy")
   releasedServiceReports     ServiceReport[]             @relation("ServiceReportReleasedBy")
@@ -720,6 +734,7 @@ model Technician {
   certifications TechnicianCertification[]
   serviceTickets ServiceTicket[]
   serviceReports ServiceReport[]
+  workSessions   TechnicianWorkSession[]
 
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
@@ -1261,6 +1276,7 @@ model MaintenanceOrder {
   materials         MaintenanceOrderMaterial[]
   receivableEntries AccountsReceivable[]
   timeEntries       TimeEntry[]
+  workSessions      TechnicianWorkSession[]
   commissions       CommissionEntry[]
   fleetAllocations  FleetAllocation[]
   sourceTickets     ServiceTicket[]
@@ -1268,6 +1284,9 @@ model MaintenanceOrder {
 
   updatedAt DateTime @updatedAt
 
+  @@index([technicianId, status])
+  @@index([generatorId, status])
+  @@index([status, scheduledTo])
   @@map("maintenance_orders")
 }
 
@@ -1406,11 +1425,44 @@ model ServiceTicket {
   @@index([clientId, status, createdAt])
   @@index([priority, status])
   @@index([assignedToUserId, status])
+  @@index([technicianId, status])
   @@index([generatorId, status])
   @@index([contractId, status])
   @@index([slaResponseDueAt])
   @@index([slaResolutionDueAt])
   @@map("service_tickets")
+}
+
+model TechnicianWorkSession {
+  id                 String                      @id @default(uuid())
+  maintenanceOrderId String
+  maintenanceOrder   MaintenanceOrder            @relation(fields: [maintenanceOrderId], references: [id], onDelete: Cascade)
+  technicianId       String
+  technician         Technician                  @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User                        @relation("TechnicianWorkSessionUser", fields: [userId], references: [id], onDelete: Cascade)
+  status             TechnicianWorkSessionStatus @default(OPEN)
+  startedAt          DateTime                    @default(now())
+  finishedAt         DateTime?
+  startLatitude      Float?
+  startLongitude     Float?
+  endLatitude        Float?
+  endLongitude       Float?
+  startNote          String?
+  endNote            String?
+  startIp            String?
+  startUserAgent     String?
+  endIp              String?
+  endUserAgent       String?
+  timeEntryId        String?                     @unique
+  timeEntry          TimeEntry?                  @relation("WorkSessionTimeEntry", fields: [timeEntryId], references: [id], onDelete: SetNull)
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+
+  @@index([technicianId, status, startedAt])
+  @@index([maintenanceOrderId, status])
+  @@index([userId, startedAt])
+  @@map("technician_work_sessions")
 }
 
 model ServiceTicketComment {
@@ -1912,23 +1964,26 @@ model CostCenterEntry {
 }
 
 model TimeEntry {
-  id                 String            @id @default(uuid())
+  id                 String                 @id @default(uuid())
   userId             String
-  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user               User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   maintenanceOrderId String?
-  maintenanceOrder   MaintenanceOrder? @relation(fields: [maintenanceOrderId], references: [id], onDelete: SetNull)
+  maintenanceOrder   MaintenanceOrder?      @relation(fields: [maintenanceOrderId], references: [id], onDelete: SetNull)
   status             TimeEntryStatus
+  source             TimeEntrySource        @default(MANUAL)
   startedAt          DateTime
   endedAt            DateTime?
-  transitMinutes     Int               @default(0)
-  workMinutes        Int               @default(0)
-  extraMinutes       Int               @default(0)
-  nightMinutes       Int               @default(0)
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  transitMinutes     Int                    @default(0)
+  workMinutes        Int                    @default(0)
+  extraMinutes       Int                    @default(0)
+  nightMinutes       Int                    @default(0)
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  workSession        TechnicianWorkSession? @relation("WorkSessionTimeEntry")
 
   @@index([userId, startedAt])
   @@index([maintenanceOrderId, startedAt])
+  @@index([source, startedAt])
   @@map("time_entries")
 }
 

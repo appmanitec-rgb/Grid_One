@@ -57,6 +57,17 @@ type CustomerScope = {
   };
 };
 
+type TechnicianScope = {
+  userId: string;
+  technicianId: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: UserRole;
+  };
+};
+
 type TicketRelationInput = {
   generatorId?: string;
   siteId?: string;
@@ -68,6 +79,7 @@ type TicketRelationInput = {
 
 type PrismaClientLike = DatabaseService | Prisma.TransactionClient;
 type TicketCommentView = Record<string, unknown> & {
+  authorType: TicketCommentAuthorType;
   customerVisible: boolean;
 };
 type TicketView = Record<string, unknown> & {
@@ -99,6 +111,7 @@ type TicketView = Record<string, unknown> & {
 
 const CUSTOMER_PORTAL_ORIGIN = TicketOrigin.CUSTOMER_PORTAL;
 const TERMINAL_TICKET_STATUSES: TicketStatus[] = [
+  TicketStatus.CONVERTING_TO_ORDER,
   TicketStatus.RESOLVED,
   TicketStatus.CLOSED,
   TicketStatus.CANCELED,
@@ -115,6 +128,9 @@ export class TicketsService {
 
   async findAll(query: ListTicketsQueryDto) {
     const now = new Date();
+    const page = Math.max(1, Number(query.page ?? 1));
+    const pageSize = Math.min(100, Math.max(1, Number(query.pageSize ?? 100)));
+    const search = query.search?.trim();
     const where: Prisma.ServiceTicketWhereInput = {
       status: query.status,
       priority: query.priority,
@@ -122,6 +138,7 @@ export class TicketsService {
       clientId: query.clientId,
       generatorId: query.generatorId,
       assignedToUserId: query.assignedToUserId,
+      technicianId: query.technicianId,
       createdAt:
         query.from || query.to
           ? {
@@ -129,19 +146,45 @@ export class TicketsService {
               lte: query.to ? new Date(query.to) : undefined,
             }
           : undefined,
+      OR: search
+        ? [
+            { code: { contains: search, mode: 'insensitive' } },
+            { title: { contains: search, mode: 'insensitive' } },
+            { description: { contains: search, mode: 'insensitive' } },
+            {
+              client: {
+                companyName: { contains: search, mode: 'insensitive' },
+              },
+            },
+            {
+              client: {
+                tradeName: { contains: search, mode: 'insensitive' },
+              },
+            },
+            {
+              generator: {
+                name: { contains: search, mode: 'insensitive' },
+              },
+            },
+          ]
+        : undefined,
     };
 
     if (query.overdue === 'true') {
-      where.OR = [
+      where.AND = [
         {
-          firstResponseAt: null,
-          slaResponseDueAt: { lt: now },
-          status: { notIn: TERMINAL_TICKET_STATUSES },
-        },
-        {
-          resolvedAt: null,
-          slaResolutionDueAt: { lt: now },
-          status: { notIn: TERMINAL_TICKET_STATUSES },
+          OR: [
+            {
+              firstResponseAt: null,
+              slaResponseDueAt: { lt: now },
+              status: { notIn: TERMINAL_TICKET_STATUSES },
+            },
+            {
+              resolvedAt: null,
+              slaResolutionDueAt: { lt: now },
+              status: { notIn: TERMINAL_TICKET_STATUSES },
+            },
+          ],
         },
       ];
     }
@@ -150,7 +193,8 @@ export class TicketsService {
       where,
       include: this.ticketInclude(),
       orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
-      take: 200,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
     });
 
     return rows.map((row) => this.mapTicket(row));
@@ -458,115 +502,165 @@ export class TicketsService {
     actorUserId: string | undefined,
     metadata: RequestMetadata,
   ) {
-    const ticket = await this.getTicketRecord(id);
-    if (ticket.status === TicketStatus.CANCELED) {
-      throw new BadRequestException('Chamado cancelado nao pode virar OS.');
-    }
-    if (
-      ticket.status === TicketStatus.CLOSED ||
-      ticket.status === TicketStatus.RESOLVED
-    ) {
-      throw new BadRequestException('Chamado encerrado nao pode virar OS.');
-    }
-    if (
-      ticket.maintenanceOrderId ||
-      ticket.status === TicketStatus.CONVERTED_TO_ORDER
-    ) {
-      throw new BadRequestException('Chamado ja foi convertido em OS.');
-    }
+    try {
+      const updated = await this.prisma.$transaction(async (tx) => {
+        const ticket = await tx.serviceTicket.findUnique({
+          where: { id },
+          include: this.ticketInclude(),
+        });
+        if (!ticket) {
+          throw new NotFoundException('Chamado nao encontrado.');
+        }
 
-    const generatorId = dto.generatorId ?? ticket.generatorId ?? undefined;
-    if (!generatorId) {
-      throw new BadRequestException(
-        'Informe um equipamento antes de converter o chamado em OS.',
-      );
-    }
+        this.assertTicketCanConvert(ticket);
 
-    const relations = await this.validateRelations(
-      this.prisma,
-      ticket.clientId,
-      {
-        generatorId,
-        siteId: dto.siteId ?? ticket.siteId ?? undefined,
-        contractId: dto.contractId ?? ticket.contractId ?? undefined,
-        technicianId: dto.technicianId ?? ticket.technicianId ?? undefined,
-      },
-    );
+        const generatorId = dto.generatorId ?? ticket.generatorId ?? undefined;
+        if (!generatorId) {
+          throw new BadRequestException(
+            'Informe um equipamento antes de converter o chamado em OS.',
+          );
+        }
 
-    const order = await this.maintenanceOrdersService.create(
-      {
-        title: dto.title ?? `OS - Chamado ${ticket.code}`,
-        description:
-          dto.description ??
-          [
-            `Origem: Chamado ${ticket.code}`,
-            `Cliente: ${ticket.client.companyName}`,
-            '',
-            ticket.description,
-          ].join('\n'),
-        type: MaintenanceOrderType.CORRECTIVE,
-        status: OrderStatus.OPEN,
-        priority: this.mapTicketPriorityToOrderPriority(ticket.priority),
-        generatorId,
-        siteId:
-          dto.siteId ??
-          ticket.siteId ??
-          relations.generator?.currentSiteId ??
-          undefined,
-        contractId:
-          dto.contractId ??
-          ticket.contractId ??
-          relations.contract?.id ??
-          undefined,
-        technicianId: dto.technicianId ?? ticket.technicianId ?? undefined,
-        scheduledTo: dto.scheduledTo,
-      },
-      actorUserId,
-    );
+        const claimed = await tx.serviceTicket.updateMany({
+          where: {
+            id,
+            maintenanceOrderId: null,
+            status: {
+              notIn: [
+                TicketStatus.CANCELED,
+                TicketStatus.CLOSED,
+                TicketStatus.RESOLVED,
+                TicketStatus.CONVERTED_TO_ORDER,
+                TicketStatus.CONVERTING_TO_ORDER,
+              ],
+            },
+          },
+          data: {
+            status: TicketStatus.CONVERTING_TO_ORDER,
+          },
+        });
 
-    const orderId = order?.id;
-    if (!orderId) {
-      throw new BadRequestException('Nao foi possivel criar a OS do chamado.');
-    }
+        if (claimed.count !== 1) {
+          const current = await tx.serviceTicket.findUnique({
+            where: { id },
+            select: { status: true, maintenanceOrderId: true },
+          });
+          if (
+            current?.maintenanceOrderId ||
+            current?.status === TicketStatus.CONVERTED_TO_ORDER
+          ) {
+            throw new BadRequestException('Chamado ja foi convertido em OS.');
+          }
+          if (current?.status === TicketStatus.CONVERTING_TO_ORDER) {
+            throw new BadRequestException(
+              'Chamado ja esta em conversao para OS.',
+            );
+          }
+          throw new BadRequestException(
+            'Chamado nao esta disponivel para conversao em OS.',
+          );
+        }
 
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const converted = await tx.serviceTicket.update({
-        where: { id },
-        data: {
-          status: TicketStatus.CONVERTED_TO_ORDER,
-          maintenanceOrderId: orderId,
-          firstResponseAt: ticket.firstResponseAt ?? new Date(),
-        },
-        include: this.ticketInclude(),
+        const relations = await this.validateRelations(tx, ticket.clientId, {
+          generatorId,
+          siteId: dto.siteId ?? ticket.siteId ?? undefined,
+          contractId: dto.contractId ?? ticket.contractId ?? undefined,
+          technicianId: dto.technicianId ?? ticket.technicianId ?? undefined,
+        });
+
+        const order = await this.maintenanceOrdersService.createInTransaction(
+          tx,
+          {
+            title: dto.title ?? `OS - Chamado ${ticket.code}`,
+            description:
+              dto.description ??
+              [
+                `Origem: Chamado ${ticket.code}`,
+                `Cliente: ${ticket.client.companyName}`,
+                '',
+                ticket.description,
+              ].join('\n'),
+            type: MaintenanceOrderType.CORRECTIVE,
+            status: OrderStatus.OPEN,
+            priority: this.mapTicketPriorityToOrderPriority(ticket.priority),
+            generatorId,
+            siteId:
+              dto.siteId ??
+              ticket.siteId ??
+              relations.generator?.currentSiteId ??
+              undefined,
+            contractId:
+              dto.contractId ??
+              ticket.contractId ??
+              relations.contract?.id ??
+              undefined,
+            technicianId: dto.technicianId ?? ticket.technicianId ?? undefined,
+            scheduledTo: dto.scheduledTo,
+          },
+          actorUserId,
+        );
+
+        const orderId = order?.id;
+        if (!orderId) {
+          throw new BadRequestException(
+            'Nao foi possivel criar a OS do chamado.',
+          );
+        }
+
+        const converted = await tx.serviceTicket.update({
+          where: { id },
+          data: {
+            status: TicketStatus.CONVERTED_TO_ORDER,
+            maintenanceOrderId: orderId,
+            firstResponseAt: ticket.firstResponseAt ?? new Date(),
+          },
+          include: this.ticketInclude(),
+        });
+
+        await this.addSystemComment(tx, {
+          ticketId: id,
+          actorUserId,
+          message: `Chamado convertido na OS ${orderId}.`,
+          customerVisible: true,
+        });
+
+        await this.auditLogsService.record(
+          {
+            domain: AuditDomain.TICKETS,
+            entityType: 'SERVICE_TICKET',
+            entityId: id,
+            action: 'CONVERT_TO_ORDER',
+            actorUserId,
+            afterPayload: {
+              maintenanceOrderId: orderId,
+              generatorId,
+              metadata,
+            } as unknown as Prisma.InputJsonValue,
+          },
+          tx,
+        );
+
+        return converted;
       });
 
-      await this.addSystemComment(tx, {
-        ticketId: id,
-        actorUserId,
-        message: `Chamado convertido na OS ${orderId}.`,
-        customerVisible: true,
-      });
-
-      await this.auditLogsService.record(
-        {
+      return this.mapTicket(updated);
+    } catch (error) {
+      await Promise.resolve(
+        this.auditLogsService.record({
           domain: AuditDomain.TICKETS,
           entityType: 'SERVICE_TICKET',
           entityId: id,
-          action: 'CONVERT_TO_ORDER',
+          action: 'CONVERT_TO_ORDER_FAILED',
           actorUserId,
-          afterPayload: {
-            maintenanceOrderId: orderId,
-            generatorId,
-            metadata,
-          } as unknown as Prisma.InputJsonValue,
-        },
-        tx,
-      );
-
-      return converted;
-    });
-
-    return this.mapTicket(updated);
+          reason:
+            error instanceof Error
+              ? error.message
+              : 'Falha desconhecida na conversao do chamado.',
+          afterPayload: metadata as unknown as Prisma.InputJsonValue,
+        }),
+      ).catch(() => undefined);
+      throw error;
+    }
   }
 
   async resolve(
@@ -614,16 +708,169 @@ export class TicketsService {
     });
   }
 
-  async listCustomerTickets(userId: string | undefined) {
+  async listTechnicianTickets(
+    userId: string | undefined,
+    query: ListTicketsQueryDto = {},
+  ) {
+    const scope = await this.requireTechnicianScope(userId);
+    const page = Math.max(1, Number(query.page ?? 1));
+    const pageSize = Math.min(100, Math.max(1, Number(query.pageSize ?? 50)));
+    const search = query.search?.trim();
+    const rows = await this.prisma.serviceTicket.findMany({
+      where: {
+        status: query.status,
+        priority: query.priority,
+        origin: query.origin,
+        createdAt:
+          query.from || query.to
+            ? {
+                gte: query.from ? new Date(query.from) : undefined,
+                lte: query.to ? new Date(query.to) : undefined,
+              }
+            : undefined,
+        AND: [
+          {
+            OR: [
+              { assignedToUserId: scope.userId },
+              { technicianId: scope.technicianId },
+              {
+                maintenanceOrder: {
+                  technicianId: scope.technicianId,
+                },
+              },
+            ],
+          },
+          search
+            ? {
+                OR: [
+                  { code: { contains: search, mode: 'insensitive' } },
+                  { title: { contains: search, mode: 'insensitive' } },
+                  { description: { contains: search, mode: 'insensitive' } },
+                  {
+                    client: {
+                      companyName: { contains: search, mode: 'insensitive' },
+                    },
+                  },
+                  {
+                    generator: {
+                      name: { contains: search, mode: 'insensitive' },
+                    },
+                  },
+                ],
+              }
+            : {},
+        ],
+      },
+      include: this.ticketInclude(),
+      orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    });
+
+    return rows.map((row) => this.mapTechnicianTicket(row));
+  }
+
+  async addTechnicianComment(
+    userId: string | undefined,
+    ticketId: string,
+    dto: AddTicketCommentDto,
+    metadata: RequestMetadata,
+  ) {
+    const scope = await this.requireTechnicianScope(userId);
+    const ticket = await this.prisma.serviceTicket.findFirst({
+      where: {
+        id: ticketId,
+        OR: [
+          { assignedToUserId: scope.userId },
+          { technicianId: scope.technicianId },
+          { maintenanceOrder: { technicianId: scope.technicianId } },
+        ],
+      },
+      include: this.ticketInclude(),
+    });
+    if (!ticket) {
+      throw new NotFoundException('Chamado nao encontrado.');
+    }
+    if (this.isClosedForCustomerInteraction(ticket.status)) {
+      throw new BadRequestException(
+        'Chamado encerrado ou cancelado nao aceita novos comentarios.',
+      );
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.serviceTicketComment.create({
+        data: {
+          ticketId,
+          authorUserId: scope.userId,
+          authorType: TicketCommentAuthorType.INTERNAL,
+          message: dto.message,
+          customerVisible: false,
+        },
+      });
+
+      const row = await tx.serviceTicket.update({
+        where: { id: ticketId },
+        data: {
+          status:
+            ticket.status === TicketStatus.OPEN
+              ? TicketStatus.IN_PROGRESS
+              : undefined,
+        },
+        include: this.ticketInclude(),
+      });
+
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.TICKETS,
+          entityType: 'SERVICE_TICKET',
+          entityId: ticketId,
+          action: 'TECHNICIAN_COMMENT',
+          actorUserId: scope.userId,
+          afterPayload: {
+            metadata,
+          } as unknown as Prisma.InputJsonValue,
+        },
+        tx,
+      );
+
+      return row;
+    });
+
+    return this.mapTechnicianTicket(updated);
+  }
+
+  async listCustomerTickets(
+    userId: string | undefined,
+    query: ListTicketsQueryDto = {},
+  ) {
     const scope = await this.requireCustomerScope(userId);
+    const page = Math.max(1, Number(query.page ?? 1));
+    const pageSize = Math.min(100, Math.max(1, Number(query.pageSize ?? 80)));
+    const search = query.search?.trim();
     const rows = await this.prisma.serviceTicket.findMany({
       where: {
         clientId: scope.clientId,
         customerVisible: true,
+        status: query.status,
+        priority: query.priority,
+        generatorId: query.generatorId,
+        OR: search
+          ? [
+              { code: { contains: search, mode: 'insensitive' } },
+              { title: { contains: search, mode: 'insensitive' } },
+              { description: { contains: search, mode: 'insensitive' } },
+              {
+                generator: {
+                  name: { contains: search, mode: 'insensitive' },
+                },
+              },
+            ]
+          : undefined,
       },
       include: this.ticketInclude(),
       orderBy: { createdAt: 'desc' },
-      take: 100,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
     });
 
     return rows.map((row) => this.mapCustomerTicket(row));
@@ -1132,6 +1379,30 @@ export class TicketsService {
     return map[priority];
   }
 
+  private assertTicketCanConvert(ticket: {
+    status: TicketStatus;
+    maintenanceOrderId?: string | null;
+  }) {
+    if (ticket.status === TicketStatus.CANCELED) {
+      throw new BadRequestException('Chamado cancelado nao pode virar OS.');
+    }
+    if (
+      ticket.status === TicketStatus.CLOSED ||
+      ticket.status === TicketStatus.RESOLVED
+    ) {
+      throw new BadRequestException('Chamado encerrado nao pode virar OS.');
+    }
+    if (ticket.status === TicketStatus.CONVERTING_TO_ORDER) {
+      throw new BadRequestException('Chamado ja esta em conversao para OS.');
+    }
+    if (
+      ticket.maintenanceOrderId ||
+      ticket.status === TicketStatus.CONVERTED_TO_ORDER
+    ) {
+      throw new BadRequestException('Chamado ja foi convertido em OS.');
+    }
+  }
+
   private addSystemComment(
     db: PrismaClientLike,
     input: {
@@ -1211,6 +1482,26 @@ export class TicketsService {
         openedByUser?.role === UserRole.CLIENT
           ? { id: openedByUser.id, name: openedByUser.name }
           : null,
+    };
+  }
+
+  private mapTechnicianTicket(ticket: TicketView) {
+    const mapped = this.mapTicket(ticket);
+    const safe = { ...mapped };
+    const comments = mapped.comments ?? [];
+    delete safe.internalNotes;
+    delete safe.assignedToUser;
+    delete safe.comments;
+
+    return {
+      ...safe,
+      internalNotes: undefined,
+      assignedToUser: undefined,
+      comments: comments.filter(
+        (comment) =>
+          comment.customerVisible ||
+          comment.authorType === TicketCommentAuthorType.SYSTEM,
+      ),
     };
   }
 
@@ -1306,6 +1597,53 @@ export class TicketsService {
         },
       },
     } satisfies Prisma.ServiceTicketInclude;
+  }
+
+  private async requireTechnicianScope(
+    userId: string | undefined,
+  ): Promise<TechnicianScope> {
+    if (!userId) {
+      throw new UnauthorizedException('Usuario tecnico nao identificado.');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+        technicianProfile: {
+          select: { id: true },
+        },
+      },
+    });
+
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Usuario indisponivel.');
+    }
+    if (user.role !== UserRole.TECHNICIAN) {
+      throw new ForbiddenException(
+        'Area tecnica exclusiva para usuarios tecnicos.',
+      );
+    }
+    if (!user.technicianProfile?.id) {
+      throw new ForbiddenException(
+        'Usuario tecnico sem perfil de tecnico vinculado.',
+      );
+    }
+
+    return {
+      userId: user.id,
+      technicianId: user.technicianProfile.id,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    };
   }
 
   private async requireCustomerScope(

@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -16,6 +17,7 @@ import { RequireAccessPolicy } from '../auth/access-policy.decorator';
 import { AccessPolicyGuard } from '../auth/access-policy.guard';
 import { AuthGuard } from '../auth/auth.guard';
 import { CreateMaintenanceOrderDto } from './dto/create-maintenance-order.dto';
+import { ListMaintenanceOrdersQueryDto } from './dto/list-maintenance-orders-query.dto';
 import { SubmitVisitReportDto } from './dto/submit-visit-report.dto';
 import { UpdateMaintenanceOrderDto } from './dto/update-maintenance-order.dto';
 import { MaintenanceOrdersService } from './maintenance-orders.service';
@@ -37,9 +39,9 @@ export class MaintenanceOrdersController {
 
   @RequireAccessPolicy('orders.view')
   @Get()
-  findAll(@Req() req: Request) {
+  findAll(@Req() req: Request, @Query() query: ListMaintenanceOrdersQueryDto) {
     const actorUserId = this.extractUserId(req);
-    return this.maintenanceOrdersService.findAll(actorUserId);
+    return this.maintenanceOrdersService.findAll(actorUserId, query);
   }
 
   @RequireAccessPolicy('orders.view')

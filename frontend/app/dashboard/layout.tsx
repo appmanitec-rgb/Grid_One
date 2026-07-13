@@ -50,6 +50,7 @@ export default function DashboardLayout({
     usersControl: false,
     tickets: false,
     serviceReports: false,
+    technicianPortal: false,
   });
 
   useEffect(() => {
@@ -234,6 +235,13 @@ export default function DashboardLayout({
         enabled: visiblePages.orders,
       },
       {
+        href: "/dashboard/tecnico",
+        label: "Campo",
+        mobileLabel: "Campo",
+        icon: "TC",
+        enabled: visiblePages.technicianPortal,
+      },
+      {
         href: "/dashboard/relatorios-tecnicos",
         label: "Laudos",
         mobileLabel: "Laudos",
@@ -280,14 +288,14 @@ export default function DashboardLayout({
         label: "Financeiro",
         mobileLabel: "Financeiro",
         icon: "FN",
-        enabled: visiblePages.contracts,
+        enabled: visiblePages.finance,
       },
       {
         href: "/dashboard/hr/collaborators",
         label: "RH",
         mobileLabel: "Pessoas",
         icon: "RH",
-        enabled: visiblePages.orders,
+        enabled: visiblePages.people,
       },
       {
         href: "/dashboard/automation",

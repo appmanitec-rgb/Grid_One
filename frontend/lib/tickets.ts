@@ -8,6 +8,7 @@ export type TicketStatus =
   | "WAITING_INTERNAL"
   | "SCHEDULED"
   | "IN_PROGRESS"
+  | "CONVERTING_TO_ORDER"
   | "CONVERTED_TO_ORDER"
   | "RESOLVED"
   | "CLOSED"
@@ -106,6 +107,7 @@ export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
   WAITING_INTERNAL: "Aguardando equipe",
   SCHEDULED: "Agendado",
   IN_PROGRESS: "Em atendimento",
+  CONVERTING_TO_ORDER: "Convertendo em OS",
   CONVERTED_TO_ORDER: "Convertido em OS",
   RESOLVED: "Resolvido",
   CLOSED: "Fechado",

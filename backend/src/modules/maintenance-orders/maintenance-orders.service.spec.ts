@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { InventoryMovementType, OrderStatus } from '@prisma/client';
+import { InventoryMovementType, OrderStatus, UserRole } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
@@ -37,6 +37,9 @@ describe('MaintenanceOrdersService', () => {
       timeEntry: {
         findFirst: jest.fn(),
         create: jest.fn(),
+      },
+      technicianWorkSession: {
+        findFirst: jest.fn(),
       },
     };
 
@@ -207,6 +210,36 @@ describe('MaintenanceOrdersService', () => {
       }),
     );
   });
+
+  it('blocks technician from finishing OS with open check-in', async () => {
+    db.technicianWorkSession.findFirst.mockResolvedValue({ id: 'session-1' });
+
+    await expect(
+      internals.assertTechnicianOrderUpdateScope(
+        {
+          role: UserRole.TECHNICIAN,
+          technicianProfile: { id: 'tech-1' },
+        },
+        { id: 'os-1', technicianId: 'tech-1' },
+        { status: OrderStatus.COMPLETED },
+      ),
+    ).rejects.toThrow('Finalize o check-out');
+  });
+
+  it('does not block manager override when OS has open check-in', async () => {
+    await expect(
+      internals.assertTechnicianOrderUpdateScope(
+        {
+          role: UserRole.MANAGER,
+          technicianProfile: null,
+        },
+        { id: 'os-1', technicianId: 'tech-1' },
+        { status: OrderStatus.COMPLETED },
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(db.technicianWorkSession.findFirst).not.toHaveBeenCalled();
+  });
 });
 
 type MaintenanceOrdersDbMock = {
@@ -234,6 +267,9 @@ type MaintenanceOrdersDbMock = {
     findFirst: jest.Mock;
     create: jest.Mock;
   };
+  technicianWorkSession: {
+    findFirst: jest.Mock;
+  };
 };
 
 type MaintenanceOrdersServiceInternals = {
@@ -250,5 +286,13 @@ type MaintenanceOrdersServiceInternals = {
   releaseMaterialsByOrder(
     tx: MaintenanceOrdersDbMock,
     orderId: string,
+  ): Promise<void>;
+  assertTechnicianOrderUpdateScope(
+    actor: {
+      role: UserRole;
+      technicianProfile?: { id: string } | null;
+    } | null,
+    current: { id: string; technicianId: string | null },
+    dto: { status?: OrderStatus },
   ): Promise<void>;
 };

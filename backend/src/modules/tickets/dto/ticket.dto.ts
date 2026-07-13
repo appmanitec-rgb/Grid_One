@@ -4,10 +4,13 @@ import {
   IsDateString,
   IsEmail,
   IsEnum,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
+  Min,
 } from 'class-validator';
 import {
   TicketCategory,
@@ -17,6 +20,23 @@ import {
 } from '@prisma/client';
 
 export class ListTicketsQueryDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  page?: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  @IsOptional()
+  pageSize?: number;
+
+  @IsString()
+  @IsOptional()
+  search?: string;
+
   @IsEnum(TicketStatus)
   @IsOptional()
   status?: TicketStatus;
@@ -40,6 +60,10 @@ export class ListTicketsQueryDto {
   @IsUUID()
   @IsOptional()
   assignedToUserId?: string;
+
+  @IsUUID()
+  @IsOptional()
+  technicianId?: string;
 
   @IsDateString()
   @IsOptional()

@@ -20,7 +20,7 @@ describe('TicketsService', () => {
   let service: TicketsService;
   let db: any;
   let auditLogsService: { record: jest.Mock };
-  let maintenanceOrdersService: { create: jest.Mock };
+  let maintenanceOrdersService: { createInTransaction: jest.Mock };
 
   const clientUser = {
     id: 'user-client-a',
@@ -46,7 +46,7 @@ describe('TicketsService', () => {
     db.serviceTicket.findFirst.mockResolvedValue(null);
     db.serviceContract.findFirst.mockResolvedValue(null);
     auditLogsService = { record: jest.fn() };
-    maintenanceOrdersService = { create: jest.fn() };
+    maintenanceOrdersService = { createInTransaction: jest.fn() };
     service = new TicketsService(
       db,
       auditLogsService as unknown as AuditLogsService,
@@ -246,7 +246,10 @@ describe('TicketsService', () => {
       name: 'Gerador A',
       currentSiteId: 'site-a',
     });
-    maintenanceOrdersService.create.mockResolvedValue({ id: 'os-1' });
+    db.serviceTicket.updateMany.mockResolvedValue({ count: 1 });
+    maintenanceOrdersService.createInTransaction.mockResolvedValue({
+      id: 'os-1',
+    });
     db.serviceTicket.update.mockResolvedValue(
       makeTicket({
         generatorId: 'gen-a',
@@ -263,7 +266,8 @@ describe('TicketsService', () => {
     );
 
     expect(result.maintenanceOrderId).toBe('os-1');
-    expect(maintenanceOrdersService.create).toHaveBeenCalledWith(
+    expect(maintenanceOrdersService.createInTransaction).toHaveBeenCalledWith(
+      db,
       expect.objectContaining({
         generatorId: 'gen-a',
       }),
@@ -303,7 +307,10 @@ describe('TicketsService', () => {
       name: 'Gerador A',
       currentSiteId: null,
     });
-    maintenanceOrdersService.create.mockResolvedValue({ id: 'os-1' });
+    db.serviceTicket.updateMany.mockResolvedValue({ count: 1 });
+    maintenanceOrdersService.createInTransaction.mockResolvedValue({
+      id: 'os-1',
+    });
     db.serviceTicket.update.mockResolvedValue(
       makeTicket({ maintenanceOrderId: 'os-1' }),
     );
@@ -314,6 +321,126 @@ describe('TicketsService', () => {
       expect.objectContaining({ action: 'CONVERT_TO_ORDER' }),
       db,
     );
+  });
+
+  it('segunda conversao sequencial nao cria outra OS', async () => {
+    db.serviceTicket.findUnique
+      .mockResolvedValueOnce(makeTicket({ generatorId: 'gen-a' }))
+      .mockResolvedValueOnce(
+        makeTicket({
+          status: TicketStatus.CONVERTED_TO_ORDER,
+          maintenanceOrderId: 'os-1',
+        }),
+      );
+    db.generator.findFirst.mockResolvedValue({
+      id: 'gen-a',
+      name: 'Gerador A',
+      currentSiteId: null,
+    });
+    db.serviceTicket.updateMany.mockResolvedValueOnce({ count: 1 });
+    maintenanceOrdersService.createInTransaction.mockResolvedValueOnce({
+      id: 'os-1',
+    });
+    db.serviceTicket.update.mockResolvedValue(
+      makeTicket({
+        generatorId: 'gen-a',
+        maintenanceOrderId: 'os-1',
+        status: TicketStatus.CONVERTED_TO_ORDER,
+      }),
+    );
+
+    await service.convertToOrder('ticket-a', {}, 'internal-user', {});
+    await expect(
+      service.convertToOrder('ticket-a', {}, 'internal-user', {}),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(maintenanceOrdersService.createInTransaction).toHaveBeenCalledTimes(
+      1,
+    );
+  });
+
+  it('falha na criacao da OS nao marca chamado como convertido', async () => {
+    db.serviceTicket.findUnique.mockResolvedValue(
+      makeTicket({ generatorId: 'gen-a' }),
+    );
+    db.generator.findFirst.mockResolvedValue({
+      id: 'gen-a',
+      name: 'Gerador A',
+      currentSiteId: null,
+    });
+    db.serviceTicket.updateMany.mockResolvedValue({ count: 1 });
+    maintenanceOrdersService.createInTransaction.mockRejectedValue(
+      new Error('falha OS'),
+    );
+
+    await expect(
+      service.convertToOrder('ticket-a', {}, 'internal-user', {}),
+    ).rejects.toThrow('falha OS');
+
+    expect(db.serviceTicket.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: TicketStatus.CONVERTED_TO_ORDER,
+        }),
+      }),
+    );
+    expect(auditLogsService.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'CONVERT_TO_ORDER_FAILED' }),
+    );
+  });
+
+  it('tecnico lista apenas chamados atribuidos a ele', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'tech-user-1',
+      name: 'Tecnico',
+      email: 'tech@example.com',
+      role: UserRole.TECHNICIAN,
+      isActive: true,
+      technicianProfile: { id: 'tech-1' },
+    });
+    db.serviceTicket.findMany.mockResolvedValue([
+      makeTicket({ id: 'ticket-own', assignedToUserId: 'tech-user-1' }),
+    ]);
+
+    const result = await service.listTechnicianTickets('tech-user-1', {});
+
+    expect(result).toHaveLength(1);
+    expect(db.serviceTicket.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          AND: expect.arrayContaining([
+            expect.objectContaining({
+              OR: expect.arrayContaining([
+                { assignedToUserId: 'tech-user-1' },
+                { technicianId: 'tech-1' },
+                { maintenanceOrder: { technicianId: 'tech-1' } },
+              ]),
+            }),
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it('tecnico nao comenta chamado de outro tecnico', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'tech-user-1',
+      name: 'Tecnico',
+      email: 'tech@example.com',
+      role: UserRole.TECHNICIAN,
+      isActive: true,
+      technicianProfile: { id: 'tech-1' },
+    });
+    db.serviceTicket.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.addTechnicianComment(
+        'tech-user-1',
+        'ticket-other',
+        { message: 'Cheguei ao local.' },
+        {},
+      ),
+    ).rejects.toThrow(NotFoundException);
   });
 
   it('identifica SLA vencido na lista interna', async () => {
@@ -328,6 +455,22 @@ describe('TicketsService', () => {
 
     expect(result[0].slaStatus).toBe('OVERDUE');
     expect(result[0].isResponseOverdue).toBe(true);
+  });
+
+  it('pagina chamados internos com busca', async () => {
+    db.serviceTicket.findMany.mockResolvedValue([]);
+
+    await service.findAll({ page: 2, pageSize: 25, search: 'motor' });
+
+    expect(db.serviceTicket.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skip: 25,
+        take: 25,
+        where: expect.objectContaining({
+          OR: expect.any(Array),
+        }),
+      }),
+    );
   });
 });
 
@@ -362,6 +505,7 @@ function createDbMock() {
       findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
     },
     serviceTicketComment: {
       create: jest.fn(),

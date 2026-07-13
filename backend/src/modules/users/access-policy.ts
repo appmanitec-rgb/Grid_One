@@ -15,6 +15,7 @@ export type AccessPolicy = {
     usersControl: boolean;
     tickets: boolean;
     serviceReports: boolean;
+    technicianPortal: boolean;
   };
   clients: {
     view: boolean;
@@ -79,10 +80,12 @@ export type AccessPolicy = {
   };
   tickets: {
     view: boolean;
+    viewOwn: boolean;
     create: boolean;
     update: boolean;
     assign: boolean;
     comment: boolean;
+    commentOwn: boolean;
     convertToOrder: boolean;
     resolve: boolean;
     close: boolean;
@@ -123,6 +126,10 @@ export type AccessPolicy = {
     dispatch: boolean;
     schedule: boolean;
   };
+  technicianWork: {
+    view: boolean;
+    checkInOut: boolean;
+  };
   reports: {
     view: boolean;
     export: boolean;
@@ -156,6 +163,7 @@ const emptyAccessPolicy: AccessPolicy = {
     usersControl: false,
     tickets: false,
     serviceReports: false,
+    technicianPortal: false,
   },
   clients: {
     view: false,
@@ -220,10 +228,12 @@ const emptyAccessPolicy: AccessPolicy = {
   },
   tickets: {
     view: false,
+    viewOwn: false,
     create: false,
     update: false,
     assign: false,
     comment: false,
+    commentOwn: false,
     convertToOrder: false,
     resolve: false,
     close: false,
@@ -264,6 +274,10 @@ const emptyAccessPolicy: AccessPolicy = {
     dispatch: false,
     schedule: false,
   },
+  technicianWork: {
+    view: false,
+    checkInOut: false,
+  },
   reports: {
     view: false,
     export: false,
@@ -302,6 +316,7 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         usersControl: true,
         tickets: true,
         serviceReports: true,
+        technicianPortal: true,
       },
       clients: allClientActions(),
       catalog: {
@@ -383,6 +398,10 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         dispatch: true,
         schedule: true,
       },
+      technicianWork: {
+        view: true,
+        checkInOut: true,
+      },
       reports: {
         view: true,
         export: true,
@@ -440,6 +459,7 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         clients: true,
         equipments: true,
         serviceReports: true,
+        technicianPortal: true,
       },
       clients: { view: true },
       catalog: { view: true },
@@ -459,12 +479,18 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         sign: true,
       },
       tickets: {
+        viewOwn: true,
         comment: true,
+        commentOwn: true,
       },
       inventory: { view: true },
       technicians: {
         view: true,
         schedule: true,
+      },
+      technicianWork: {
+        view: true,
+        checkInOut: true,
       },
       users: {
         viewLiveLocation: true,
@@ -485,6 +511,7 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         inventory: true,
         tickets: true,
         serviceReports: true,
+        technicianPortal: true,
       },
       clients: { view: true },
       catalog: {
@@ -512,10 +539,12 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
       serviceReports: allServiceReportActions(),
       tickets: {
         view: true,
+        viewOwn: true,
         create: true,
         update: true,
         assign: true,
         comment: true,
+        commentOwn: true,
         convertToOrder: true,
         resolve: true,
         close: true,
@@ -530,6 +559,10 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         view: true,
         dispatch: true,
         schedule: true,
+      },
+      technicianWork: {
+        view: true,
+        checkInOut: true,
       },
       users: {
         manageSpecialties: true,
@@ -551,6 +584,7 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         inventory: true,
         tickets: role === UserRole.LOGISTICS,
         serviceReports: role === UserRole.LOGISTICS,
+        technicianPortal: role === UserRole.LOGISTICS,
       },
       clients: { view: true },
       catalog: {
@@ -569,9 +603,11 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         role === UserRole.LOGISTICS
           ? {
               view: true,
+              viewOwn: true,
               update: true,
               assign: true,
               comment: true,
+              commentOwn: true,
               convertToOrder: true,
               resolve: true,
               close: true,
@@ -596,6 +632,13 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         view: true,
         dispatch: true,
       },
+      technicianWork:
+        role === UserRole.LOGISTICS
+          ? {
+              view: true,
+              checkInOut: true,
+            }
+          : undefined,
       serviceReports:
         role === UserRole.LOGISTICS ? allServiceReportActions() : undefined,
       users: {
@@ -769,10 +812,12 @@ function allClientActions() {
 function allTicketActions() {
   return {
     view: true,
+    viewOwn: true,
     create: true,
     update: true,
     assign: true,
     comment: true,
+    commentOwn: true,
     convertToOrder: true,
     resolve: true,
     close: true,
@@ -816,6 +861,7 @@ function mergeAccessPolicy(
     finance: mergeSection(base.finance, overrides.finance),
     people: mergeSection(base.people, overrides.people),
     technicians: mergeSection(base.technicians, overrides.technicians),
+    technicianWork: mergeSection(base.technicianWork, overrides.technicianWork),
     reports: mergeSection(base.reports, overrides.reports),
     settings: mergeSection(base.settings, overrides.settings),
     audit: mergeSection(base.audit, overrides.audit),
@@ -856,6 +902,7 @@ function mapAccessPolicy(
     finance: mapSection(input.finance, mapper),
     people: mapSection(input.people, mapper),
     technicians: mapSection(input.technicians, mapper),
+    technicianWork: mapSection(input.technicianWork, mapper),
     reports: mapSection(input.reports, mapper),
     settings: mapSection(input.settings, mapper),
     audit: mapSection(input.audit, mapper),

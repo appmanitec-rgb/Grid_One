@@ -15,6 +15,22 @@ import {
 import { ChecklistResult, EvidenceType, ReportStatus } from '@prisma/client';
 
 export class ListServiceReportsQueryDto {
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  pageSize?: number;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+
   @IsOptional()
   @IsEnum(ReportStatus)
   status?: ReportStatus;

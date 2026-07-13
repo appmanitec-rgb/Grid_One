@@ -33,6 +33,7 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { CustomerPortalModule } from './modules/customer-portal/customer-portal.module';
 import { TicketsModule } from './modules/tickets/tickets.module';
 import { ServiceReportsModule } from './modules/service-reports/service-reports.module';
+import { TechnicianWorkModule } from './modules/technician-work/technician-work.module';
 
 @Module({
   imports: [
@@ -76,6 +77,7 @@ import { ServiceReportsModule } from './modules/service-reports/service-reports.
     ReportsModule,
     TicketsModule,
     ServiceReportsModule,
+    TechnicianWorkModule,
     CustomerPortalModule,
   ],
   controllers: [],

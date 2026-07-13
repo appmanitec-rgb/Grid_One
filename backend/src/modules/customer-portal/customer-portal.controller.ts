@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -11,9 +12,11 @@ import type { Request } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
 import { TicketsService } from '../tickets/tickets.service';
 import { ServiceReportsService } from '../service-reports/service-reports.service';
+import { ListServiceReportsQueryDto } from '../service-reports/dto/service-report.dto';
 import {
   CreateCustomerTicketDto,
   CustomerTicketCommentDto,
+  ListTicketsQueryDto,
   TicketActionNoteDto,
 } from '../tickets/dto/ticket.dto';
 import { CustomerPortalService } from './customer-portal.service';
@@ -133,17 +136,26 @@ export class CustomerPortalController {
   }
 
   @Get('equipment/:id/reports')
-  equipmentReports(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+  equipmentReports(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Query() query: ListServiceReportsQueryDto,
+  ) {
     return this.serviceReportsService.listCustomerEquipmentReports(
       this.extractUserId(req),
       id,
+      query,
     );
   }
 
   @Get('service-reports')
-  serviceReports(@Req() req: AuthenticatedRequest) {
+  serviceReports(
+    @Req() req: AuthenticatedRequest,
+    @Query() query: ListServiceReportsQueryDto,
+  ) {
     return this.serviceReportsService.listCustomerReports(
       this.extractUserId(req),
+      query,
     );
   }
 
@@ -159,8 +171,14 @@ export class CustomerPortalController {
   }
 
   @Get('tickets')
-  tickets(@Req() req: AuthenticatedRequest) {
-    return this.ticketsService.listCustomerTickets(this.extractUserId(req));
+  tickets(
+    @Req() req: AuthenticatedRequest,
+    @Query() query: ListTicketsQueryDto,
+  ) {
+    return this.ticketsService.listCustomerTickets(
+      this.extractUserId(req),
+      query,
+    );
   }
 
   @Get('tickets/:id')

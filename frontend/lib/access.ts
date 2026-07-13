@@ -15,6 +15,7 @@ export type AccessPolicy = {
     usersControl: boolean;
     tickets: boolean;
     serviceReports: boolean;
+    technicianPortal: boolean;
   };
   clients: {
     view: boolean;
@@ -79,10 +80,12 @@ export type AccessPolicy = {
   };
   tickets: {
     view: boolean;
+    viewOwn: boolean;
     create: boolean;
     update: boolean;
     assign: boolean;
     comment: boolean;
+    commentOwn: boolean;
     convertToOrder: boolean;
     resolve: boolean;
     close: boolean;
@@ -122,6 +125,10 @@ export type AccessPolicy = {
     view: boolean;
     dispatch: boolean;
     schedule: boolean;
+  };
+  technicianWork: {
+    view: boolean;
+    checkInOut: boolean;
   };
   reports: {
     view: boolean;
@@ -165,6 +172,7 @@ const ACCESS_ROUTE_RULES: AccessRouteRule[] = [
   { prefix: "/dashboard/costs", permission: "finance" },
   { prefix: "/dashboard/company-settings", permission: "usersControl" },
   { prefix: "/dashboard/profile", permission: "dashboard" },
+  { prefix: "/dashboard/tecnico", permission: "technicianPortal" },
   { prefix: "/dashboard/atendimento", permission: "tickets" },
   { prefix: "/dashboard/relatorios-tecnicos", permission: "serviceReports" },
   { prefix: "/dashboard/dispatch", permission: "orders" },
@@ -196,6 +204,7 @@ const EMPTY_ACCESS_POLICY: AccessPolicy = {
     usersControl: false,
     tickets: false,
     serviceReports: false,
+    technicianPortal: false,
   },
   clients: { view: false, create: false, update: false, delete: false },
   catalog: {
@@ -255,10 +264,12 @@ const EMPTY_ACCESS_POLICY: AccessPolicy = {
   },
   tickets: {
     view: false,
+    viewOwn: false,
     create: false,
     update: false,
     assign: false,
     comment: false,
+    commentOwn: false,
     convertToOrder: false,
     resolve: false,
     close: false,
@@ -290,6 +301,7 @@ const EMPTY_ACCESS_POLICY: AccessPolicy = {
   },
   people: { view: false, create: false, update: false, delete: false },
   technicians: { view: false, dispatch: false, schedule: false },
+  technicianWork: { view: false, checkInOut: false },
   reports: { view: false, export: false },
   settings: { view: false, update: false, admin: false },
   audit: { read: false },
@@ -314,6 +326,7 @@ export function defaultAccessByRole(role: string): AccessPolicy {
         usersControl: true,
         tickets: true,
         serviceReports: true,
+        technicianPortal: true,
       },
       clients: { view: true, create: true, update: true, delete: true },
       catalog: {
@@ -397,6 +410,7 @@ export function defaultAccessByRole(role: string): AccessPolicy {
       },
       people: { view: true, create: true, update: true },
       technicians: { view: true, dispatch: true, schedule: true },
+      technicianWork: { view: true, checkInOut: true },
       reports: { view: true, export: true },
       settings: { view: true, update: true },
       audit: { read: true },
@@ -436,6 +450,7 @@ export function defaultAccessByRole(role: string): AccessPolicy {
         catalog: true,
         clients: true,
         equipments: true,
+        technicianPortal: true,
       },
       clients: { view: true },
       catalog: { view: true },
@@ -448,9 +463,10 @@ export function defaultAccessByRole(role: string): AccessPolicy {
         addEvidence: true,
         sign: true,
       },
-      tickets: { comment: true },
+      tickets: { viewOwn: true, comment: true, commentOwn: true },
       inventory: { view: true },
       technicians: { view: true, schedule: true },
+      technicianWork: { view: true, checkInOut: true },
       users: { viewLiveLocation: true },
     });
   }
@@ -468,6 +484,7 @@ export function defaultAccessByRole(role: string): AccessPolicy {
         inventory: true,
         tickets: true,
         serviceReports: true,
+        technicianPortal: true,
       },
       clients: { view: true },
       catalog: { viewCosts: true, view: true },
@@ -489,10 +506,12 @@ export function defaultAccessByRole(role: string): AccessPolicy {
       serviceReports: allServiceReportActions(),
       tickets: {
         view: true,
+        viewOwn: true,
         create: true,
         update: true,
         assign: true,
         comment: true,
+        commentOwn: true,
         convertToOrder: true,
         resolve: true,
         close: true,
@@ -500,6 +519,7 @@ export function defaultAccessByRole(role: string): AccessPolicy {
       },
       inventory: { view: true, reserve: true, consume: true },
       technicians: { view: true, dispatch: true, schedule: true },
+      technicianWork: { view: true, checkInOut: true },
       users: { manageSpecialties: true, viewLiveLocation: true },
       reports: { view: true },
     });
@@ -517,6 +537,7 @@ export function defaultAccessByRole(role: string): AccessPolicy {
         inventory: true,
         tickets: role === "LOGISTICS",
         serviceReports: role === "LOGISTICS",
+        technicianPortal: role === "LOGISTICS",
       },
       clients: { view: true },
       catalog: {
@@ -532,9 +553,11 @@ export function defaultAccessByRole(role: string): AccessPolicy {
         role === "LOGISTICS"
           ? {
               view: true,
+              viewOwn: true,
               update: true,
               assign: true,
               comment: true,
+              commentOwn: true,
               convertToOrder: true,
               resolve: true,
               close: true,
@@ -556,6 +579,8 @@ export function defaultAccessByRole(role: string): AccessPolicy {
         cancel: true,
       },
       technicians: { view: true, dispatch: true },
+      technicianWork:
+        role === "LOGISTICS" ? { view: true, checkInOut: true } : undefined,
       serviceReports:
         role === "LOGISTICS" ? allServiceReportActions() : undefined,
       users: { viewLiveLocation: true },
@@ -739,6 +764,10 @@ function mergeAccessPolicy(
     finance: mergeSection(base.finance, overrides.finance),
     people: mergeSection(base.people, overrides.people),
     technicians: mergeSection(base.technicians, overrides.technicians),
+    technicianWork: mergeSection(
+      base.technicianWork,
+      overrides.technicianWork,
+    ),
     reports: mergeSection(base.reports, overrides.reports),
     settings: mergeSection(base.settings, overrides.settings),
     audit: mergeSection(base.audit, overrides.audit),
@@ -779,6 +808,7 @@ function mapAccessPolicy(
     finance: mapSection(input.finance, mapper),
     people: mapSection(input.people, mapper),
     technicians: mapSection(input.technicians, mapper),
+    technicianWork: mapSection(input.technicianWork, mapper),
     reports: mapSection(input.reports, mapper),
     settings: mapSection(input.settings, mapper),
     audit: mapSection(input.audit, mapper),
@@ -819,6 +849,10 @@ function normalizeAccessPolicy(access: AccessPolicy): AccessPolicy {
       tickets: access.pages.tickets || access.tickets.view,
       serviceReports:
         access.pages.serviceReports || access.serviceReports.view,
+      technicianPortal:
+        access.pages.technicianPortal ||
+        access.technicianWork.view ||
+        access.tickets.viewOwn,
     },
     proposals: {
       ...access.proposals,

@@ -17,6 +17,8 @@ import {
   OrderStatus,
   Prisma,
   SkillLevel,
+  TechnicianWorkSessionStatus,
+  TimeEntrySource,
   TimeEntryStatus,
   UserRole,
 } from '@prisma/client';
@@ -24,6 +26,7 @@ import { DatabaseService } from '../../database/database.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { CreateMaintenanceOrderDto } from './dto/create-maintenance-order.dto';
+import { ListMaintenanceOrdersQueryDto } from './dto/list-maintenance-orders-query.dto';
 import { UpdateMaintenanceOrderDto } from './dto/update-maintenance-order.dto';
 
 type AssignmentValidationResult = {
@@ -40,133 +43,184 @@ export class MaintenanceOrdersService {
 
   async create(dto: CreateMaintenanceOrderDto, actorUserId?: string) {
     await this.assertInternalActor(actorUserId);
-    return this.prisma.$transaction(async (tx) => {
-      const generator = await this.ensureGeneratorAndSite(
-        tx,
-        dto.generatorId,
-        dto.siteId,
-        dto.contractId,
-      );
-      const assignmentValidation = await this.ensureTechnicianAssignmentRules(
-        tx,
-        {
-          orderId: null,
-          generatorId: dto.generatorId,
-          generatorCriticality: generator.criticality,
-          technicianId: dto.technicianId,
-          checklistData: dto.checklistData,
-          assignmentJustification: dto.assignmentJustification,
-          assignmentOverrideApprovalId: dto.assignmentOverrideApprovalId,
-          certificationJustification: dto.certificationJustification,
-          actorUserId,
-        },
-      );
-
-      const reservedMap = dto.materials?.length
-        ? await this.reserveMaterials(
-            tx,
-            dto.materials,
-            'MAINTENANCE_ORDER',
-            dto.title,
-          )
-        : new Map<string, string>();
-
-      const order = await tx.maintenanceOrder.create({
-        data: {
-          title: dto.title,
-          description: dto.description,
-          auvoId: dto.auvoId,
-          auvoLink: dto.auvoLink,
-          type: dto.type ?? MaintenanceOrderType.CORRECTIVE,
-          status: dto.status ?? OrderStatus.OPEN,
-          priority: dto.priority,
-          customerReport: dto.customerReport,
-          checklistData: dto.checklistData as Prisma.InputJsonValue | undefined,
-          customerSignatureUrl: dto.customerSignatureUrl,
-          displacementStartedAt: dto.displacementStartedAt
-            ? new Date(dto.displacementStartedAt)
-            : undefined,
-          startedAt: dto.startedAt ? new Date(dto.startedAt) : undefined,
-          pausedAt: dto.pausedAt ? new Date(dto.pausedAt) : undefined,
-          finishedAt: dto.finishedAt ? new Date(dto.finishedAt) : undefined,
-          scheduledTo: dto.scheduledTo ? new Date(dto.scheduledTo) : undefined,
-          laborHours: dto.laborHours,
-          hourMeterAfter: dto.hourMeterAfter,
-          generatorId: dto.generatorId,
-          siteId: dto.siteId,
-          contractId: dto.contractId,
-          technicianId: dto.technicianId,
-          materials: dto.materials?.length
-            ? {
-                create: dto.materials.map((item) => ({
-                  catalogItemId: item.catalogItemId,
-                  warehouseId:
-                    item.warehouseId ||
-                    reservedMap.get(`${item.catalogItemId}:${item.quantity}`),
-                  quantity: item.quantity,
-                  unitCost: item.unitCost,
-                  reservedAt: new Date(),
-                })),
-              }
-            : undefined,
-        },
-      });
-
-      await this.applyGeneratorStatusOnOrderChange(
-        tx,
-        dto.generatorId,
-        dto.type ?? MaintenanceOrderType.CORRECTIVE,
-        dto.status ?? OrderStatus.OPEN,
-        dto.hourMeterAfter,
-      );
-
-      if ((dto.status ?? OrderStatus.OPEN) === OrderStatus.COMPLETED) {
-        await this.finalizeCompletedOrder(tx, order.id, actorUserId);
-      }
-
-      const fullOrder = await tx.maintenanceOrder.findUnique({
-        where: { id: order.id },
-        include: this.orderInclude(),
-      });
-
-      await this.auditLogsService.record(
-        {
-          domain: AuditDomain.MAINTENANCE_ORDERS,
-          entityType: 'MAINTENANCE_ORDER',
-          entityId: order.id,
-          action: 'CREATE',
-          actorUserId,
-          afterPayload: {
-            status: dto.status ?? OrderStatus.OPEN,
-            generatorId: dto.generatorId,
-            technicianId: dto.technicianId,
-            warnings: assignmentValidation.warnings,
-          } as unknown as Prisma.InputJsonValue,
-        },
-        tx,
-      );
-
-      if (!fullOrder) return fullOrder;
-      if (assignmentValidation.warnings.length === 0) return fullOrder;
-      return {
-        ...fullOrder,
-        dispatchWarnings: assignmentValidation.warnings,
-      };
-    });
+    return this.prisma.$transaction((tx) =>
+      this.createInTransaction(tx, dto, actorUserId),
+    );
   }
 
-  async findAll(actorUserId?: string) {
-    const scope = await this.getActorScope(actorUserId);
-    return this.prisma.maintenanceOrder.findMany({
-      where:
-        scope?.role === UserRole.CLIENT
+  async createInTransaction(
+    tx: Prisma.TransactionClient,
+    dto: CreateMaintenanceOrderDto,
+    actorUserId?: string,
+  ) {
+    const generator = await this.ensureGeneratorAndSite(
+      tx,
+      dto.generatorId,
+      dto.siteId,
+      dto.contractId,
+    );
+    const assignmentValidation = await this.ensureTechnicianAssignmentRules(
+      tx,
+      {
+        orderId: null,
+        generatorId: dto.generatorId,
+        generatorCriticality: generator.criticality,
+        technicianId: dto.technicianId,
+        checklistData: dto.checklistData,
+        assignmentJustification: dto.assignmentJustification,
+        assignmentOverrideApprovalId: dto.assignmentOverrideApprovalId,
+        certificationJustification: dto.certificationJustification,
+        actorUserId,
+      },
+    );
+
+    const reservedMap = dto.materials?.length
+      ? await this.reserveMaterials(
+          tx,
+          dto.materials,
+          'MAINTENANCE_ORDER',
+          dto.title,
+        )
+      : new Map<string, string>();
+
+    const order = await tx.maintenanceOrder.create({
+      data: {
+        title: dto.title,
+        description: dto.description,
+        auvoId: dto.auvoId,
+        auvoLink: dto.auvoLink,
+        type: dto.type ?? MaintenanceOrderType.CORRECTIVE,
+        status: dto.status ?? OrderStatus.OPEN,
+        priority: dto.priority,
+        customerReport: dto.customerReport,
+        checklistData: dto.checklistData as Prisma.InputJsonValue | undefined,
+        customerSignatureUrl: dto.customerSignatureUrl,
+        displacementStartedAt: dto.displacementStartedAt
+          ? new Date(dto.displacementStartedAt)
+          : undefined,
+        startedAt: dto.startedAt ? new Date(dto.startedAt) : undefined,
+        pausedAt: dto.pausedAt ? new Date(dto.pausedAt) : undefined,
+        finishedAt: dto.finishedAt ? new Date(dto.finishedAt) : undefined,
+        scheduledTo: dto.scheduledTo ? new Date(dto.scheduledTo) : undefined,
+        laborHours: dto.laborHours,
+        hourMeterAfter: dto.hourMeterAfter,
+        generatorId: dto.generatorId,
+        siteId: dto.siteId,
+        contractId: dto.contractId,
+        technicianId: dto.technicianId,
+        materials: dto.materials?.length
           ? {
-              generator: {
-                clientId: this.requireLinkedClientId(scope),
-              },
+              create: dto.materials.map((item) => ({
+                catalogItemId: item.catalogItemId,
+                warehouseId:
+                  item.warehouseId ||
+                  reservedMap.get(`${item.catalogItemId}:${item.quantity}`),
+                quantity: item.quantity,
+                unitCost: item.unitCost,
+                reservedAt: new Date(),
+              })),
             }
           : undefined,
+      },
+    });
+
+    await this.applyGeneratorStatusOnOrderChange(
+      tx,
+      dto.generatorId,
+      dto.type ?? MaintenanceOrderType.CORRECTIVE,
+      dto.status ?? OrderStatus.OPEN,
+      dto.hourMeterAfter,
+    );
+
+    if ((dto.status ?? OrderStatus.OPEN) === OrderStatus.COMPLETED) {
+      await this.finalizeCompletedOrder(tx, order.id, actorUserId);
+    }
+
+    const fullOrder = await tx.maintenanceOrder.findUnique({
+      where: { id: order.id },
       include: this.orderInclude(),
+    });
+
+    await this.auditLogsService.record(
+      {
+        domain: AuditDomain.MAINTENANCE_ORDERS,
+        entityType: 'MAINTENANCE_ORDER',
+        entityId: order.id,
+        action: 'CREATE',
+        actorUserId,
+        afterPayload: {
+          status: dto.status ?? OrderStatus.OPEN,
+          generatorId: dto.generatorId,
+          technicianId: dto.technicianId,
+          warnings: assignmentValidation.warnings,
+        } as unknown as Prisma.InputJsonValue,
+      },
+      tx,
+    );
+
+    if (!fullOrder) return fullOrder;
+    if (assignmentValidation.warnings.length === 0) return fullOrder;
+    return {
+      ...fullOrder,
+      dispatchWarnings: assignmentValidation.warnings,
+    };
+  }
+
+  async findAll(
+    actorUserId?: string,
+    query: ListMaintenanceOrdersQueryDto = {},
+  ) {
+    const scope = await this.getActorScope(actorUserId);
+    const page = Math.max(1, Number(query.page ?? 1));
+    const pageSize = Math.min(100, Math.max(1, Number(query.pageSize ?? 100)));
+    const search = query.search?.trim();
+    const where: Prisma.MaintenanceOrderWhereInput = {
+      status: query.status,
+      type: query.type,
+      technicianId:
+        scope?.role === UserRole.TECHNICIAN
+          ? this.requireActorTechnicianId(scope)
+          : query.technicianId,
+      generatorId: query.generatorId,
+      scheduledTo:
+        query.dateFrom || query.dateTo
+          ? {
+              gte: query.dateFrom ? new Date(query.dateFrom) : undefined,
+              lte: query.dateTo ? new Date(query.dateTo) : undefined,
+            }
+          : undefined,
+      generator:
+        scope?.role === UserRole.CLIENT
+          ? { clientId: this.requireLinkedClientId(scope) }
+          : query.clientId
+            ? { clientId: query.clientId }
+            : undefined,
+      OR: search
+        ? [
+            { title: { contains: search, mode: 'insensitive' } },
+            { description: { contains: search, mode: 'insensitive' } },
+            {
+              generator: {
+                name: { contains: search, mode: 'insensitive' },
+              },
+            },
+            {
+              generator: {
+                client: {
+                  companyName: { contains: search, mode: 'insensitive' },
+                },
+              },
+            },
+          ]
+        : undefined,
+    };
+
+    return this.prisma.maintenanceOrder.findMany({
+      where,
+      include: this.orderInclude(),
+      orderBy: [{ scheduledTo: 'asc' }, { openedAt: 'desc' }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
     });
   }
 
@@ -180,7 +234,11 @@ export class MaintenanceOrdersService {
       throw new NotFoundException('OS nao encontrada.');
     }
 
-    await this.assertOrderScope(order.generator.client.id, actorUserId);
+    await this.assertOrderScope(
+      order.generator.client.id,
+      actorUserId,
+      order.technicianId,
+    );
     return order;
   }
 
@@ -189,7 +247,7 @@ export class MaintenanceOrdersService {
     dto: UpdateMaintenanceOrderDto,
     actorUserId?: string,
   ) {
-    await this.assertInternalActor(actorUserId);
+    const actor = await this.assertInternalActor(actorUserId);
     const current = await this.prisma.maintenanceOrder.findUnique({
       where: { id },
       select: {
@@ -205,6 +263,7 @@ export class MaintenanceOrdersService {
     if (!current) {
       throw new NotFoundException('OS nao encontrada.');
     }
+    await this.assertTechnicianOrderUpdateScope(actor, current, dto);
     if (current.status === OrderStatus.CANCELED) {
       throw new BadRequestException('OS cancelada nao pode ser alterada.');
     }
@@ -449,6 +508,9 @@ export class MaintenanceOrdersService {
         id: true,
         role: true,
         linkedClientId: true,
+        technicianProfile: {
+          select: { id: true },
+        },
       },
     });
 
@@ -476,16 +538,96 @@ export class MaintenanceOrdersService {
         'Usuarios do portal do cliente nao podem executar esta acao.',
       );
     }
+    return actor;
   }
 
-  private async assertOrderScope(clientId: string, actorUserId?: string) {
+  private async assertOrderScope(
+    clientId: string,
+    actorUserId?: string,
+    technicianId?: string | null,
+  ) {
     const actor = await this.getActorScope(actorUserId);
+    if (actor?.role === UserRole.TECHNICIAN) {
+      if (technicianId !== this.requireActorTechnicianId(actor)) {
+        throw new NotFoundException('OS nao encontrada.');
+      }
+      return;
+    }
+
     if (actor?.role !== UserRole.CLIENT) {
       return;
     }
 
     if (clientId !== this.requireLinkedClientId(actor)) {
       throw new NotFoundException('OS nao encontrada.');
+    }
+  }
+
+  private requireActorTechnicianId(actor: {
+    technicianProfile?: { id: string } | null;
+  }) {
+    if (!actor.technicianProfile?.id) {
+      throw new ForbiddenException(
+        'Usuario tecnico sem perfil de tecnico vinculado.',
+      );
+    }
+    return actor.technicianProfile.id;
+  }
+
+  private async assertTechnicianOrderUpdateScope(
+    actor: {
+      role: UserRole;
+      technicianProfile?: { id: string } | null;
+    } | null,
+    current: {
+      id: string;
+      technicianId: string | null;
+    },
+    dto: UpdateMaintenanceOrderDto,
+  ) {
+    if (actor?.role !== UserRole.TECHNICIAN) return;
+
+    const technicianId = this.requireActorTechnicianId(actor);
+    if (current.technicianId !== technicianId) {
+      throw new NotFoundException('OS nao encontrada.');
+    }
+
+    if (dto.technicianId && dto.technicianId !== technicianId) {
+      throw new ForbiddenException(
+        'Tecnico nao pode transferir OS para outro tecnico.',
+      );
+    }
+
+    if (
+      dto.generatorId ||
+      dto.siteId ||
+      dto.contractId ||
+      dto.materials?.length
+    ) {
+      throw new ForbiddenException(
+        'Tecnico nao pode alterar cliente, equipamento, contrato ou materiais da OS.',
+      );
+    }
+
+    if (dto.status === OrderStatus.CANCELED) {
+      throw new ForbiddenException('Tecnico nao pode cancelar OS diretamente.');
+    }
+
+    if (dto.status !== OrderStatus.COMPLETED) return;
+
+    const openSession = await this.prisma.technicianWorkSession.findFirst({
+      where: {
+        maintenanceOrderId: current.id,
+        technicianId,
+        status: TechnicianWorkSessionStatus.OPEN,
+      },
+      select: { id: true },
+    });
+
+    if (openSession) {
+      throw new BadRequestException(
+        'Finalize o check-out antes de concluir a OS.',
+      );
     }
   }
 
@@ -1088,6 +1230,7 @@ export class MaintenanceOrdersService {
         userId: order.technician.userId,
         maintenanceOrderId: orderId,
         status: TimeEntryStatus.WORK,
+        source: TimeEntrySource.MAINTENANCE_ORDER_FINALIZATION,
         startedAt: order.startedAt,
         endedAt: order.finishedAt,
         workMinutes,
