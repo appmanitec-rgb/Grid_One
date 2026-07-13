@@ -23,7 +23,7 @@ export default function ModuleBlueprintPage({
   return (
     <div className="space-y-6 pb-10">
       <PageHero
-        eyebrow="Modulo em estruturacao"
+        eyebrow="Módulo em estruturação"
         title={title}
         description={subtitle}
         stats={[

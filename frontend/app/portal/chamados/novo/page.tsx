@@ -82,7 +82,7 @@ export default function NewPortalTicketPage() {
     <section className="mx-auto max-w-3xl rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <h1 className="text-2xl font-extrabold text-slate-950">Novo chamado</h1>
       <p className="mt-1 text-sm text-slate-500">
-        Informe o problema ou solicitacao. A equipe interna classificara e dara
+        Informe o problema ou solicitação. A equipe interna classificará e dará
         andamento.
       </p>
 
@@ -101,7 +101,7 @@ export default function NewPortalTicketPage() {
             }
             className="w-full rounded-md border border-slate-300 p-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           >
-            <option value="">Nao vincular equipamento</option>
+            <option value="">Não vincular equipamento</option>
             {equipment.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.name} {item.serialNumber ? `- ${item.serialNumber}` : ""}
@@ -149,7 +149,7 @@ export default function NewPortalTicketPage() {
           </Field>
         </div>
 
-        <Field label="Titulo">
+        <Field label="Título">
           <input
             value={form.title}
             onChange={(event) =>
@@ -160,7 +160,7 @@ export default function NewPortalTicketPage() {
           />
         </Field>
 
-        <Field label="Descricao">
+        <Field label="Descrição">
           <textarea
             value={form.description}
             onChange={(event) =>

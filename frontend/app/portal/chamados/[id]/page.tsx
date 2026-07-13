@@ -49,12 +49,13 @@ export default function PortalTicketDetailPage() {
         message: comment,
       });
       setComment("");
-      setSuccess("Comentario enviado.");
+      setSuccess("Comentário enviado.");
       await load();
     });
   }
 
   async function handleCancel() {
+    if (!window.confirm("Cancelar este chamado?")) return;
     await runAction(async () => {
       await portalTicketsPost<ServiceTicket>(`/${ticketId}/cancel`, {
         note: "Cancelado pelo portal do cliente.",
@@ -71,7 +72,7 @@ export default function PortalTicketDetailPage() {
     try {
       await action();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao executar acao.");
+      setError(err instanceof Error ? err.message : "Falha ao executar ação.");
     } finally {
       setSaving(false);
     }
@@ -82,7 +83,7 @@ export default function PortalTicketDetailPage() {
   }
 
   if (!ticket) {
-    return <State text={error || "Chamado nao encontrado."} tone="error" />;
+    return <State text={error || "Chamado não encontrado."} tone="error" />;
   }
 
   const canCancel = ["OPEN", "TRIAGE", "WAITING_CUSTOMER"].includes(
@@ -122,7 +123,7 @@ export default function PortalTicketDetailPage() {
             value={formatTicketDate(ticket.slaResponseDueAt)}
           />
           <Info
-            label="Solucao SLA"
+            label="Solução SLA"
             value={formatTicketDate(ticket.slaResolutionDueAt)}
           />
           <Info
@@ -130,7 +131,7 @@ export default function PortalTicketDetailPage() {
             value={
               ticket.maintenanceOrder
                 ? ticket.maintenanceOrder.title
-                : "Ainda nao"
+                : "Ainda não"
             }
           />
         </div>
@@ -145,7 +146,7 @@ export default function PortalTicketDetailPage() {
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-lg font-extrabold text-slate-950">
-          Historico visivel
+          Histórico visível
         </h2>
         <div className="mt-4 space-y-3">
           {(ticket.comments || []).map((item) => (
@@ -171,14 +172,14 @@ export default function PortalTicketDetailPage() {
             </article>
           ))}
           {!ticket.comments?.length ? (
-            <State text="Nenhuma interacao visivel ainda." />
+            <State text="Nenhuma interação visível ainda." />
           ) : null}
         </div>
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-lg font-extrabold text-slate-950">
-          Adicionar comentario
+          Adicionar comentário
         </h2>
         <form onSubmit={handleComment} className="mt-4 space-y-3">
           <textarea
@@ -193,7 +194,7 @@ export default function PortalTicketDetailPage() {
               disabled={saving}
               className="rounded-md bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:opacity-60"
             >
-              Enviar comentario
+              Enviar comentário
             </button>
             <button
               type="button"

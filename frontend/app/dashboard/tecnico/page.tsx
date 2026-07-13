@@ -69,13 +69,13 @@ export default function TechnicianDashboardPage() {
     <div className="mx-auto max-w-5xl space-y-5 pb-8">
       <header className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
-          Campo tecnico
+          Campo técnico
         </p>
         <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-slate-950">Minha rota</h1>
             <p className="mt-1 text-sm text-slate-600">
-              OS, chamados e apontamentos de execucao atribuidos a voce.
+              OS, chamados e apontamentos de execução atribuídos a você.
             </p>
           </div>
           <button type="button" onClick={load} className={SECONDARY_BUTTON}>
@@ -98,7 +98,7 @@ export default function TechnicianDashboardPage() {
       ) : null}
 
       {!loading && orders.length === 0 ? (
-        <EmptyState title="Nenhuma OS atribuida" />
+        <EmptyState title="Nenhuma OS atribuída" />
       ) : null}
 
       <section className="space-y-3">
@@ -115,7 +115,7 @@ export default function TechnicianDashboardPage() {
           Meus chamados
         </h2>
         {!loading && tickets.length === 0 ? (
-          <EmptyState title="Nenhum chamado atribuido" />
+          <EmptyState title="Nenhum chamado atribuído" />
         ) : null}
         {tickets.map((ticket) => (
           <TicketCard key={ticket.id} ticket={ticket} />
@@ -169,10 +169,10 @@ function OrderCard({ order }: { order: TechnicianOrder }) {
           <p className="mt-1 text-sm text-slate-600">
             {order.generator?.client?.tradeName ||
               order.generator?.client?.companyName ||
-              "Cliente nao informado"}
+              "Cliente não informado"}
           </p>
           <p className="mt-1 text-sm text-slate-500">
-            {order.generator?.name || "Equipamento nao informado"} -{" "}
+            {order.generator?.name || "Equipamento não informado"} -{" "}
             {formatFieldDate(order.scheduledTo)}
           </p>
         </div>

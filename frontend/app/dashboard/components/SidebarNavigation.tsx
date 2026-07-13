@@ -86,19 +86,19 @@ const MAIN_SECTIONS: NavSection[] = [
       },
       {
         key: "overview_reports",
-        label: "Relatorios",
+        label: "Relatórios",
         href: "/dashboard/reports",
         enabled: true,
       },
       {
         key: "overview_management",
-        label: "Gestao",
+        label: "Gestão",
         href: "/dashboard/control",
         enabled: true,
       },
       {
         key: "overview_automation",
-        label: "Automacao",
+        label: "Automação",
         href: "/dashboard/automation",
         enabled: true,
       },
@@ -151,7 +151,7 @@ const MAIN_SECTIONS: NavSection[] = [
   },
   {
     id: "ops",
-    title: "Operacao",
+    title: "Operação",
     icon: "ops",
     items: [
       {
@@ -187,7 +187,7 @@ const MAIN_SECTIONS: NavSection[] = [
       },
       {
         key: "ops_team",
-        label: "Tecnicos",
+        label: "Técnicos",
         href: "/dashboard/technicians",
         enabled: true,
       },
@@ -231,7 +231,7 @@ const MAIN_SECTIONS: NavSection[] = [
     items: [
       {
         key: "stock_catalog",
-        label: "Catalogo",
+        label: "Catálogo",
         href: "/dashboard/catalog",
         enabled: true,
       },
@@ -280,7 +280,7 @@ const MAIN_SECTIONS: NavSection[] = [
       },
       {
         key: "finance_banks",
-        label: "Contas Bancarias & Caixas",
+        label: "Contas Bancárias & Caixas",
         href: "/dashboard/finance/bank-accounts",
         enabled: true,
       },
@@ -317,7 +317,7 @@ const MAIN_SECTIONS: NavSection[] = [
       },
       {
         key: "hr_commissions",
-        label: "Comissoes",
+        label: "Comissões",
         href: "/dashboard/hr/commissions",
         enabled: true,
       },
@@ -339,7 +339,7 @@ const CLIENT_SECTIONS: NavSection[] = [
     items: [
       {
         key: "client_home",
-        label: "Visao geral",
+        label: "Visão geral",
         href: "/dashboard/client-portal",
         enabled: true,
       },
@@ -587,7 +587,7 @@ export default function SidebarNavigation({
               MANITEC
             </p>
             <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-slate-300">
-              Operacao integrada
+              Operação integrada
             </p>
           </div>
         )}
@@ -806,7 +806,7 @@ export default function SidebarNavigation({
           onClick={onLogout}
           className={`mt-3 w-full rounded-2xl border border-red-300/60 bg-red-500/10 px-3 py-2.5 text-sm font-semibold text-red-100 hover:bg-red-500/18 ${collapsed ? "text-xs" : ""}`}
         >
-          {collapsed ? "Sair" : "Encerrar Sessao"}
+          {collapsed ? "Sair" : "Encerrar sessão"}
         </button>
       </div>
     </aside>

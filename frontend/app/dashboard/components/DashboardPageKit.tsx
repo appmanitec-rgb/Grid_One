@@ -21,6 +21,7 @@ type PageHeroProps = {
   stats?: HeroStat[];
   actions?: ReactNode;
   aside?: ReactNode;
+  compact?: boolean;
 };
 
 type SectionCardProps = {
@@ -60,16 +61,25 @@ export function PageHero({
   stats = [],
   actions,
   aside,
+  compact = false,
 }: PageHeroProps) {
   return (
-    <section className="relative overflow-hidden rounded-[32px] border border-slate-200/85 bg-[linear-gradient(180deg,#fbfcfd_0%,#f3f6f9_100%)] p-4 shadow-[0_30px_70px_-50px_rgba(15,23,42,0.34)] md:p-5">
+    <section
+      className={cx(
+        "relative overflow-hidden rounded-[28px] border border-slate-200/85 bg-[linear-gradient(180deg,#fbfcfd_0%,#f3f6f9_100%)] p-3 shadow-[0_30px_70px_-50px_rgba(15,23,42,0.34)] md:p-4",
+        compact ? "rounded-[24px]" : "md:p-5",
+      )}
+    >
       <div className="absolute inset-x-12 top-0 h-px bg-gradient-to-r from-transparent via-slate-900/20 to-transparent" />
       <div
-        className="relative rounded-[28px] border border-white/8 px-6 py-6 shadow-[0_28px_70px_-46px_rgba(6,10,18,0.92)] md:px-7 md:py-7"
+        className={cx(
+          "relative rounded-[24px] border border-white/8 px-5 shadow-[0_28px_70px_-46px_rgba(6,10,18,0.92)] md:px-6",
+          compact ? "py-4 md:py-5" : "py-6 md:py-7",
+        )}
         style={{ background: "var(--dashboard-hero-background)" }}
       >
         <div
-          className="absolute inset-y-0 left-0 w-1.5 rounded-l-[28px]"
+          className="absolute inset-y-0 left-0 w-1.5 rounded-l-[24px]"
           style={{ background: "var(--dashboard-hero-ribbon)" }}
         />
         <div
@@ -81,15 +91,25 @@ export function PageHero({
           style={{ backgroundColor: "var(--dashboard-hero-glow-secondary)" }}
         />
 
-        <div className="relative space-y-6">
-          <div className="grid items-start gap-6 [grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr))]">
+        <div className="relative">
+          <div
+            className={cx(
+              "grid items-start [grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr))]",
+              compact ? "gap-4" : "gap-6",
+            )}
+          >
             <div className="max-w-3xl">
               {eyebrow ? (
                 <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-200">
                   {eyebrow}
                 </p>
               ) : null}
-              <h1 className="mt-3 text-3xl font-bold leading-tight text-white md:text-4xl">
+              <h1
+                className={cx(
+                  "mt-2 font-bold leading-tight text-white",
+                  compact ? "text-2xl md:text-3xl" : "text-3xl md:text-4xl",
+                )}
+              >
                 {title}
               </h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200 md:text-[15px]">
@@ -106,7 +126,7 @@ export function PageHero({
         </div>
       </div>
 
-      <div className="relative mt-5 space-y-5">
+      <div className={cx("relative space-y-4", compact ? "mt-4" : "mt-5 md:space-y-5")}>
         {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
 
         {stats.length > 0 ? (

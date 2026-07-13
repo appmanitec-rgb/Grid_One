@@ -74,7 +74,7 @@ export default function TechnicianOrderDetailPage() {
       setSuccess(path === "check-in" ? "Check-in registrado." : "Check-out registrado.");
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao registrar acao.");
+      setError(err instanceof Error ? err.message : "Falha ao registrar ação.");
     } finally {
       setSubmitting(false);
     }
@@ -118,7 +118,7 @@ export default function TechnicianOrderDetailPage() {
         </div>
         <h1 className="mt-3 text-2xl font-bold text-slate-950">{order.title}</h1>
         <p className="mt-2 text-sm text-slate-600">
-          {order.description || "Sem descricao tecnica."}
+          {order.description || "Sem descrição técnica."}
         </p>
       </header>
 
@@ -146,7 +146,7 @@ export default function TechnicianOrderDetailPage() {
           onChange={(event) => setNote(event.target.value)}
           rows={3}
           className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-400"
-          placeholder="Observacao de campo"
+          placeholder="Observação de campo"
         />
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           <button
@@ -174,7 +174,7 @@ export default function TechnicianOrderDetailPage() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-sm font-bold uppercase tracking-[0.16em] text-slate-500">
-              Laudo tecnico
+              Laudo técnico
             </h2>
             <p className="mt-1 text-sm text-slate-600">
               {order.serviceReport
@@ -191,7 +191,7 @@ export default function TechnicianOrderDetailPage() {
             </Link>
           ) : (
             <Link href="/dashboard/relatorios-tecnicos" className={SECONDARY_BUTTON}>
-              Criar laudo
+              Abrir central de laudos
             </Link>
           )}
         </div>
@@ -199,7 +199,7 @@ export default function TechnicianOrderDetailPage() {
 
       <section className="space-y-3">
         <h2 className="text-sm font-bold uppercase tracking-[0.16em] text-slate-500">
-          Sessoes
+          Sessões
         </h2>
         {sessions.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-center text-sm font-semibold text-slate-500">

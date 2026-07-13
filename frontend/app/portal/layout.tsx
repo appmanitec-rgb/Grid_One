@@ -15,7 +15,7 @@ const NAV_ITEMS = [
   { href: "/portal/equipamentos", label: "Equipamentos" },
   { href: "/portal/propostas", label: "Propostas" },
   { href: "/portal/chamados", label: "Chamados" },
-  { href: "/portal/solicitacoes", label: "Solicitacoes" },
+  { href: "/portal/solicitacoes", label: "Solicitações" },
   { href: "/portal/laudos", label: "Laudos" },
   { href: "/portal/documentos", label: "Documentos" },
   { href: "/portal/financeiro", label: "Financeiro" },
@@ -92,7 +92,7 @@ export default function PortalLayout({
             <p className="text-sm font-medium text-slate-500">{clientName}</p>
           </div>
 
-          <nav className="flex gap-2 overflow-x-auto">
+          <nav className="flex gap-2 overflow-x-auto pb-1">
             {NAV_ITEMS.map((item) => {
               const active =
                 pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -100,7 +100,7 @@ export default function PortalLayout({
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`whitespace-nowrap rounded-md px-3 py-2 text-sm font-bold transition ${
+                  className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-bold transition ${
                     active
                       ? "bg-blue-600 text-white"
                       : "border border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:text-blue-700"

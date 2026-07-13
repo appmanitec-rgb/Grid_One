@@ -108,7 +108,7 @@ export default function ProposalDetailPage() {
       if (await handleUnauthorized(res)) return;
       if (!res.ok) {
         throw new Error(
-          await readApiErrorMessage(res, "Nao foi possivel carregar a proposta."),
+          await readApiErrorMessage(res, "Não foi possível carregar a proposta."),
         );
       }
       setProposal(await res.json());
@@ -150,7 +150,7 @@ export default function ProposalDetailPage() {
       });
       if (await handleUnauthorized(res)) return false;
       if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, "Falha na acao."));
+        throw new Error(await readApiErrorMessage(res, "Falha na ação."));
       }
 
       const data = await res.json();
@@ -163,10 +163,10 @@ export default function ProposalDetailPage() {
         return true;
       }
       await load();
-      setNotice("Acao executada com sucesso.");
+      setNotice("Ação executada com sucesso.");
       return true;
     } catch (e: unknown) {
-      setError(getErrorMessage(e, "Erro ao executar acao."));
+      setError(getErrorMessage(e, "Erro ao executar ação."));
       return false;
     } finally {
       setIsBusy(false);
@@ -176,7 +176,7 @@ export default function ProposalDetailPage() {
   async function handleRequestDiscount() {
     const percent = Number(discountPercentInput.replace(",", "."));
     if (!Number.isFinite(percent) || percent <= 0) {
-      setError("Informe um percentual de desconto valido.");
+      setError("Informe um percentual de desconto válido.");
       return;
     }
 
@@ -228,7 +228,7 @@ export default function ProposalDetailPage() {
         {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
         <EmptyState
           title="Carregando proposta"
-          description="Estamos reunindo o contexto comercial, os itens e o historico desta proposta."
+          description="Estamos reunindo o contexto comercial, os itens e o histórico desta proposta."
         />
       </div>
     );
@@ -245,6 +245,7 @@ export default function ProposalDetailPage() {
   const flowActions: Array<{
     label: string;
     tone: "primary" | "danger" | "amber";
+    confirmText?: string;
     run: () => Promise<void>;
   }> = [];
 
@@ -273,6 +274,7 @@ export default function ProposalDetailPage() {
       {
         label: "Aprovar diretoria",
         tone: "primary",
+        confirmText: "Aprovar esta proposta para seguir no fluxo comercial?",
         run: async () => {
           await runAction("board-approve");
         },
@@ -280,6 +282,7 @@ export default function ProposalDetailPage() {
       {
         label: "Solicitar ajustes",
         tone: "amber",
+        confirmText: "Solicitar ajustes nesta proposta?",
         run: async () => {
           await runAction("board-reject", {
             note: "Diretoria solicitou ajustes.",
@@ -294,6 +297,9 @@ export default function ProposalDetailPage() {
       {
         label: isClient ? "Aprovar proposta" : "Marcar como ganho",
         tone: "primary",
+        confirmText: isClient
+          ? "Confirmar aprovação desta proposta?"
+          : "Marcar esta proposta como ganha?",
         run: async () => {
           await runAction("client-approve");
         },
@@ -301,6 +307,9 @@ export default function ProposalDetailPage() {
       {
         label: isClient ? "Recusar proposta" : "Marcar como perdido",
         tone: "danger",
+        confirmText: isClient
+          ? "Confirmar recusa desta proposta?"
+          : "Marcar esta proposta como perdida?",
         run: async () => {
           await runAction("client-reject", {
             note: "Cliente recusou a proposta.",
@@ -325,12 +334,13 @@ export default function ProposalDetailPage() {
   return (
     <div className="space-y-6">
       <PageHero
+        compact
         eyebrow="Proposta comercial"
         title={`Proposta ${proposal.code}`}
         description={
           isClient
-            ? `Status atual: ${statusLabel(proposal.status)}. Revise condicoes, itens e responda quando a proposta estiver pronta para sua decisao.`
-            : `Status atual: ${statusLabel(proposal.status)}. Fluxo, condicoes comerciais, itens e historico em uma leitura unica.`
+            ? `Status atual: ${statusLabel(proposal.status)}. Revise condições, itens e responda quando a proposta estiver pronta para sua decisão.`
+            : `Status atual: ${statusLabel(proposal.status)}. Fluxo, condições comerciais, itens e histórico em uma leitura única.`
         }
         stats={[
           {
@@ -352,7 +362,7 @@ export default function ProposalDetailPage() {
             tone: "blue",
           },
           {
-            label: "Historico",
+            label: "Histórico",
             value: String(proposal.movements?.length || 0),
             helper: "Eventos registrados nesta proposta.",
             tone: "amber",
@@ -361,7 +371,15 @@ export default function ProposalDetailPage() {
         actions={
           <>
             {proposal.status === "WON" && !proposal.generatedContract && !isClient ? (
-              <ActionButton busy={isBusy} onClick={() => runAction("convert-contract")}>
+              <ActionButton
+                busy={isBusy}
+                onClick={() => {
+                  if (!window.confirm("Converter esta proposta ganha em contrato?")) {
+                    return;
+                  }
+                  void runAction("convert-contract");
+                }}
+              >
                 Converter em contrato
               </ActionButton>
             ) : null}
@@ -380,7 +398,15 @@ export default function ProposalDetailPage() {
               Documento
             </Link>
             {!isClient ? (
-              <ActionButton busy={isBusy} onClick={() => runAction("revise", undefined, true)}>
+              <ActionButton
+                busy={isBusy}
+                onClick={() => {
+                  if (!window.confirm("Criar uma nova revisão desta proposta?")) {
+                    return;
+                  }
+                  void runAction("revise", undefined, true);
+                }}
+              >
                 Revisar proposta
               </ActionButton>
             ) : null}
@@ -407,18 +433,18 @@ export default function ProposalDetailPage() {
             </div>
             <MiniInfo
               label="Cliente"
-              value={proposal.client?.companyName || "Nao vinculado"}
+              value={proposal.client?.companyName || "Não vinculado"}
               helper="Cadastro comercial que recebe esta proposta."
             />
             <MiniInfo
               label="Equipamento"
-              value={proposal.generator?.name || "Nao vinculado"}
-              helper="Ativo ou conjunto tecnico associado."
+              value={proposal.generator?.name || "Não vinculado"}
+              helper="Ativo ou conjunto técnico associado."
             />
             <MiniInfo
               label="Criado por"
               value={proposal.user?.name || "Sistema"}
-              helper="Origem do registro e da negociacao."
+              helper="Origem do registro e da negociação."
             />
           </FieldBox>
         }
@@ -454,22 +480,22 @@ export default function ProposalDetailPage() {
         >
           <InlineMessage>
             O modulo deixa claro quando a proposta nasceu do CRM para manter o contexto da
-            negociacao conectado ao restante da trilha comercial.
+            negociação conectado ao restante da trilha comercial.
           </InlineMessage>
         </SectionCard>
       ) : null}
 
       <SectionCard
         eyebrow="Governanca do fluxo"
-        title="Ritmo comercial e aprovacoes"
+        title="Ritmo comercial e aprovações"
         description={
           isClient
             ? "Acompanhe a etapa atual e responda quando a proposta estiver em analise do cliente."
-            : "Acompanhe o passo atual da proposta, acione mudancas de etapa e trate solicitacoes de desconto sem perder o contexto."
+            : "Acompanhe o passo atual da proposta, acione mudanças de etapa e trate solicitações de desconto sem perder o contexto."
         }
         actions={
           proposal.status === "REVISION_REQUIRED" ? (
-            <DataPill tone="amber">Em revisao para diretoria</DataPill>
+            <DataPill tone="amber">Em revisão para diretoria</DataPill>
           ) : (
             <DataPill tone={statusTone(proposal.status)}>
               {statusLabel(proposal.status)}
@@ -509,6 +535,9 @@ export default function ProposalDetailPage() {
                 busy={isBusy}
                 tone={action.tone}
                 onClick={() => {
+                  if (action.confirmText && !window.confirm(action.confirmText)) {
+                    return;
+                  }
                   void action.run();
                 }}
               >
@@ -570,8 +599,8 @@ export default function ProposalDetailPage() {
               </div>
             </div>
             <p className="mt-3 text-sm leading-6 text-amber-900">
-              Descontos dentro da alcada do usuario podem ser liberados automaticamente.
-              Acima do limite, o pedido segue para aprovacao.
+              Descontos dentro da alçada do usuário podem ser liberados automaticamente.
+              Acima do limite, o pedido segue para aprovação.
             </p>
           </div>
         ) : null}
@@ -620,7 +649,7 @@ export default function ProposalDetailPage() {
 
       <SectionCard
         eyebrow="Resumo executivo"
-        title="Leitura rapida da proposta"
+        title="Leitura rápida da proposta"
         description="Contexto essencial para decidir, revisar ou converter em contrato."
       >
         <div className="grid gap-3 md:grid-cols-3">
@@ -634,19 +663,19 @@ export default function ProposalDetailPage() {
       </SectionCard>
 
       <SectionCard
-        eyebrow="Condicoes comerciais"
+        eyebrow="Condições comerciais"
         title="Pagamento, prazo e vencimentos"
-        description="Base financeira e logistica que sustenta esta negociacao."
+        description="Base financeira e logística que sustenta esta negociação."
       >
         <div className="grid gap-3 md:grid-cols-3">
           <Info label="Validade" value={proposal.validUntil ? formatDate(proposal.validUntil) : "-"} />
-          <Info label="Condicao de pagamento" value={proposal.paymentTerm || "-"} />
+          <Info label="Condição de pagamento" value={proposal.paymentTerm || "-"} />
           <Info label="Prazo de entrega (dias)" value={proposal.deliveryLeadTimeDays != null ? String(proposal.deliveryLeadTimeDays) : "-"} />
           <Info label="Primeiro vencimento" value={proposal.firstDueDate ? formatDate(proposal.firstDueDate) : "-"} />
           <Info label="Intervalo parcelas (dias)" value={proposal.installmentIntervalDays != null ? String(proposal.installmentIntervalDays) : "-"} />
           <Info label="Parcelamento" value={`${installments}x de ${formatCurrency(installmentValue)}`} />
           <Info label="Entrada" value={proposal.hasDownPayment ? formatCurrency(downPayment) : "Sem entrada"} />
-          <Info label="Saldo apos entrada" value={formatCurrency(remaining)} />
+          <Info label="Saldo após entrada" value={formatCurrency(remaining)} />
         </div>
       </SectionCard>
 
@@ -654,7 +683,7 @@ export default function ProposalDetailPage() {
         <SectionCard
           eyebrow="Financeiro"
           title="Dados para pagamento"
-          description="Observacoes complementares para o fechamento financeiro."
+          description="Observações complementares para o fechamento financeiro."
         >
           <div className="rounded-[24px] border border-slate-200 bg-slate-50/85 px-4 py-4">
             <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">
@@ -667,7 +696,7 @@ export default function ProposalDetailPage() {
       <SectionCard
         eyebrow="Escopo da proposta"
         title="Itens comerciais"
-        description="Resumo dos itens, quantidades e valores unitarios que compoem a proposta."
+        description="Resumo dos itens, quantidades e valores unitários que compõem a proposta."
       >
         <div className="overflow-x-auto">
           <table className="w-full min-w-[560px] text-sm">
@@ -675,7 +704,7 @@ export default function ProposalDetailPage() {
               <tr className="border-b border-slate-200 text-left text-slate-500">
                 <th className="px-3 py-3 font-semibold">Item</th>
                 <th className="px-3 py-3 font-semibold">Quantidade</th>
-                <th className="px-3 py-3 font-semibold">Unitario</th>
+                <th className="px-3 py-3 font-semibold">Unitário</th>
                 <th className="px-3 py-3 font-semibold">Total</th>
               </tr>
             </thead>
@@ -698,7 +727,7 @@ export default function ProposalDetailPage() {
             <div className="mt-4">
               <EmptyState
                 title="Nenhum item cadastrado"
-                description="Inclua itens na proposta para fechar a composicao comercial."
+                description="Inclua itens na proposta para fechar a composição comercial."
               />
             </div>
           ) : null}
@@ -707,13 +736,13 @@ export default function ProposalDetailPage() {
 
       <SectionCard
         eyebrow="Relacionamentos"
-        title="Revisoes da proposta"
-        description="Novas rodadas comerciais associadas a este historico."
+        title="Revisões da proposta"
+        description="Novas rodadas comerciais associadas a este histórico."
       >
         {(!proposal.revisions || proposal.revisions.length === 0) ? (
           <EmptyState
-            title="Sem revisoes"
-            description="Novas rodadas de proposta aparecerao aqui."
+            title="Sem revisões"
+            description="Novas rodadas de proposta aparecerão aqui."
           />
         ) : (
           <div className="space-y-2">
@@ -740,13 +769,13 @@ export default function ProposalDetailPage() {
 
       <SectionCard
         eyebrow="Trilha operacional"
-        title="Movimentacoes registradas"
-        description="Linha do tempo das acoes aplicadas nesta proposta."
+        title="Movimentações registradas"
+        description="Linha do tempo das ações aplicadas nesta proposta."
       >
         {(!proposal.movements || proposal.movements.length === 0) ? (
           <EmptyState
-            title="Sem movimentacoes registradas"
-            description="A trilha operacional aparecera aqui conforme o fluxo evoluir."
+            title="Sem movimentações registradas"
+            description="A trilha operacional aparecerá aqui conforme o fluxo evoluir."
           />
         ) : (
           <div className="space-y-3">
@@ -878,10 +907,10 @@ function MiniInfo({
 
 function opportunityStageLabel(stage: string) {
   const map: Record<string, string> = {
-    PROSPECTION: "Prospeccao",
+    PROSPECTION: "Prospecção",
     SITE_SURVEY_SCHEDULED: "Vistoria Agendada",
     PROPOSAL_SENT: "Proposta Enviada",
-    NEGOTIATION: "Em Negociacao",
+    NEGOTIATION: "Em Negociação",
     WON: "Ganha",
     LOST: "Perdida",
   };

@@ -40,7 +40,7 @@ export default function PortalRequestsPage() {
       setRequests(requestPayload);
       setEquipment(equipmentPayload);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao carregar solicitacoes.");
+      setError(err instanceof Error ? err.message : "Falha ao carregar solicitações.");
     } finally {
       setLoading(false);
     }
@@ -61,11 +61,11 @@ export default function PortalRequestsPage() {
         ...form,
         equipmentId: form.equipmentId || undefined,
       });
-      setSuccess("Solicitacao enviada para o time comercial.");
+      setSuccess("Solicitação enviada para o time comercial.");
       setForm(INITIAL_FORM);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao enviar solicitacao.");
+      setError(err instanceof Error ? err.message : "Falha ao enviar solicitação.");
     } finally {
       setSubmitting(false);
     }
@@ -74,9 +74,9 @@ export default function PortalRequestsPage() {
   return (
     <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <h1 className="text-2xl font-extrabold text-slate-950">Solicitar cotacao</h1>
+        <h1 className="text-2xl font-extrabold text-slate-950">Solicitar cotação</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Abra uma solicitacao para atendimento comercial ou tecnico.
+          Abra uma solicitação para atendimento comercial ou técnico.
         </p>
 
         {error ? <State text={error} tone="error" /> : null}
@@ -89,7 +89,7 @@ export default function PortalRequestsPage() {
               onChange={(event) => setForm((current) => ({ ...current, equipmentId: event.target.value }))}
               className="w-full rounded-md border border-slate-300 p-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             >
-              <option value="">Nao vincular equipamento</option>
+              <option value="">Não vincular equipamento</option>
               {equipment.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.name} {item.serialNumber ? `- ${item.serialNumber}` : ""}
@@ -98,17 +98,17 @@ export default function PortalRequestsPage() {
             </select>
           </Field>
 
-          <Field label="Tipo de servico">
+          <Field label="Tipo de serviço">
             <input
               value={form.serviceType}
               onChange={(event) => setForm((current) => ({ ...current, serviceType: event.target.value }))}
               className="w-full rounded-md border border-slate-300 p-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              placeholder="Preventiva, corretiva, peca, contrato..."
+              placeholder="Preventiva, corretiva, peça, contrato..."
               required
             />
           </Field>
 
-          <Field label="Urgencia">
+          <Field label="Urgência">
             <select
               value={form.urgency}
               onChange={(event) => setForm((current) => ({ ...current, urgency: event.target.value }))}
@@ -121,7 +121,7 @@ export default function PortalRequestsPage() {
             </select>
           </Field>
 
-          <Field label="Descricao">
+          <Field label="Descrição">
             <textarea
               value={form.description}
               onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
@@ -161,16 +161,16 @@ export default function PortalRequestsPage() {
             disabled={submitting}
             className="rounded-md bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:opacity-60"
           >
-            {submitting ? "Enviando..." : "Enviar solicitacao"}
+            {submitting ? "Enviando..." : "Enviar solicitação"}
           </button>
         </form>
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-xl font-extrabold text-slate-950">Solicitacoes abertas</h2>
+        <h2 className="text-xl font-extrabold text-slate-950">Solicitações abertas</h2>
         <div className="mt-4 space-y-3">
-          {loading ? <State text="Carregando solicitacoes..." /> : null}
-          {!loading && !requests.length ? <State text="Nenhuma solicitacao aberta pelo portal." /> : null}
+          {loading ? <State text="Carregando solicitações..." /> : null}
+          {!loading && !requests.length ? <State text="Nenhuma solicitação aberta pelo portal." /> : null}
           {requests.map((request) => (
             <article key={request.id} className="rounded-md border border-slate-100 bg-slate-50 p-3">
               <div className="flex items-start justify-between gap-3">

@@ -68,12 +68,12 @@ export default function PortalEquipmentPage() {
             </div>
 
             <dl className="mt-4 grid grid-cols-2 gap-2 text-sm">
-              <Info label="Potencia" value={`${item.power} kVA`} />
+              <Info label="Potência" value={`${item.power} kVA`} />
               <Info label="Modelo" value={item.model?.name || "-"} />
               <Info label="Local" value={item.currentSite?.name || "-"} />
-              <Info label="Horimetro" value={item.hourMeter ? `${item.hourMeter} h` : "-"} />
-              <Info label="Ultima OS" value={item.lastOrder ? statusLabel(item.lastOrder.status) : "-"} />
-              <Info label="Proxima preventiva" value={formatPortalDate(item.nextPreventive?.scheduledDate)} />
+              <Info label="Horímetro" value={item.hourMeter ? `${item.hourMeter} h` : "-"} />
+              <Info label="Última OS" value={item.lastOrder ? statusLabel(item.lastOrder.status) : "-"} />
+              <Info label="Próxima preventiva" value={formatPortalDate(item.nextPreventive?.scheduledDate)} />
             </dl>
           </Link>
         ))}

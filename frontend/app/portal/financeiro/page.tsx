@@ -50,7 +50,7 @@ export default function PortalFinancialPage() {
     <div className="space-y-5">
       <header className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <h1 className="text-2xl font-extrabold text-slate-950">Financeiro</h1>
-        <p className="mt-1 text-sm text-slate-500">Titulos vinculados a sua empresa.</p>
+        <p className="mt-1 text-sm text-slate-500">Títulos vinculados à sua empresa.</p>
         <strong className="mt-4 block text-3xl text-slate-950">{formatPortalCurrency(openAmount)}</strong>
         <p className="text-sm font-medium text-slate-500">Saldo aberto estimado</p>
       </header>
@@ -61,7 +61,7 @@ export default function PortalFinancialPage() {
 
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="grid grid-cols-[1fr_auto_auto] gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3 text-xs font-bold uppercase text-slate-500">
-          <span>Descricao</span>
+          <span>Descrição</span>
           <span>Vencimento</span>
           <span>Valor</span>
         </div>

@@ -16,10 +16,10 @@ const STAGE_ORDER = [
 type Stage = (typeof STAGE_ORDER)[number];
 
 const STAGE_LABEL: Record<Stage, string> = {
-  PROSPECTION: "Prospeccao",
+  PROSPECTION: "Prospecção",
   SITE_SURVEY_SCHEDULED: "Vistoria Agendada",
   PROPOSAL_SENT: "Proposta Enviada",
-  NEGOTIATION: "Em Negociacao",
+  NEGOTIATION: "Em Negociação",
   WON: "Ganho",
   LOST: "Perdido",
 };
@@ -44,19 +44,19 @@ const LOSS_REASONS = [
 type LossReason = (typeof LOSS_REASONS)[number];
 
 const LOSS_REASON_LABEL: Record<LossReason, string> = {
-  PRICE: "Preco",
+  PRICE: "Preço",
   DEADLINE: "Prazo",
   COMPETITOR: "Concorrente",
   PROJECT_CANCELED: "Projeto cancelado",
-  TECHNICAL_SCOPE: "Escopo tecnico",
+  TECHNICAL_SCOPE: "Escopo técnico",
   OTHER: "Outro",
 };
 
 const PROPOSAL_STATUS_LABEL: Record<string, string> = {
   DRAFT: "Rascunho",
-  BOARD_REVIEW: "Analise Diretoria",
-  REVISION_REQUIRED: "Em Revisao",
-  CLIENT_REVIEW: "Analise Cliente",
+  BOARD_REVIEW: "Análise Diretoria",
+  REVISION_REQUIRED: "Em Revisão",
+  CLIENT_REVIEW: "Análise Cliente",
   DISCOUNT_REVIEW: "Aguardando desconto",
   WON: "Ganha",
   LOST: "Perdida",
@@ -107,7 +107,9 @@ export default function OpportunitiesPage() {
   const [sellers, setSellers] = useState<Collaborator[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [changingStageId, setChangingStageId] = useState("");
 
   const [title, setTitle] = useState("");
   const [clientId, setClientId] = useState("");
@@ -124,6 +126,7 @@ export default function OpportunitiesPage() {
   }, [pipeline]);
 
   async function loadAll() {
+    setLoading(true);
     setError("");
     setMessage("");
     try {
@@ -158,6 +161,8 @@ export default function OpportunitiesPage() {
           ? loadError.message
           : "Falha ao carregar dados do funil.",
       );
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -175,7 +180,7 @@ export default function OpportunitiesPage() {
   async function handleCreateOpportunity(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!title.trim() || !clientId) {
-      setError("Informe titulo e cliente para criar a oportunidade.");
+      setError("Informe título e cliente para criar a oportunidade.");
       return;
     }
 
@@ -244,7 +249,7 @@ export default function OpportunitiesPage() {
       if (!reasonInput) return;
 
       if (!LOSS_REASONS.includes(reasonInput as LossReason)) {
-        setError("Motivo de perda invalido.");
+        setError("Motivo de perda inválido.");
         return;
       }
 
@@ -258,6 +263,7 @@ export default function OpportunitiesPage() {
 
     setError("");
     setMessage("");
+    setChangingStageId(item.id);
     try {
       const res = await apiFetch(`/crm/opportunities/${item.id}/stage`, {
         method: "PATCH",
@@ -278,16 +284,44 @@ export default function OpportunitiesPage() {
           ? updateError.message
           : "Falha ao atualizar fase.",
       );
+    } finally {
+      setChangingStageId("");
     }
   }
 
   return (
-    <div className="space-y-6 p-8">
-      <header className="space-y-2">
-        <h1 className="text-3xl font-bold text-zinc-900">Funil de Vendas (Oportunidades)</h1>
-        <p className="text-sm text-zinc-600">
-          Controle comercial em Kanban com fases, valores e inteligencia de motivos de perda.
-        </p>
+    <div className="space-y-5 p-4 md:p-6">
+      <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+              Comercial
+            </p>
+            <h1 className="mt-2 text-2xl font-bold text-zinc-900">
+              Funil de Vendas
+            </h1>
+            <p className="mt-1 text-sm text-zinc-600">
+              Kanban comercial com fases, valores, responsáveis e próximos passos.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <MiniMetric label="Oportunidades" value={String(opportunities.length)} />
+            <MiniMetric
+              label="Pipeline"
+              value={`R$ ${pipeline
+                .reduce((sum, row) => sum + Number(row.estimatedValue || 0), 0)
+                .toLocaleString("pt-BR")}`}
+            />
+            <MiniMetric
+              label="Abertas"
+              value={String(
+                opportunities.filter(
+                  (item) => !["WON", "LOST"].includes(item.stage),
+                ).length,
+              )}
+            />
+          </div>
+        </div>
       </header>
 
       {message ? (
@@ -301,7 +335,7 @@ export default function OpportunitiesPage() {
         </p>
       ) : null}
 
-      <section className="rounded-xl border border-zinc-200 bg-white p-4">
+      <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
         <h2 className="text-lg font-bold text-zinc-900">Nova Oportunidade</h2>
         <form
           onSubmit={(event) => void handleCreateOpportunity(event)}
@@ -310,7 +344,7 @@ export default function OpportunitiesPage() {
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            placeholder="Titulo da oportunidade"
+            placeholder="Título da oportunidade"
             className="rounded-lg border border-zinc-300 px-3 py-2 text-sm md:col-span-2"
             required
           />
@@ -333,7 +367,7 @@ export default function OpportunitiesPage() {
             onChange={(event) => setAssignedSellerId(event.target.value)}
             className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
           >
-            <option value="">Vendedor responsavel</option>
+            <option value="">Vendedor responsável</option>
             {sellers.map((seller) => (
               <option key={seller.id} value={seller.id}>
                 {seller.name}
@@ -374,11 +408,11 @@ export default function OpportunitiesPage() {
         </form>
       </section>
 
-      <section className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
         {STAGE_ORDER.map((stage) => {
           const row = pipelineMap.get(stage);
           return (
-            <article key={stage} className="rounded-xl border border-zinc-200 bg-white p-3">
+            <article key={stage} className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
               <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-500">
                 {STAGE_LABEL[stage]}
               </p>
@@ -391,12 +425,22 @@ export default function OpportunitiesPage() {
         })}
       </section>
 
-      <section className="overflow-x-auto rounded-xl border border-zinc-200 bg-white p-4">
-        <div className="grid min-w-[1220px] grid-cols-6 gap-3">
+      <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+        {loading ? (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">
+            Carregando oportunidades...
+          </div>
+        ) : null}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
           {STAGE_ORDER.map((stage) => (
-            <div key={stage} className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+            <div key={stage} className="min-h-[18rem] rounded-xl border border-zinc-200 bg-zinc-50 p-3">
               <h2 className="mb-2 text-sm font-bold text-zinc-800">{STAGE_LABEL[stage]}</h2>
               <div className="space-y-2">
+                {opportunities.filter((item) => item.stage === stage).length === 0 && !loading ? (
+                  <div className="rounded-lg border border-dashed border-zinc-300 bg-white/80 px-3 py-4 text-sm text-zinc-500">
+                    Nenhuma oportunidade nesta etapa.
+                  </div>
+                ) : null}
                 {opportunities
                   .filter((item) => item.stage === stage)
                   .map((item) => (
@@ -413,7 +457,7 @@ export default function OpportunitiesPage() {
                         {item.client?.tradeName || item.client?.companyName}
                       </p>
                       <p className="text-xs text-zinc-600">
-                        Vendedor: {item.assignedSeller?.name || "Nao definido"}
+                        Vendedor: {item.assignedSeller?.name || "Não definido"}
                       </p>
                       <p className="text-xs text-zinc-600">
                         Temperatura: {TEMPERATURE_LABEL[item.temperature]}
@@ -431,7 +475,7 @@ export default function OpportunitiesPage() {
                       </div>
                       {item.proposals?.[0] ? (
                         <p className="mt-2 text-xs text-zinc-500">
-                          Ultima proposta: {item.proposals[0].code} | {PROPOSAL_STATUS_LABEL[item.proposals[0].status] || item.proposals[0].status}
+                          Última proposta: {item.proposals[0].code} | {PROPOSAL_STATUS_LABEL[item.proposals[0].status] || item.proposals[0].status}
                         </p>
                       ) : null}
                       {item.lossReason ? (
@@ -458,10 +502,11 @@ export default function OpportunitiesPage() {
                       </div>
                       <select
                         value={item.stage}
+                        disabled={changingStageId === item.id}
                         onChange={(event) =>
                           void handleStageChange(item, event.target.value as Stage)
                         }
-                        className="mt-3 w-full rounded-md border border-zinc-300 px-2 py-1 text-xs"
+                        className="mt-3 w-full rounded-md border border-zinc-300 px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {STAGE_ORDER.map((stageOption) => (
                           <option key={stageOption} value={stageOption}>
@@ -469,6 +514,11 @@ export default function OpportunitiesPage() {
                           </option>
                         ))}
                       </select>
+                      {changingStageId === item.id ? (
+                        <p className="mt-2 text-xs font-semibold text-sky-700">
+                          Atualizando etapa...
+                        </p>
+                      ) : null}
                     </article>
                   ))}
               </div>
@@ -476,6 +526,17 @@ export default function OpportunitiesPage() {
           ))}
         </div>
       </section>
+    </div>
+  );
+}
+
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-black text-slate-950">{value}</p>
     </div>
   );
 }

@@ -178,7 +178,7 @@ export default function ServiceReportDetailPage() {
   async function addEvidence(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!evidenceForm.title.trim()) {
-      setError("Informe o titulo da evidencia.");
+      setError("Informe o título da evidência.");
       return;
     }
     await runAction("evidence", async () => {
@@ -199,7 +199,7 @@ export default function ServiceReportDetailPage() {
   }
 
   async function uploadEvidenceFile() {
-    if (!evidenceFile) throw new Error("Selecione o arquivo da evidencia.");
+    if (!evidenceFile) throw new Error("Selecione o arquivo da evidência.");
     const formData = new FormData();
     formData.set("file", evidenceFile);
     formData.set("type", evidenceForm.type);
@@ -285,7 +285,7 @@ export default function ServiceReportDetailPage() {
   }
 
   async function reviseReleasedReport() {
-    const reason = window.prompt("Informe o motivo da revisao do laudo liberado:");
+    const reason = window.prompt("Informe o motivo da revisão do laudo liberado:");
     if (!reason?.trim()) return;
     await runAction("revise", async () => {
       const updated = await serviceReportsPost<ServiceReport>(
@@ -300,7 +300,7 @@ export default function ServiceReportDetailPage() {
         },
       );
       setReport(updated);
-      setSuccess("Revisao versionada criada. Gere um novo PDF para a versao atual.");
+      setSuccess("Revisão versionada criada. Gere um novo PDF para a versão atual.");
     });
   }
 
@@ -308,7 +308,7 @@ export default function ServiceReportDetailPage() {
     await runAction("print", async () => {
       const html = await serviceReportsGetText(`/${reportId}/print`);
       openHtmlInNewWindow(html);
-      setSuccess("Preview imprimivel aberto.");
+      setSuccess("Preview imprimível aberto.");
     });
   }
 
@@ -325,15 +325,18 @@ export default function ServiceReportDetailPage() {
     await runAction("share-link", async () => {
       const created = await serviceReportsPost<ServiceReportShareLink>(
         `/${reportId}/share-links`,
-        { allowPdfDownload: shareAllowPdfDownload },
+        {
+          allowPdfDownload:
+            shareAllowPdfDownload && Boolean(report?.generatedDocument?.hasStoredFile),
+        },
       );
       setShareLinks((current) => [created, ...current]);
-      setSuccess("Link publico criado.");
+      setSuccess("Link público criado.");
     });
   }
 
   async function revokeShareLink(linkId: string) {
-    if (!window.confirm("Revogar este link publico?")) return;
+    if (!window.confirm("Revogar este link público?")) return;
     await runAction(`revoke-${linkId}`, async () => {
       const updated = await serviceReportsPost<ServiceReportShareLink>(
         `/${reportId}/share-links/${linkId}/revoke`,
@@ -342,7 +345,7 @@ export default function ServiceReportDetailPage() {
       setShareLinks((current) =>
         current.map((link) => (link.id === linkId ? updated : link)),
       );
-      setSuccess("Link publico revogado.");
+      setSuccess("Link público revogado.");
     });
   }
 
@@ -353,7 +356,7 @@ export default function ServiceReportDetailPage() {
     try {
       await action();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha na acao solicitada.");
+      setError(err instanceof Error ? err.message : "Falha na ação solicitada.");
     } finally {
       setBusyKey("");
     }
@@ -389,12 +392,13 @@ export default function ServiceReportDetailPage() {
 
   if (loading) return <State text="Carregando laudo..." />;
   if (error && !report) return <State text={error} tone="error" />;
-  if (!report) return <State text="Laudo nao encontrado." />;
+  if (!report) return <State text="Laudo não encontrado." />;
 
   return (
     <div className="space-y-6">
       <PageHero
-        eyebrow="Laudo tecnico"
+        compact
+        eyebrow="Laudo técnico"
         title={`${report.code} - ${report.title}`}
         description={`${report.client?.tradeName || report.client?.companyName || "Cliente"} / ${report.generator?.name || "Equipamento"} / ${report.maintenanceOrder?.title || "OS"}`}
         actions={
@@ -408,7 +412,7 @@ export default function ServiceReportDetailPage() {
               disabled={busyKey === "print"}
               onClick={() => void openPrintPreview()}
             >
-              {busyKey === "print" ? "Abrindo..." : "Visualizar impressao"}
+              {busyKey === "print" ? "Abrindo..." : "Visualizar impressão"}
             </button>
             {canGenerateDocument ? (
               <button
@@ -447,7 +451,7 @@ export default function ServiceReportDetailPage() {
                 disabled={busyKey === "revise"}
                 onClick={() => void reviseReleasedReport()}
               >
-                Revisar versao
+                Revisar versão
               </button>
             ) : null}
             {canApprove ? (
@@ -455,7 +459,13 @@ export default function ServiceReportDetailPage() {
                 type="button"
                 className={PRIMARY_BUTTON}
                 disabled={busyKey === "approve"}
-                onClick={() => void transition("approve", "Laudo aprovado.")}
+                onClick={() =>
+                  void transition(
+                    "approve",
+                    "Laudo aprovado.",
+                    "Aprovar este laudo para geração/liberação?",
+                  )
+                }
               >
                 {busyKey === "approve" ? "Aprovando..." : "Aprovar"}
               </button>
@@ -500,7 +510,7 @@ export default function ServiceReportDetailPage() {
             tone: "blue",
           },
           {
-            label: "Evidencias",
+            label: "Evidências",
             value: String(report.evidences.length),
             tone: "slate",
           },
@@ -510,7 +520,7 @@ export default function ServiceReportDetailPage() {
             tone: report.customerVisible ? "emerald" : "amber",
           },
           {
-            label: "Versao",
+            label: "Versão",
             value: String(report.versionNumber || 1),
             tone: "blue",
           },
@@ -522,7 +532,7 @@ export default function ServiceReportDetailPage() {
 
       <SectionCard
         title="Documento e compartilhamento"
-        description="Documento imprimivel, hash de autenticidade e links publicos expiraveis."
+        description="Documento imprimível, hash de autenticidade e links públicos expiráveis."
         actions={
           canManageShareLinks ? (
             <div className="flex flex-wrap items-center gap-3">
@@ -530,17 +540,23 @@ export default function ServiceReportDetailPage() {
                 <input
                   type="checkbox"
                   checked={shareAllowPdfDownload}
+                  disabled={!report.generatedDocument?.hasStoredFile}
                   onChange={(event) => setShareAllowPdfDownload(event.target.checked)}
                 />
                 Permitir PDF no link
               </label>
+              {!report.generatedDocument?.hasStoredFile ? (
+                <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+                  Gere o PDF antes de liberar download público
+                </span>
+              ) : null}
               <button
                 type="button"
                 className={PRIMARY_BUTTON}
                 disabled={busyKey === "share-link"}
                 onClick={() => void createShareLink()}
               >
-                {busyKey === "share-link" ? "Criando..." : "Criar link publico"}
+                {busyKey === "share-link" ? "Criando..." : "Criar link público"}
               </button>
             </div>
           ) : null
@@ -552,7 +568,7 @@ export default function ServiceReportDetailPage() {
             value={report.generatedDocument?.hasStoredFile ? "Gerado" : "Pendente"}
           />
           <Info label="Hash" value={report.documentHash?.slice(0, 24)} />
-          <Info label="Validacao" value={report.validationUrl ? "Disponivel" : "Pendente"} />
+          <Info label="Validação" value={report.validationUrl ? "Disponível" : "Pendente"} />
         </div>
         {report.validationUrl ? (
           <a
@@ -561,12 +577,12 @@ export default function ServiceReportDetailPage() {
             rel="noreferrer"
             className="mt-4 inline-flex text-sm font-bold text-blue-700 hover:text-blue-900"
           >
-            Abrir validacao publica
+            Abrir validação pública
           </a>
         ) : null}
         <div className="mt-4 grid gap-3">
           {shareLinks.length === 0 ? (
-            <EmptyState text="Nenhum link publico criado para este laudo." />
+            <EmptyState text="Nenhum link público criado para este laudo." />
           ) : (
             shareLinks.map((link) => (
               <div
@@ -613,15 +629,15 @@ export default function ServiceReportDetailPage() {
       </SectionCard>
 
       <SectionCard
-        title="Dados tecnicos"
+        title="Dados técnicos"
         description={
           editable
-            ? "Campos internos e externos do laudo antes da aprovacao."
-            : "Laudos aprovados, liberados ou cancelados ficam bloqueados para edicao direta."
+            ? "Campos internos e externos do laudo antes da aprovação."
+            : "Laudos aprovados, liberados ou cancelados ficam bloqueados para edição direta."
         }
       >
         <form onSubmit={saveReport} className="grid gap-4 lg:grid-cols-2">
-          <FormField label="Titulo">
+          <FormField label="Título">
             <TextInput
               value={form.title}
               onChange={(event) =>
@@ -696,7 +712,7 @@ export default function ServiceReportDetailPage() {
               disabled={!canEdit}
             />
           </FormField>
-          <FormField label="Notas de seguranca internas">
+          <FormField label="Notas de segurança internas">
             <TextAreaInput
               value={form.safetyNotes}
               onChange={(event) =>
@@ -712,7 +728,7 @@ export default function ServiceReportDetailPage() {
           {canEdit ? (
             <div className="lg:col-span-2">
               <button type="submit" className={PRIMARY_BUTTON} disabled={busyKey === "save"}>
-                {busyKey === "save" ? "Salvando..." : "Salvar dados tecnicos"}
+                {busyKey === "save" ? "Salvando..." : "Salvar dados técnicos"}
               </button>
             </div>
           ) : null}
@@ -721,7 +737,7 @@ export default function ServiceReportDetailPage() {
 
       <SectionCard
         title="Checklist"
-        description="Itens obrigatorios pendentes bloqueiam aprovacao; itens nao conformes exigem observacao."
+        description="Itens obrigatórios pendentes bloqueiam aprovação; itens não conformes exigem observação."
         actions={
           canEdit ? (
             <>
@@ -788,7 +804,7 @@ export default function ServiceReportDetailPage() {
                   updateChecklistItem(index, { notes: event.target.value })
                 }
                 disabled={!canEdit}
-                placeholder="Observacao"
+                placeholder="Observação"
               />
               {canEdit ? (
                 <button
@@ -805,8 +821,8 @@ export default function ServiceReportDetailPage() {
       </SectionCard>
 
       <SectionCard
-        title="Evidencias"
-        description="Somente evidencias marcadas como visiveis aparecem no Portal do Cliente apos liberacao do laudo."
+        title="Evidências"
+        description="Somente evidências marcadas como visíveis aparecem no Portal do Cliente após liberação do laudo."
       >
         {canAddEvidence ? (
           <form onSubmit={addEvidence} className="mb-5 grid gap-4 lg:grid-cols-2">
@@ -828,7 +844,7 @@ export default function ServiceReportDetailPage() {
                 ))}
               </select>
             </FormField>
-            <FormField label="Titulo">
+            <FormField label="Título">
               <TextInput
                 value={evidenceForm.title}
                 onChange={(event) =>
@@ -872,7 +888,7 @@ export default function ServiceReportDetailPage() {
                 }
               />
             </FormField>
-            <FormField label="Descricao" className="lg:col-span-2">
+            <FormField label="Descrição" className="lg:col-span-2">
               <TextAreaInput
                 value={evidenceForm.description}
                 onChange={(event) =>
@@ -895,7 +911,7 @@ export default function ServiceReportDetailPage() {
                   }))
                 }
               />
-              Visivel ao cliente apos liberacao
+              Visível ao cliente após liberação
             </label>
             <div>
               <button
@@ -903,13 +919,13 @@ export default function ServiceReportDetailPage() {
                 className={PRIMARY_BUTTON}
                 disabled={busyKey === "evidence"}
               >
-                {busyKey === "evidence" ? "Registrando..." : "Adicionar evidencia"}
+                {busyKey === "evidence" ? "Registrando..." : "Adicionar evidência"}
               </button>
             </div>
           </form>
         ) : null}
 
-        {report.evidences.length === 0 ? <EmptyState text="Nenhuma evidencia registrada." /> : null}
+        {report.evidences.length === 0 ? <EmptyState text="Nenhuma evidência registrada." /> : null}
         <div className="grid gap-3 md:grid-cols-2">
           {report.evidences.map((evidence) => (
             <article
@@ -937,7 +953,7 @@ export default function ServiceReportDetailPage() {
                   rel="noreferrer"
                   className="mt-3 inline-flex text-sm font-bold text-blue-700 hover:text-blue-900"
                 >
-                  Abrir evidencia
+                  Abrir evidência
                 </a>
               ) : null}
               {evidence.storageKey ? (

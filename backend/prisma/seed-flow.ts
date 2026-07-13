@@ -72,6 +72,7 @@ async function upsertUser(input: {
   branch?: string;
   approvalDiscountLimit?: number;
   hourCost?: number;
+  linkedClientId?: string;
 }) {
   return prisma.user.upsert({
     where: { email: input.email },
@@ -85,6 +86,7 @@ async function upsertUser(input: {
       branch: input.branch,
       approvalDiscountLimit: input.approvalDiscountLimit,
       hourCost: input.hourCost,
+      linkedClientId: input.linkedClientId,
     },
     create: {
       name: input.name,
@@ -97,6 +99,7 @@ async function upsertUser(input: {
       branch: input.branch,
       approvalDiscountLimit: input.approvalDiscountLimit,
       hourCost: input.hourCost,
+      linkedClientId: input.linkedClientId,
     },
   });
 }
@@ -129,11 +132,62 @@ async function main() {
   const opsUser = await upsertUser({
     name: 'Coordenador Demo',
     email: 'operacao.demo@manitec.local',
-    role: UserRole.NORMAL,
+    role: UserRole.LOGISTICS,
     passwordHash,
     department: 'Operacoes',
     branch: 'Matriz',
     hourCost: 120,
+  });
+
+  const managerUser = await upsertUser({
+    name: 'Gestor Demo',
+    email: 'gestor.demo@manitec.local',
+    role: UserRole.MANAGER,
+    passwordHash,
+    department: 'Gestao',
+    branch: 'Matriz',
+    approvalDiscountLimit: 20,
+    hourCost: 180,
+  });
+
+  const financeUser = await upsertUser({
+    name: 'Financeiro Demo',
+    email: 'financeiro.demo@manitec.local',
+    role: UserRole.FINANCE,
+    passwordHash,
+    department: 'Financeiro',
+    branch: 'Matriz',
+    hourCost: 130,
+  });
+
+  const suppliesUser = await upsertUser({
+    name: 'Suprimentos Demo',
+    email: 'suprimentos.demo@manitec.local',
+    role: UserRole.SUPPLIES,
+    passwordHash,
+    department: 'Suprimentos',
+    branch: 'Matriz',
+    hourCost: 110,
+  });
+
+  const hrUser = await upsertUser({
+    name: 'Pessoas Demo',
+    email: 'pessoas.demo@manitec.local',
+    role: UserRole.HR,
+    passwordHash,
+    department: 'Pessoas',
+    branch: 'Matriz',
+    hourCost: 115,
+  });
+
+  const auditorUser = await upsertUser({
+    name: 'Auditor Demo',
+    email: 'auditor.demo@manitec.local',
+    role: UserRole.AUDITOR,
+    passwordHash,
+    department: 'Auditoria',
+    branch: 'Matriz',
+    hourCost: 0,
   });
 
   const technicianProfile = await prisma.technician.upsert({
@@ -269,6 +323,69 @@ async function main() {
     ],
   });
 
+  const clientB = await prisma.client.upsert({
+    where: { cnpj: '22.222.222/0001-22' },
+    update: {
+      companyName: 'Cliente Demo Backup Ltda.',
+      tradeName: 'Industria Backup Demo',
+      email: 'contato@cliente-b-demo.local',
+      contactName: 'Bruno Almeida',
+      phone: '(11) 4100-2200',
+      city: 'Campinas',
+      state: 'SP',
+      segment: 'Industrial',
+      preferences: 'Atendimento comercial em horario comercial',
+      clientType: ClientType.NO_CONTRACT,
+      personType: ClientPersonType.LEGAL_ENTITY,
+      paymentTermDefault: '15 dias',
+      priceTableCode: 'PADRAO',
+      salesOwnerId: salesUser.id,
+      withholdsInss: false,
+      withholdsIss: false,
+      isDelinquent: false,
+    },
+    create: {
+      companyName: 'Cliente Demo Backup Ltda.',
+      tradeName: 'Industria Backup Demo',
+      cnpj: '22.222.222/0001-22',
+      email: 'contato@cliente-b-demo.local',
+      contactName: 'Bruno Almeida',
+      phone: '(11) 4100-2200',
+      city: 'Campinas',
+      state: 'SP',
+      segment: 'Industrial',
+      preferences: 'Atendimento comercial em horario comercial',
+      clientType: ClientType.NO_CONTRACT,
+      personType: ClientPersonType.LEGAL_ENTITY,
+      paymentTermDefault: '15 dias',
+      priceTableCode: 'PADRAO',
+      salesOwnerId: salesUser.id,
+      withholdsInss: false,
+      withholdsIss: false,
+      isDelinquent: false,
+    },
+  });
+
+  const clientUserA = await upsertUser({
+    name: 'Cliente A Demo',
+    email: 'cliente.a.demo@manitec.local',
+    role: UserRole.CLIENT,
+    passwordHash,
+    department: 'Cliente',
+    branch: 'Portal',
+    linkedClientId: client.id,
+  });
+
+  const clientUserB = await upsertUser({
+    name: 'Cliente B Demo',
+    email: 'cliente.b.demo@manitec.local',
+    role: UserRole.CLIENT,
+    passwordHash,
+    department: 'Cliente',
+    branch: 'Portal',
+    linkedClientId: clientB.id,
+  });
+
   const site =
     (await prisma.site.findFirst({
       where: { clientId: client.id, name: 'Obra Hospital Central' },
@@ -290,6 +407,30 @@ async function main() {
       baseContactName: 'Portaria Tecnica',
       baseContactPhone: '(11) 3333-7000',
       notes: 'Acesso 24h para chamados criticos',
+    },
+  });
+
+  const siteB =
+    (await prisma.site.findFirst({
+      where: { clientId: clientB.id, name: 'Planta Industrial Demo' },
+    })) ||
+    (await prisma.site.create({
+      data: {
+        clientId: clientB.id,
+        name: 'Planta Industrial Demo',
+      },
+    }));
+
+  await prisma.site.update({
+    where: { id: siteB.id },
+    data: {
+      code: 'OBR-IND-002',
+      latitude: -22.9056,
+      longitude: -47.0608,
+      accessRestrictions: 'Portaria industrial com agendamento',
+      baseContactName: 'Bruno Almeida',
+      baseContactPhone: '(11) 4100-2200',
+      notes: 'Base isolada para QA de portal Cliente B',
     },
   });
 
@@ -490,6 +631,37 @@ async function main() {
     },
   });
 
+  const generatorB = await prisma.generator.upsert({
+    where: { serialNumber: 'DEMO-GMG-B-0001' },
+    update: {
+      name: 'Gerador Industrial Backup',
+      brand: 'Stemac',
+      power: 450,
+      hourMeter: 620,
+      condition: 'OPERACIONAL',
+      installationSite: 'Sala de Energia Principal',
+      clientId: clientB.id,
+      modelId: model.id,
+      currentSiteId: siteB.id,
+      createdByUserId: opsUser.id,
+      hasMaintenanceContract: false,
+    },
+    create: {
+      name: 'Gerador Industrial Backup',
+      brand: 'Stemac',
+      serialNumber: 'DEMO-GMG-B-0001',
+      power: 450,
+      hourMeter: 620,
+      condition: 'OPERACIONAL',
+      installationSite: 'Sala de Energia Principal',
+      clientId: clientB.id,
+      modelId: model.id,
+      currentSiteId: siteB.id,
+      createdByUserId: opsUser.id,
+      hasMaintenanceContract: false,
+    },
+  });
+
   await prisma.generatorBaseItem.deleteMany({ where: { generatorId: generator.id } });
   await prisma.generatorBaseItem.createMany({
     data: [
@@ -538,6 +710,18 @@ async function main() {
       punctualityScore: 90,
       isActive: true,
     },
+  });
+
+  await prisma.generatorBaseItem.deleteMany({ where: { generatorId: generatorB.id } });
+  await prisma.generatorBaseItem.createMany({
+    data: [
+      {
+        generatorId: generatorB.id,
+        catalogItemId: serviceItem.id,
+        serviceGroup: ServiceGroup.TM,
+        quantity: 1,
+      },
+    ],
   });
 
   const supplierItem = await prisma.supplierCatalogItem.findFirst({
@@ -1541,15 +1725,25 @@ async function main() {
 
   console.log('[seed:flow] Fluxo completo criado/atualizado com sucesso.');
   console.log(`[seed:flow] Cliente: ${client.companyName} (${client.cnpj})`);
+  console.log(`[seed:flow] Cliente B QA: ${clientB.companyName} (${clientB.cnpj})`);
   console.log(`[seed:flow] Equipamento: ${generator.name} (${generator.serialNumber})`);
+  console.log(`[seed:flow] Equipamento Cliente B: ${generatorB.name} (${generatorB.serialNumber})`);
   console.log(`[seed:flow] Proposta: ${proposal.code} | Contrato: ${contract.code}`);
   console.log(`[seed:flow] OS: ${correctiveOrder.title} / ${preventiveOrder.title}`);
   console.log(`[seed:flow] Recebivel aberto: ${osReceivable.description}`);
   console.log(`[seed:flow] Pedido de compra: ${purchaseOrder.code} | Pagar: ${payable.description}`);
   console.log('[seed:flow] Usuarios demo:');
+  console.log('  - admin@manitec.local (via seed principal, se executado)');
+  console.log(`  - ${managerUser.email}`);
   console.log('  - vendas.demo@manitec.local');
+  console.log(`  - ${opsUser.email}`);
   console.log('  - tecnico.demo@manitec.local');
-  console.log('  - operacao.demo@manitec.local');
+  console.log(`  - ${financeUser.email}`);
+  console.log(`  - ${suppliesUser.email}`);
+  console.log(`  - ${hrUser.email}`);
+  console.log(`  - ${auditorUser.email}`);
+  console.log(`  - ${clientUserA.email}`);
+  console.log(`  - ${clientUserB.email}`);
 }
 
 main()

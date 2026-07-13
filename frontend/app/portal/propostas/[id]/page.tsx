@@ -64,7 +64,7 @@ export default function PortalProposalDetailPage() {
       setDecisionMode(null);
       setNote("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao registrar decisao.");
+      setError(err instanceof Error ? err.message : "Falha ao registrar decisão.");
     } finally {
       setSubmitting(false);
     }
@@ -72,7 +72,7 @@ export default function PortalProposalDetailPage() {
 
   if (loading) return <State text="Carregando proposta..." />;
   if (error && !proposal) return <State text={error} tone="error" />;
-  if (!proposal) return <State text="Proposta nao encontrada." />;
+  if (!proposal) return <State text="Proposta não encontrada." />;
 
   const canDecide = proposal.status === "CLIENT_REVIEW";
 
@@ -136,7 +136,7 @@ export default function PortalProposalDetailPage() {
 
         <aside className="space-y-4">
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-lg font-extrabold text-slate-950">Condicoes</h2>
+            <h2 className="text-lg font-extrabold text-slate-950">Condições</h2>
             <dl className="mt-3 space-y-2 text-sm">
               <Info label="Pagamento" value={proposal.paymentTerm || "-"} />
               <Info label="Frete" value={proposal.freight || "-"} />
@@ -146,7 +146,7 @@ export default function PortalProposalDetailPage() {
           </section>
 
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-lg font-extrabold text-slate-950">Decisao</h2>
+            <h2 className="text-lg font-extrabold text-slate-950">Decisão</h2>
             {canDecide ? (
               <div className="mt-3 flex flex-col gap-2">
                 <button
@@ -166,7 +166,7 @@ export default function PortalProposalDetailPage() {
               </div>
             ) : (
               <p className="mt-3 rounded-md bg-slate-50 p-3 text-sm font-medium text-slate-500">
-                Esta proposta ja possui uma decisao registrada.
+                Esta proposta já possui uma decisão registrada.
               </p>
             )}
           </section>
@@ -177,18 +177,18 @@ export default function PortalProposalDetailPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
           <div className="w-full max-w-lg rounded-lg bg-white p-5 shadow-xl">
             <h2 className="text-xl font-extrabold text-slate-950">
-              {decisionMode === "APPROVE" ? "Confirmar aprovacao" : "Confirmar reprovacao"}
+              {decisionMode === "APPROVE" ? "Confirmar aprovação" : "Confirmar reprovação"}
             </h2>
             <p className="mt-2 text-sm text-slate-500">
               {decisionMode === "APPROVE"
-                ? "A aprovacao sera registrada em auditoria e enviada ao time comercial."
-                : "Informe o motivo ou uma observacao para o time comercial."}
+                ? "A aprovação será registrada em auditoria e enviada ao time comercial."
+                : "Informe o motivo ou uma observação para o time comercial."}
             </p>
             <textarea
               value={note}
               onChange={(event) => setNote(event.target.value)}
               className="mt-4 min-h-28 w-full rounded-md border border-slate-300 p-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              placeholder="Observacao opcional"
+              placeholder="Observação opcional"
             />
             <div className="mt-4 flex justify-end gap-2">
               <button

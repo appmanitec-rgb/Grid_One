@@ -63,7 +63,7 @@ export default function PortalServiceReportsPage() {
       <header className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <h1 className="text-2xl font-extrabold text-slate-950">Laudos</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Relatorios tecnicos liberados pela MANITEC para consulta do cliente.
+          Relatórios técnicos liberados pela MANITEC para consulta do cliente.
         </p>
       </header>
 
@@ -72,7 +72,7 @@ export default function PortalServiceReportsPage() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
-          placeholder="Buscar por equipamento, OS ou codigo"
+          placeholder="Buscar por equipamento, OS ou código"
         />
       </section>
 

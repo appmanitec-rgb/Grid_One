@@ -51,7 +51,7 @@ export default function PortalServiceReportDetailPage() {
 
   if (loading) return <State text="Carregando laudo..." />;
   if (error) return <State text={error} tone="error" />;
-  if (!report) return <State text="Laudo nao encontrado." />;
+  if (!report) return <State text="Laudo não encontrado." />;
 
   async function runAction(key: string, action: () => Promise<void>) {
     setBusyKey(key);
@@ -59,7 +59,7 @@ export default function PortalServiceReportDetailPage() {
     try {
       await action();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha na acao solicitada.");
+      setError(err instanceof Error ? err.message : "Falha na ação solicitada.");
     } finally {
       setBusyKey("");
     }
@@ -108,12 +108,12 @@ export default function PortalServiceReportDetailPage() {
         </h1>
         <p className="mt-1 text-sm text-slate-500">
           {report.generator?.name || "Equipamento"} -{" "}
-          {report.maintenanceOrder?.title || "Ordem de servico"}
+          {report.maintenanceOrder?.title || "Ordem de serviço"}
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+            className="min-h-11 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
             disabled={busyKey === "print"}
             onClick={() => void openPrintPreview()}
           >
@@ -124,7 +124,7 @@ export default function PortalServiceReportDetailPage() {
               href={report.validationUrl}
               target="_blank"
               rel="noreferrer"
-              className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100"
+            className="inline-flex min-h-11 items-center rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100"
             >
               Validar autenticidade
             </a>
@@ -132,7 +132,7 @@ export default function PortalServiceReportDetailPage() {
           {report.generatedDocument?.hasStoredFile ? (
             <button
               type="button"
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+              className="min-h-11 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
               disabled={busyKey === "download-pdf"}
               onClick={() => void downloadPdf()}
             >
@@ -140,7 +140,7 @@ export default function PortalServiceReportDetailPage() {
             </button>
           ) : (
             <span className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-700">
-              PDF ainda nao gerado
+              PDF ainda não gerado
             </span>
           )}
         </div>
@@ -148,19 +148,19 @@ export default function PortalServiceReportDetailPage() {
 
       <section className="grid gap-3 md:grid-cols-3">
         <Info label="Equipamento" value={report.generator?.name} />
-        <Info label="Numero de serie" value={report.generator?.serialNumber} />
-        <Info label="Tecnico" value={report.technician?.user?.name} />
-        <Info label="Versao" value={String(report.versionNumber || 1)} />
+        <Info label="Número de série" value={report.generator?.serialNumber} />
+        <Info label="Técnico" value={report.technician?.user?.name} />
+        <Info label="Versão" value={String(report.versionNumber || 1)} />
         <Info label="Hash" value={report.documentHash?.slice(0, 18)} />
       </section>
 
-      <Section title="Diagnostico">{report.diagnosis}</Section>
-      <Section title="Servico realizado">{report.performedServices}</Section>
+      <Section title="Diagnóstico">{report.diagnosis}</Section>
+      <Section title="Serviço realizado">{report.performedServices}</Section>
       {report.recommendations ? (
-        <Section title="Recomendacoes">{report.recommendations}</Section>
+        <Section title="Recomendações">{report.recommendations}</Section>
       ) : null}
       {report.customerNotes ? (
-        <Section title="Observacoes ao cliente">{report.customerNotes}</Section>
+        <Section title="Observações ao cliente">{report.customerNotes}</Section>
       ) : null}
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -190,9 +190,9 @@ export default function PortalServiceReportDetailPage() {
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-extrabold text-slate-950">Evidencias</h2>
+        <h2 className="text-lg font-extrabold text-slate-950">Evidências</h2>
         {report.evidences.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-500">Sem evidencias liberadas.</p>
+          <p className="mt-3 text-sm text-slate-500">Sem evidências liberadas.</p>
         ) : (
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             {report.evidences.map((evidence) => (
@@ -216,7 +216,7 @@ export default function PortalServiceReportDetailPage() {
                     rel="noreferrer"
                     className="mt-3 inline-flex text-sm font-bold text-blue-700 hover:text-blue-900"
                   >
-                    Abrir evidencia
+                    Abrir evidência
                   </a>
                 ) : null}
                 {evidence.hasStoredFile ? (
@@ -226,7 +226,7 @@ export default function PortalServiceReportDetailPage() {
                     onClick={() => void downloadEvidence(evidence.id, evidence.fileName)}
                     className="mt-3 inline-flex text-sm font-bold text-blue-700 hover:text-blue-900"
                   >
-                    {busyKey === `download-${evidence.id}` ? "Baixando..." : "Baixar evidencia"}
+                    {busyKey === `download-${evidence.id}` ? "Baixando..." : "Baixar evidência"}
                   </button>
                 ) : null}
               </article>
@@ -239,12 +239,12 @@ export default function PortalServiceReportDetailPage() {
         <h2 className="text-lg font-extrabold text-slate-950">Assinatura</h2>
         {report.signedAt ? (
           <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <Info label="Responsavel" value={report.signedByName} />
+            <Info label="Responsável" value={report.signedByName} />
             <Info label="Documento" value={report.signedByDocument} />
             <Info label="Assinado em" value={formatServiceReportDate(report.signedAt)} />
           </div>
         ) : (
-          <p className="mt-3 text-sm text-slate-500">Assinatura nao registrada.</p>
+          <p className="mt-3 text-sm text-slate-500">Assinatura não registrada.</p>
         )}
       </section>
     </div>

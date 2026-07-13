@@ -41,7 +41,7 @@ export default function PortalDocumentsPage() {
       <header className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <h1 className="text-2xl font-extrabold text-slate-950">Documentos</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Documentos enviados ou liberados para sua empresa. Downloads amplos dependem de liberacao explicita.
+          Documentos enviados ou liberados para sua empresa. Downloads amplos dependem de liberação explícita.
         </p>
       </header>
 

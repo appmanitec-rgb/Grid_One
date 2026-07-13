@@ -37,7 +37,7 @@ export default function PublicServiceReportVerifyPage() {
         if (active) setPayload(result);
       } catch (err) {
         if (active) {
-          setError(err instanceof Error ? err.message : "Validacao indisponivel.");
+          setError(err instanceof Error ? err.message : "Validação indisponível.");
         }
       } finally {
         if (active) setLoading(false);
@@ -54,7 +54,7 @@ export default function PublicServiceReportVerifyPage() {
     <main className="min-h-screen bg-slate-50 px-4 py-10 text-slate-900">
       <section className="mx-auto max-w-3xl rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
         <p className="text-sm font-bold uppercase tracking-[0.16em] text-slate-500">
-          Validacao de laudo
+          Validação de laudo
         </p>
         {loading ? <State text="Validando documento..." /> : null}
         {error ? <State text={error} tone="error" /> : null}
@@ -67,15 +67,15 @@ export default function PublicServiceReportVerifyPage() {
                   : "border-red-200 bg-red-50 text-red-700"
               }`}
             >
-              {payload.valid ? "Documento valido" : "Documento invalido ou revogado"}
+              {payload.valid ? "Documento válido" : "Documento inválido ou revogado"}
             </div>
             <h1 className="text-2xl font-extrabold">{payload.code}</h1>
             <p className="text-slate-600">{payload.title}</p>
             <div className="grid gap-3 md:grid-cols-2">
               <Info label="Cliente" value={payload.client?.tradeName || payload.client?.companyName} />
               <Info label="Equipamento" value={payload.generator?.name} />
-              <Info label="Serie" value={payload.generator?.serialNumber} />
-              <Info label="Versao" value={String(payload.versionNumber || 1)} />
+              <Info label="Série" value={payload.generator?.serialNumber} />
+              <Info label="Versão" value={String(payload.versionNumber || 1)} />
               <Info label="Status" value={payload.status} />
               <Info label="Liberado em" value={formatDate(payload.releasedToCustomerAt)} />
             </div>

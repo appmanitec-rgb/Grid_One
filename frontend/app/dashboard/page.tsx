@@ -75,9 +75,9 @@ type DashboardPanelsState = Record<DashboardPanelKey, boolean>;
 
 const PIPELINE_COLUMNS: StageColumn[] = [
   { key: "DRAFT", label: "Rascunho" },
-  { key: "BOARD_REVIEW", label: "Analise diretoria" },
-  { key: "REVISION_REQUIRED", label: "Em revisao" },
-  { key: "CLIENT_REVIEW", label: "Analise cliente" },
+  { key: "BOARD_REVIEW", label: "Análise diretoria" },
+  { key: "REVISION_REQUIRED", label: "Em revisão" },
+  { key: "CLIENT_REVIEW", label: "Análise cliente" },
   { key: "DISCOUNT_REVIEW", label: "Desconto" },
   { key: "WON", label: "Ganhas" },
   { key: "LOST", label: "Perdidas" },
@@ -187,7 +187,7 @@ const STAGE_STYLES: Record<
 const PRIMARY_BUTTON =
   "inline-flex items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#f04b54_0%,#da2d3b_54%,#a91c27_100%)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_18px_34px_-18px_rgba(218,45,59,0.55)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_42px_-18px_rgba(218,45,59,0.6)]";
 const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white/96 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-[0_14px_28px_-24px_rgba(15,23,42,0.26)] transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white";
+  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white/96 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-[0_14px_28px_-24px_rgba(15,23,42,0.26)] transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0";
 const PANEL_TOGGLE_BUTTON =
   "inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-[0_12px_24px_-22px_rgba(15,23,42,0.28)] transition hover:border-slate-300 hover:bg-slate-50";
 const DASHBOARD_PANELS_STORAGE_KEY = "manitec_dashboard_home_panels";
@@ -211,7 +211,12 @@ export default function DashboardPage() {
   const [hydrated, setHydrated] = useState(false);
   const [isBoard, setIsBoard] = useState(false);
   const [canManageUsers, setCanManageUsers] = useState(false);
+  const [canCreateProposal, setCanCreateProposal] = useState(false);
+  const [canCreateClient, setCanCreateClient] = useState(false);
+  const [canCreateContract, setCanCreateContract] = useState(false);
+  const [canViewOrders, setCanViewOrders] = useState(false);
   const [apiWarning, setApiWarning] = useState("");
+  const [uiNotice, setUiNotice] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [canScrollPipelineLeft, setCanScrollPipelineLeft] = useState(false);
@@ -292,43 +297,62 @@ export default function DashboardPage() {
 
   const quickActions = useMemo(() => {
     const items = [
-      {
-        href: "/dashboard/proposals/new",
-        title: "Nova proposta",
-        subtitle: "Abrir proposta comercial.",
-        tone: "blue" as Tone,
-      },
-      {
-        href: "/dashboard/orders",
-        title: "Ordens",
-        subtitle: "Ver execucao e fila tecnica.",
-        tone: "emerald" as Tone,
-      },
-      {
-        href: "/dashboard/clients/new",
-        title: "Novo cliente",
-        subtitle: "Cadastrar conta e contatos.",
-        tone: "slate" as Tone,
-      },
-      {
-        href: "/dashboard/contracts/new",
-        title: "Novo contrato",
-        subtitle: "Criar contrato.",
-        tone: "amber" as Tone,
-      },
-    ];
+      canCreateProposal
+        ? {
+            href: "/dashboard/proposals/new",
+            title: "Nova proposta",
+            subtitle: "Abrir proposta comercial.",
+            tone: "blue" as Tone,
+          }
+        : null,
+      canViewOrders
+        ? {
+            href: "/dashboard/orders",
+            title: "Ordens",
+            subtitle: "Ver execução e fila técnica.",
+            tone: "emerald" as Tone,
+          }
+        : null,
+      canCreateClient
+        ? {
+            href: "/dashboard/clients/new",
+            title: "Novo cliente",
+            subtitle: "Cadastrar conta e contatos.",
+            tone: "slate" as Tone,
+          }
+        : null,
+      canCreateContract
+        ? {
+            href: "/dashboard/contracts/new",
+            title: "Novo contrato",
+            subtitle: "Criar contrato.",
+            tone: "amber" as Tone,
+          }
+        : null,
+    ].filter(Boolean) as Array<{
+      href: string;
+      title: string;
+      subtitle: string;
+      tone: Tone;
+    }>;
 
     if (canManageUsers) {
       items.unshift({
         href: "/dashboard/control",
         title: "Acessos",
-        subtitle: "Usuarios e permissoes.",
+        subtitle: "Usuários e permissões.",
         tone: "rose" as Tone,
       });
     }
 
     return items.slice(0, 5);
-  }, [canManageUsers]);
+  }, [
+    canCreateClient,
+    canCreateContract,
+    canCreateProposal,
+    canManageUsers,
+    canViewOrders,
+  ]);
 
   useEffect(() => {
     setHydrated(true);
@@ -336,6 +360,10 @@ export default function DashboardPage() {
     if (!token) {
       setIsBoard(false);
       setCanManageUsers(false);
+      setCanCreateProposal(false);
+      setCanCreateClient(false);
+      setCanCreateContract(false);
+      setCanViewOrders(false);
       return;
     }
 
@@ -343,12 +371,20 @@ export default function DashboardPage() {
     if (!payload) {
       setIsBoard(false);
       setCanManageUsers(false);
+      setCanCreateProposal(false);
+      setCanCreateClient(false);
+      setCanCreateContract(false);
+      setCanViewOrders(false);
       return;
     }
 
     const access = getAccessFromToken();
     setIsBoard(payload.role === "ADMIN");
     setCanManageUsers(access.users.manage);
+    setCanCreateProposal(access.proposals.create);
+    setCanCreateClient(access.clients.create);
+    setCanCreateContract(access.contracts.create);
+    setCanViewOrders(access.orders.view);
   }, []);
 
   useEffect(() => {
@@ -458,16 +494,16 @@ export default function DashboardPage() {
 
         if (hasNetworkFailure || hasApiFailure) {
           setApiWarning(
-            "Nao foi possivel carregar todo o cockpit agora. Verifique a conexao com a API e tente novamente.",
+            "Não foi possível carregar todo o cockpit agora. Verifique a conexão com a API e tente novamente.",
           );
         }
       } catch {
         setApiWarning(
-          "Falha ao carregar o dashboard. Verifique a conexao com a API.",
+          "Falha ao carregar o dashboard. Verifique a conexão com a API.",
         );
       }
     })().catch(() => {
-      setApiWarning("Falha ao carregar o dashboard. Verifique a conexao com a API.");
+      setApiWarning("Falha ao carregar o dashboard. Verifique a conexão com a API.");
     });
   }, [hydrated, isBoard, canManageUsers, router]);
 
@@ -538,7 +574,7 @@ export default function DashboardPage() {
       }
     } catch {
       setProposals(snapshot);
-      setApiWarning("Nao foi possivel mover a proposta no dashboard.");
+      setApiWarning("Não foi possível mover a proposta no dashboard.");
     } finally {
       setDraggingId(null);
       setDropTarget(null);
@@ -547,6 +583,7 @@ export default function DashboardPage() {
 
   function togglePanel(panel: DashboardPanelKey) {
     setPanelState((current) => ({ ...current, [panel]: !current[panel] }));
+    setUiNotice("");
   }
 
   function setAllPanels(expanded: boolean) {
@@ -558,16 +595,22 @@ export default function DashboardPage() {
       updates: expanded,
       governance: expanded,
     });
+    setUiNotice(expanded ? "Home expandida." : "Home compactada.");
   }
+
+  const allPanelsExpanded = Object.values(panelState).every(Boolean);
+  const allPanelsCollapsed = Object.values(panelState).every((value) => !value);
 
   return (
     <div className="space-y-6 pb-10">
       {apiWarning ? <StatusBanner tone="amber">{apiWarning}</StatusBanner> : null}
+      {uiNotice ? <StatusBanner tone="emerald">{uiNotice}</StatusBanner> : null}
 
       <PageHero
+        compact
         eyebrow="Dashboard"
         title="Resumo comercial e operacional."
-        description="Visao rapida do que exige decisao agora."
+        description="Visão rápida do que exige decisão agora."
         stats={[
           {
             label: "Propostas",
@@ -588,7 +631,7 @@ export default function DashboardPage() {
             tone: "emerald",
           },
           {
-            label: "Conversao",
+            label: "Conversão",
             value: `${stats.conversion}%`,
             helper: `${stats.won} ganhas`,
             tone: "amber",
@@ -596,30 +639,41 @@ export default function DashboardPage() {
         ]}
         actions={
           <>
-            <Link href="/dashboard/proposals/new" className={PRIMARY_BUTTON}>
-              Nova proposta
-            </Link>
-            <Link href="/dashboard/orders" className={SECONDARY_BUTTON}>
-              Ver ordens
-            </Link>
+            {canCreateProposal ? (
+              <Link href="/dashboard/proposals/new" className={PRIMARY_BUTTON}>
+                Nova proposta
+              </Link>
+            ) : null}
+            {canViewOrders ? (
+              <Link href="/dashboard/orders" className={SECONDARY_BUTTON}>
+                Ver ordens
+              </Link>
+            ) : null}
             {canManageUsers ? (
               <Link href="/dashboard/control" className={SECONDARY_BUTTON}>
                 Abrir acessos
               </Link>
             ) : null}
+            {!canCreateProposal && !canViewOrders && !canManageUsers ? (
+              <span className="inline-flex items-center rounded-2xl border border-slate-200 bg-white/90 px-4 py-2.5 text-sm font-semibold text-slate-600">
+                Atalhos limitados pelo seu perfil
+              </span>
+            ) : null}
             <button
               type="button"
               onClick={() => setAllPanels(false)}
+              disabled={allPanelsCollapsed}
               className={SECONDARY_BUTTON}
             >
-              Compactar home
+              {allPanelsCollapsed ? "Home compacta" : "Compactar seções"}
             </button>
             <button
               type="button"
               onClick={() => setAllPanels(true)}
+              disabled={allPanelsExpanded}
               className={SECONDARY_BUTTON}
             >
-              Expandir home
+              {allPanelsExpanded ? "Home expandida" : "Expandir seções"}
             </button>
           </>
         }
@@ -1079,7 +1133,7 @@ function PipelineColumnCard({
             </div>
 
             <p className="mt-3 text-xs text-slate-500">
-              Responsavel: {item.user?.name || "Nao informado"}
+              Responsável: {item.user?.name || "Não informado"}
             </p>
           </article>
         ))}
@@ -1108,7 +1162,7 @@ function BoardPendingCard({
     <SectionCard
       eyebrow="Board"
       title="Pendencias"
-      description="Itens aguardando aprovacao."
+      description="Itens aguardando aprovação."
       actions={<PanelToggleButton collapsed={collapsed} onClick={onToggle} />}
     >
       {collapsed ? (
@@ -1171,7 +1225,7 @@ function UpdatesFeedCard({
       actions={<PanelToggleButton collapsed={collapsed} onClick={onToggle} />}
     >
       {collapsed ? (
-        <CollapsedSectionSummary summary={`${updates.length} atualizacao(oes)`} />
+        <CollapsedSectionSummary summary={`${updates.length} atualização(ões)`} />
       ) : (
         <div className="space-y-3">
           {updates.length === 0 ? (
@@ -1430,10 +1484,10 @@ function formatCurrency(value: number) {
 function statusLabel(status: string) {
   const map: Record<string, string> = {
     DRAFT: "Rascunho",
-    BOARD_REVIEW: "Analise diretoria",
-    REVISION_REQUIRED: "Em revisao",
-    CLIENT_REVIEW: "Analise cliente",
-    DISCOUNT_REVIEW: "Analise desconto",
+    BOARD_REVIEW: "Análise diretoria",
+    REVISION_REQUIRED: "Em revisão",
+    CLIENT_REVIEW: "Análise cliente",
+    DISCOUNT_REVIEW: "Análise desconto",
     WON: "Ganho",
     LOST: "Perdido",
   };

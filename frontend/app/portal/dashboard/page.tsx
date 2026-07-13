@@ -43,7 +43,7 @@ export default function PortalDashboardPage() {
   if (loading) return <PortalState title="Carregando dados" />;
   if (error)
     return (
-      <PortalState title="Nao foi possivel carregar" description={error} />
+      <PortalState title="Não foi possível carregar" description={error} />
     );
   if (!data) return <PortalState title="Sem dados para exibir" />;
 
@@ -69,7 +69,7 @@ export default function PortalDashboardPage() {
       href: "/portal/chamados",
     },
     {
-      label: "Solicitacoes abertas",
+      label: "Solicitações abertas",
       value: data.stats.openQuoteRequests,
       href: "/portal/solicitacoes",
     },
@@ -84,13 +84,13 @@ export default function PortalDashboardPage() {
     <div className="space-y-6">
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <p className="text-sm font-bold uppercase text-blue-700">
-          Area do Cliente
+          Área do Cliente
         </p>
         <h1 className="mt-1 text-2xl font-extrabold text-slate-950">
           {data.client.tradeName || data.client.companyName}
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Acompanhe equipamentos, propostas, ordens, documentos e cobrancas
+          Acompanhe equipamentos, propostas, ordens, documentos e cobranças
           liberadas.
         </p>
       </section>
@@ -154,7 +154,7 @@ export default function PortalDashboardPage() {
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Proximas preventivas" href="/portal/equipamentos">
+        <Panel title="Próximas preventivas" href="/portal/equipamentos">
           {data.upcomingPreventives.length ? (
             data.upcomingPreventives.map((item) => (
               <Row

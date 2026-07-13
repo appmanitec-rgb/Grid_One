@@ -271,8 +271,8 @@ export default function DashboardLayout({
       },
       {
         href: "/dashboard/catalog",
-        label: "Catalogo",
-        mobileLabel: "Catalogo",
+        label: "Catálogo",
+        mobileLabel: "Catálogo",
         icon: "CG",
         enabled: visiblePages.catalog,
       },
@@ -299,15 +299,15 @@ export default function DashboardLayout({
       },
       {
         href: "/dashboard/automation",
-        label: "Automacoes",
-        mobileLabel: "Automacao",
+        label: "Automações",
+        mobileLabel: "Automação",
         icon: "AU",
         enabled: visiblePages.usersControl,
       },
       {
         href: "/dashboard/control",
-        label: "Gestao",
-        mobileLabel: "Gestao",
+        label: "Gestão",
+        mobileLabel: "Gestão",
         icon: "AC",
         enabled: visiblePages.usersControl,
       },
@@ -333,7 +333,7 @@ export default function DashboardLayout({
         className="flex min-h-screen items-center justify-center px-6 text-sm font-semibold text-zinc-500"
         style={{ background: "var(--app-body-background)" }}
       >
-        Validando sessao...
+        Validando sessão...
       </div>
     );
   }

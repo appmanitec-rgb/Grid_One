@@ -41,7 +41,7 @@ export default function PortalEquipmentDetailPage() {
 
   if (loading) return <State text="Carregando equipamento..." />;
   if (error) return <State text={error} tone="error" />;
-  if (!equipment) return <State text="Equipamento nao encontrado." />;
+  if (!equipment) return <State text="Equipamento não encontrado." />;
 
   return (
     <div className="space-y-5">
@@ -53,7 +53,7 @@ export default function PortalEquipmentDetailPage() {
           <div>
             <h1 className="text-2xl font-extrabold text-slate-950">{equipment.name}</h1>
             <p className="mt-1 text-sm text-slate-500">
-              {equipment.brand} {equipment.serialNumber ? `- Serie ${equipment.serialNumber}` : ""}
+              {equipment.brand} {equipment.serialNumber ? `- Série ${equipment.serialNumber}` : ""}
             </p>
           </div>
           <span className="w-fit rounded-full bg-blue-50 px-3 py-1 text-sm font-bold text-blue-700">
@@ -63,14 +63,14 @@ export default function PortalEquipmentDetailPage() {
       </header>
 
       <section className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-        <Info label="Potencia" value={`${equipment.power} kVA`} />
+        <Info label="Potência" value={`${equipment.power} kVA`} />
         <Info label="Modelo" value={equipment.model?.name || "-"} />
         <Info label="Local" value={equipment.currentSite?.name || "-"} />
         <Info label="Criticidade" value={equipment.criticality || "-"} />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Historico de OS">
+        <Panel title="Histórico de OS">
           {equipment.orders?.length ? (
             equipment.orders.map((order) => (
               <div key={order.id} className="rounded-md border border-slate-100 bg-slate-50 p-3">

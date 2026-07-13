@@ -20,45 +20,45 @@ type TopBarProps = {
 };
 
 const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
-  "/dashboard/client-portal": { title: "Portal do Cliente", subtitle: "Propostas, contratos, ordens e cobranca em uma visao unica." },
-  "/dashboard/documents": { title: "Central Documental", subtitle: "Versoes prontas para imprimir, salvar em PDF e compartilhar." },
-  "/dashboard/deliveries": { title: "Historico de Envios", subtitle: "Rastreamento de compartilhamentos, abertura do link e falhas." },
-  "/dashboard/notifications": { title: "Central de Alertas", subtitle: "Aprovacoes, operacao, comercial e financeiro em uma fila unica." },
-  "/dashboard": { title: "Gestao e Operacoes", subtitle: "KPIs executivos, pipeline comercial e execucao tecnica." },
-  "/dashboard/opportunities": { title: "Funil de Vendas", subtitle: "Pipeline por fase, temperatura e previsao de receita." },
-  "/dashboard/commercial-inspections": { title: "Vistorias Comerciais", subtitle: "Checklists tecnicos e midias para dimensionamento." },
-  "/dashboard/proposals": { title: "Central de Propostas", subtitle: "Controle completo por fase e revisoes." },
-  "/dashboard/orders": { title: "Centro de Ordens", subtitle: "Execucao tecnica com SLA e prioridade." },
-  "/dashboard/contracts": { title: "Gestao de Contratos", subtitle: "Vigencia, SLA, faturamento e preventiva automatica." },
-  "/dashboard/reports": { title: "Relatorios Gerenciais", subtitle: "Indicadores consolidados de performance e operacao." },
-  "/dashboard/monitoring": { title: "Monitoramento Operacional", subtitle: "Telemetria, alertas, automacoes e resposta de campo." },
-  "/dashboard/dispatch": { title: "Painel de Despacho", subtitle: "Agenda diaria/semanal com roteirizacao e prioridade operacional." },
-  "/dashboard/technicians": { title: "Equipe de Tecnicos", subtitle: "Capacidade operacional, skills e certificacoes da equipe." },
-  "/dashboard/sites": { title: "Locais e Obras", subtitle: "Mapa de instalacoes e ativos por local." },
-  "/dashboard/inventory": { title: "Controle de Estoque", subtitle: "Inventario, rupturas e valorizacao." },
-  "/dashboard/purchase-orders": { title: "Pedidos de Compra", subtitle: "Solicitacoes e acompanhamento de compras." },
+  "/dashboard/client-portal": { title: "Portal do Cliente", subtitle: "Propostas, contratos, ordens e cobrança em uma visão única." },
+  "/dashboard/documents": { title: "Central Documental", subtitle: "Versões prontas para imprimir, salvar em PDF e compartilhar." },
+  "/dashboard/deliveries": { title: "Histórico de Envios", subtitle: "Rastreamento de compartilhamentos, abertura do link e falhas." },
+  "/dashboard/notifications": { title: "Central de Alertas", subtitle: "Aprovações, operação, comercial e financeiro em uma fila única." },
+  "/dashboard": { title: "Gestão e Operações", subtitle: "KPIs executivos, pipeline comercial e execução técnica." },
+  "/dashboard/opportunities": { title: "Funil de Vendas", subtitle: "Pipeline por fase, temperatura e previsão de receita." },
+  "/dashboard/commercial-inspections": { title: "Vistorias Comerciais", subtitle: "Checklists técnicos e mídias para dimensionamento." },
+  "/dashboard/proposals": { title: "Central de Propostas", subtitle: "Controle completo por fase e revisões." },
+  "/dashboard/orders": { title: "Centro de Ordens", subtitle: "Execução técnica com SLA e prioridade." },
+  "/dashboard/contracts": { title: "Gestão de Contratos", subtitle: "Vigência, SLA, faturamento e preventiva automática." },
+  "/dashboard/reports": { title: "Relatórios Gerenciais", subtitle: "Indicadores consolidados de performance e operação." },
+  "/dashboard/monitoring": { title: "Monitoramento Operacional", subtitle: "Telemetria, alertas, automações e resposta de campo." },
+  "/dashboard/dispatch": { title: "Painel de Despacho", subtitle: "Agenda diária/semanal com roteirização e prioridade operacional." },
+  "/dashboard/technicians": { title: "Equipe de Técnicos", subtitle: "Capacidade operacional, skills e certificações da equipe." },
+  "/dashboard/sites": { title: "Locais e Obras", subtitle: "Mapa de instalações e ativos por local." },
+  "/dashboard/inventory": { title: "Controle de Estoque", subtitle: "Inventário, rupturas e valorização." },
+  "/dashboard/purchase-orders": { title: "Pedidos de Compra", subtitle: "Solicitações e acompanhamento de compras." },
   "/dashboard/finance/accounts-receivable": { title: "Contas a Receber", subtitle: "Recebimentos de contratos e ordens avulsas." },
   "/dashboard/finance/accounts-payable": { title: "Contas a Pagar", subtitle: "Despesas operacionais, folha e fornecedores." },
-  "/dashboard/finance/cash-flow": { title: "Fluxo de Caixa", subtitle: "Previsao de saldo, entradas e saidas do dia." },
-  "/dashboard/finance/bank-accounts": { title: "Contas Bancarias & Caixas", subtitle: "Consolidacao de saldos por banco e caixa interno." },
+  "/dashboard/finance/cash-flow": { title: "Fluxo de Caixa", subtitle: "Previsão de saldo, entradas e saídas do dia." },
+  "/dashboard/finance/bank-accounts": { title: "Contas Bancárias & Caixas", subtitle: "Consolidação de saldos por banco e caixa interno." },
   "/dashboard/finance/cost-centers": { title: "Centros de Custo (DRE)", subtitle: "Margem por contrato, ativo e cliente." },
   "/dashboard/hr/collaborators": { title: "Colaboradores", subtitle: "Cadastro geral da equipe tecnica e administrativa." },
   "/dashboard/hr/epis-tools": { title: "EPIs e Ferramentas", subtitle: "Controle de entrega, responsabilidade e rastreabilidade." },
   "/dashboard/hr/time-tracking": { title: "Apontamento e Banco de Horas", subtitle: "Horas de campo, extras e sobreaviso." },
-  "/dashboard/hr/commissions": { title: "Comissoes e Premiacao", subtitle: "Consolidado de variaveis do comercial e operacao." },
-  "/dashboard/hr/fleet": { title: "Gestao de Frota", subtitle: "Veiculos, manutencao, multas e alocacao por tecnico." },
-  "/dashboard/billing": { title: "Faturamento", subtitle: "Recebiveis de contratos e ordens de servico." },
-  "/dashboard/costs": { title: "Custos de Operacao", subtitle: "Analise de custos tecnicos e margens." },
-  "/dashboard/company-settings": { title: "Configuracoes da Empresa", subtitle: "Cadastros de empresas, CNPJs e identidade visual." },
-  "/dashboard/profile": { title: "Meu Perfil", subtitle: "Dados pessoais e preferencias do usuario." },
-  "/dashboard/clients": { title: "CRM de Clientes", subtitle: "Contatos, maquinas e historico consolidado." },
-  "/dashboard/equipments": { title: "Parque de Equipamentos", subtitle: "Rastreio de ativos e manutencao." },
-  "/dashboard/catalog": { title: "Inteligencia de Catalogo", subtitle: "Pecas, custos, margens e precificacao." },
-  "/dashboard/suppliers": { title: "Rede de Fornecedores", subtitle: "Compras, SLA e condicoes comerciais." },
-  "/dashboard/management/users": { title: "Area de Gestao (Admin)", subtitle: "Cadastros de usuarios, permissoes e governanca." },
-  "/dashboard/management": { title: "Area de Gestao (Admin)", subtitle: "Cadastros de usuarios, permissoes e governanca." },
-  "/dashboard/control": { title: "Area de Gestao (Admin)", subtitle: "Cadastros de usuarios, permissoes e governanca." },
-  "/dashboard/automation": { title: "Central de Automacoes", subtitle: "Historico, saude e disparos manuais das rotinas agendadas." },
+  "/dashboard/hr/commissions": { title: "Comissões e Premiação", subtitle: "Consolidado de variáveis do comercial e operação." },
+  "/dashboard/hr/fleet": { title: "Gestão de Frota", subtitle: "Veículos, manutenção, multas e alocação por técnico." },
+  "/dashboard/billing": { title: "Faturamento", subtitle: "Recebíveis de contratos e ordens de serviço." },
+  "/dashboard/costs": { title: "Custos de Operação", subtitle: "Análise de custos técnicos e margens." },
+  "/dashboard/company-settings": { title: "Configurações da Empresa", subtitle: "Cadastros de empresas, CNPJs e identidade visual." },
+  "/dashboard/profile": { title: "Meu Perfil", subtitle: "Dados pessoais e preferências do usuário." },
+  "/dashboard/clients": { title: "CRM de Clientes", subtitle: "Contatos, máquinas e histórico consolidado." },
+  "/dashboard/equipments": { title: "Parque de Equipamentos", subtitle: "Rastreio de ativos e manutenção." },
+  "/dashboard/catalog": { title: "Inteligência de Catálogo", subtitle: "Peças, custos, margens e precificação." },
+  "/dashboard/suppliers": { title: "Rede de Fornecedores", subtitle: "Compras, SLA e condições comerciais." },
+  "/dashboard/management/users": { title: "Área de Gestão (Admin)", subtitle: "Cadastros de usuários, permissões e governança." },
+  "/dashboard/management": { title: "Área de Gestão (Admin)", subtitle: "Cadastros de usuários, permissões e governança." },
+  "/dashboard/control": { title: "Área de Gestão (Admin)", subtitle: "Cadastros de usuários, permissões e governança." },
+  "/dashboard/automation": { title: "Central de Automações", subtitle: "Histórico, saúde e disparos manuais das rotinas agendadas." },
 };
 
 function getRouteFamily(pathname: string) {
@@ -75,10 +75,10 @@ function getRouteFamily(pathname: string) {
     return "Comercial";
   }
   if (pathname.startsWith("/dashboard/orders") || pathname.startsWith("/dashboard/dispatch") || pathname.startsWith("/dashboard/technicians") || pathname.startsWith("/dashboard/monitoring") || pathname.startsWith("/dashboard/sites") || pathname.startsWith("/dashboard/equipments")) {
-    return "Operacao";
+    return "Operação";
   }
   if (pathname.startsWith("/dashboard/control") || pathname.startsWith("/dashboard/management") || pathname.startsWith("/dashboard/company-settings") || pathname.startsWith("/dashboard/profile") || pathname.startsWith("/dashboard/automation") || pathname.startsWith("/dashboard/reports")) {
-    return "Gestao";
+    return "Gestão";
   }
   return "Painel";
 }
@@ -133,7 +133,7 @@ function getQuickAction(pathname: string, roleCode: string) {
     return { href: "/dashboard/finance/cash-flow", label: "Ver fluxo de caixa" };
   }
   if (pathname.startsWith("/dashboard/orders") || pathname.startsWith("/dashboard/dispatch") || pathname.startsWith("/dashboard/technicians")) {
-    return { href: "/dashboard/orders", label: "Agenda tecnica" };
+    return { href: "/dashboard/orders", label: "Agenda técnica" };
   }
   if (pathname.startsWith("/dashboard/monitoring")) {
     return { href: "/dashboard/dispatch", label: "Abrir despacho" };
@@ -155,7 +155,7 @@ export default function TopBar({
 }: TopBarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const [userName, setUserName] = useState("Usuario");
+  const [userName, setUserName] = useState("Usuário");
   const [userRole, setUserRole] = useState("Operador");
   const [userRoleCode, setUserRoleCode] = useState("NORMAL");
   const [notificationSummary, setNotificationSummary] = useState({
@@ -181,15 +181,15 @@ export default function TopBar({
     const roleMap: Record<string, string> = {
       ADMIN: "Administrador",
       SALES: "Comercial",
-      TECHNICIAN: "Tecnico",
-      ENGINEER_APPLICATION: "Eng. Aplicacao",
-      LOGISTICS: "Logistica",
+      TECHNICIAN: "Técnico",
+      ENGINEER_APPLICATION: "Eng. Aplicação",
+      LOGISTICS: "Logística",
       CLIENT: "Cliente",
-      NORMAL: "Usuario",
+      NORMAL: "Usuário",
     };
-    setUserName(payload.name || payload.email || "Usuario");
+    setUserName(payload.name || payload.email || "Usuário");
     setUserRoleCode(payload.role || "NORMAL");
-    setUserRole(roleMap[payload.role || ""] || payload.role || "Usuario");
+    setUserRole(roleMap[payload.role || ""] || payload.role || "Usuário");
   }, [router]);
 
   useEffect(() => {
@@ -317,7 +317,7 @@ export default function TopBar({
                 {notificationSummary.highPriority > 0
                   ? "Prioridade alta"
                   : notificationSummary.actionRequired > 0
-                    ? "Requer acao"
+                    ? "Requer ação"
                     : "Tudo em dia"}
               </p>
             </div>

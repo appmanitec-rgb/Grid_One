@@ -41,7 +41,7 @@ export default function PublicServiceReportSharePage() {
         if (active) setPayload(result);
       } catch (err) {
         if (active) {
-          setError(err instanceof Error ? err.message : "Link indisponivel.");
+          setError(err instanceof Error ? err.message : "Link indisponível.");
         }
       } finally {
         if (active) setLoading(false);
@@ -58,7 +58,7 @@ export default function PublicServiceReportSharePage() {
     return (
       <main className="min-h-screen bg-slate-50 px-4 py-10">
         <section className="mx-auto max-w-3xl rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-          <State text={loading ? "Abrindo laudo..." : error || "Laudo indisponivel."} tone={error ? "error" : undefined} />
+          <State text={loading ? "Abrindo laudo..." : error || "Laudo indisponível."} tone={error ? "error" : undefined} />
         </section>
       </main>
     );
@@ -105,18 +105,18 @@ export default function PublicServiceReportSharePage() {
 
         <section className="grid gap-3 md:grid-cols-4">
           <Info label="Equipamento" value={report.generator?.name} />
-          <Info label="Serie" value={report.generator?.serialNumber} />
-          <Info label="Tecnico" value={report.technician?.user?.name} />
-          <Info label="Versao" value={String(report.versionNumber || 1)} />
+          <Info label="Série" value={report.generator?.serialNumber} />
+          <Info label="Técnico" value={report.technician?.user?.name} />
+          <Info label="Versão" value={String(report.versionNumber || 1)} />
         </section>
 
-        <Section title="Diagnostico">{report.diagnosis}</Section>
-        <Section title="Servico realizado">{report.performedServices}</Section>
+        <Section title="Diagnóstico">{report.diagnosis}</Section>
+        <Section title="Serviço realizado">{report.performedServices}</Section>
         {report.recommendations ? (
-          <Section title="Recomendacoes">{report.recommendations}</Section>
+          <Section title="Recomendações">{report.recommendations}</Section>
         ) : null}
         {report.customerNotes ? (
-          <Section title="Observacoes ao cliente">{report.customerNotes}</Section>
+          <Section title="Observações ao cliente">{report.customerNotes}</Section>
         ) : null}
 
         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -141,10 +141,10 @@ export default function PublicServiceReportSharePage() {
         </section>
 
         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-extrabold">Evidencias visiveis</h2>
+          <h2 className="text-lg font-extrabold">Evidências visíveis</h2>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             {report.evidences.length === 0 ? (
-              <p className="text-sm text-slate-500">Sem evidencias liberadas.</p>
+              <p className="text-sm text-slate-500">Sem evidências liberadas.</p>
             ) : (
               report.evidences.map((evidence) => (
                 <div
