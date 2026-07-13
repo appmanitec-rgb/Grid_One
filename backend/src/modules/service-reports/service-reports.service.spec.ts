@@ -20,15 +20,38 @@ describe('ServiceReportsService', () => {
   let service: ServiceReportsService;
   let db: any;
   let auditLogsService: { record: jest.Mock };
+  let fileStorageService: {
+    saveServiceReportFile: jest.Mock;
+    load: jest.Mock;
+  };
 
   beforeEach(() => {
     db = createDbMock();
     db.$transaction.mockImplementation((cb: (tx: any) => unknown) => cb(db));
     db.user.findUnique.mockResolvedValue(makeInternalUser());
+    db.serviceReportVersion.findUnique.mockResolvedValue(null);
     auditLogsService = { record: jest.fn() };
+    fileStorageService = {
+      saveServiceReportFile: jest.fn().mockResolvedValue({
+        storageKey: 'service-reports/2026/07/evidence.jpg',
+        fileName: 'evidence.jpg',
+        mimeType: 'image/jpeg',
+        sizeBytes: 128,
+        checksumSha256: 'hash-1',
+      }),
+      load: jest.fn().mockResolvedValue({
+        storageKey: 'service-reports/2026/07/evidence.jpg',
+        fileName: 'evidence.jpg',
+        mimeType: 'image/jpeg',
+        sizeBytes: 128,
+        checksumSha256: 'hash-1',
+        buffer: Buffer.from('file'),
+      }),
+    };
     service = new ServiceReportsService(
       db,
       auditLogsService as unknown as AuditLogsService,
+      fileStorageService as never,
     );
   });
 
@@ -177,7 +200,13 @@ describe('ServiceReportsService', () => {
     db.user.findUnique.mockResolvedValue(makeClientUser());
     db.serviceReport.findMany.mockResolvedValue([
       makeReleasedReport({
-        evidences: [makeEvidence({ id: 'e-visible', customerVisible: true })],
+        evidences: [
+          makeEvidence({
+            id: 'e-visible',
+            customerVisible: true,
+            storageKey: 'service-reports/2026/07/evidence.jpg',
+          }),
+        ],
       }),
     ]);
 
@@ -185,6 +214,8 @@ describe('ServiceReportsService', () => {
 
     expect(reports[0].evidences).toHaveLength(1);
     expect(reports[0].evidences[0].id).toBe('e-visible');
+    expect(reports[0].evidences[0].hasStoredFile).toBe(true);
+    expect(reports[0].evidences[0]).not.toHaveProperty('storageKey');
   });
 
   it('cliente lista apenas relatorios do proprio clientId', async () => {
@@ -254,6 +285,14 @@ describe('ServiceReportsService', () => {
       }),
       db,
     );
+    expect(db.serviceReportVersion.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          reportId: 'report-1',
+          versionNumber: 1,
+        }),
+      }),
+    );
   });
 
   it('liberacao ao cliente gera documento e AuditLog', async () => {
@@ -264,7 +303,15 @@ describe('ServiceReportsService', () => {
       id: 'delivery-1',
       documentType: DeliveryDocumentType.SERVICE_REPORT,
     });
-    db.serviceReport.update.mockResolvedValue(makeReleasedReport());
+    db.serviceReport.update
+      .mockResolvedValueOnce(
+        makeReport({
+          status: ReportStatus.APPROVED,
+          validationToken: 'token-1',
+          documentHash: 'hash-1',
+        }),
+      )
+      .mockResolvedValueOnce(makeReleasedReport());
 
     await service.releaseToCustomer('report-1', 'user-1');
 
@@ -284,6 +331,175 @@ describe('ServiceReportsService', () => {
     expect(auditLogsService.record).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'DOCUMENT_REGISTERED' }),
       db,
+    );
+  });
+
+  it('upload fisico de evidencia salva metadados e AuditLog', async () => {
+    db.serviceReport.findUnique.mockResolvedValue(makeReport());
+    db.serviceReport.findUniqueOrThrow.mockResolvedValue(
+      makeReport({
+        evidences: [
+          makeEvidence({
+            storageKey: 'service-reports/2026/07/evidence.jpg',
+            checksumSha256: 'hash-1',
+          }),
+        ],
+      }),
+    );
+
+    await service.uploadEvidence(
+      'report-1',
+      { type: EvidenceType.PHOTO, title: 'Foto do quadro' },
+      {
+        originalname: 'evidence.jpg',
+        mimetype: 'image/jpeg',
+        size: 128,
+        buffer: Buffer.from([0xff, 0xd8, 0xff]),
+      },
+      'user-1',
+    );
+
+    expect(fileStorageService.saveServiceReportFile).toHaveBeenCalled();
+    expect(db.serviceReportEvidence.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          storageKey: 'service-reports/2026/07/evidence.jpg',
+          checksumSha256: 'hash-1',
+        }),
+      }),
+    );
+    expect(auditLogsService.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'EVIDENCE_UPLOADED' }),
+      db,
+    );
+  });
+
+  it('cliente nao baixa evidencia interna', async () => {
+    db.user.findUnique.mockResolvedValue(makeClientUser());
+    db.serviceReport.findFirst.mockResolvedValue({
+      id: 'report-1',
+      evidences: [],
+    });
+
+    await expect(
+      service.downloadCustomerEvidence(
+        'customer-user-1',
+        'report-1',
+        'evidence-internal',
+      ),
+    ).rejects.toThrow(NotFoundException);
+
+    expect(db.serviceReport.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          evidences: expect.objectContaining({
+            where: expect.objectContaining({ customerVisible: true }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('cliente nao baixa evidencia de outro cliente', async () => {
+    db.user.findUnique.mockResolvedValue(makeClientUser());
+    db.serviceReport.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.downloadCustomerEvidence(
+        'customer-user-1',
+        'report-other-client',
+        'evidence-1',
+      ),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it('link publico expirado nao funciona', async () => {
+    db.serviceReportShareLink.findUnique.mockResolvedValue({
+      id: 'link-1',
+      reportId: 'report-1',
+      revokedAt: null,
+      expiresAt: new Date('2026-07-01T00:00:00.000Z'),
+      report: makeReleasedReport({ validationToken: 'token-1' }),
+    });
+
+    await expect(service.getPublicSharedReport('raw-token')).rejects.toThrow(
+      ForbiddenException,
+    );
+  });
+
+  it('link publico revogado nao funciona', async () => {
+    db.serviceReportShareLink.findUnique.mockResolvedValue({
+      id: 'link-1',
+      reportId: 'report-1',
+      revokedAt: new Date('2026-07-10T00:00:00.000Z'),
+      expiresAt: new Date('2026-08-01T00:00:00.000Z'),
+      report: makeReleasedReport({ validationToken: 'token-1' }),
+    });
+
+    await expect(service.getPublicSharedReport('raw-token')).rejects.toThrow(
+      ForbiddenException,
+    );
+  });
+
+  it('token publico invalido nao valida laudo', async () => {
+    db.serviceReport.findUnique.mockResolvedValue(null);
+
+    await expect(service.verifyPublicReport('invalid')).rejects.toThrow(
+      NotFoundException,
+    );
+  });
+
+  it('HTML do portal nao expoe notas internas', async () => {
+    db.user.findUnique.mockResolvedValue(makeClientUser());
+    db.serviceReport.findFirst.mockResolvedValue(
+      makeReleasedReport({
+        safetyNotes: 'Segredo operacional',
+        observations: 'Observacao interna sensivel',
+        validationToken: 'token-1',
+      }),
+    );
+
+    const html = await service.getCustomerPrintableHtml(
+      'customer-user-1',
+      'report-1',
+    );
+
+    expect(html).not.toContain('Segredo operacional');
+    expect(html).not.toContain('Observacao interna sensivel');
+  });
+
+  it('geracao de documento vincula DocumentDelivery ao laudo', async () => {
+    db.serviceReport.findUnique.mockResolvedValue(
+      makeReport({ status: ReportStatus.APPROVED }),
+    );
+    db.serviceReport.update
+      .mockResolvedValueOnce(
+        makeReport({
+          status: ReportStatus.APPROVED,
+          validationToken: 'token-1',
+          documentHash: 'hash-1',
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeReport({
+          status: ReportStatus.APPROVED,
+          generatedDocumentId: 'delivery-1',
+          validationToken: 'token-1',
+          documentHash: 'hash-1',
+        }),
+      );
+    db.documentDelivery.create.mockResolvedValue({
+      id: 'delivery-1',
+      documentType: DeliveryDocumentType.SERVICE_REPORT,
+    });
+
+    const result = await service.generateDocument('report-1', 'user-1');
+
+    expect(result.documentDeliveryId).toBe('delivery-1');
+    expect(db.serviceReport.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ generatedDocumentId: 'delivery-1' }),
+      }),
     );
   });
 
@@ -388,6 +604,18 @@ function createDbMock() {
     },
     serviceReportEvidence: {
       create: jest.fn(),
+    },
+    serviceReportVersion: {
+      findUnique: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+    },
+    serviceReportShareLink: {
+      create: jest.fn(),
+      findMany: jest.fn(),
+      findFirst: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
     },
     documentDelivery: {
       create: jest.fn(),

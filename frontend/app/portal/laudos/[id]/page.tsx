@@ -7,14 +7,19 @@ import {
   CHECKLIST_RESULT_LABELS,
   EVIDENCE_TYPE_LABELS,
   ServiceReport,
+  downloadBlob,
   formatServiceReportDate,
+  openHtmlInNewWindow,
+  portalServiceReportsGetBlob,
   portalServiceReportsGet,
+  portalServiceReportsGetText,
 } from "@/lib/service-reports";
 
 export default function PortalServiceReportDetailPage() {
   const params = useParams<{ id: string }>();
   const [report, setReport] = useState<ServiceReport | null>(null);
   const [loading, setLoading] = useState(true);
+  const [busyKey, setBusyKey] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -48,6 +53,34 @@ export default function PortalServiceReportDetailPage() {
   if (error) return <State text={error} tone="error" />;
   if (!report) return <State text="Laudo nao encontrado." />;
 
+  async function runAction(key: string, action: () => Promise<void>) {
+    setBusyKey(key);
+    setError("");
+    try {
+      await action();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha na acao solicitada.");
+    } finally {
+      setBusyKey("");
+    }
+  }
+
+  async function openPrintPreview() {
+    await runAction("print", async () => {
+      const html = await portalServiceReportsGetText(`/${params.id}/print`);
+      openHtmlInNewWindow(html);
+    });
+  }
+
+  async function downloadEvidence(evidenceId: string, fileName?: string | null) {
+    await runAction(`download-${evidenceId}`, async () => {
+      const blob = await portalServiceReportsGetBlob(
+        `/${params.id}/evidence/${evidenceId}/download`,
+      );
+      downloadBlob(blob, fileName || `evidencia-${evidenceId}`);
+    });
+  }
+
   return (
     <div className="space-y-5">
       <Link href="/portal/laudos" className="text-sm font-bold text-blue-700 hover:text-blue-900">
@@ -70,12 +103,34 @@ export default function PortalServiceReportDetailPage() {
           {report.generator?.name || "Equipamento"} -{" "}
           {report.maintenanceOrder?.title || "Ordem de servico"}
         </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+            disabled={busyKey === "print"}
+            onClick={() => void openPrintPreview()}
+          >
+            {busyKey === "print" ? "Abrindo..." : "Visualizar laudo"}
+          </button>
+          {report.validationUrl ? (
+            <a
+              href={report.validationUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100"
+            >
+              Validar autenticidade
+            </a>
+          ) : null}
+        </div>
       </header>
 
       <section className="grid gap-3 md:grid-cols-3">
         <Info label="Equipamento" value={report.generator?.name} />
         <Info label="Numero de serie" value={report.generator?.serialNumber} />
         <Info label="Tecnico" value={report.technician?.user?.name} />
+        <Info label="Versao" value={String(report.versionNumber || 1)} />
+        <Info label="Hash" value={report.documentHash?.slice(0, 18)} />
       </section>
 
       <Section title="Diagnostico">{report.diagnosis}</Section>
@@ -142,6 +197,16 @@ export default function PortalServiceReportDetailPage() {
                   >
                     Abrir evidencia
                   </a>
+                ) : null}
+                {evidence.hasStoredFile ? (
+                  <button
+                    type="button"
+                    disabled={busyKey === `download-${evidence.id}`}
+                    onClick={() => void downloadEvidence(evidence.id, evidence.fileName)}
+                    className="mt-3 inline-flex text-sm font-bold text-blue-700 hover:text-blue-900"
+                  >
+                    {busyKey === `download-${evidence.id}` ? "Baixando..." : "Baixar evidencia"}
+                  </button>
                 ) : null}
               </article>
             ))}

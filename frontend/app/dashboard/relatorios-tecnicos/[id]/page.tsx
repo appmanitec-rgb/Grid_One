@@ -12,11 +12,17 @@ import {
   REPORT_STATUS_LABELS,
   ServiceReport,
   ServiceReportChecklistItem,
+  ServiceReportShareLink,
+  downloadBlob,
   formatServiceReportDate,
+  openHtmlInNewWindow,
   reportStatusTone,
+  serviceReportsGetBlob,
   serviceReportsGet,
+  serviceReportsGetText,
   serviceReportsPatch,
   serviceReportsPost,
+  serviceReportsPostForm,
 } from "@/lib/service-reports";
 import {
   DataPill,
@@ -70,7 +76,9 @@ export default function ServiceReportDetailPage() {
   });
   const [checklist, setChecklist] = useState<ServiceReportChecklistItem[]>([]);
   const [evidenceForm, setEvidenceForm] = useState(EMPTY_EVIDENCE);
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [signatureForm, setSignatureForm] = useState(EMPTY_SIGNATURE);
+  const [shareLinks, setShareLinks] = useState<ServiceReportShareLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState("");
   const [error, setError] = useState("");
@@ -81,7 +89,13 @@ export default function ServiceReportDetailPage() {
     setError("");
     try {
       const payload = await serviceReportsGet<ServiceReport>(`/${reportId}`);
+      const links = access.serviceReports.manageShareLinks
+        ? await serviceReportsGet<ServiceReportShareLink[]>(
+            `/${reportId}/share-links`,
+          )
+        : [];
       setReport(payload);
+      setShareLinks(links);
       setForm({
         title: payload.title || "",
         diagnosis: payload.diagnosis || "",
@@ -102,7 +116,7 @@ export default function ServiceReportDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [reportId]);
+  }, [access.serviceReports.manageShareLinks, reportId]);
 
   useEffect(() => {
     void load();
@@ -123,6 +137,13 @@ export default function ServiceReportDetailPage() {
     access.serviceReports.approve;
   const canRelease = report?.status === "APPROVED" && access.serviceReports.releaseToCustomer;
   const canCancel = report?.status !== "CANCELED" && access.serviceReports.cancel;
+  const canGenerateDocument =
+    report &&
+    ["APPROVED", "RELEASED_TO_CUSTOMER"].includes(report.status) &&
+    access.serviceReports.generateDocument;
+  const canManageShareLinks =
+    report?.status === "RELEASED_TO_CUSTOMER" &&
+    access.serviceReports.manageShareLinks;
 
   async function saveReport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -158,20 +179,36 @@ export default function ServiceReportDetailPage() {
       return;
     }
     await runAction("evidence", async () => {
-      const updated = await serviceReportsPost<ServiceReport>(
-        `/${reportId}/evidence`,
-        {
-          ...evidenceForm,
-          description: evidenceForm.description.trim() || undefined,
-          fileUrl: evidenceForm.fileUrl.trim() || undefined,
-          fileName: evidenceForm.fileName.trim() || undefined,
-          mimeType: evidenceForm.mimeType.trim() || undefined,
-        },
-      );
+      const updated = evidenceFile
+        ? await uploadEvidenceFile()
+        : await serviceReportsPost<ServiceReport>(`/${reportId}/evidence`, {
+            ...evidenceForm,
+            description: evidenceForm.description.trim() || undefined,
+            fileUrl: evidenceForm.fileUrl.trim() || undefined,
+            fileName: evidenceForm.fileName.trim() || undefined,
+            mimeType: evidenceForm.mimeType.trim() || undefined,
+          });
       setReport(updated);
       setEvidenceForm(EMPTY_EVIDENCE);
+      setEvidenceFile(null);
       setSuccess("Evidencia registrada.");
     });
+  }
+
+  async function uploadEvidenceFile() {
+    if (!evidenceFile) throw new Error("Selecione o arquivo da evidencia.");
+    const formData = new FormData();
+    formData.set("file", evidenceFile);
+    formData.set("type", evidenceForm.type);
+    formData.set("title", evidenceForm.title);
+    if (evidenceForm.description.trim()) {
+      formData.set("description", evidenceForm.description.trim());
+    }
+    formData.set("customerVisible", String(evidenceForm.customerVisible));
+    return serviceReportsPostForm<ServiceReport>(
+      `/${reportId}/evidence/upload`,
+      formData,
+    );
   }
 
   async function signReport(event: FormEvent<HTMLFormElement>) {
@@ -212,6 +249,59 @@ export default function ServiceReportDetailPage() {
       });
       setReport(updated);
       setSuccess("Laudo cancelado.");
+    });
+  }
+
+  async function generateDocument() {
+    await runAction("generate-document", async () => {
+      const payload = await serviceReportsPost<{ report: ServiceReport }>(
+        `/${reportId}/generate-document`,
+        {},
+      );
+      setReport(payload.report);
+      setSuccess("Documento gerado e vinculado ao laudo.");
+    });
+  }
+
+  async function openPrintPreview() {
+    await runAction("print", async () => {
+      const html = await serviceReportsGetText(`/${reportId}/print`);
+      openHtmlInNewWindow(html);
+      setSuccess("Preview imprimivel aberto.");
+    });
+  }
+
+  async function downloadEvidence(evidenceId: string, fileName?: string | null) {
+    await runAction(`download-${evidenceId}`, async () => {
+      const blob = await serviceReportsGetBlob(
+        `/${reportId}/evidence/${evidenceId}/download`,
+      );
+      downloadBlob(blob, fileName || `evidencia-${evidenceId}`);
+    });
+  }
+
+  async function createShareLink() {
+    await runAction("share-link", async () => {
+      const created = await serviceReportsPost<ServiceReportShareLink>(
+        `/${reportId}/share-links`,
+        {},
+      );
+      setShareLinks((current) => [created, ...current]);
+      setSuccess("Link publico criado.");
+    });
+  }
+
+  async function revokeShareLink(linkId: string) {
+    if (!window.confirm("Revogar este link publico?")) return;
+    await runAction(`revoke-${linkId}`, async () => {
+      const updated = await serviceReportsPost<ServiceReportShareLink>(
+        `/${reportId}/share-links/${linkId}/revoke`,
+        { reason: "Revogado pela tela de laudos." },
+      );
+      setShareLinks((current) =>
+        current.map((link) => (link.id === linkId ? updated : link)),
+      );
+      setSuccess("Link publico revogado.");
     });
   }
 
@@ -271,6 +361,24 @@ export default function ServiceReportDetailPage() {
             <Link href="/dashboard/relatorios-tecnicos" className={SECONDARY_BUTTON}>
               Voltar
             </Link>
+            <button
+              type="button"
+              className={SECONDARY_BUTTON}
+              disabled={busyKey === "print"}
+              onClick={() => void openPrintPreview()}
+            >
+              {busyKey === "print" ? "Abrindo..." : "Visualizar impressao"}
+            </button>
+            {canGenerateDocument ? (
+              <button
+                type="button"
+                className={SECONDARY_BUTTON}
+                disabled={busyKey === "generate-document"}
+                onClick={() => void generateDocument()}
+              >
+                {busyKey === "generate-document" ? "Gerando..." : "Gerar documento"}
+              </button>
+            ) : null}
             {canApprove ? (
               <button
                 type="button"
@@ -330,11 +438,95 @@ export default function ServiceReportDetailPage() {
             value: report.customerVisible ? "Liberado" : "Interno",
             tone: report.customerVisible ? "emerald" : "amber",
           },
+          {
+            label: "Versao",
+            value: String(report.versionNumber || 1),
+            tone: "blue",
+          },
         ]}
       />
 
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
       {success ? <StatusBanner tone="emerald">{success}</StatusBanner> : null}
+
+      <SectionCard
+        title="Documento e compartilhamento"
+        description="Documento imprimivel, hash de autenticidade e links publicos expiraveis."
+        actions={
+          canManageShareLinks ? (
+            <button
+              type="button"
+              className={PRIMARY_BUTTON}
+              disabled={busyKey === "share-link"}
+              onClick={() => void createShareLink()}
+            >
+              {busyKey === "share-link" ? "Criando..." : "Criar link publico"}
+            </button>
+          ) : null
+        }
+      >
+        <div className="grid gap-3 md:grid-cols-3">
+          <Info label="Documento" value={report.generatedDocumentId ? "Gerado" : "Pendente"} />
+          <Info label="Hash" value={report.documentHash?.slice(0, 24)} />
+          <Info label="Validacao" value={report.validationUrl ? "Disponivel" : "Pendente"} />
+        </div>
+        {report.validationUrl ? (
+          <a
+            href={report.validationUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-4 inline-flex text-sm font-bold text-blue-700 hover:text-blue-900"
+          >
+            Abrir validacao publica
+          </a>
+        ) : null}
+        <div className="mt-4 grid gap-3">
+          {shareLinks.length === 0 ? (
+            <EmptyState text="Nenhum link publico criado para este laudo." />
+          ) : (
+            shareLinks.map((link) => (
+              <div
+                key={link.id}
+                className="grid gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 lg:grid-cols-[1fr_auto_auto]"
+              >
+                <div>
+                  <p className="text-sm font-bold text-slate-950">
+                    Expira em {formatServiceReportDate(link.expiresAt)}
+                  </p>
+                  <p className="text-xs font-semibold text-slate-500">
+                    {link.revokedAt
+                      ? `Revogado em ${formatServiceReportDate(link.revokedAt)}`
+                      : `${link.accessCount} acesso(s)`}
+                  </p>
+                  {link.shareUrl ? (
+                    <p className="mt-1 break-all text-xs text-slate-500">{link.shareUrl}</p>
+                  ) : null}
+                </div>
+                {link.shareUrl ? (
+                  <a
+                    href={link.shareUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={SECONDARY_BUTTON}
+                  >
+                    Abrir
+                  </a>
+                ) : null}
+                {!link.revokedAt ? (
+                  <button
+                    type="button"
+                    className={DANGER_BUTTON}
+                    disabled={busyKey === `revoke-${link.id}`}
+                    onClick={() => void revokeShareLink(link.id)}
+                  >
+                    Revogar
+                  </button>
+                ) : null}
+              </div>
+            ))
+          )}
+        </div>
+      </SectionCard>
 
       <SectionCard
         title="Dados tecnicos"
@@ -563,7 +755,17 @@ export default function ServiceReportDetailPage() {
                 }
               />
             </FormField>
-            <FormField label="URL segura">
+            <FormField label="Arquivo">
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                onChange={(event) =>
+                  setEvidenceFile(event.target.files?.[0] ?? null)
+                }
+                className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none"
+              />
+            </FormField>
+            <FormField label="URL externa opcional">
               <TextInput
                 value={evidenceForm.fileUrl}
                 onChange={(event) =>
@@ -653,6 +855,21 @@ export default function ServiceReportDetailPage() {
                 >
                   Abrir evidencia
                 </a>
+              ) : null}
+              {evidence.storageKey ? (
+                <button
+                  type="button"
+                  className="mt-3 inline-flex text-sm font-bold text-blue-700 hover:text-blue-900"
+                  disabled={busyKey === `download-${evidence.id}`}
+                  onClick={() => void downloadEvidence(evidence.id, evidence.fileName)}
+                >
+                  {busyKey === `download-${evidence.id}` ? "Baixando..." : "Baixar arquivo"}
+                </button>
+              ) : null}
+              {evidence.checksumSha256 ? (
+                <p className="mt-2 break-all text-xs text-slate-500">
+                  SHA-256 {evidence.checksumSha256.slice(0, 24)}
+                </p>
               ) : null}
             </article>
           ))}

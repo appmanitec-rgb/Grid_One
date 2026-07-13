@@ -6,10 +6,13 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import type { Response } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
+import { LoadedFile } from '../file-storage/file-storage.service';
 import { TicketsService } from '../tickets/tickets.service';
 import { ServiceReportsService } from '../service-reports/service-reports.service';
 import { ListServiceReportsQueryDto } from '../service-reports/dto/service-report.dto';
@@ -159,6 +162,29 @@ export class CustomerPortalController {
     );
   }
 
+  @Get('service-reports/:id/print')
+  serviceReportPrint(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    return this.serviceReportsService
+      .getCustomerPrintableHtml(this.extractUserId(req), id)
+      .then((html) => res.type('text/html').send(html));
+  }
+
+  @Get('service-reports/:id/evidence/:evidenceId/download')
+  serviceReportEvidenceDownload(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Param('evidenceId') evidenceId: string,
+    @Res() res: Response,
+  ) {
+    return this.serviceReportsService
+      .downloadCustomerEvidence(this.extractUserId(req), id, evidenceId)
+      .then((file) => this.sendFile(res, file));
+  }
+
   @Get('service-reports/:id')
   serviceReportDetail(
     @Req() req: AuthenticatedRequest,
@@ -245,5 +271,16 @@ export class CustomerPortalController {
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     };
+  }
+
+  private sendFile(res: Response, file: LoadedFile) {
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader('Content-Length', String(file.buffer.length));
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${encodeURIComponent(file.fileName)}"`,
+    );
+    return res.send(file.buffer);
   }
 }

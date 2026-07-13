@@ -76,6 +76,8 @@ export type AccessPolicy = {
     sign: boolean;
     approve: boolean;
     releaseToCustomer: boolean;
+    generateDocument: boolean;
+    manageShareLinks: boolean;
     cancel: boolean;
   };
   tickets: {
@@ -260,6 +262,8 @@ const EMPTY_ACCESS_POLICY: AccessPolicy = {
     sign: false,
     approve: false,
     releaseToCustomer: false,
+    generateDocument: false,
+    manageShareLinks: false,
     cancel: false,
   },
   tickets: {
@@ -879,6 +883,12 @@ function normalizeAccessPolicy(access: AccessPolicy): AccessPolicy {
       addEvidence:
         access.serviceReports.addEvidence || access.serviceReports.update,
       sign: access.serviceReports.sign || access.serviceReports.update,
+      generateDocument:
+        access.serviceReports.generateDocument ||
+        access.serviceReports.approve,
+      manageShareLinks:
+        access.serviceReports.manageShareLinks ||
+        access.serviceReports.releaseToCustomer,
     },
   };
 }
@@ -892,6 +902,8 @@ function allServiceReportActions() {
     sign: true,
     approve: true,
     releaseToCustomer: true,
+    generateDocument: true,
+    manageShareLinks: true,
     cancel: true,
   };
 }

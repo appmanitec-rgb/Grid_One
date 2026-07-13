@@ -7,22 +7,38 @@ import {
   Post,
   Query,
   Req,
+  Res,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
+import type { Response } from 'express';
 import { RequireAccessPolicy } from '../auth/access-policy.decorator';
 import { AccessPolicyGuard } from '../auth/access-policy.guard';
 import { AuthGuard } from '../auth/auth.guard';
+import { LoadedFile } from '../file-storage/file-storage.service';
 import {
   AddServiceReportEvidenceDto,
   CancelServiceReportDto,
+  CreateServiceReportShareLinkDto,
   CreateServiceReportDto,
   ListServiceReportsQueryDto,
+  RevokeServiceReportShareLinkDto,
   SignServiceReportDto,
   UpdateServiceReportChecklistDto,
   UpdateServiceReportDto,
+  UploadServiceReportEvidenceDto,
 } from './dto/service-report.dto';
 import { ServiceReportsService } from './service-reports.service';
+
+type UploadFile = {
+  originalname?: string;
+  mimetype?: string;
+  size?: number;
+  buffer?: Buffer;
+};
 
 @Controller('service-reports')
 @UseGuards(AuthGuard, AccessPolicyGuard)
@@ -84,6 +100,37 @@ export class ServiceReportsController {
     );
   }
 
+  @Post(':id/evidence/upload')
+  @RequireAccessPolicy('serviceReports.addEvidence')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 20 * 1024 * 1024 } }),
+  )
+  uploadEvidence(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: UploadServiceReportEvidenceDto,
+    @UploadedFile() file?: UploadFile,
+  ) {
+    return this.serviceReportsService.uploadEvidence(
+      id,
+      dto,
+      file,
+      this.extractUserId(req),
+    );
+  }
+
+  @Get(':id/evidence/:evidenceId/download')
+  downloadEvidence(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Param('evidenceId') evidenceId: string,
+    @Res() res: Response,
+  ) {
+    return this.serviceReportsService
+      .downloadEvidence(id, evidenceId, this.extractUserId(req))
+      .then((file) => this.sendFile(res, file));
+  }
+
   @Post(':id/sign')
   @RequireAccessPolicy('serviceReports.sign')
   sign(
@@ -114,6 +161,61 @@ export class ServiceReportsController {
     );
   }
 
+  @Post(':id/generate-document')
+  @RequireAccessPolicy('serviceReports.generateDocument')
+  generateDocument(@Req() req: Request, @Param('id') id: string) {
+    return this.serviceReportsService.generateDocument(
+      id,
+      this.extractUserId(req),
+    );
+  }
+
+  @Get(':id/print')
+  print(@Req() req: Request, @Param('id') id: string, @Res() res: Response) {
+    return this.serviceReportsService
+      .getPrintableHtml(id, this.extractUserId(req))
+      .then((html) => res.type('text/html').send(html));
+  }
+
+  @Post(':id/share-links')
+  @RequireAccessPolicy('serviceReports.manageShareLinks')
+  createShareLink(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: CreateServiceReportShareLinkDto,
+  ) {
+    return this.serviceReportsService.createShareLink(
+      id,
+      dto,
+      this.extractUserId(req),
+    );
+  }
+
+  @Get(':id/share-links')
+  @RequireAccessPolicy('serviceReports.manageShareLinks')
+  listShareLinks(@Req() req: Request, @Param('id') id: string) {
+    return this.serviceReportsService.listShareLinks(
+      id,
+      this.extractUserId(req),
+    );
+  }
+
+  @Post(':id/share-links/:linkId/revoke')
+  @RequireAccessPolicy('serviceReports.manageShareLinks')
+  revokeShareLink(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Param('linkId') linkId: string,
+    @Body() dto: RevokeServiceReportShareLinkDto,
+  ) {
+    return this.serviceReportsService.revokeShareLink(
+      id,
+      linkId,
+      dto,
+      this.extractUserId(req),
+    );
+  }
+
   @Post(':id/cancel')
   @RequireAccessPolicy('serviceReports.cancel')
   cancel(
@@ -134,5 +236,16 @@ export class ServiceReportsController {
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     };
+  }
+
+  private sendFile(res: Response, file: LoadedFile) {
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader('Content-Length', String(file.buffer.length));
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${encodeURIComponent(file.fileName)}"`,
+    );
+    return res.send(file.buffer);
   }
 }

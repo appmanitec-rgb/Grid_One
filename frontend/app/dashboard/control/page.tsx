@@ -352,6 +352,8 @@ const SERVICE_REPORT_ITEMS = [
   { key: "sign", label: "Registrar assinatura" },
   { key: "approve", label: "Aprovar laudos" },
   { key: "releaseToCustomer", label: "Liberar ao cliente" },
+  { key: "generateDocument", label: "Gerar documento" },
+  { key: "manageShareLinks", label: "Gerenciar links publicos" },
   { key: "cancel", label: "Cancelar laudos" },
 ] as const satisfies ReadonlyArray<
   PermissionItem<keyof AccessPolicy["serviceReports"]>

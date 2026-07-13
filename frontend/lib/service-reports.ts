@@ -1,4 +1,4 @@
-import { apiFetch, readApiErrorMessage } from "./api";
+import { apiFetch, apiUrl, readApiErrorMessage } from "./api";
 import { customerPortalGet } from "./customer-portal";
 
 export type ReportStatus =
@@ -36,9 +36,25 @@ export type ServiceReportEvidence = {
   fileName?: string | null;
   mimeType?: string | null;
   sizeBytes?: number | null;
+  checksumSha256?: string | null;
+  storedAt?: string | null;
+  storageKey?: string | null;
+  hasStoredFile?: boolean;
   customerVisible: boolean;
   createdAt: string;
   uploadedByUser?: { id: string; name: string; email?: string | null } | null;
+};
+
+export type ServiceReportShareLink = {
+  id: string;
+  reportId: string;
+  expiresAt: string;
+  revokedAt?: string | null;
+  accessCount: number;
+  lastAccessedAt?: string | null;
+  createdAt: string;
+  shareUrl?: string;
+  createdByUser?: { id: string; name: string; email?: string | null } | null;
 };
 
 export type ServiceReport = {
@@ -67,6 +83,10 @@ export type ServiceReport = {
   customerVisible: boolean;
   releasedToCustomerAt?: string | null;
   generatedDocumentId?: string | null;
+  versionNumber?: number;
+  documentHash?: string | null;
+  validationUrl?: string | null;
+  validationExpiresAt?: string | null;
   maintenanceOrder?: {
     id: string;
     title: string;
@@ -167,6 +187,37 @@ export async function serviceReportsPost<T>(path: string, body: unknown = {}) {
   return (await response.json()) as T;
 }
 
+export async function serviceReportsPostForm<T>(path: string, body: FormData) {
+  const response = await apiFetch(`/service-reports${path}`, {
+    method: "POST",
+    body,
+  });
+  if (!response.ok) {
+    throw new Error(await readApiErrorMessage(response, "Falha ao enviar arquivo."));
+  }
+  return (await response.json()) as T;
+}
+
+export async function serviceReportsGetText(path: string) {
+  const response = await apiFetch(`/service-reports${path}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(await readApiErrorMessage(response, "Falha ao abrir laudo."));
+  }
+  return response.text();
+}
+
+export async function serviceReportsGetBlob(path: string) {
+  const response = await apiFetch(`/service-reports${path}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(await readApiErrorMessage(response, "Falha ao baixar arquivo."));
+  }
+  return response.blob();
+}
+
 export async function serviceReportsPatch<T>(path: string, body: unknown) {
   const response = await apiFetch(`/service-reports${path}`, {
     method: "PATCH",
@@ -181,6 +232,54 @@ export async function serviceReportsPatch<T>(path: string, body: unknown) {
 
 export async function portalServiceReportsGet<T>(path = "") {
   return customerPortalGet<T>(`/service-reports${path}`);
+}
+
+export async function portalServiceReportsGetText(path: string) {
+  const response = await apiFetch(`/customer-portal/service-reports${path}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(await readApiErrorMessage(response, "Falha ao abrir laudo."));
+  }
+  return response.text();
+}
+
+export async function portalServiceReportsGetBlob(path: string) {
+  const response = await apiFetch(`/customer-portal/service-reports${path}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(await readApiErrorMessage(response, "Falha ao baixar arquivo."));
+  }
+  return response.blob();
+}
+
+export async function publicServiceReportGet<T>(path: string) {
+  const response = await fetch(apiUrl(`/public/service-reports${path}`), {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(await readApiErrorMessage(response, "Link publico invalido."));
+  }
+  return (await response.json()) as T;
+}
+
+export function openHtmlInNewWindow(html: string) {
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank", "noopener,noreferrer");
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+export function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 export function formatServiceReportDate(value?: string | null) {

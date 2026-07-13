@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
@@ -226,6 +226,38 @@ export class AddServiceReportEvidenceDto {
   @IsOptional()
   @IsBoolean()
   customerVisible?: boolean;
+}
+
+export class UploadServiceReportEvidenceDto {
+  @IsEnum(EvidenceType)
+  type!: EvidenceType;
+
+  @IsString()
+  @MaxLength(180)
+  title!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  description?: string;
+
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsOptional()
+  @IsBoolean()
+  customerVisible?: boolean;
+}
+
+export class CreateServiceReportShareLinkDto {
+  @IsOptional()
+  @IsDateString()
+  expiresAt?: string;
+}
+
+export class RevokeServiceReportShareLinkDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  reason?: string;
 }
 
 export class SignServiceReportDto {

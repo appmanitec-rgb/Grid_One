@@ -500,45 +500,47 @@ model User {
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
 
-  technicianProfile          Technician?
-  manager                    User?                       @relation("UserManagementHierarchy", fields: [managerId], references: [id], onDelete: SetNull)
-  managedUsers               User[]                      @relation("UserManagementHierarchy")
-  linkedClient               Client?                     @relation("ClientPortalUsers", fields: [linkedClientId], references: [id], onDelete: SetNull)
-  proposals                  Proposal[]
-  customerProposalDecisions  Proposal[]                  @relation("ProposalCustomerDecisionBy")
-  proposalMovements          ProposalMovement[]
-  presences                  UserPresence[]
-  certifications             UserCertification[]
-  manufacturerSpecialties    UserManufacturerSpecialty[]
-  requestedApprovals         ApprovalRequest[]           @relation("ApprovalRequester")
-  approvalQueue              ApprovalRequest[]           @relation("ApprovalApprover")
-  systemAuditLogs            SystemAuditLog[]            @relation("SystemAuditActor")
-  clientAuditLogs            ClientAuditLog[]
-  createdGenerators          Generator[]                 @relation("GeneratorCreatedBy")
-  managedClients             Client[]                    @relation("ClientSalesOwner")
-  createdContracts           ServiceContract[]           @relation("ContractCreatedBy")
-  assignedOpportunities      SalesOpportunity[]          @relation("OpportunityAssignedSeller")
-  commercialInspections      CommercialInspection[]      @relation("InspectionInspector")
-  companySettingsUpdated     CompanySettings[]           @relation("CompanySettingsUpdatedBy")
-  financialAuditLogs         FinancialAuditLog[]         @relation("FinancialAuditActor")
-  receivablePayments         AccountsReceivablePayment[] @relation("ReceivablePaymentActor")
-  payablePayments            AccountsPayablePayment[]    @relation("PayablePaymentActor")
-  timeEntries                TimeEntry[]
-  commissions                CommissionEntry[]
-  hrAssetAssignments         HrAssetAssignment[]
-  fleetAllocations           FleetAllocation[]
-  authSessions               AuthSession[]
-  requestedAutomationRuns    AutomationRun[]             @relation("AutomationRunRequestedBy")
-  createdDocumentShareTokens DocumentShareToken[]        @relation("DocumentShareCreatedBy")
-  createdDocumentDeliveries  DocumentDelivery[]          @relation("DocumentDeliveryCreatedBy")
-  openedTickets              ServiceTicket[]             @relation("TicketOpenedBy")
-  assignedTickets            ServiceTicket[]             @relation("TicketAssignedTo")
-  ticketComments             ServiceTicketComment[]      @relation("TicketCommentAuthor")
-  technicianWorkSessions     TechnicianWorkSession[]     @relation("TechnicianWorkSessionUser")
-  createdServiceReports      ServiceReport[]             @relation("ServiceReportCreatedBy")
-  updatedServiceReports      ServiceReport[]             @relation("ServiceReportUpdatedBy")
-  releasedServiceReports     ServiceReport[]             @relation("ServiceReportReleasedBy")
-  uploadedReportEvidences    ServiceReportEvidence[]     @relation("ServiceReportEvidenceUploadedBy")
+  technicianProfile              Technician?
+  manager                        User?                       @relation("UserManagementHierarchy", fields: [managerId], references: [id], onDelete: SetNull)
+  managedUsers                   User[]                      @relation("UserManagementHierarchy")
+  linkedClient                   Client?                     @relation("ClientPortalUsers", fields: [linkedClientId], references: [id], onDelete: SetNull)
+  proposals                      Proposal[]
+  customerProposalDecisions      Proposal[]                  @relation("ProposalCustomerDecisionBy")
+  proposalMovements              ProposalMovement[]
+  presences                      UserPresence[]
+  certifications                 UserCertification[]
+  manufacturerSpecialties        UserManufacturerSpecialty[]
+  requestedApprovals             ApprovalRequest[]           @relation("ApprovalRequester")
+  approvalQueue                  ApprovalRequest[]           @relation("ApprovalApprover")
+  systemAuditLogs                SystemAuditLog[]            @relation("SystemAuditActor")
+  clientAuditLogs                ClientAuditLog[]
+  createdGenerators              Generator[]                 @relation("GeneratorCreatedBy")
+  managedClients                 Client[]                    @relation("ClientSalesOwner")
+  createdContracts               ServiceContract[]           @relation("ContractCreatedBy")
+  assignedOpportunities          SalesOpportunity[]          @relation("OpportunityAssignedSeller")
+  commercialInspections          CommercialInspection[]      @relation("InspectionInspector")
+  companySettingsUpdated         CompanySettings[]           @relation("CompanySettingsUpdatedBy")
+  financialAuditLogs             FinancialAuditLog[]         @relation("FinancialAuditActor")
+  receivablePayments             AccountsReceivablePayment[] @relation("ReceivablePaymentActor")
+  payablePayments                AccountsPayablePayment[]    @relation("PayablePaymentActor")
+  timeEntries                    TimeEntry[]
+  commissions                    CommissionEntry[]
+  hrAssetAssignments             HrAssetAssignment[]
+  fleetAllocations               FleetAllocation[]
+  authSessions                   AuthSession[]
+  requestedAutomationRuns        AutomationRun[]             @relation("AutomationRunRequestedBy")
+  createdDocumentShareTokens     DocumentShareToken[]        @relation("DocumentShareCreatedBy")
+  createdDocumentDeliveries      DocumentDelivery[]          @relation("DocumentDeliveryCreatedBy")
+  openedTickets                  ServiceTicket[]             @relation("TicketOpenedBy")
+  assignedTickets                ServiceTicket[]             @relation("TicketAssignedTo")
+  ticketComments                 ServiceTicketComment[]      @relation("TicketCommentAuthor")
+  technicianWorkSessions         TechnicianWorkSession[]     @relation("TechnicianWorkSessionUser")
+  createdServiceReports          ServiceReport[]             @relation("ServiceReportCreatedBy")
+  updatedServiceReports          ServiceReport[]             @relation("ServiceReportUpdatedBy")
+  releasedServiceReports         ServiceReport[]             @relation("ServiceReportReleasedBy")
+  uploadedReportEvidences        ServiceReportEvidence[]     @relation("ServiceReportEvidenceUploadedBy")
+  createdServiceReportVersions   ServiceReportVersion[]      @relation("ServiceReportVersionCreatedBy")
+  createdServiceReportShareLinks ServiceReportShareLink[]    @relation("ServiceReportShareLinkCreatedBy")
 
   @@index([linkedClientId])
   @@map("users")
@@ -842,7 +844,7 @@ model GeneratorModel {
   name  String  @unique
   brand String?
 
-  suggestedItems         CatalogItem[]     @relation("ModelSuggestedItems")
+  suggestedItems         CatalogItem[]           @relation("ModelSuggestedItems")
   baseItems              ModelBaseItem[]
   category               String?
   defaultPowerKva        Float?
@@ -855,6 +857,7 @@ model GeneratorModel {
   defaultTankCapacity    String?
   maintenancePlan        Json?
   manuals                GeneratorManual[]
+  serviceReportTemplates ServiceReportTemplate[]
 
   generators Generator[]
 
@@ -1291,21 +1294,21 @@ model MaintenanceOrder {
 }
 
 model ServiceReport {
-  id                   String            @id @default(uuid())
-  code                 String            @unique
-  maintenanceOrderId   String            @unique
-  maintenanceOrder     MaintenanceOrder  @relation(fields: [maintenanceOrderId], references: [id], onDelete: Cascade)
+  id                   String                 @id @default(uuid())
+  code                 String                 @unique
+  maintenanceOrderId   String                 @unique
+  maintenanceOrder     MaintenanceOrder       @relation(fields: [maintenanceOrderId], references: [id], onDelete: Cascade)
   clientId             String
-  client               Client            @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  client               Client                 @relation(fields: [clientId], references: [id], onDelete: Restrict)
   generatorId          String
-  generator            Generator         @relation(fields: [generatorId], references: [id], onDelete: Restrict)
+  generator            Generator              @relation(fields: [generatorId], references: [id], onDelete: Restrict)
   siteId               String?
-  site                 Site?             @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  site                 Site?                  @relation(fields: [siteId], references: [id], onDelete: SetNull)
   contractId           String?
-  contract             ServiceContract?  @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  contract             ServiceContract?       @relation(fields: [contractId], references: [id], onDelete: SetNull)
   technicianId         String?
-  technician           Technician?       @relation(fields: [technicianId], references: [id], onDelete: SetNull)
-  status               ReportStatus      @default(DRAFT)
+  technician           Technician?            @relation(fields: [technicianId], references: [id], onDelete: SetNull)
+  status               ReportStatus           @default(DRAFT)
   title                String
   diagnosis            String
   performedServices    String
@@ -1321,19 +1324,28 @@ model ServiceReport {
   signatureData        String?
   signatureIp          String?
   signatureUserAgent   String?
-  customerVisible      Boolean           @default(false)
+  customerVisible      Boolean                @default(false)
   releasedToCustomerAt DateTime?
   releasedByUserId     String?
-  releasedByUser       User?             @relation("ServiceReportReleasedBy", fields: [releasedByUserId], references: [id], onDelete: SetNull)
-  generatedDocumentId  String?           @unique
-  generatedDocument    DocumentDelivery? @relation("ServiceReportGeneratedDocument", fields: [generatedDocumentId], references: [id], onDelete: SetNull)
+  releasedByUser       User?                  @relation("ServiceReportReleasedBy", fields: [releasedByUserId], references: [id], onDelete: SetNull)
+  generatedDocumentId  String?                @unique
+  generatedDocument    DocumentDelivery?      @relation("ServiceReportGeneratedDocument", fields: [generatedDocumentId], references: [id], onDelete: SetNull)
+  templateId           String?
+  template             ServiceReportTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  versionNumber        Int                    @default(1)
+  validationToken      String?                @unique
+  validationExpiresAt  DateTime?
+  validationRevokedAt  DateTime?
+  documentHash         String?
   createdByUserId      String?
-  createdByUser        User?             @relation("ServiceReportCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdByUser        User?                  @relation("ServiceReportCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   updatedByUserId      String?
-  updatedByUser        User?             @relation("ServiceReportUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  updatedByUser        User?                  @relation("ServiceReportUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
 
   checklistItems ServiceReportChecklistItem[]
   evidences      ServiceReportEvidence[]
+  versions       ServiceReportVersion[]
+  shareLinks     ServiceReportShareLink[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1342,7 +1354,65 @@ model ServiceReport {
   @@index([generatorId, createdAt])
   @@index([technicianId, createdAt])
   @@index([customerVisible, releasedToCustomerAt])
+  @@index([templateId])
   @@map("service_reports")
+}
+
+model ServiceReportTemplate {
+  id                         String                @id @default(uuid())
+  name                       String
+  description                String?
+  active                     Boolean               @default(true)
+  defaultForGeneratorModelId String?
+  defaultForGeneratorModel   GeneratorModel?       @relation(fields: [defaultForGeneratorModelId], references: [id], onDelete: SetNull)
+  defaultForOrderType        MaintenanceOrderType?
+  sectionsConfig             Json
+  createdAt                  DateTime              @default(now())
+  updatedAt                  DateTime              @updatedAt
+
+  reports ServiceReport[]
+
+  @@index([active])
+  @@index([defaultForGeneratorModelId])
+  @@index([defaultForOrderType])
+  @@map("service_report_templates")
+}
+
+model ServiceReportVersion {
+  id                  String            @id @default(uuid())
+  reportId            String
+  report              ServiceReport     @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  versionNumber       Int
+  snapshot            Json
+  generatedDocumentId String?           @unique
+  generatedDocument   DocumentDelivery? @relation("ServiceReportVersionDocument", fields: [generatedDocumentId], references: [id], onDelete: SetNull)
+  createdByUserId     String?
+  createdByUser       User?             @relation("ServiceReportVersionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  changeReason        String?
+  createdAt           DateTime          @default(now())
+
+  @@unique([reportId, versionNumber])
+  @@index([createdByUserId, createdAt])
+  @@map("service_report_versions")
+}
+
+model ServiceReportShareLink {
+  id              String        @id @default(uuid())
+  reportId        String
+  report          ServiceReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  tokenHash       String        @unique
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  createdByUserId String?
+  createdByUser   User?         @relation("ServiceReportShareLinkCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  accessCount     Int           @default(0)
+  lastAccessedAt  DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([reportId, expiresAt])
+  @@index([createdByUserId, createdAt])
+  @@map("service_report_share_links")
 }
 
 model ServiceReportChecklistItem {
@@ -1372,6 +1442,10 @@ model ServiceReportEvidence {
   fileName         String?
   mimeType         String?
   sizeBytes        Int?
+  storageKey       String?       @unique
+  checksumSha256   String?
+  storedAt         DateTime?
+  deletedAt        DateTime?
   customerVisible  Boolean       @default(false)
   uploadedByUserId String?
   uploadedByUser   User?         @relation("ServiceReportEvidenceUploadedBy", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
@@ -1379,6 +1453,7 @@ model ServiceReportEvidence {
 
   @@index([reportId, customerVisible, createdAt])
   @@index([uploadedByUserId, createdAt])
+  @@index([checksumSha256])
   @@map("service_report_evidences")
 }
 
@@ -2127,10 +2202,11 @@ model DocumentDelivery {
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
 
-  client                 Client?             @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  createdByUser          User?               @relation("DocumentDeliveryCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  shareToken             DocumentShareToken? @relation(fields: [shareTokenId], references: [id], onDelete: SetNull)
-  generatedServiceReport ServiceReport?      @relation("ServiceReportGeneratedDocument")
+  client                 Client?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  createdByUser          User?                 @relation("DocumentDeliveryCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  shareToken             DocumentShareToken?   @relation(fields: [shareTokenId], references: [id], onDelete: SetNull)
+  generatedServiceReport ServiceReport?        @relation("ServiceReportGeneratedDocument")
+  generatedReportVersion ServiceReportVersion? @relation("ServiceReportVersionDocument")
 
   @@index([documentType, documentId])
   @@index([clientId, createdAt])

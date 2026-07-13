@@ -104,6 +104,8 @@ export const accessPolicyKeys = [
   'serviceReports.sign',
   'serviceReports.approve',
   'serviceReports.releaseToCustomer',
+  'serviceReports.generateDocument',
+  'serviceReports.manageShareLinks',
   'serviceReports.cancel',
   'audit.read',
 ] as const;
