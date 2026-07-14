@@ -6,6 +6,7 @@ import { publicServiceReportGet } from "@/lib/service-reports";
 
 type VerificationPayload = {
   valid: boolean;
+  revoked?: boolean;
   code: string;
   title: string;
   status: string;
@@ -16,6 +17,8 @@ type VerificationPayload = {
   releasedToCustomerAt?: string | null;
   validationExpiresAt?: string | null;
   validationRevokedAt?: string | null;
+  revokedAt?: string | null;
+  message?: string | null;
 };
 
 export default function PublicServiceReportVerifyPage() {
@@ -37,7 +40,9 @@ export default function PublicServiceReportVerifyPage() {
         if (active) setPayload(result);
       } catch (err) {
         if (active) {
-          setError(err instanceof Error ? err.message : "Validação indisponível.");
+          setError(
+            err instanceof Error ? err.message : "Validação indisponível.",
+          );
         }
       } finally {
         if (active) setLoading(false);
@@ -67,17 +72,32 @@ export default function PublicServiceReportVerifyPage() {
                   : "border-red-200 bg-red-50 text-red-700"
               }`}
             >
-              {payload.valid ? "Documento válido" : "Documento inválido ou revogado"}
+              {payload.message ||
+                (payload.valid
+                  ? "Documento valido"
+                  : "Documento invalido ou revogado")}
             </div>
             <h1 className="text-2xl font-extrabold">{payload.code}</h1>
             <p className="text-slate-600">{payload.title}</p>
             <div className="grid gap-3 md:grid-cols-2">
-              <Info label="Cliente" value={payload.client?.tradeName || payload.client?.companyName} />
+              <Info
+                label="Cliente"
+                value={payload.client?.tradeName || payload.client?.companyName}
+              />
               <Info label="Equipamento" value={payload.generator?.name} />
               <Info label="Série" value={payload.generator?.serialNumber} />
               <Info label="Versão" value={String(payload.versionNumber || 1)} />
               <Info label="Status" value={payload.status} />
-              <Info label="Liberado em" value={formatDate(payload.releasedToCustomerAt)} />
+              <Info
+                label="Liberado em"
+                value={formatDate(payload.releasedToCustomerAt)}
+              />
+              <Info
+                label="Revogado em"
+                value={formatDate(
+                  payload.revokedAt || payload.validationRevokedAt,
+                )}
+              />
             </div>
             {payload.documentHash ? (
               <p className="break-all rounded-lg bg-slate-50 p-3 text-xs text-slate-500">

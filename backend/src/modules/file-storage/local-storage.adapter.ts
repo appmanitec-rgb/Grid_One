@@ -1,5 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { mkdir, readFile, stat, writeFile } from 'fs/promises';
+import { mkdir, readFile, rm, stat, writeFile } from 'fs/promises';
 import { dirname, isAbsolute, normalize, relative, resolve } from 'path';
 import { StorageAdapter, StorageAdapterSaveInput } from './storage-adapter';
 
@@ -27,6 +27,15 @@ export class LocalStorageAdapter implements StorageAdapter {
       return buffer;
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
+      throw new NotFoundException('Arquivo nao encontrado.');
+    }
+  }
+
+  async remove(storageKey: string): Promise<void> {
+    const targetPath = this.resolveStoragePath(storageKey);
+    try {
+      await rm(targetPath, { force: false });
+    } catch {
       throw new NotFoundException('Arquivo nao encontrado.');
     }
   }

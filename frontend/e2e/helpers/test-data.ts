@@ -12,6 +12,7 @@ export const PUBLIC_TOKENS = {
   shareExpired: "e2e-service-report-share-expired",
   shareRevoked: "e2e-service-report-share-revoked",
   validation: "e2e-service-report-validation",
+  validationRevoked: "e2e-service-report-validation-b",
   invalid: "e2e-invalid-token",
 };
 

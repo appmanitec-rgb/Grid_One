@@ -354,6 +354,7 @@ const SERVICE_REPORT_ITEMS = [
   { key: "releaseToCustomer", label: "Liberar ao cliente" },
   { key: "generateDocument", label: "Gerar documento" },
   { key: "manageShareLinks", label: "Gerenciar links publicos" },
+  { key: "manageDocuments", label: "Gerenciar politica documental" },
   { key: "cancel", label: "Cancelar laudos" },
 ] as const satisfies ReadonlyArray<
   PermissionItem<keyof AccessPolicy["serviceReports"]>

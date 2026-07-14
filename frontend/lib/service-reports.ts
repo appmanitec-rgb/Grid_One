@@ -59,6 +59,33 @@ export type ServiceReportShareLink = {
   createdByUser?: { id: string; name: string; email?: string | null } | null;
 };
 
+export type ServiceReportAccessLog = {
+  id: string;
+  documentType: string;
+  documentId?: string | null;
+  documentDeliveryId?: string | null;
+  serviceReportId?: string | null;
+  evidenceId?: string | null;
+  userId?: string | null;
+  clientId?: string | null;
+  shareLinkId?: string | null;
+  accessType: "PDF_DOWNLOAD" | "EVIDENCE_DOWNLOAD" | "SHARE_OPEN" | "VERIFY";
+  channel: "INTERNAL" | "CUSTOMER_PORTAL" | "PUBLIC_LINK" | "VERIFY";
+  result: "SUCCESS" | "DENIED" | "EXPIRED" | "REVOKED" | "NOT_FOUND";
+  createdAt: string;
+  user?: {
+    id: string;
+    name: string;
+    email?: string | null;
+    role?: string | null;
+  } | null;
+  client?: {
+    id: string;
+    companyName: string;
+    tradeName?: string | null;
+  } | null;
+};
+
 export type ServiceReport = {
   id: string;
   code: string;
@@ -82,13 +109,29 @@ export type ServiceReport = {
   signedByName?: string | null;
   signedByDocument?: string | null;
   signatureData?: string | null;
+  signerRole?: string | null;
+  signerEmail?: string | null;
+  acceptanceText?: string | null;
+  evidenceHash?: string | null;
+  signatureHash?: string | null;
+  signatureVersion?: number;
   customerVisible: boolean;
   releasedToCustomerAt?: string | null;
+  retentionUntil?: string | null;
+  legalHold?: boolean;
+  revokedAt?: string | null;
+  archivedAt?: string | null;
+  customerAcceptedAt?: string | null;
+  customerAcceptedByUserId?: string | null;
+  customerAcceptanceText?: string | null;
+  customerAcceptanceHash?: string | null;
+  customerAcceptanceDocumentHash?: string | null;
   generatedDocumentId?: string | null;
   versionNumber?: number;
   documentHash?: string | null;
   validationUrl?: string | null;
   validationExpiresAt?: string | null;
+  storageDriver?: string;
   maintenanceOrder?: {
     id: string;
     title: string;
@@ -98,7 +141,11 @@ export type ServiceReport = {
     openedAt?: string | null;
     finishedAt?: string | null;
   } | null;
-  client?: { id: string; companyName: string; tradeName?: string | null } | null;
+  client?: {
+    id: string;
+    companyName: string;
+    tradeName?: string | null;
+  } | null;
   generator?: {
     id: string;
     name: string;
@@ -107,7 +154,12 @@ export type ServiceReport = {
     power?: number | null;
   } | null;
   site?: { id: string; name: string; code?: string | null } | null;
-  contract?: { id: string; code: string; title?: string | null; status: string } | null;
+  contract?: {
+    id: string;
+    code: string;
+    title?: string | null;
+    status: string;
+  } | null;
   technician?: {
     id: string;
     user?: { id: string; name: string; email?: string | null } | null;
@@ -140,7 +192,11 @@ export type MaintenanceOrderOption = {
   generator?: {
     id: string;
     name: string;
-    client?: { id: string; companyName: string; tradeName?: string | null } | null;
+    client?: {
+      id: string;
+      companyName: string;
+      tradeName?: string | null;
+    } | null;
   } | null;
   technician?: {
     id: string;
@@ -191,7 +247,9 @@ export async function serviceReportsPost<T>(path: string, body: unknown = {}) {
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    throw new Error(await readApiErrorMessage(response, "Falha ao salvar laudo."));
+    throw new Error(
+      await readApiErrorMessage(response, "Falha ao salvar laudo."),
+    );
   }
   return (await response.json()) as T;
 }
@@ -202,7 +260,9 @@ export async function serviceReportsPostForm<T>(path: string, body: FormData) {
     body,
   });
   if (!response.ok) {
-    throw new Error(await readApiErrorMessage(response, "Falha ao enviar arquivo."));
+    throw new Error(
+      await readApiErrorMessage(response, "Falha ao enviar arquivo."),
+    );
   }
   return (await response.json()) as T;
 }
@@ -212,7 +272,9 @@ export async function serviceReportsGetText(path: string) {
     cache: "no-store",
   });
   if (!response.ok) {
-    throw new Error(await readApiErrorMessage(response, "Falha ao abrir laudo."));
+    throw new Error(
+      await readApiErrorMessage(response, "Falha ao abrir laudo."),
+    );
   }
   return response.text();
 }
@@ -222,7 +284,9 @@ export async function serviceReportsGetBlob(path: string) {
     cache: "no-store",
   });
   if (!response.ok) {
-    throw new Error(await readApiErrorMessage(response, "Falha ao baixar arquivo."));
+    throw new Error(
+      await readApiErrorMessage(response, "Falha ao baixar arquivo."),
+    );
   }
   return response.blob();
 }
@@ -234,7 +298,9 @@ export async function serviceReportsPatch<T>(path: string, body: unknown) {
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    throw new Error(await readApiErrorMessage(response, "Falha ao atualizar laudo."));
+    throw new Error(
+      await readApiErrorMessage(response, "Falha ao atualizar laudo."),
+    );
   }
   return (await response.json()) as T;
 }
@@ -243,12 +309,31 @@ export async function portalServiceReportsGet<T>(path = "") {
   return customerPortalGet<T>(`/service-reports${path}`);
 }
 
+export async function portalServiceReportsPost<T>(
+  path: string,
+  body: unknown = {},
+) {
+  const response = await apiFetch(`/customer-portal/service-reports${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(response, "Falha ao salvar aceite."),
+    );
+  }
+  return (await response.json()) as T;
+}
+
 export async function portalServiceReportsGetText(path: string) {
   const response = await apiFetch(`/customer-portal/service-reports${path}`, {
     cache: "no-store",
   });
   if (!response.ok) {
-    throw new Error(await readApiErrorMessage(response, "Falha ao abrir laudo."));
+    throw new Error(
+      await readApiErrorMessage(response, "Falha ao abrir laudo."),
+    );
   }
   return response.text();
 }
@@ -258,7 +343,9 @@ export async function portalServiceReportsGetBlob(path: string) {
     cache: "no-store",
   });
   if (!response.ok) {
-    throw new Error(await readApiErrorMessage(response, "Falha ao baixar arquivo."));
+    throw new Error(
+      await readApiErrorMessage(response, "Falha ao baixar arquivo."),
+    );
   }
   return response.blob();
 }
@@ -268,7 +355,9 @@ export async function publicServiceReportGet<T>(path: string) {
     cache: "no-store",
   });
   if (!response.ok) {
-    throw new Error(await readApiErrorMessage(response, "Link publico invalido."));
+    throw new Error(
+      await readApiErrorMessage(response, "Link publico invalido."),
+    );
   }
   return (await response.json()) as T;
 }

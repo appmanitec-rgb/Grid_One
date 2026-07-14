@@ -6,7 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes } from 'crypto';
 import { extname, join, resolve } from 'path';
-import { PreparedExternalStorageAdapter } from './external-storage.adapter';
+import { S3StorageAdapter } from './external-storage.adapter';
 import { LocalStorageAdapter } from './local-storage.adapter';
 import { StorageAdapter } from './storage-adapter';
 
@@ -49,13 +49,18 @@ export class FileStorageService {
     ).toLowerCase();
     if (driver === 'local') {
       const baseDir = resolve(
-        configService.get<string>('FILE_STORAGE_DIR') ||
+        configService.get<string>('FILE_STORAGE_LOCAL_PATH') ||
+          configService.get<string>('FILE_STORAGE_DIR') ||
           join(process.cwd(), 'storage', 'private'),
       );
       this.adapter = new LocalStorageAdapter(baseDir);
     } else {
-      this.adapter = new PreparedExternalStorageAdapter(driver);
+      this.adapter = S3StorageAdapter.fromConfig(configService, driver);
     }
+  }
+
+  getDriver() {
+    return this.adapter.driver;
   }
 
   async saveServiceReportFile(file: UploadFile): Promise<StoredFile> {
@@ -119,6 +124,10 @@ export class FileStorageService {
       if (error instanceof NotFoundException) throw error;
       throw new NotFoundException('Arquivo nao encontrado.');
     }
+  }
+
+  async remove(storageKey: string) {
+    return this.adapter.remove(storageKey);
   }
 
   private validateFile(file: UploadFile) {

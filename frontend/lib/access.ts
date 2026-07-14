@@ -78,6 +78,7 @@ export type AccessPolicy = {
     releaseToCustomer: boolean;
     generateDocument: boolean;
     manageShareLinks: boolean;
+    manageDocuments: boolean;
     cancel: boolean;
   };
   tickets: {
@@ -264,6 +265,7 @@ const EMPTY_ACCESS_POLICY: AccessPolicy = {
     releaseToCustomer: false,
     generateDocument: false,
     manageShareLinks: false,
+    manageDocuments: false,
     cancel: false,
   },
   tickets: {
@@ -768,10 +770,7 @@ function mergeAccessPolicy(
     finance: mergeSection(base.finance, overrides.finance),
     people: mergeSection(base.people, overrides.people),
     technicians: mergeSection(base.technicians, overrides.technicians),
-    technicianWork: mergeSection(
-      base.technicianWork,
-      overrides.technicianWork,
-    ),
+    technicianWork: mergeSection(base.technicianWork, overrides.technicianWork),
     reports: mergeSection(base.reports, overrides.reports),
     settings: mergeSection(base.settings, overrides.settings),
     audit: mergeSection(base.audit, overrides.audit),
@@ -851,8 +850,7 @@ function normalizeAccessPolicy(access: AccessPolicy): AccessPolicy {
       people: access.pages.people || access.people.view,
       usersControl: access.pages.usersControl || access.users.manage,
       tickets: access.pages.tickets || access.tickets.view,
-      serviceReports:
-        access.pages.serviceReports || access.serviceReports.view,
+      serviceReports: access.pages.serviceReports || access.serviceReports.view,
       technicianPortal:
         access.pages.technicianPortal ||
         access.technicianWork.view ||
@@ -884,9 +882,12 @@ function normalizeAccessPolicy(access: AccessPolicy): AccessPolicy {
         access.serviceReports.addEvidence || access.serviceReports.update,
       sign: access.serviceReports.sign || access.serviceReports.update,
       generateDocument:
-        access.serviceReports.generateDocument ||
-        access.serviceReports.approve,
+        access.serviceReports.generateDocument || access.serviceReports.approve,
       manageShareLinks:
+        access.serviceReports.manageShareLinks ||
+        access.serviceReports.releaseToCustomer,
+      manageDocuments:
+        access.serviceReports.manageDocuments ||
         access.serviceReports.manageShareLinks ||
         access.serviceReports.releaseToCustomer,
     },
@@ -904,6 +905,7 @@ function allServiceReportActions() {
     releaseToCustomer: true,
     generateDocument: true,
     manageShareLinks: true,
+    manageDocuments: true,
     cancel: true,
   };
 }

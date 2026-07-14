@@ -21,13 +21,16 @@ import { AuthGuard } from '../auth/auth.guard';
 import { LoadedFile } from '../file-storage/file-storage.service';
 import {
   AddServiceReportEvidenceDto,
+  ArchiveServiceReportDocumentDto,
   CancelServiceReportDto,
   CreateServiceReportShareLinkDto,
   CreateServiceReportDto,
   ListServiceReportsQueryDto,
+  RevokeServiceReportDocumentDto,
   RevokeServiceReportShareLinkDto,
   ReviseReleasedServiceReportDto,
   SignServiceReportDto,
+  UpdateServiceReportRetentionDto,
   UpdateServiceReportChecklistDto,
   UpdateServiceReportDto,
   UploadServiceReportEvidenceDto,
@@ -128,7 +131,12 @@ export class ServiceReportsController {
     @Res() res: Response,
   ) {
     return this.serviceReportsService
-      .downloadEvidence(id, evidenceId, this.extractUserId(req))
+      .downloadEvidence(
+        id,
+        evidenceId,
+        this.extractUserId(req),
+        this.extractMetadata(req),
+      )
       .then((file) => this.sendFile(res, file));
   }
 
@@ -184,7 +192,7 @@ export class ServiceReportsController {
     @Res() res: Response,
   ) {
     return this.serviceReportsService
-      .downloadPdf(id, this.extractUserId(req))
+      .downloadPdf(id, this.extractUserId(req), this.extractMetadata(req))
       .then((file) => this.sendFile(res, file));
   }
 
@@ -243,6 +251,58 @@ export class ServiceReportsController {
     return this.serviceReportsService.revokeShareLink(
       id,
       linkId,
+      dto,
+      this.extractUserId(req),
+    );
+  }
+
+  @Get(':id/access-logs')
+  @RequireAccessPolicy('serviceReports.manageDocuments')
+  accessLogs(@Req() req: Request, @Param('id') id: string) {
+    return this.serviceReportsService.listDocumentAccessLogs(
+      id,
+      this.extractUserId(req),
+    );
+  }
+
+  @Post(':id/retention-policy')
+  @RequireAccessPolicy('serviceReports.manageDocuments')
+  updateRetentionPolicy(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: UpdateServiceReportRetentionDto,
+  ) {
+    return this.serviceReportsService.updateRetentionPolicy(
+      id,
+      dto,
+      this.extractUserId(req),
+    );
+  }
+
+  @Post(':id/revoke-document')
+  @RequireAccessPolicy('serviceReports.manageDocuments')
+  revokeDocument(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: RevokeServiceReportDocumentDto,
+  ) {
+    return this.serviceReportsService.revokeDocument(
+      id,
+      dto,
+      this.extractUserId(req),
+      this.extractMetadata(req),
+    );
+  }
+
+  @Post(':id/archive-document')
+  @RequireAccessPolicy('serviceReports.manageDocuments')
+  archiveDocument(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: ArchiveServiceReportDocumentDto,
+  ) {
+    return this.serviceReportsService.archiveDocument(
+      id,
       dto,
       this.extractUserId(req),
     );

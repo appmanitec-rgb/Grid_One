@@ -469,6 +469,28 @@ enum DeliveryDocumentType {
   SERVICE_REPORT
 }
 
+enum DocumentAccessType {
+  PDF_DOWNLOAD
+  EVIDENCE_DOWNLOAD
+  SHARE_OPEN
+  VERIFY
+}
+
+enum DocumentAccessChannel {
+  INTERNAL
+  CUSTOMER_PORTAL
+  PUBLIC_LINK
+  VERIFY
+}
+
+enum DocumentAccessResult {
+  SUCCESS
+  DENIED
+  EXPIRED
+  REVOKED
+  NOT_FOUND
+}
+
 model User {
   id                    String                 @id @default(uuid())
   name                  String
@@ -538,9 +560,13 @@ model User {
   createdServiceReports          ServiceReport[]             @relation("ServiceReportCreatedBy")
   updatedServiceReports          ServiceReport[]             @relation("ServiceReportUpdatedBy")
   releasedServiceReports         ServiceReport[]             @relation("ServiceReportReleasedBy")
+  revokedServiceReports          ServiceReport[]             @relation("ServiceReportRevokedBy")
+  archivedServiceReports         ServiceReport[]             @relation("ServiceReportArchivedBy")
+  customerAcceptedServiceReports ServiceReport[]             @relation("ServiceReportCustomerAcceptedBy")
   uploadedReportEvidences        ServiceReportEvidence[]     @relation("ServiceReportEvidenceUploadedBy")
   createdServiceReportVersions   ServiceReportVersion[]      @relation("ServiceReportVersionCreatedBy")
   createdServiceReportShareLinks ServiceReportShareLink[]    @relation("ServiceReportShareLinkCreatedBy")
+  documentAccessLogs             DocumentAccessLog[]         @relation("DocumentAccessLogActor")
 
   @@index([linkedClientId])
   @@map("users")
@@ -789,6 +815,7 @@ model Client {
   documentDeliveries    DocumentDelivery[]
   serviceTickets        ServiceTicket[]
   serviceReports        ServiceReport[]
+  documentAccessLogs    DocumentAccessLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1294,58 +1321,82 @@ model MaintenanceOrder {
 }
 
 model ServiceReport {
-  id                   String                 @id @default(uuid())
-  code                 String                 @unique
-  maintenanceOrderId   String                 @unique
-  maintenanceOrder     MaintenanceOrder       @relation(fields: [maintenanceOrderId], references: [id], onDelete: Cascade)
-  clientId             String
-  client               Client                 @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  generatorId          String
-  generator            Generator              @relation(fields: [generatorId], references: [id], onDelete: Restrict)
-  siteId               String?
-  site                 Site?                  @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  contractId           String?
-  contract             ServiceContract?       @relation(fields: [contractId], references: [id], onDelete: SetNull)
-  technicianId         String?
-  technician           Technician?            @relation(fields: [technicianId], references: [id], onDelete: SetNull)
-  status               ReportStatus           @default(DRAFT)
-  title                String
-  diagnosis            String
-  performedServices    String
-  recommendations      String?
-  observations         String?
-  safetyNotes          String?
-  customerNotes        String?
-  startedAt            DateTime?
-  finishedAt           DateTime?
-  signedAt             DateTime?
-  signedByName         String?
-  signedByDocument     String?
-  signatureData        String?
-  signatureIp          String?
-  signatureUserAgent   String?
-  customerVisible      Boolean                @default(false)
-  releasedToCustomerAt DateTime?
-  releasedByUserId     String?
-  releasedByUser       User?                  @relation("ServiceReportReleasedBy", fields: [releasedByUserId], references: [id], onDelete: SetNull)
-  generatedDocumentId  String?                @unique
-  generatedDocument    DocumentDelivery?      @relation("ServiceReportGeneratedDocument", fields: [generatedDocumentId], references: [id], onDelete: SetNull)
-  templateId           String?
-  template             ServiceReportTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  versionNumber        Int                    @default(1)
-  validationToken      String?                @unique
-  validationExpiresAt  DateTime?
-  validationRevokedAt  DateTime?
-  documentHash         String?
-  createdByUserId      String?
-  createdByUser        User?                  @relation("ServiceReportCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  updatedByUserId      String?
-  updatedByUser        User?                  @relation("ServiceReportUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  id                             String                 @id @default(uuid())
+  code                           String                 @unique
+  maintenanceOrderId             String                 @unique
+  maintenanceOrder               MaintenanceOrder       @relation(fields: [maintenanceOrderId], references: [id], onDelete: Cascade)
+  clientId                       String
+  client                         Client                 @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  generatorId                    String
+  generator                      Generator              @relation(fields: [generatorId], references: [id], onDelete: Restrict)
+  siteId                         String?
+  site                           Site?                  @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  contractId                     String?
+  contract                       ServiceContract?       @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  technicianId                   String?
+  technician                     Technician?            @relation(fields: [technicianId], references: [id], onDelete: SetNull)
+  status                         ReportStatus           @default(DRAFT)
+  title                          String
+  diagnosis                      String
+  performedServices              String
+  recommendations                String?
+  observations                   String?
+  safetyNotes                    String?
+  customerNotes                  String?
+  startedAt                      DateTime?
+  finishedAt                     DateTime?
+  signedAt                       DateTime?
+  signedByName                   String?
+  signedByDocument               String?
+  signatureData                  String?
+  signatureIp                    String?
+  signatureUserAgent             String?
+  signerRole                     String?
+  signerEmail                    String?
+  acceptanceText                 String?
+  evidenceHash                   String?
+  signatureHash                  String?
+  signatureVersion               Int                    @default(1)
+  customerVisible                Boolean                @default(false)
+  releasedToCustomerAt           DateTime?
+  releasedByUserId               String?
+  releasedByUser                 User?                  @relation("ServiceReportReleasedBy", fields: [releasedByUserId], references: [id], onDelete: SetNull)
+  generatedDocumentId            String?                @unique
+  generatedDocument              DocumentDelivery?      @relation("ServiceReportGeneratedDocument", fields: [generatedDocumentId], references: [id], onDelete: SetNull)
+  templateId                     String?
+  template                       ServiceReportTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  versionNumber                  Int                    @default(1)
+  validationToken                String?                @unique
+  validationExpiresAt            DateTime?
+  validationRevokedAt            DateTime?
+  documentHash                   String?
+  retentionUntil                 DateTime?
+  legalHold                      Boolean                @default(false)
+  revokedAt                      DateTime?
+  revokedById                    String?
+  revokedBy                      User?                  @relation("ServiceReportRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
+  revokeReason                   String?
+  archivedAt                     DateTime?
+  archivedById                   String?
+  archivedBy                     User?                  @relation("ServiceReportArchivedBy", fields: [archivedById], references: [id], onDelete: SetNull)
+  customerAcceptedAt             DateTime?
+  customerAcceptedByUserId       String?
+  customerAcceptedByUser         User?                  @relation("ServiceReportCustomerAcceptedBy", fields: [customerAcceptedByUserId], references: [id], onDelete: SetNull)
+  customerAcceptanceText         String?
+  customerAcceptanceIp           String?
+  customerAcceptanceUserAgent    String?
+  customerAcceptanceHash         String?
+  customerAcceptanceDocumentHash String?
+  createdByUserId                String?
+  createdByUser                  User?                  @relation("ServiceReportCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  updatedByUserId                String?
+  updatedByUser                  User?                  @relation("ServiceReportUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
 
   checklistItems ServiceReportChecklistItem[]
   evidences      ServiceReportEvidence[]
   versions       ServiceReportVersion[]
   shareLinks     ServiceReportShareLink[]
+  accessLogs     DocumentAccessLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1355,6 +1406,9 @@ model ServiceReport {
   @@index([technicianId, createdAt])
   @@index([customerVisible, releasedToCustomerAt])
   @@index([templateId])
+  @@index([revokedAt])
+  @@index([retentionUntil])
+  @@index([customerAcceptedAt])
   @@map("service_reports")
 }
 
@@ -1397,20 +1451,21 @@ model ServiceReportVersion {
 }
 
 model ServiceReportShareLink {
-  id                    String        @id @default(uuid())
+  id                    String              @id @default(uuid())
   reportId              String
-  report                ServiceReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  tokenHash             String        @unique
+  report                ServiceReport       @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  tokenHash             String              @unique
   expiresAt             DateTime
   revokedAt             DateTime?
-  allowPdfDownload      Boolean       @default(false)
-  allowEvidenceDownload Boolean       @default(false)
+  allowPdfDownload      Boolean             @default(false)
+  allowEvidenceDownload Boolean             @default(false)
   createdByUserId       String?
-  createdByUser         User?         @relation("ServiceReportShareLinkCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  accessCount           Int           @default(0)
+  createdByUser         User?               @relation("ServiceReportShareLinkCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  accessCount           Int                 @default(0)
   lastAccessedAt        DateTime?
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  accessLogs            DocumentAccessLog[]
 
   @@index([reportId, expiresAt])
   @@index([createdByUserId, createdAt])
@@ -1434,9 +1489,9 @@ model ServiceReportChecklistItem {
 }
 
 model ServiceReportEvidence {
-  id               String        @id @default(uuid())
+  id               String              @id @default(uuid())
   reportId         String
-  report           ServiceReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  report           ServiceReport       @relation(fields: [reportId], references: [id], onDelete: Cascade)
   type             EvidenceType
   title            String
   description      String?
@@ -1444,14 +1499,15 @@ model ServiceReportEvidence {
   fileName         String?
   mimeType         String?
   sizeBytes        Int?
-  storageKey       String?       @unique
+  storageKey       String?             @unique
   checksumSha256   String?
   storedAt         DateTime?
   deletedAt        DateTime?
-  customerVisible  Boolean       @default(false)
+  customerVisible  Boolean             @default(false)
   uploadedByUserId String?
-  uploadedByUser   User?         @relation("ServiceReportEvidenceUploadedBy", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
-  createdAt        DateTime      @default(now())
+  uploadedByUser   User?               @relation("ServiceReportEvidenceUploadedBy", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+  createdAt        DateTime            @default(now())
+  accessLogs       DocumentAccessLog[]
 
   @@index([reportId, customerVisible, createdAt])
   @@index([uploadedByUserId, createdAt])
@@ -2215,6 +2271,7 @@ model DocumentDelivery {
   shareToken             DocumentShareToken?   @relation(fields: [shareTokenId], references: [id], onDelete: SetNull)
   generatedServiceReport ServiceReport?        @relation("ServiceReportGeneratedDocument")
   generatedReportVersion ServiceReportVersion? @relation("ServiceReportVersionDocument")
+  accessLogs             DocumentAccessLog[]
 
   @@index([documentType, documentId])
   @@index([clientId, createdAt])
@@ -2222,4 +2279,39 @@ model DocumentDelivery {
   @@index([checksumSha256])
   @@index([status, createdAt])
   @@map("document_deliveries")
+}
+
+model DocumentAccessLog {
+  id                 String                @id @default(uuid())
+  documentType       DeliveryDocumentType
+  documentId         String?
+  documentDeliveryId String?
+  serviceReportId    String?
+  evidenceId         String?
+  userId             String?
+  clientId           String?
+  shareLinkId        String?
+  accessType         DocumentAccessType
+  channel            DocumentAccessChannel
+  result             DocumentAccessResult
+  ipAddress          String?
+  userAgent          String?
+  createdAt          DateTime              @default(now())
+
+  documentDelivery DocumentDelivery?       @relation(fields: [documentDeliveryId], references: [id], onDelete: SetNull)
+  serviceReport    ServiceReport?          @relation(fields: [serviceReportId], references: [id], onDelete: SetNull)
+  evidence         ServiceReportEvidence?  @relation(fields: [evidenceId], references: [id], onDelete: SetNull)
+  user             User?                   @relation("DocumentAccessLogActor", fields: [userId], references: [id], onDelete: SetNull)
+  client           Client?                 @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  shareLink        ServiceReportShareLink? @relation(fields: [shareLinkId], references: [id], onDelete: SetNull)
+
+  @@index([documentType, documentId, createdAt])
+  @@index([serviceReportId, createdAt])
+  @@index([documentDeliveryId, createdAt])
+  @@index([evidenceId, createdAt])
+  @@index([userId, createdAt])
+  @@index([clientId, createdAt])
+  @@index([shareLinkId, createdAt])
+  @@index([accessType, result, createdAt])
+  @@map("document_access_logs")
 }

@@ -8,6 +8,9 @@ import {
   AuditDomain,
   ChecklistResult,
   DeliveryDocumentType,
+  DocumentAccessChannel,
+  DocumentAccessResult,
+  DocumentAccessType,
   EvidenceType,
   OrderStatus,
   ReportStatus,
@@ -24,6 +27,7 @@ describe('ServiceReportsService', () => {
     saveServiceReportFile: jest.Mock;
     saveServiceReportPdf: jest.Mock;
     load: jest.Mock;
+    getDriver: jest.Mock;
   };
   let pdfService: { generate: jest.Mock };
 
@@ -56,6 +60,7 @@ describe('ServiceReportsService', () => {
         checksumSha256: 'hash-1',
         buffer: Buffer.from('file'),
       }),
+      getDriver: jest.fn().mockReturnValue('local'),
     };
     pdfService = {
       generate: jest.fn().mockReturnValue(Buffer.from('%PDF-1.4')),
@@ -701,6 +706,18 @@ describe('ServiceReportsService', () => {
       expect.objectContaining({ mimeType: 'application/pdf' }),
     );
     expect(file.buffer).toEqual(Buffer.from('file'));
+    expect(db.documentAccessLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          serviceReportId: 'report-1',
+          clientId: 'client-1',
+          userId: 'customer-user-1',
+          accessType: DocumentAccessType.PDF_DOWNLOAD,
+          channel: DocumentAccessChannel.CUSTOMER_PORTAL,
+          result: DocumentAccessResult.SUCCESS,
+        }),
+      }),
+    );
   });
 
   it('portal nao baixa PDF de outro cliente ou laudo nao liberado', async () => {
@@ -725,6 +742,131 @@ describe('ServiceReportsService', () => {
 
     await expect(service.downloadPublicSharePdf('raw-token')).rejects.toThrow(
       ForbiddenException,
+    );
+    expect(db.documentAccessLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          serviceReportId: 'report-1',
+          shareLinkId: 'link-1',
+          accessType: DocumentAccessType.PDF_DOWNLOAD,
+          channel: DocumentAccessChannel.PUBLIC_LINK,
+          result: DocumentAccessResult.DENIED,
+        }),
+      }),
+    );
+  });
+
+  it('laudo revogado bloqueia link publico e registra auditoria documental', async () => {
+    db.serviceReportShareLink.findUnique.mockResolvedValue({
+      id: 'link-1',
+      reportId: 'report-1',
+      revokedAt: null,
+      expiresAt: new Date('2026-08-01T00:00:00.000Z'),
+      allowPdfDownload: true,
+      allowEvidenceDownload: false,
+      report: makeReleasedReport({
+        generatedDocument: makeDocument(),
+        revokedAt: new Date('2026-07-10T00:00:00.000Z'),
+      }),
+    });
+
+    await expect(service.downloadPublicSharePdf('raw-token')).rejects.toThrow(
+      ForbiddenException,
+    );
+
+    expect(db.documentAccessLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          serviceReportId: 'report-1',
+          shareLinkId: 'link-1',
+          result: DocumentAccessResult.REVOKED,
+        }),
+      }),
+    );
+  });
+
+  it('legal hold bloqueia revogacao destrutiva do documento', async () => {
+    db.serviceReport.findUnique.mockResolvedValue(
+      makeReleasedReport({ legalHold: true }),
+    );
+
+    await expect(
+      service.revokeDocument(
+        'report-1',
+        { reason: 'Retencao legal em andamento.', destructive: true },
+        'user-1',
+        { ip: '127.0.0.1', userAgent: 'jest' },
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('revogacao documental oculta do cliente e revoga validacao', async () => {
+    db.serviceReport.findUnique.mockResolvedValue(makeReleasedReport());
+    db.serviceReport.update.mockResolvedValue(
+      makeReleasedReport({
+        revokedAt: new Date('2026-07-10T12:00:00.000Z'),
+        customerVisible: false,
+        validationRevokedAt: new Date('2026-07-10T12:00:00.000Z'),
+      }),
+    );
+
+    const result = await service.revokeDocument(
+      'report-1',
+      { reason: 'Documento substituido por versao corrigida.' },
+      'user-1',
+      { ip: '127.0.0.1', userAgent: 'jest' },
+    );
+
+    expect(result.customerVisible).toBe(false);
+    expect(db.serviceReport.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          customerVisible: false,
+          revokedById: 'user-1',
+          validationRevokedAt: expect.any(Date),
+        }),
+      }),
+    );
+    expect(auditLogsService.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'DOCUMENT_REVOKED' }),
+      db,
+    );
+  });
+
+  it('aceite do cliente registra hash e vinculo ao usuario do portal', async () => {
+    db.user.findUnique.mockResolvedValue(makeClientUser());
+    db.serviceReport.findFirst.mockResolvedValue(
+      makeReleasedReport({ documentHash: 'pdf-hash-1' }),
+    );
+    db.serviceReport.update.mockResolvedValue(
+      makeReleasedReport({
+        documentHash: 'pdf-hash-1',
+        customerAcceptedAt: new Date('2026-07-10T12:00:00.000Z'),
+        customerAcceptedByUserId: 'customer-user-1',
+        customerAcceptanceHash: 'acceptance-hash',
+      }),
+    );
+
+    const result = await service.acceptCustomerReport(
+      'customer-user-1',
+      'report-1',
+      { acceptanceText: 'Cliente declara aceite formal do laudo.' },
+      { ip: '127.0.0.1', userAgent: 'jest' },
+    );
+
+    expect(result.customerAcceptedAt).toBeTruthy();
+    expect(db.serviceReport.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          customerAcceptedByUserId: 'customer-user-1',
+          customerAcceptanceHash: expect.any(String),
+          customerAcceptanceDocumentHash: 'pdf-hash-1',
+        }),
+      }),
+    );
+    expect(auditLogsService.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'CUSTOMER_ACCEPTED' }),
+      db,
     );
   });
 
@@ -906,6 +1048,10 @@ function createDbMock() {
       create: jest.fn(),
       update: jest.fn(),
     },
+    documentAccessLog: {
+      create: jest.fn(),
+      findMany: jest.fn(),
+    },
   };
 }
 
@@ -973,6 +1119,12 @@ function makeReport(overrides: Record<string, unknown> = {}) {
     signedByName: null,
     signedByDocument: null,
     signatureData: null,
+    signerRole: null,
+    signerEmail: null,
+    acceptanceText: null,
+    evidenceHash: null,
+    signatureHash: null,
+    signatureVersion: 1,
     customerVisible: false,
     releasedToCustomerAt: null,
     generatedDocumentId: null,
@@ -981,6 +1133,18 @@ function makeReport(overrides: Record<string, unknown> = {}) {
     validationExpiresAt: null,
     validationRevokedAt: null,
     documentHash: null,
+    retentionUntil: null,
+    legalHold: false,
+    revokedAt: null,
+    revokedById: null,
+    revokeReason: null,
+    archivedAt: null,
+    archivedById: null,
+    customerAcceptedAt: null,
+    customerAcceptedByUserId: null,
+    customerAcceptanceText: null,
+    customerAcceptanceHash: null,
+    customerAcceptanceDocumentHash: null,
     templateId: null,
     maintenanceOrder: {
       id: 'order-1',

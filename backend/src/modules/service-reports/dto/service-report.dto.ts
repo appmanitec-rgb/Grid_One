@@ -285,6 +285,21 @@ export class SignServiceReportDto {
   @IsString()
   @MaxLength(20000)
   signatureData?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  signerRole?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(180)
+  signerEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  acceptanceText?: string;
 }
 
 export class CancelServiceReportDto {
@@ -299,4 +314,46 @@ export class ReviseReleasedServiceReportDto extends UpdateServiceReportDto {
   @MinLength(8)
   @MaxLength(1000)
   changeReason!: string;
+}
+
+export class RevokeServiceReportDocumentDto {
+  @IsString()
+  @MinLength(8)
+  @MaxLength(1000)
+  reason!: string;
+
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsOptional()
+  @IsBoolean()
+  destructive?: boolean;
+}
+
+export class ArchiveServiceReportDocumentDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  reason?: string;
+}
+
+export class UpdateServiceReportRetentionDto {
+  @IsOptional()
+  @IsDateString()
+  retentionUntil?: string;
+
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsOptional()
+  @IsBoolean()
+  legalHold?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  reason?: string;
+}
+
+export class AcceptServiceReportDto {
+  @IsString()
+  @MinLength(8)
+  @MaxLength(2000)
+  acceptanceText!: string;
 }

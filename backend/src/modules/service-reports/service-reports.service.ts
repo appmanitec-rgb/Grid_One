@@ -13,6 +13,9 @@ import {
   DeliveryChannel,
   DeliveryDocumentType,
   DeliveryStatus,
+  DocumentAccessChannel,
+  DocumentAccessResult,
+  DocumentAccessType,
   OrderStatus,
   Prisma,
   ReportStatus,
@@ -27,13 +30,17 @@ import {
 } from '../file-storage/file-storage.service';
 import {
   AddServiceReportEvidenceDto,
+  AcceptServiceReportDto,
+  ArchiveServiceReportDocumentDto,
   CancelServiceReportDto,
   CreateServiceReportShareLinkDto,
   CreateServiceReportDto,
   ListServiceReportsQueryDto,
+  RevokeServiceReportDocumentDto,
   RevokeServiceReportShareLinkDto,
   ReviseReleasedServiceReportDto,
   SignServiceReportDto,
+  UpdateServiceReportRetentionDto,
   UpdateServiceReportChecklistDto,
   UpdateServiceReportDto,
   UploadServiceReportEvidenceDto,
@@ -64,6 +71,20 @@ type InternalActor = {
   id: string;
   role: UserRole;
   technicianId?: string | null;
+};
+
+type DocumentAccessInput = {
+  documentId?: string | null;
+  documentDeliveryId?: string | null;
+  serviceReportId?: string | null;
+  evidenceId?: string | null;
+  userId?: string | null;
+  clientId?: string | null;
+  shareLinkId?: string | null;
+  accessType: DocumentAccessType;
+  channel: DocumentAccessChannel;
+  result: DocumentAccessResult;
+  metadata?: RequestMetadata;
 };
 
 type ReportMap = Record<string, unknown> & {
@@ -165,7 +186,7 @@ export class ServiceReportsService {
       throw new NotFoundException('Relatorio tecnico nao encontrado.');
     }
     this.assertActorReportScope(actor, report);
-    return report;
+    return this.withStorageInfo(report);
   }
 
   async create(dto: CreateServiceReportDto, actorUserId?: string) {
@@ -464,6 +485,7 @@ export class ServiceReportsService {
     reportId: string,
     evidenceId: string,
     actorUserId?: string,
+    metadata?: RequestMetadata,
   ) {
     const actor = await this.assertInternalActor(actorUserId);
     const report = await this.prisma.serviceReport.findUnique({
@@ -477,20 +499,84 @@ export class ServiceReportsService {
       },
     });
     if (!report) {
+      await this.recordDocumentAccess({
+        documentId: reportId,
+        serviceReportId: reportId,
+        evidenceId,
+        userId: actor.id,
+        accessType: DocumentAccessType.EVIDENCE_DOWNLOAD,
+        channel: DocumentAccessChannel.INTERNAL,
+        result: DocumentAccessResult.NOT_FOUND,
+        metadata,
+      });
       throw new NotFoundException('Relatorio tecnico nao encontrado.');
     }
-    this.assertActorReportScope(actor, report);
+    try {
+      this.assertActorReportScope(actor, report);
+    } catch (error) {
+      await this.recordDocumentAccess({
+        documentId: reportId,
+        serviceReportId: reportId,
+        evidenceId,
+        userId: actor.id,
+        clientId: report.clientId,
+        accessType: DocumentAccessType.EVIDENCE_DOWNLOAD,
+        channel: DocumentAccessChannel.INTERNAL,
+        result: DocumentAccessResult.DENIED,
+        metadata,
+      });
+      throw error;
+    }
     const evidence = report.evidences[0];
     if (!evidence) {
+      await this.recordDocumentAccess({
+        documentId: reportId,
+        serviceReportId: reportId,
+        evidenceId,
+        userId: actor.id,
+        clientId: report.clientId,
+        accessType: DocumentAccessType.EVIDENCE_DOWNLOAD,
+        channel: DocumentAccessChannel.INTERNAL,
+        result: DocumentAccessResult.NOT_FOUND,
+        metadata,
+      });
       throw new NotFoundException('Evidencia nao encontrada.');
     }
-    return this.loadEvidenceFile(evidence);
+    try {
+      const file = await this.loadEvidenceFile(evidence);
+      await this.recordDocumentAccess({
+        documentId: reportId,
+        serviceReportId: reportId,
+        evidenceId,
+        userId: actor.id,
+        clientId: report.clientId,
+        accessType: DocumentAccessType.EVIDENCE_DOWNLOAD,
+        channel: DocumentAccessChannel.INTERNAL,
+        result: DocumentAccessResult.SUCCESS,
+        metadata,
+      });
+      return file;
+    } catch (error) {
+      await this.recordDocumentAccess({
+        documentId: reportId,
+        serviceReportId: reportId,
+        evidenceId,
+        userId: actor.id,
+        clientId: report.clientId,
+        accessType: DocumentAccessType.EVIDENCE_DOWNLOAD,
+        channel: DocumentAccessChannel.INTERNAL,
+        result: DocumentAccessResult.NOT_FOUND,
+        metadata,
+      });
+      throw error;
+    }
   }
 
   async downloadCustomerEvidence(
     userId: string | undefined,
     reportId: string,
     evidenceId: string,
+    metadata?: RequestMetadata,
   ) {
     const scope = await this.requireCustomerScope(userId);
     const report = await this.prisma.serviceReport.findFirst({
@@ -510,13 +596,62 @@ export class ServiceReportsService {
       },
     });
     if (!report) {
+      await this.recordDocumentAccess({
+        documentId: reportId,
+        serviceReportId: reportId,
+        evidenceId,
+        userId: scope.userId,
+        clientId: scope.clientId,
+        accessType: DocumentAccessType.EVIDENCE_DOWNLOAD,
+        channel: DocumentAccessChannel.CUSTOMER_PORTAL,
+        result: await this.resolveCustomerAccessFailure(reportId, scope),
+        metadata,
+      });
       throw new NotFoundException('Laudo nao encontrado.');
     }
     const evidence = report.evidences[0];
     if (!evidence) {
+      await this.recordDocumentAccess({
+        documentId: reportId,
+        serviceReportId: reportId,
+        evidenceId,
+        userId: scope.userId,
+        clientId: scope.clientId,
+        accessType: DocumentAccessType.EVIDENCE_DOWNLOAD,
+        channel: DocumentAccessChannel.CUSTOMER_PORTAL,
+        result: DocumentAccessResult.NOT_FOUND,
+        metadata,
+      });
       throw new NotFoundException('Evidencia nao encontrada.');
     }
-    return this.loadEvidenceFile(evidence);
+    try {
+      const file = await this.loadEvidenceFile(evidence);
+      await this.recordDocumentAccess({
+        documentId: reportId,
+        serviceReportId: reportId,
+        evidenceId,
+        userId: scope.userId,
+        clientId: scope.clientId,
+        accessType: DocumentAccessType.EVIDENCE_DOWNLOAD,
+        channel: DocumentAccessChannel.CUSTOMER_PORTAL,
+        result: DocumentAccessResult.SUCCESS,
+        metadata,
+      });
+      return file;
+    } catch (error) {
+      await this.recordDocumentAccess({
+        documentId: reportId,
+        serviceReportId: reportId,
+        evidenceId,
+        userId: scope.userId,
+        clientId: scope.clientId,
+        accessType: DocumentAccessType.EVIDENCE_DOWNLOAD,
+        channel: DocumentAccessChannel.CUSTOMER_PORTAL,
+        result: DocumentAccessResult.NOT_FOUND,
+        metadata,
+      });
+      throw error;
+    }
   }
 
   async sign(
@@ -540,15 +675,45 @@ export class ServiceReportsService {
         );
       }
 
+      const signedAt = new Date();
+      const evidenceHash = this.buildEvidenceHash(current);
+      const documentHash =
+        typeof current.documentHash === 'string' && current.documentHash
+          ? current.documentHash
+          : this.buildDocumentHash(current);
+      const signatureVersion = 1;
+      const signatureHash = this.buildProofHash({
+        type: 'service-report-signature',
+        reportId: id,
+        versionNumber: current.versionNumber ?? 1,
+        documentHash,
+        evidenceHash,
+        signedByName: dto.signedByName,
+        signedByDocument: dto.signedByDocument,
+        signerRole: dto.signerRole,
+        signerEmail: dto.signerEmail,
+        acceptanceText: dto.acceptanceText,
+        signedAt: signedAt.toISOString(),
+        ip: metadata.ip,
+        userAgent: this.normalizeUserAgent(metadata.userAgent),
+        signatureVersion,
+      });
+
       const updated = await tx.serviceReport.update({
         where: { id },
         data: {
           signedByName: dto.signedByName,
           signedByDocument: dto.signedByDocument,
           signatureData: dto.signatureData,
-          signedAt: new Date(),
+          signedAt,
           signatureIp: metadata.ip,
           signatureUserAgent: this.normalizeUserAgent(metadata.userAgent),
+          signerRole: dto.signerRole,
+          signerEmail: dto.signerEmail,
+          acceptanceText: dto.acceptanceText,
+          evidenceHash,
+          signatureHash,
+          signatureVersion,
           updatedByUserId: actor.id,
         },
         include: this.internalInclude(),
@@ -567,6 +732,10 @@ export class ServiceReportsService {
           signedAt: updated.signedAt?.toISOString() ?? null,
           signedByName: updated.signedByName,
           signedByDocument: updated.signedByDocument,
+          signerRole: updated.signerRole,
+          signerEmail: updated.signerEmail,
+          signatureHash: updated.signatureHash,
+          evidenceHash: updated.evidenceHash,
           metadata,
         },
       );
@@ -871,20 +1040,79 @@ export class ServiceReportsService {
     });
   }
 
-  async downloadPdf(reportId: string, actorUserId?: string) {
+  async downloadPdf(
+    reportId: string,
+    actorUserId?: string,
+    metadata?: RequestMetadata,
+  ) {
     const actor = await this.assertInternalActor(actorUserId);
     const report = await this.prisma.serviceReport.findUnique({
       where: { id: reportId },
       include: this.internalInclude(),
     });
     if (!report) {
+      await this.recordDocumentAccess({
+        documentId: reportId,
+        serviceReportId: reportId,
+        userId: actor.id,
+        accessType: DocumentAccessType.PDF_DOWNLOAD,
+        channel: DocumentAccessChannel.INTERNAL,
+        result: DocumentAccessResult.NOT_FOUND,
+        metadata,
+      });
       throw new NotFoundException('Relatorio tecnico nao encontrado.');
     }
-    this.assertActorReportScope(actor, report);
-    return this.loadDocumentFile(report.generatedDocument);
+    try {
+      this.assertActorReportScope(actor, report);
+    } catch (error) {
+      await this.recordDocumentAccess({
+        documentId: reportId,
+        documentDeliveryId: report.generatedDocumentId,
+        serviceReportId: reportId,
+        userId: actor.id,
+        clientId: report.clientId,
+        accessType: DocumentAccessType.PDF_DOWNLOAD,
+        channel: DocumentAccessChannel.INTERNAL,
+        result: DocumentAccessResult.DENIED,
+        metadata,
+      });
+      throw error;
+    }
+    try {
+      const file = await this.loadDocumentFile(report.generatedDocument);
+      await this.recordDocumentAccess({
+        documentId: reportId,
+        documentDeliveryId: report.generatedDocumentId,
+        serviceReportId: reportId,
+        userId: actor.id,
+        clientId: report.clientId,
+        accessType: DocumentAccessType.PDF_DOWNLOAD,
+        channel: DocumentAccessChannel.INTERNAL,
+        result: DocumentAccessResult.SUCCESS,
+        metadata,
+      });
+      return file;
+    } catch (error) {
+      await this.recordDocumentAccess({
+        documentId: reportId,
+        documentDeliveryId: report.generatedDocumentId,
+        serviceReportId: reportId,
+        userId: actor.id,
+        clientId: report.clientId,
+        accessType: DocumentAccessType.PDF_DOWNLOAD,
+        channel: DocumentAccessChannel.INTERNAL,
+        result: DocumentAccessResult.NOT_FOUND,
+        metadata,
+      });
+      throw error;
+    }
   }
 
-  async downloadCustomerPdf(userId: string | undefined, reportId: string) {
+  async downloadCustomerPdf(
+    userId: string | undefined,
+    reportId: string,
+    metadata?: RequestMetadata,
+  ) {
     const scope = await this.requireCustomerScope(userId);
     const report = await this.prisma.serviceReport.findFirst({
       where: {
@@ -894,12 +1122,49 @@ export class ServiceReportsService {
       include: this.customerInclude(),
     });
     if (!report) {
+      await this.recordDocumentAccess({
+        documentId: reportId,
+        serviceReportId: reportId,
+        userId: scope.userId,
+        clientId: scope.clientId,
+        accessType: DocumentAccessType.PDF_DOWNLOAD,
+        channel: DocumentAccessChannel.CUSTOMER_PORTAL,
+        result: await this.resolveCustomerAccessFailure(reportId, scope),
+        metadata,
+      });
       throw new NotFoundException('Laudo nao encontrado.');
     }
-    return this.loadDocumentFile(report.generatedDocument);
+    try {
+      const file = await this.loadDocumentFile(report.generatedDocument);
+      await this.recordDocumentAccess({
+        documentId: reportId,
+        documentDeliveryId: report.generatedDocumentId,
+        serviceReportId: reportId,
+        userId: scope.userId,
+        clientId: scope.clientId,
+        accessType: DocumentAccessType.PDF_DOWNLOAD,
+        channel: DocumentAccessChannel.CUSTOMER_PORTAL,
+        result: DocumentAccessResult.SUCCESS,
+        metadata,
+      });
+      return file;
+    } catch (error) {
+      await this.recordDocumentAccess({
+        documentId: reportId,
+        documentDeliveryId: report.generatedDocumentId,
+        serviceReportId: reportId,
+        userId: scope.userId,
+        clientId: scope.clientId,
+        accessType: DocumentAccessType.PDF_DOWNLOAD,
+        channel: DocumentAccessChannel.CUSTOMER_PORTAL,
+        result: DocumentAccessResult.NOT_FOUND,
+        metadata,
+      });
+      throw error;
+    }
   }
 
-  async downloadPublicSharePdf(token: string) {
+  async downloadPublicSharePdf(token: string, metadata?: RequestMetadata) {
     const tokenHash = this.hashToken(token);
     const link = await this.prisma.serviceReportShareLink.findUnique({
       where: { tokenHash },
@@ -910,10 +1175,41 @@ export class ServiceReportsService {
       },
     });
     if (!link) {
+      await this.recordDocumentAccess({
+        accessType: DocumentAccessType.PDF_DOWNLOAD,
+        channel: DocumentAccessChannel.PUBLIC_LINK,
+        result: DocumentAccessResult.NOT_FOUND,
+        metadata,
+      });
       throw new NotFoundException('Link publico nao encontrado.');
     }
-    this.assertPublicLinkUsable(link);
+    const blocked = this.getPublicLinkBlock(link);
+    if (blocked) {
+      await this.recordDocumentAccess({
+        documentId: link.reportId,
+        documentDeliveryId: link.report.generatedDocumentId,
+        serviceReportId: link.reportId,
+        clientId: link.report.clientId,
+        shareLinkId: link.id,
+        accessType: DocumentAccessType.PDF_DOWNLOAD,
+        channel: DocumentAccessChannel.PUBLIC_LINK,
+        result: blocked.result,
+        metadata,
+      });
+      throw new ForbiddenException(blocked.message);
+    }
     if (!link.allowPdfDownload) {
+      await this.recordDocumentAccess({
+        documentId: link.reportId,
+        documentDeliveryId: link.report.generatedDocumentId,
+        serviceReportId: link.reportId,
+        clientId: link.report.clientId,
+        shareLinkId: link.id,
+        accessType: DocumentAccessType.PDF_DOWNLOAD,
+        channel: DocumentAccessChannel.PUBLIC_LINK,
+        result: DocumentAccessResult.DENIED,
+        metadata,
+      });
       throw new ForbiddenException(
         'Download de PDF nao esta liberado para este link.',
       );
@@ -932,7 +1228,34 @@ export class ServiceReportsService {
       action: 'PUBLIC_PDF_DOWNLOADED',
       afterPayload: { linkId: link.id },
     });
-    return this.loadDocumentFile(link.report.generatedDocument);
+    try {
+      const file = await this.loadDocumentFile(link.report.generatedDocument);
+      await this.recordDocumentAccess({
+        documentId: link.reportId,
+        documentDeliveryId: link.report.generatedDocumentId,
+        serviceReportId: link.reportId,
+        clientId: link.report.clientId,
+        shareLinkId: link.id,
+        accessType: DocumentAccessType.PDF_DOWNLOAD,
+        channel: DocumentAccessChannel.PUBLIC_LINK,
+        result: DocumentAccessResult.SUCCESS,
+        metadata,
+      });
+      return file;
+    } catch (error) {
+      await this.recordDocumentAccess({
+        documentId: link.reportId,
+        documentDeliveryId: link.report.generatedDocumentId,
+        serviceReportId: link.reportId,
+        clientId: link.report.clientId,
+        shareLinkId: link.id,
+        accessType: DocumentAccessType.PDF_DOWNLOAD,
+        channel: DocumentAccessChannel.PUBLIC_LINK,
+        result: DocumentAccessResult.NOT_FOUND,
+        metadata,
+      });
+      throw error;
+    }
   }
 
   async reviseReleasedReport(
@@ -1155,21 +1478,257 @@ export class ServiceReportsService {
     return updated;
   }
 
-  async verifyPublicReport(token: string) {
+  async listDocumentAccessLogs(id: string, actorUserId?: string) {
+    const actor = await this.assertInternalActor(actorUserId);
+    const report = await this.prisma.serviceReport.findUnique({
+      where: { id },
+      select: { id: true, technicianId: true },
+    });
+    if (!report) {
+      throw new NotFoundException('Relatorio tecnico nao encontrado.');
+    }
+    this.assertActorReportScope(actor, report);
+    return this.prisma.documentAccessLog.findMany({
+      where: { serviceReportId: id },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      include: {
+        user: { select: { id: true, name: true, email: true, role: true } },
+        client: { select: { id: true, companyName: true, tradeName: true } },
+      },
+    });
+  }
+
+  async updateRetentionPolicy(
+    id: string,
+    dto: UpdateServiceReportRetentionDto,
+    actorUserId?: string,
+  ) {
+    const actor = await this.assertInternalActor(actorUserId);
+    return this.prisma.$transaction(async (tx) => {
+      const current = await this.getReportForMutation(tx, id);
+      this.assertActorReportScope(actor, current);
+      const retentionUntil =
+        dto.retentionUntil === undefined
+          ? undefined
+          : this.parseDate(dto.retentionUntil);
+      if (retentionUntil && Number.isNaN(retentionUntil.getTime())) {
+        throw new BadRequestException('Data de retencao invalida.');
+      }
+      const updated = await tx.serviceReport.update({
+        where: { id },
+        data: {
+          retentionUntil,
+          legalHold: dto.legalHold,
+          updatedByUserId: actor.id,
+        },
+        include: this.internalInclude(),
+      });
+      await this.recordAudit(
+        tx,
+        'RETENTION_POLICY_UPDATED',
+        id,
+        actor.id,
+        {
+          retentionUntil: current.retentionUntil,
+          legalHold: current.legalHold,
+        },
+        {
+          retentionUntil: updated.retentionUntil,
+          legalHold: updated.legalHold,
+        },
+        dto.reason,
+      );
+      return updated;
+    });
+  }
+
+  async revokeDocument(
+    id: string,
+    dto: RevokeServiceReportDocumentDto,
+    actorUserId: string | undefined,
+    metadata: RequestMetadata,
+  ) {
+    const actor = await this.assertInternalActor(actorUserId);
+    return this.prisma.$transaction(async (tx) => {
+      const current = await this.getReportForMutation(tx, id);
+      this.assertActorReportScope(actor, current);
+      if (dto.destructive && current.legalHold) {
+        throw new BadRequestException(
+          'Legal hold ativo bloqueia revogacao destrutiva.',
+        );
+      }
+      if (current.revokedAt) {
+        return current;
+      }
+      const now = new Date();
+      const updated = await tx.serviceReport.update({
+        where: { id },
+        data: {
+          revokedAt: now,
+          revokedById: actor.id,
+          revokeReason: dto.reason,
+          customerVisible: false,
+          validationRevokedAt: current.validationRevokedAt ?? now,
+          updatedByUserId: actor.id,
+        },
+        include: this.internalInclude(),
+      });
+      await this.recordAudit(
+        tx,
+        'DOCUMENT_REVOKED',
+        id,
+        actor.id,
+        {
+          revokedAt: current.revokedAt,
+          validationRevokedAt: current.validationRevokedAt,
+          customerVisible: current.customerVisible,
+        },
+        {
+          revokedAt: updated.revokedAt,
+          validationRevokedAt: updated.validationRevokedAt,
+          customerVisible: updated.customerVisible,
+          metadata,
+        },
+        dto.reason,
+      );
+      return updated;
+    });
+  }
+
+  async archiveDocument(
+    id: string,
+    dto: ArchiveServiceReportDocumentDto,
+    actorUserId?: string,
+  ) {
+    const actor = await this.assertInternalActor(actorUserId);
+    return this.prisma.$transaction(async (tx) => {
+      const current = await this.getReportForMutation(tx, id);
+      this.assertActorReportScope(actor, current);
+      if (current.archivedAt) {
+        return current;
+      }
+      const updated = await tx.serviceReport.update({
+        where: { id },
+        data: {
+          archivedAt: new Date(),
+          archivedById: actor.id,
+          updatedByUserId: actor.id,
+        },
+        include: this.internalInclude(),
+      });
+      await this.recordAudit(
+        tx,
+        'DOCUMENT_ARCHIVED',
+        id,
+        actor.id,
+        { archivedAt: current.archivedAt },
+        { archivedAt: updated.archivedAt },
+        dto.reason,
+      );
+      return updated;
+    });
+  }
+
+  async acceptCustomerReport(
+    userId: string | undefined,
+    id: string,
+    dto: AcceptServiceReportDto,
+    metadata: RequestMetadata,
+  ) {
+    const scope = await this.requireCustomerScope(userId);
+    return this.prisma.$transaction(async (tx) => {
+      const report = await tx.serviceReport.findFirst({
+        where: {
+          id,
+          ...this.customerVisibleWhere(scope.clientId),
+        },
+        include: this.customerInclude(),
+      });
+      if (!report) {
+        throw new NotFoundException('Laudo nao encontrado.');
+      }
+      if (report.customerAcceptedAt) {
+        return this.toCustomerReport(report);
+      }
+      const acceptedAt = new Date();
+      const documentHash =
+        report.documentHash || this.buildDocumentHash(report as ReportMap);
+      const acceptanceText = dto.acceptanceText.trim();
+      const acceptanceHash = this.buildProofHash({
+        type: 'service-report-customer-acceptance',
+        reportId: id,
+        versionNumber: report.versionNumber,
+        documentHash,
+        userId: scope.userId,
+        clientId: scope.clientId,
+        acceptanceText,
+        acceptedAt: acceptedAt.toISOString(),
+        ip: metadata.ip,
+        userAgent: this.normalizeUserAgent(metadata.userAgent),
+      });
+      const updated = await tx.serviceReport.update({
+        where: { id },
+        data: {
+          customerAcceptedAt: acceptedAt,
+          customerAcceptedByUserId: scope.userId,
+          customerAcceptanceText: acceptanceText,
+          customerAcceptanceIp: metadata.ip,
+          customerAcceptanceUserAgent: this.normalizeUserAgent(
+            metadata.userAgent,
+          ),
+          customerAcceptanceHash: acceptanceHash,
+          customerAcceptanceDocumentHash: documentHash,
+        },
+        include: this.customerInclude(),
+      });
+      await this.recordAudit(
+        tx,
+        'CUSTOMER_ACCEPTED',
+        id,
+        scope.userId,
+        undefined,
+        {
+          customerAcceptedAt: updated.customerAcceptedAt,
+          customerAcceptedByUserId: scope.userId,
+          customerAcceptanceHash: acceptanceHash,
+          customerAcceptanceDocumentHash: documentHash,
+          metadata,
+        },
+      );
+      return this.toCustomerReport(updated);
+    });
+  }
+
+  async verifyPublicReport(token: string, metadata?: RequestMetadata) {
     const report = await this.prisma.serviceReport.findUnique({
       where: { validationToken: token },
       include: this.customerInclude(),
     });
     if (!report) {
+      await this.recordDocumentAccess({
+        accessType: DocumentAccessType.VERIFY,
+        channel: DocumentAccessChannel.VERIFY,
+        result: DocumentAccessResult.NOT_FOUND,
+        metadata,
+      });
       throw new NotFoundException('Validacao nao encontrada.');
     }
-    const valid =
-      report.status === ReportStatus.RELEASED_TO_CUSTOMER &&
-      !report.validationRevokedAt &&
-      (!report.validationExpiresAt ||
-        report.validationExpiresAt.getTime() > Date.now());
+    const verificationResult = this.resolveVerificationResult(report);
+    await this.recordDocumentAccess({
+      documentId: report.id,
+      documentDeliveryId: report.generatedDocumentId,
+      serviceReportId: report.id,
+      clientId: report.clientId,
+      accessType: DocumentAccessType.VERIFY,
+      channel: DocumentAccessChannel.VERIFY,
+      result: verificationResult,
+      metadata,
+    });
+    const valid = verificationResult === DocumentAccessResult.SUCCESS;
     return {
       valid,
+      revoked: verificationResult === DocumentAccessResult.REVOKED,
       code: report.code,
       title: report.title,
       status: report.status,
@@ -1190,10 +1749,12 @@ export class ServiceReportsService {
       releasedToCustomerAt: report.releasedToCustomerAt,
       validationExpiresAt: report.validationExpiresAt,
       validationRevokedAt: report.validationRevokedAt,
+      revokedAt: report.revokedAt,
+      message: this.verificationMessage(verificationResult),
     };
   }
 
-  async getPublicSharedReport(token: string) {
+  async getPublicSharedReport(token: string, metadata?: RequestMetadata) {
     const tokenHash = this.hashToken(token);
     const link = await this.prisma.serviceReportShareLink.findUnique({
       where: { tokenHash },
@@ -1204,9 +1765,29 @@ export class ServiceReportsService {
       },
     });
     if (!link) {
+      await this.recordDocumentAccess({
+        accessType: DocumentAccessType.SHARE_OPEN,
+        channel: DocumentAccessChannel.PUBLIC_LINK,
+        result: DocumentAccessResult.NOT_FOUND,
+        metadata,
+      });
       throw new NotFoundException('Link publico nao encontrado.');
     }
-    this.assertPublicLinkUsable(link);
+    const blocked = this.getPublicLinkBlock(link);
+    if (blocked) {
+      await this.recordDocumentAccess({
+        documentId: link.reportId,
+        documentDeliveryId: link.report.generatedDocumentId,
+        serviceReportId: link.reportId,
+        clientId: link.report.clientId,
+        shareLinkId: link.id,
+        accessType: DocumentAccessType.SHARE_OPEN,
+        channel: DocumentAccessChannel.PUBLIC_LINK,
+        result: blocked.result,
+        metadata,
+      });
+      throw new ForbiddenException(blocked.message);
+    }
     await this.prisma.serviceReportShareLink.update({
       where: { id: link.id },
       data: {
@@ -1221,6 +1802,17 @@ export class ServiceReportsService {
       action: 'SHARE_LINK_OPENED',
       afterPayload: { linkId: link.id },
     });
+    await this.recordDocumentAccess({
+      documentId: link.reportId,
+      documentDeliveryId: link.report.generatedDocumentId,
+      serviceReportId: link.reportId,
+      clientId: link.report.clientId,
+      shareLinkId: link.id,
+      accessType: DocumentAccessType.SHARE_OPEN,
+      channel: DocumentAccessChannel.PUBLIC_LINK,
+      result: DocumentAccessResult.SUCCESS,
+      metadata,
+    });
     return {
       report: this.toCustomerReport(link.report),
       permissions: {
@@ -1230,7 +1822,7 @@ export class ServiceReportsService {
       validation:
         typeof link.report.validationToken === 'string' &&
         link.report.validationToken
-          ? await this.verifyPublicReport(link.report.validationToken)
+          ? await this.verifyPublicReport(link.report.validationToken, metadata)
           : null,
     };
   }
@@ -1314,6 +1906,7 @@ export class ServiceReportsService {
       customerVisible: true,
       releasedToCustomerAt: { not: null },
       status: ReportStatus.RELEASED_TO_CUSTOMER,
+      revokedAt: null,
     };
   }
 
@@ -1490,6 +2083,120 @@ export class ServiceReportsService {
       },
       tx,
     );
+  }
+
+  private async recordDocumentAccess(
+    input: DocumentAccessInput,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const db = tx ?? this.prisma;
+    await db.documentAccessLog.create({
+      data: {
+        documentType: DeliveryDocumentType.SERVICE_REPORT,
+        documentId: input.documentId ?? input.serviceReportId ?? null,
+        documentDeliveryId: input.documentDeliveryId ?? null,
+        serviceReportId: input.serviceReportId ?? null,
+        evidenceId: input.evidenceId ?? null,
+        userId: input.userId ?? null,
+        clientId: input.clientId ?? null,
+        shareLinkId: input.shareLinkId ?? null,
+        accessType: input.accessType,
+        channel: input.channel,
+        result: input.result,
+        ipAddress: input.metadata?.ip,
+        userAgent: this.normalizeUserAgent(input.metadata?.userAgent),
+      } satisfies Prisma.DocumentAccessLogUncheckedCreateInput,
+    });
+  }
+
+  private async resolveCustomerAccessFailure(
+    reportId: string,
+    scope: CustomerScope,
+  ) {
+    const report = await this.prisma.serviceReport.findUnique({
+      where: { id: reportId },
+      select: {
+        id: true,
+        clientId: true,
+        status: true,
+        revokedAt: true,
+        validationRevokedAt: true,
+        validationExpiresAt: true,
+      },
+    });
+    if (!report) return DocumentAccessResult.NOT_FOUND;
+    if (report.clientId !== scope.clientId) return DocumentAccessResult.DENIED;
+    if (report.revokedAt || report.validationRevokedAt) {
+      return DocumentAccessResult.REVOKED;
+    }
+    if (
+      report.validationExpiresAt &&
+      report.validationExpiresAt.getTime() <= Date.now()
+    ) {
+      return DocumentAccessResult.EXPIRED;
+    }
+    if (report.status !== ReportStatus.RELEASED_TO_CUSTOMER) {
+      return DocumentAccessResult.DENIED;
+    }
+    return DocumentAccessResult.NOT_FOUND;
+  }
+
+  private withStorageInfo<T extends Record<string, unknown>>(report: T) {
+    return {
+      ...report,
+      storageDriver: this.fileStorageService?.getDriver() ?? 'unconfigured',
+    };
+  }
+
+  private buildProofHash(payload: Record<string, unknown>) {
+    return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+  }
+
+  private buildEvidenceHash(report: ReportMap) {
+    const evidences = (report.evidences || []).map((evidence) => ({
+      id: evidence.id,
+      title: evidence.title,
+      type: evidence.type,
+      checksumSha256: evidence.checksumSha256,
+      customerVisible: evidence.customerVisible,
+      deletedAt: evidence.deletedAt,
+    }));
+    return this.buildProofHash({
+      reportId: report.id,
+      versionNumber: report.versionNumber ?? 1,
+      evidences,
+    });
+  }
+
+  private resolveVerificationResult(report: {
+    status: ReportStatus;
+    revokedAt?: Date | null;
+    validationRevokedAt?: Date | null;
+    validationExpiresAt?: Date | null;
+  }) {
+    if (report.revokedAt || report.validationRevokedAt) {
+      return DocumentAccessResult.REVOKED;
+    }
+    if (
+      report.validationExpiresAt &&
+      report.validationExpiresAt.getTime() <= Date.now()
+    ) {
+      return DocumentAccessResult.EXPIRED;
+    }
+    if (report.status !== ReportStatus.RELEASED_TO_CUSTOMER) {
+      return DocumentAccessResult.DENIED;
+    }
+    return DocumentAccessResult.SUCCESS;
+  }
+
+  private verificationMessage(result: DocumentAccessResult) {
+    if (result === DocumentAccessResult.SUCCESS) return 'Documento valido.';
+    if (result === DocumentAccessResult.REVOKED) return 'Documento revogado.';
+    if (result === DocumentAccessResult.EXPIRED) return 'Validacao expirada.';
+    if (result === DocumentAccessResult.DENIED) {
+      return 'Documento nao esta liberado para validacao publica.';
+    }
+    return 'Validacao nao encontrada.';
   }
 
   private auditSnapshot(report: Record<string, unknown>) {
@@ -1938,12 +2645,20 @@ export class ServiceReportsService {
       <h2>Assinatura</h2>
       <div class="grid">
         ${this.valueCard('Responsavel', report.signedByName)}
+        ${this.valueCard('Papel', report.signerRole)}
         ${this.valueCard('Documento', report.signedByDocument)}
         ${this.valueCard('Assinado em', this.formatDateTime(report.signedAt))}
+        ${this.valueCard('Hash assinatura', this.safeText(report.signatureHash, '-').slice(0, 16))}
+        ${this.valueCard('Aceite cliente', this.formatDateTime(report.customerAcceptedAt))}
       </div>
       ${
         typeof report.signatureData === 'string' && report.signatureData
           ? `<p>${this.escapeHtml(report.signatureData)}</p>`
+          : ''
+      }
+      ${
+        typeof report.acceptanceText === 'string' && report.acceptanceText
+          ? `<p class="muted">${this.escapeHtml(report.acceptanceText)}</p>`
           : ''
       }
     </section>`
@@ -2123,17 +2838,50 @@ export class ServiceReportsService {
   private assertPublicLinkUsable(link: {
     revokedAt?: Date | null;
     expiresAt: Date;
-    report: { status: ReportStatus };
+    report: {
+      status: ReportStatus;
+      revokedAt?: Date | null;
+      validationRevokedAt?: Date | null;
+    };
+  }) {
+    const blocked = this.getPublicLinkBlock(link);
+    if (blocked) throw new ForbiddenException(blocked.message);
+  }
+
+  private getPublicLinkBlock(link: {
+    revokedAt?: Date | null;
+    expiresAt: Date;
+    report: {
+      status: ReportStatus;
+      revokedAt?: Date | null;
+      validationRevokedAt?: Date | null;
+    };
   }) {
     if (link.revokedAt) {
-      throw new ForbiddenException('Link publico revogado.');
+      return {
+        result: DocumentAccessResult.REVOKED,
+        message: 'Link publico revogado.',
+      };
+    }
+    if (link.report.revokedAt || link.report.validationRevokedAt) {
+      return {
+        result: DocumentAccessResult.REVOKED,
+        message: 'Documento revogado.',
+      };
     }
     if (link.expiresAt.getTime() <= Date.now()) {
-      throw new ForbiddenException('Link publico expirado.');
+      return {
+        result: DocumentAccessResult.EXPIRED,
+        message: 'Link publico expirado.',
+      };
     }
     if (link.report.status !== ReportStatus.RELEASED_TO_CUSTOMER) {
-      throw new ForbiddenException('Laudo nao esta liberado ao cliente.');
+      return {
+        result: DocumentAccessResult.DENIED,
+        message: 'Laudo nao esta liberado ao cliente.',
+      };
     }
+    return null;
   }
 
   private async resolveTemplate(
@@ -2354,7 +3102,22 @@ export class ServiceReportsService {
       signedByName: report.signedByName,
       signedByDocument: report.signedByDocument,
       signatureData: report.signatureData,
+      signerRole: report.signerRole,
+      signerEmail: report.signerEmail,
+      acceptanceText: report.acceptanceText,
+      evidenceHash: report.evidenceHash,
+      signatureHash: report.signatureHash,
+      signatureVersion: report.signatureVersion ?? 1,
       releasedToCustomerAt: report.releasedToCustomerAt,
+      retentionUntil: report.retentionUntil,
+      legalHold: report.legalHold,
+      revokedAt: report.revokedAt,
+      archivedAt: report.archivedAt,
+      customerAcceptedAt: report.customerAcceptedAt,
+      customerAcceptedByUserId: report.customerAcceptedByUserId,
+      customerAcceptanceText: report.customerAcceptanceText,
+      customerAcceptanceHash: report.customerAcceptanceHash,
+      customerAcceptanceDocumentHash: report.customerAcceptanceDocumentHash,
       maintenanceOrder: report.maintenanceOrder,
       client: report.client,
       generator: report.generator,

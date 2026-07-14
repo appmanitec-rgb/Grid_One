@@ -15,7 +15,10 @@ import { AuthGuard } from '../auth/auth.guard';
 import { LoadedFile } from '../file-storage/file-storage.service';
 import { TicketsService } from '../tickets/tickets.service';
 import { ServiceReportsService } from '../service-reports/service-reports.service';
-import { ListServiceReportsQueryDto } from '../service-reports/dto/service-report.dto';
+import {
+  AcceptServiceReportDto,
+  ListServiceReportsQueryDto,
+} from '../service-reports/dto/service-report.dto';
 import {
   CreateCustomerTicketDto,
   CustomerTicketCommentDto,
@@ -180,7 +183,11 @@ export class CustomerPortalController {
     @Res() res: Response,
   ) {
     return this.serviceReportsService
-      .downloadCustomerPdf(this.extractUserId(req), id)
+      .downloadCustomerPdf(
+        this.extractUserId(req),
+        id,
+        this.extractMetadata(req),
+      )
       .then((file) => this.sendFile(res, file));
   }
 
@@ -192,7 +199,12 @@ export class CustomerPortalController {
     @Res() res: Response,
   ) {
     return this.serviceReportsService
-      .downloadCustomerEvidence(this.extractUserId(req), id, evidenceId)
+      .downloadCustomerEvidence(
+        this.extractUserId(req),
+        id,
+        evidenceId,
+        this.extractMetadata(req),
+      )
       .then((file) => this.sendFile(res, file));
   }
 
@@ -204,6 +216,20 @@ export class CustomerPortalController {
     return this.serviceReportsService.getCustomerReport(
       this.extractUserId(req),
       id,
+    );
+  }
+
+  @Post('service-reports/:id/acceptance')
+  acceptServiceReport(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: AcceptServiceReportDto,
+  ) {
+    return this.serviceReportsService.acceptCustomerReport(
+      this.extractUserId(req),
+      id,
+      dto,
+      this.extractMetadata(req),
     );
   }
 

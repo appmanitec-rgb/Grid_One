@@ -1,4 +1,5 @@
-import { Controller, Get, Param, Res } from '@nestjs/common';
+import { Controller, Get, Param, Req, Res } from '@nestjs/common';
+import type { Request } from 'express';
 import type { Response } from 'express';
 import { LoadedFile } from '../file-storage/file-storage.service';
 import { ServiceReportsService } from './service-reports.service';
@@ -8,20 +9,37 @@ export class ServiceReportsPublicController {
   constructor(private readonly serviceReportsService: ServiceReportsService) {}
 
   @Get('verify/:token')
-  verify(@Param('token') token: string) {
-    return this.serviceReportsService.verifyPublicReport(token);
+  verify(@Req() req: Request, @Param('token') token: string) {
+    return this.serviceReportsService.verifyPublicReport(
+      token,
+      this.extractMetadata(req),
+    );
   }
 
   @Get('share/:token')
-  share(@Param('token') token: string) {
-    return this.serviceReportsService.getPublicSharedReport(token);
+  share(@Req() req: Request, @Param('token') token: string) {
+    return this.serviceReportsService.getPublicSharedReport(
+      token,
+      this.extractMetadata(req),
+    );
   }
 
   @Get('share/:token/download-pdf')
-  downloadPdf(@Param('token') token: string, @Res() res: Response) {
+  downloadPdf(
+    @Req() req: Request,
+    @Param('token') token: string,
+    @Res() res: Response,
+  ) {
     return this.serviceReportsService
-      .downloadPublicSharePdf(token)
+      .downloadPublicSharePdf(token, this.extractMetadata(req))
       .then((file) => this.sendFile(res, file));
+  }
+
+  private extractMetadata(req: Request) {
+    return {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    };
   }
 
   private sendFile(res: Response, file: LoadedFile) {

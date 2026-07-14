@@ -78,6 +78,7 @@ export type AccessPolicy = {
     releaseToCustomer: boolean;
     generateDocument: boolean;
     manageShareLinks: boolean;
+    manageDocuments: boolean;
     cancel: boolean;
   };
   tickets: {
@@ -228,6 +229,7 @@ const emptyAccessPolicy: AccessPolicy = {
     releaseToCustomer: false,
     generateDocument: false,
     manageShareLinks: false,
+    manageDocuments: false,
     cancel: false,
   },
   tickets: {
@@ -840,6 +842,7 @@ function allServiceReportActions() {
     releaseToCustomer: true,
     generateDocument: true,
     manageShareLinks: true,
+    manageDocuments: true,
     cancel: true,
   };
 }
