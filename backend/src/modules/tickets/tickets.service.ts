@@ -1279,12 +1279,18 @@ export class TicketsService {
   }
 
   private async generateCode(db: PrismaClientLike) {
-    const latest = await db.serviceTicket.findFirst({
-      orderBy: { createdAt: 'desc' },
+    const tickets = await db.serviceTicket.findMany({
+      where: { code: { startsWith: 'TCK-' } },
+      orderBy: { code: 'desc' },
       select: { code: true },
+      take: 500,
     });
-    const currentNumber = latest?.code.match(/(\d+)$/)?.[1];
-    const next = currentNumber ? Number(currentNumber) + 1 : 1;
+    const highest = tickets.reduce((currentHighest, ticket) => {
+      const currentNumber = ticket.code.match(/^TCK-(\d+)$/)?.[1];
+      if (!currentNumber) return currentHighest;
+      return Math.max(currentHighest, Number(currentNumber));
+    }, 0);
+    const next = highest + 1;
     return `TCK-${String(next).padStart(6, '0')}`;
   }
 

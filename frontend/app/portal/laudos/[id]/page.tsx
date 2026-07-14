@@ -23,30 +23,23 @@ export default function PortalServiceReportDetailPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    let cancelled = false;
-
     async function load() {
       setLoading(true);
       setError("");
+      setReport(null);
       try {
         const payload = await portalServiceReportsGet<ServiceReport>(
           `/${params.id}`,
         );
-        if (!cancelled) setReport(payload);
+        setReport(payload);
       } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Falha ao carregar laudo.");
-        }
+        setError(err instanceof Error ? err.message : "Falha ao carregar laudo.");
       } finally {
-        if (!cancelled) setLoading(false);
+        setLoading(false);
       }
     }
 
     void load();
-
-    return () => {
-      cancelled = true;
-    };
   }, [params.id]);
 
   if (loading) return <State text="Carregando laudo..." />;

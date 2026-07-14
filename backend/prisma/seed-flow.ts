@@ -4,6 +4,7 @@ import {
   AccountsReceivableStatus,
   BankAccountType,
   BillingAdjustmentIndex,
+  ChecklistResult,
   ClientPersonType,
   ClientType,
   CommissionStatus,
@@ -11,6 +12,10 @@ import {
   ContractStatus,
   CostCenterEntryType,
   CostCenterType,
+  DeliveryChannel,
+  DeliveryDocumentType,
+  DeliveryStatus,
+  EvidenceType,
   FleetVehicleStatus,
   HrAssetStatus,
   HrAssetType,
@@ -24,13 +29,30 @@ import {
   ProposalStatus,
   ProposalType,
   PurchaseOrderStatus,
+  ReportStatus,
   ServiceGroup,
+  TicketCategory,
+  TicketCommentAuthorType,
+  TicketOrigin,
+  TicketPriority,
+  TicketStatus,
   UserRole,
+  Prisma,
   PrismaClient,
 } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { createCipheriv, createHash } from 'crypto';
+import { mkdirSync, writeFileSync } from 'fs';
+import { dirname, join } from 'path';
 
 const prisma = new PrismaClient();
+const E2E_MFA_SECRET = 'JBSWY3DPEHPK3PXP';
+const E2E_PUBLIC_SHARE_TOKEN_VALID = 'e2e-service-report-share-valid';
+const E2E_PUBLIC_SHARE_TOKEN_EXPIRED = 'e2e-service-report-share-expired';
+const E2E_PUBLIC_SHARE_TOKEN_REVOKED = 'e2e-service-report-share-revoked';
+const E2E_VALIDATION_TOKEN = 'e2e-service-report-validation';
+const E2E_PDF_STORAGE_KEY = 'service-report-pdfs/e2e/laudo-e2e.pdf';
+const E2E_EVIDENCE_STORAGE_KEY = 'service-reports/e2e/evidencia-e2e.png';
 
 function mustPassword() {
   const password =
@@ -45,6 +67,65 @@ function mustPassword() {
   }
 
   return password;
+}
+
+function mfaEncryptionKey() {
+  const seed =
+    process.env.MFA_ENCRYPTION_KEY ||
+    process.env.JWT_SECRET ||
+    'change_me';
+  return createHash('sha256').update(seed).digest();
+}
+
+function encryptMfaSecret(secret: string) {
+  const iv = Buffer.alloc(12, 7);
+  const cipher = createCipheriv('aes-256-gcm', mfaEncryptionKey(), iv);
+  const encrypted = Buffer.concat([
+    cipher.update(secret, 'utf8'),
+    cipher.final(),
+  ]);
+  const tag = cipher.getAuthTag();
+  return `${iv.toString('base64')}.${tag.toString('base64')}.${encrypted.toString('base64')}`;
+}
+
+function hashToken(token: string) {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+function ensureSeedFile(storageKey: string, buffer: Buffer) {
+  const fullPath = join(
+    process.cwd(),
+    'storage',
+    'private',
+    ...storageKey.split('/'),
+  );
+  mkdirSync(dirname(fullPath), { recursive: true });
+  writeFileSync(fullPath, buffer);
+  return {
+    storageKey,
+    sizeBytes: buffer.length,
+    checksumSha256: createHash('sha256').update(buffer).digest('hex'),
+  };
+}
+
+function seedPdfBuffer() {
+  const body =
+    '%PDF-1.4\n' +
+    '1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n' +
+    '2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n' +
+    '3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 300 160] /Contents 4 0 R >> endobj\n' +
+    '4 0 obj << /Length 82 >> stream\n' +
+    'BT /F1 12 Tf 36 110 Td (MANITEC Laudo E2E - documento de teste) Tj ET\n' +
+    'endstream endobj\n' +
+    'trailer << /Root 1 0 R /Size 5 >>\n%%EOF';
+  return Buffer.from(body, 'latin1');
+}
+
+function seedPngBuffer() {
+  return Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+    'base64',
+  );
 }
 
 function addDays(base: Date, days: number) {
@@ -73,7 +154,23 @@ async function upsertUser(input: {
   approvalDiscountLimit?: number;
   hourCost?: number;
   linkedClientId?: string;
+  mfaSecretEncrypted?: string;
 }) {
+  const mfaData =
+    input.role === UserRole.CLIENT
+      ? {
+          mfaEnabled: false,
+          mfaSecretEncrypted: null,
+          mfaRecoveryCodesHash: Prisma.JsonNull,
+        }
+      : input.mfaSecretEncrypted
+        ? {
+            mfaEnabled: true,
+            mfaSecretEncrypted: input.mfaSecretEncrypted,
+            mfaRecoveryCodesHash: [] as unknown as Prisma.InputJsonValue,
+          }
+        : {};
+
   return prisma.user.upsert({
     where: { email: input.email },
     update: {
@@ -87,6 +184,7 @@ async function upsertUser(input: {
       approvalDiscountLimit: input.approvalDiscountLimit,
       hourCost: input.hourCost,
       linkedClientId: input.linkedClientId,
+      ...mfaData,
     },
     create: {
       name: input.name,
@@ -100,6 +198,7 @@ async function upsertUser(input: {
       approvalDiscountLimit: input.approvalDiscountLimit,
       hourCost: input.hourCost,
       linkedClientId: input.linkedClientId,
+      ...mfaData,
     },
   });
 }
@@ -107,6 +206,19 @@ async function upsertUser(input: {
 async function main() {
   const now = new Date();
   const passwordHash = await bcrypt.hash(mustPassword(), 10);
+  const demoMfaSecretEncrypted = encryptMfaSecret(E2E_MFA_SECRET);
+
+  const adminUser = await upsertUser({
+    name: 'Admin Demo',
+    email: 'admin.demo@manitec.local',
+    role: UserRole.ADMIN,
+    passwordHash,
+    department: 'Gestao',
+    branch: 'Matriz',
+    approvalDiscountLimit: 100,
+    hourCost: 0,
+    mfaSecretEncrypted: demoMfaSecretEncrypted,
+  });
 
   const salesUser = await upsertUser({
     name: 'Comercial Demo',
@@ -117,6 +229,7 @@ async function main() {
     branch: 'Matriz',
     approvalDiscountLimit: 10,
     hourCost: 0,
+    mfaSecretEncrypted: demoMfaSecretEncrypted,
   });
 
   const technicianUser = await upsertUser({
@@ -127,6 +240,18 @@ async function main() {
     department: 'Operacoes',
     branch: 'Matriz',
     hourCost: 95,
+    mfaSecretEncrypted: demoMfaSecretEncrypted,
+  });
+
+  const technicianUserB = await upsertUser({
+    name: 'Tecnico Secundario Demo',
+    email: 'tecnico.b.demo@manitec.local',
+    role: UserRole.TECHNICIAN,
+    passwordHash,
+    department: 'Operacoes',
+    branch: 'Filial Campinas',
+    hourCost: 90,
+    mfaSecretEncrypted: demoMfaSecretEncrypted,
   });
 
   const opsUser = await upsertUser({
@@ -137,6 +262,7 @@ async function main() {
     department: 'Operacoes',
     branch: 'Matriz',
     hourCost: 120,
+    mfaSecretEncrypted: demoMfaSecretEncrypted,
   });
 
   const managerUser = await upsertUser({
@@ -148,6 +274,7 @@ async function main() {
     branch: 'Matriz',
     approvalDiscountLimit: 20,
     hourCost: 180,
+    mfaSecretEncrypted: demoMfaSecretEncrypted,
   });
 
   const financeUser = await upsertUser({
@@ -158,6 +285,7 @@ async function main() {
     department: 'Financeiro',
     branch: 'Matriz',
     hourCost: 130,
+    mfaSecretEncrypted: demoMfaSecretEncrypted,
   });
 
   const suppliesUser = await upsertUser({
@@ -168,6 +296,7 @@ async function main() {
     department: 'Suprimentos',
     branch: 'Matriz',
     hourCost: 110,
+    mfaSecretEncrypted: demoMfaSecretEncrypted,
   });
 
   const hrUser = await upsertUser({
@@ -178,6 +307,7 @@ async function main() {
     department: 'Pessoas',
     branch: 'Matriz',
     hourCost: 115,
+    mfaSecretEncrypted: demoMfaSecretEncrypted,
   });
 
   const auditorUser = await upsertUser({
@@ -188,6 +318,7 @@ async function main() {
     department: 'Auditoria',
     branch: 'Matriz',
     hourCost: 0,
+    mfaSecretEncrypted: demoMfaSecretEncrypted,
   });
 
   const technicianProfile = await prisma.technician.upsert({
@@ -228,6 +359,25 @@ async function main() {
         validUntil: addDays(now, 210),
       },
     ],
+  });
+
+  const technicianProfileB = await prisma.technician.upsert({
+    where: { userId: technicianUserB.id },
+    update: {
+      cpf: '12345678902',
+      phone: '(11) 99999-0002',
+      skills: ['mecanica', 'preventiva', 'industrial'],
+      latitude: -22.9056,
+      longitude: -47.0608,
+    },
+    create: {
+      userId: technicianUserB.id,
+      cpf: '12345678902',
+      phone: '(11) 99999-0002',
+      skills: ['mecanica', 'preventiva', 'industrial'],
+      latitude: -22.9056,
+      longitude: -47.0608,
+    },
   });
 
   const client = await prisma.client.upsert({
@@ -1272,6 +1422,418 @@ async function main() {
       })
     : await prisma.maintenanceOrder.create({ data: preventiveOrderBase });
 
+  await prisma.technicianWorkSession.deleteMany({
+    where: { maintenanceOrderId: preventiveOrder.id },
+  });
+
+  const otherTechnicianOrderBase = {
+    title: 'OS DEMO - Atendimento Cliente B tecnico secundario',
+    description:
+      'Ordem usada para QA de isolamento: tecnico principal nao deve acessa-la.',
+    status: OrderStatus.OPEN,
+    type: MaintenanceOrderType.CORRECTIVE,
+    priority: 'NORMAL',
+    generatorId: generatorB.id,
+    siteId: siteB.id,
+    technicianId: technicianProfileB.id,
+    scheduledTo: addDays(now, 4),
+    customerReport: 'Cliente B solicitou verificacao preventiva isolada para QA.',
+  };
+
+  const otherTechnicianOrderExisting = await prisma.maintenanceOrder.findFirst({
+    where: {
+      generatorId: generatorB.id,
+      title: otherTechnicianOrderBase.title,
+    },
+  });
+
+  const otherTechnicianOrder = otherTechnicianOrderExisting
+    ? await prisma.maintenanceOrder.update({
+        where: { id: otherTechnicianOrderExisting.id },
+        data: otherTechnicianOrderBase,
+      })
+    : await prisma.maintenanceOrder.create({ data: otherTechnicianOrderBase });
+
+  await prisma.serviceTicket.deleteMany({
+    where: {
+      code: { in: ['TCK-E2E-A', 'TCK-E2E-B'] },
+    },
+  });
+
+  const ticketA = await prisma.serviceTicket.create({
+    data: {
+      code: 'TCK-E2E-A',
+      clientId: client.id,
+      openedByUserId: clientUserA.id,
+      assignedToUserId: opsUser.id,
+      technicianId: technicianProfile.id,
+      generatorId: generator.id,
+      siteId: site.id,
+      contractId: contract.id,
+      title: 'Chamado E2E Cliente A - oscilacao do gerador',
+      description:
+        'Chamado controlado para testes E2E de portal, atendimento e conversao para OS.',
+      category: TicketCategory.CORRECTIVE_MAINTENANCE,
+      priority: TicketPriority.HIGH,
+      status: TicketStatus.TRIAGE,
+      origin: TicketOrigin.CUSTOMER_PORTAL,
+      customerVisible: true,
+      contactName: 'Ana Martins',
+      contactPhone: '(11) 98888-1200',
+      contactEmail: 'ana.martins@cliente-demo.local',
+      comments: {
+        create: {
+          authorUserId: clientUserA.id,
+          authorType: TicketCommentAuthorType.CUSTOMER,
+          customerVisible: true,
+          message: 'Chamado E2E aberto pelo portal do Cliente A.',
+        },
+      },
+    },
+  });
+
+  const ticketB = await prisma.serviceTicket.create({
+    data: {
+      code: 'TCK-E2E-B',
+      clientId: clientB.id,
+      openedByUserId: clientUserB.id,
+      assignedToUserId: opsUser.id,
+      technicianId: technicianProfileB.id,
+      generatorId: generatorB.id,
+      siteId: siteB.id,
+      title: 'Chamado E2E Cliente B - isolamento de dados',
+      description:
+        'Chamado controlado para validar que Cliente A nao enxerga dados do Cliente B.',
+      category: TicketCategory.TECHNICAL_SUPPORT,
+      priority: TicketPriority.MEDIUM,
+      status: TicketStatus.OPEN,
+      origin: TicketOrigin.CUSTOMER_PORTAL,
+      customerVisible: true,
+      contactName: 'Bruno Almeida',
+      contactPhone: '(11) 4100-2200',
+      contactEmail: 'bruno.almeida@cliente-b-demo.local',
+      comments: {
+        create: {
+          authorUserId: clientUserB.id,
+          authorType: TicketCommentAuthorType.CUSTOMER,
+          customerVisible: true,
+          message: 'Chamado E2E aberto pelo portal do Cliente B.',
+        },
+      },
+    },
+  });
+
+  const pdfStored = ensureSeedFile(E2E_PDF_STORAGE_KEY, seedPdfBuffer());
+  const evidenceStored = ensureSeedFile(E2E_EVIDENCE_STORAGE_KEY, seedPngBuffer());
+
+  const serviceReportExisting = await prisma.serviceReport.findFirst({
+    where: {
+      OR: [{ code: 'LR-E2E-90001' }, { maintenanceOrderId: preventiveOrder.id }],
+    },
+  });
+
+  const serviceReport = serviceReportExisting
+    ? await prisma.serviceReport.update({
+        where: { id: serviceReportExisting.id },
+        data: {
+          code: 'LR-E2E-90001',
+          maintenanceOrderId: preventiveOrder.id,
+          clientId: client.id,
+          generatorId: generator.id,
+          siteId: site.id,
+          contractId: contract.id,
+          technicianId: technicianProfile.id,
+          status: ReportStatus.RELEASED_TO_CUSTOMER,
+          title: 'Laudo E2E liberado ao Cliente A',
+          diagnosis: 'Diagnostico E2E sem exposicao de notas internas.',
+          performedServices:
+            'Teste funcional, verificacao visual e validacao de partida.',
+          recommendations: 'Manter rotina preventiva e monitorar alarmes.',
+          observations: 'OBSERVACAO_INTERNA_E2E_NAO_DEVE_APARECER_NO_PORTAL',
+          safetyNotes: 'NOTA_INTERNA_SEGURANCA_E2E_NAO_PUBLICA',
+          customerNotes: 'Laudo liberado para validacao automatizada do portal.',
+          startedAt: addDays(now, -2),
+          finishedAt: addDays(now, -2),
+          signedAt: addDays(now, -2),
+          signedByName: 'Ana Martins',
+          signedByDocument: '123.456.789-00',
+          signatureData: 'Assinatura simples E2E',
+          customerVisible: true,
+          releasedToCustomerAt: addDays(now, -1),
+          releasedByUserId: adminUser.id,
+          versionNumber: 1,
+          validationToken: E2E_VALIDATION_TOKEN,
+          validationExpiresAt: addDays(now, 30),
+          validationRevokedAt: null,
+          documentHash: pdfStored.checksumSha256,
+          createdByUserId: adminUser.id,
+          updatedByUserId: adminUser.id,
+        },
+      })
+    : await prisma.serviceReport.create({
+        data: {
+          code: 'LR-E2E-90001',
+          maintenanceOrderId: preventiveOrder.id,
+          clientId: client.id,
+          generatorId: generator.id,
+          siteId: site.id,
+          contractId: contract.id,
+          technicianId: technicianProfile.id,
+          status: ReportStatus.RELEASED_TO_CUSTOMER,
+          title: 'Laudo E2E liberado ao Cliente A',
+          diagnosis: 'Diagnostico E2E sem exposicao de notas internas.',
+          performedServices:
+            'Teste funcional, verificacao visual e validacao de partida.',
+          recommendations: 'Manter rotina preventiva e monitorar alarmes.',
+          observations: 'OBSERVACAO_INTERNA_E2E_NAO_DEVE_APARECER_NO_PORTAL',
+          safetyNotes: 'NOTA_INTERNA_SEGURANCA_E2E_NAO_PUBLICA',
+          customerNotes: 'Laudo liberado para validacao automatizada do portal.',
+          startedAt: addDays(now, -2),
+          finishedAt: addDays(now, -2),
+          signedAt: addDays(now, -2),
+          signedByName: 'Ana Martins',
+          signedByDocument: '123.456.789-00',
+          signatureData: 'Assinatura simples E2E',
+          customerVisible: true,
+          releasedToCustomerAt: addDays(now, -1),
+          releasedByUserId: adminUser.id,
+          versionNumber: 1,
+          validationToken: E2E_VALIDATION_TOKEN,
+          validationExpiresAt: addDays(now, 30),
+          documentHash: pdfStored.checksumSha256,
+          createdByUserId: adminUser.id,
+          updatedByUserId: adminUser.id,
+        },
+      });
+
+  await prisma.serviceReportChecklistItem.deleteMany({
+    where: { reportId: serviceReport.id },
+  });
+  await prisma.serviceReportChecklistItem.createMany({
+    data: [
+      {
+        reportId: serviceReport.id,
+        label: 'Partida automatica validada',
+        result: ChecklistResult.OK,
+        required: true,
+        notes: 'Teste E2E aprovado.',
+        sortOrder: 1,
+      },
+      {
+        reportId: serviceReport.id,
+        label: 'Sem vazamentos aparentes',
+        result: ChecklistResult.OK,
+        required: true,
+        notes: 'Inspecao visual E2E.',
+        sortOrder: 2,
+      },
+    ],
+  });
+
+  await prisma.serviceReportEvidence.deleteMany({
+    where: {
+      OR: [
+        { reportId: serviceReport.id },
+        { storageKey: E2E_EVIDENCE_STORAGE_KEY },
+      ],
+    },
+  });
+  await prisma.serviceReportEvidence.create({
+    data: {
+      reportId: serviceReport.id,
+      type: EvidenceType.PHOTO,
+      title: 'Evidencia E2E liberada ao cliente',
+      description: 'Imagem minima para validar download autorizado.',
+      fileName: 'evidencia-e2e.png',
+      mimeType: 'image/png',
+      sizeBytes: evidenceStored.sizeBytes,
+      storageKey: evidenceStored.storageKey,
+      checksumSha256: evidenceStored.checksumSha256,
+      storedAt: now,
+      customerVisible: true,
+      uploadedByUserId: adminUser.id,
+    },
+  });
+
+  const generatedDocumentExisting = await prisma.documentDelivery.findFirst({
+    where: {
+      documentType: DeliveryDocumentType.SERVICE_REPORT,
+      documentId: serviceReport.id,
+    },
+  });
+
+  const generatedDocument = generatedDocumentExisting
+    ? await prisma.documentDelivery.update({
+        where: { id: generatedDocumentExisting.id },
+        data: {
+          documentCode: serviceReport.code,
+          documentTitle: serviceReport.title,
+          clientId: client.id,
+          counterpartName: client.tradeName || client.companyName,
+          channel: DeliveryChannel.WEBHOOK,
+          status: DeliveryStatus.DELIVERED,
+          recipientName: client.tradeName || client.companyName,
+          recipientTarget: `portal:${client.id}`,
+          subject: `PDF Laudo tecnico ${serviceReport.code}`,
+          message: 'PDF E2E do laudo tecnico gerado pelo seed.',
+          provider: 'seed-flow-e2e',
+          fileStorageKey: pdfStored.storageKey,
+          fileName: 'laudo-e2e.pdf',
+          mimeType: 'application/pdf',
+          sizeBytes: pdfStored.sizeBytes,
+          checksumSha256: pdfStored.checksumSha256,
+          storedAt: now,
+          sentAt: now,
+          deliveredAt: now,
+          failedAt: null,
+          errorMessage: null,
+          createdByUserId: adminUser.id,
+        },
+      })
+    : await prisma.documentDelivery.create({
+        data: {
+          documentType: DeliveryDocumentType.SERVICE_REPORT,
+          documentId: serviceReport.id,
+          documentCode: serviceReport.code,
+          documentTitle: serviceReport.title,
+          clientId: client.id,
+          counterpartName: client.tradeName || client.companyName,
+          channel: DeliveryChannel.WEBHOOK,
+          status: DeliveryStatus.DELIVERED,
+          recipientName: client.tradeName || client.companyName,
+          recipientTarget: `portal:${client.id}`,
+          subject: `PDF Laudo tecnico ${serviceReport.code}`,
+          message: 'PDF E2E do laudo tecnico gerado pelo seed.',
+          provider: 'seed-flow-e2e',
+          fileStorageKey: pdfStored.storageKey,
+          fileName: 'laudo-e2e.pdf',
+          mimeType: 'application/pdf',
+          sizeBytes: pdfStored.sizeBytes,
+          checksumSha256: pdfStored.checksumSha256,
+          storedAt: now,
+          sentAt: now,
+          deliveredAt: now,
+          createdByUserId: adminUser.id,
+        },
+      });
+
+  await prisma.serviceReport.update({
+    where: { id: serviceReport.id },
+    data: { generatedDocumentId: generatedDocument.id },
+  });
+
+  const serviceReportBExisting = await prisma.serviceReport.findFirst({
+    where: {
+      OR: [
+        { code: 'LR-E2E-90002' },
+        { maintenanceOrderId: otherTechnicianOrder.id },
+      ],
+    },
+  });
+
+  const serviceReportB = serviceReportBExisting
+    ? await prisma.serviceReport.update({
+        where: { id: serviceReportBExisting.id },
+        data: {
+          code: 'LR-E2E-90002',
+          maintenanceOrderId: otherTechnicianOrder.id,
+          clientId: clientB.id,
+          generatorId: generatorB.id,
+          siteId: siteB.id,
+          technicianId: technicianProfileB.id,
+          status: ReportStatus.RELEASED_TO_CUSTOMER,
+          title: 'Laudo E2E Cliente B isolado',
+          diagnosis: 'Diagnostico do Cliente B para isolamento.',
+          performedServices: 'Validacao de isolamento de portal.',
+          customerNotes: 'Documento visivel apenas para Cliente B.',
+          customerVisible: true,
+          releasedToCustomerAt: addDays(now, -1),
+          releasedByUserId: adminUser.id,
+          versionNumber: 1,
+          validationToken: 'e2e-service-report-validation-b',
+          validationExpiresAt: addDays(now, 30),
+          validationRevokedAt: null,
+          documentHash: createHash('sha256')
+            .update('cliente-b-e2e')
+            .digest('hex'),
+          createdByUserId: adminUser.id,
+          updatedByUserId: adminUser.id,
+        },
+      })
+    : await prisma.serviceReport.create({
+        data: {
+          code: 'LR-E2E-90002',
+          maintenanceOrderId: otherTechnicianOrder.id,
+          clientId: clientB.id,
+          generatorId: generatorB.id,
+          siteId: siteB.id,
+          technicianId: technicianProfileB.id,
+          status: ReportStatus.RELEASED_TO_CUSTOMER,
+          title: 'Laudo E2E Cliente B isolado',
+          diagnosis: 'Diagnostico do Cliente B para isolamento.',
+          performedServices: 'Validacao de isolamento de portal.',
+          customerNotes: 'Documento visivel apenas para Cliente B.',
+          customerVisible: true,
+          releasedToCustomerAt: addDays(now, -1),
+          releasedByUserId: adminUser.id,
+          versionNumber: 1,
+          validationToken: 'e2e-service-report-validation-b',
+          validationExpiresAt: addDays(now, 30),
+          documentHash: createHash('sha256')
+            .update('cliente-b-e2e')
+            .digest('hex'),
+          createdByUserId: adminUser.id,
+          updatedByUserId: adminUser.id,
+        },
+      });
+
+  await prisma.serviceReportShareLink.deleteMany({
+    where: {
+      OR: [
+        { reportId: serviceReport.id },
+        {
+          tokenHash: {
+            in: [
+              hashToken(E2E_PUBLIC_SHARE_TOKEN_VALID),
+              hashToken(E2E_PUBLIC_SHARE_TOKEN_EXPIRED),
+              hashToken(E2E_PUBLIC_SHARE_TOKEN_REVOKED),
+            ],
+          },
+        },
+      ],
+    },
+  });
+
+  await prisma.serviceReportShareLink.createMany({
+    data: [
+      {
+        reportId: serviceReport.id,
+        tokenHash: hashToken(E2E_PUBLIC_SHARE_TOKEN_VALID),
+        expiresAt: addDays(now, 7),
+        allowPdfDownload: true,
+        allowEvidenceDownload: false,
+        createdByUserId: adminUser.id,
+      },
+      {
+        reportId: serviceReport.id,
+        tokenHash: hashToken(E2E_PUBLIC_SHARE_TOKEN_EXPIRED),
+        expiresAt: addDays(now, -1),
+        allowPdfDownload: true,
+        allowEvidenceDownload: false,
+        createdByUserId: adminUser.id,
+      },
+      {
+        reportId: serviceReport.id,
+        tokenHash: hashToken(E2E_PUBLIC_SHARE_TOKEN_REVOKED),
+        expiresAt: addDays(now, 7),
+        revokedAt: addDays(now, -1),
+        allowPdfDownload: true,
+        allowEvidenceDownload: false,
+        createdByUserId: adminUser.id,
+      },
+    ],
+  });
+
   await prisma.maintenanceOrderMaterial.deleteMany({ where: { orderId: correctiveOrder.id } });
   await prisma.maintenanceOrderMaterial.create({
     data: {
@@ -1730,20 +2292,28 @@ async function main() {
   console.log(`[seed:flow] Equipamento Cliente B: ${generatorB.name} (${generatorB.serialNumber})`);
   console.log(`[seed:flow] Proposta: ${proposal.code} | Contrato: ${contract.code}`);
   console.log(`[seed:flow] OS: ${correctiveOrder.title} / ${preventiveOrder.title}`);
+  console.log(`[seed:flow] OS Cliente B QA: ${otherTechnicianOrder.title}`);
+  console.log(`[seed:flow] Chamados E2E: ${ticketA.code} / ${ticketB.code}`);
+  console.log(`[seed:flow] Laudos E2E: ${serviceReport.code} / ${serviceReportB.code}`);
+  console.log(`[seed:flow] Link publico valido E2E: ${E2E_PUBLIC_SHARE_TOKEN_VALID}`);
+  console.log(`[seed:flow] Token validacao E2E: ${E2E_VALIDATION_TOKEN}`);
   console.log(`[seed:flow] Recebivel aberto: ${osReceivable.description}`);
   console.log(`[seed:flow] Pedido de compra: ${purchaseOrder.code} | Pagar: ${payable.description}`);
   console.log('[seed:flow] Usuarios demo:');
   console.log('  - admin@manitec.local (via seed principal, se executado)');
+  console.log(`  - ${adminUser.email}`);
   console.log(`  - ${managerUser.email}`);
   console.log('  - vendas.demo@manitec.local');
   console.log(`  - ${opsUser.email}`);
   console.log('  - tecnico.demo@manitec.local');
+  console.log(`  - ${technicianUserB.email}`);
   console.log(`  - ${financeUser.email}`);
   console.log(`  - ${suppliesUser.email}`);
   console.log(`  - ${hrUser.email}`);
   console.log(`  - ${auditorUser.email}`);
   console.log(`  - ${clientUserA.email}`);
   console.log(`  - ${clientUserB.email}`);
+  console.log('[seed:flow] MFA demo interno: segredo TOTP JBSWY3DPEHPK3PXP');
 }
 
 main()

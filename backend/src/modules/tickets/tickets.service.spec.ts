@@ -44,6 +44,7 @@ describe('TicketsService', () => {
     db.$transaction.mockImplementation((cb: (tx: any) => unknown) => cb(db));
     db.user.findUnique.mockResolvedValue(clientUser);
     db.serviceTicket.findFirst.mockResolvedValue(null);
+    db.serviceTicket.findMany.mockResolvedValue([]);
     db.serviceContract.findFirst.mockResolvedValue(null);
     auditLogsService = { record: jest.fn() };
     maintenanceOrdersService = { createInTransaction: jest.fn() };
@@ -235,6 +236,37 @@ describe('TicketsService', () => {
       '2026-04-05T18:00:00.000Z',
     );
     jest.useRealTimers();
+  });
+
+  it('gera codigo de chamado ignorando codigos nao numericos', async () => {
+    db.serviceTicket.findMany.mockResolvedValue([
+      { code: 'TCK-E2E-B' },
+      { code: 'TCK-E2E-A' },
+      { code: 'TCK-000123' },
+    ]);
+    db.serviceTicket.create.mockImplementation(({ data }: any) => {
+      const ticketData = { ...data };
+      delete ticketData.comments;
+      return Promise.resolve(
+        makeTicket({ ...ticketData, id: 'ticket-next-code' }),
+      );
+    });
+
+    await service.createCustomerTicket(
+      'user-client-a',
+      {
+        title: 'Falha intermitente',
+        description: 'Validar numeracao apos dados E2E.',
+        category: TicketCategory.CORRECTIVE_MAINTENANCE,
+      },
+      {},
+    );
+
+    expect(db.serviceTicket.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ code: 'TCK-000124' }),
+      }),
+    );
   });
 
   it('chamado pode ser convertido em OS', async () => {

@@ -117,6 +117,7 @@ export type ServiceReport = {
     documentType: string;
     documentCode?: string | null;
     documentTitle?: string | null;
+    fileStorageKey?: string | null;
     fileName?: string | null;
     mimeType?: string | null;
     sizeBytes?: number | null;

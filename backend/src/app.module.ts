@@ -44,8 +44,8 @@ import { TechnicianWorkModule } from './modules/technician-work/technician-work.
     ThrottlerModule.forRoot([
       {
         name: 'default',
-        ttl: 60_000,
-        limit: 120,
+        ttl: Number(process.env.THROTTLE_TTL_MS ?? 60_000),
+        limit: Number(process.env.THROTTLE_LIMIT ?? 120),
       },
     ]),
     DatabaseModule,

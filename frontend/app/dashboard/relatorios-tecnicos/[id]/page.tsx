@@ -142,6 +142,10 @@ export default function ServiceReportDetailPage() {
     report &&
     ["APPROVED", "RELEASED_TO_CUSTOMER"].includes(report.status) &&
     access.serviceReports.generateDocument;
+  const reportHasGeneratedPdf = Boolean(
+    report?.generatedDocument?.hasStoredFile ||
+      report?.generatedDocument?.fileStorageKey,
+  );
   const canReviseReleased =
     report?.status === "RELEASED_TO_CUSTOMER" && access.serviceReports.update;
   const canManageShareLinks =
@@ -327,7 +331,7 @@ export default function ServiceReportDetailPage() {
         `/${reportId}/share-links`,
         {
           allowPdfDownload:
-            shareAllowPdfDownload && Boolean(report?.generatedDocument?.hasStoredFile),
+            shareAllowPdfDownload && reportHasGeneratedPdf,
         },
       );
       setShareLinks((current) => [created, ...current]);
@@ -434,7 +438,7 @@ export default function ServiceReportDetailPage() {
                 {busyKey === "generate-pdf" ? "Gerando..." : "Gerar PDF"}
               </button>
             ) : null}
-            {report.generatedDocument?.hasStoredFile ? (
+            {reportHasGeneratedPdf ? (
               <button
                 type="button"
                 className={SECONDARY_BUTTON}
@@ -540,12 +544,12 @@ export default function ServiceReportDetailPage() {
                 <input
                   type="checkbox"
                   checked={shareAllowPdfDownload}
-                  disabled={!report.generatedDocument?.hasStoredFile}
+                  disabled={!reportHasGeneratedPdf}
                   onChange={(event) => setShareAllowPdfDownload(event.target.checked)}
                 />
                 Permitir PDF no link
               </label>
-              {!report.generatedDocument?.hasStoredFile ? (
+              {!reportHasGeneratedPdf ? (
                 <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
                   Gere o PDF antes de liberar download público
                 </span>
@@ -565,7 +569,7 @@ export default function ServiceReportDetailPage() {
         <div className="grid gap-3 md:grid-cols-3">
           <Info
             label="PDF"
-            value={report.generatedDocument?.hasStoredFile ? "Gerado" : "Pendente"}
+            value={reportHasGeneratedPdf ? "Gerado" : "Pendente"}
           />
           <Info label="Hash" value={report.documentHash?.slice(0, 24)} />
           <Info label="Validação" value={report.validationUrl ? "Disponível" : "Pendente"} />

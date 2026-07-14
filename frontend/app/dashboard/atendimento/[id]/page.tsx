@@ -78,16 +78,30 @@ export default function InternalTicketDetailPage() {
     setLoading(true);
     setError("");
     try {
-      const [ticketPayload, generatorPayload] = await Promise.all([
-        ticketsGet<ServiceTicket>(`/${ticketId}`),
-        fetchJson<GeneratorOption[]>("/generators"),
-      ]);
+      const ticketPayload = await ticketsGet<ServiceTicket>(`/${ticketId}`);
+      const fallbackGenerators =
+        ticketPayload.generator?.id && ticketPayload.client?.id
+          ? [
+              {
+                id: ticketPayload.generator.id,
+                name: ticketPayload.generator.name || "Equipamento do chamado",
+                serialNumber: ticketPayload.generator.serialNumber,
+                clientId: ticketPayload.client.id,
+              },
+            ]
+          : [];
       setTicket(ticketPayload);
       setSelectedStatus(ticketPayload.status);
       setSelectedPriority(ticketPayload.priority);
       setInternalNotes(ticketPayload.internalNotes || "");
       setConvertGeneratorId(ticketPayload.generator?.id || "");
-      setGenerators(generatorPayload);
+      setGenerators(fallbackGenerators);
+
+      void fetchJson<GeneratorOption[]>("/generators")
+        .then((generatorPayload) => setGenerators(generatorPayload))
+        .catch(() => {
+          // The ticket itself is enough to render and convert its current generator.
+        });
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Falha ao carregar chamado.",
@@ -137,14 +151,19 @@ export default function InternalTicketDetailPage() {
 
   async function handleConvert() {
     await runAction(async () => {
-      await ticketsPost<ServiceTicket>(`/${ticketId}/convert-to-order`, {
+      const converted = await ticketsPost<ServiceTicket>(`/${ticketId}/convert-to-order`, {
         generatorId: convertGeneratorId || undefined,
         scheduledTo: scheduledTo
           ? new Date(scheduledTo).toISOString()
           : undefined,
       });
-      await load();
+      setTicket(converted);
+      setSelectedStatus(converted.status);
+      setSelectedPriority(converted.priority);
+      setInternalNotes(converted.internalNotes || "");
+      setConvertGeneratorId(converted.generator?.id || "");
       setSuccess("Chamado convertido em OS.");
+      void load();
     });
   }
 
