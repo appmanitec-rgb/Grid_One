@@ -2,8 +2,12 @@ import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   AccountsReceivableStatus,
+  BankMovementOriginType,
+  BankMovementType,
   CommissionStatus,
   ContractInvoiceStatus,
+  FinancialPaymentStatus,
+  FinancialPeriodStatus,
   PaymentMethod,
 } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
@@ -33,6 +37,7 @@ describe('FinanceService', () => {
       accountsReceivablePayment: {
         findFirst: jest.fn(),
         create: jest.fn(),
+        update: jest.fn(),
         aggregate: jest.fn(),
       },
       accountsPayable: {
@@ -43,8 +48,26 @@ describe('FinanceService', () => {
       },
       bankAccount: {
         findUnique: jest.fn(),
+        findMany: jest.fn(),
         update: jest.fn(),
         aggregate: jest.fn(),
+      },
+      bankMovement: {
+        findUnique: jest.fn(),
+        findFirst: jest.fn(),
+        findMany: jest.fn(),
+        aggregate: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      financialPeriodClosing: {
+        findUnique: jest.fn(),
+      },
+      commissionRule: {
+        findFirst: jest.fn(),
+      },
+      user: {
+        findUnique: jest.fn(),
       },
       contractInvoice: {
         findFirst: jest.fn(),
@@ -160,7 +183,15 @@ describe('FinanceService', () => {
       id: 'bank-1',
       isActive: true,
     });
+    db.financialPeriodClosing.findUnique.mockResolvedValue(null);
+    db.bankMovement.findUnique.mockResolvedValue(null);
+    db.bankMovement.create.mockResolvedValue({
+      id: 'movement-1',
+      type: BankMovementType.CREDIT,
+      amount: 1000,
+    });
     db.accountsReceivablePayment.create.mockResolvedValue({ id: 'pay-1' });
+    db.accountsReceivablePayment.update.mockResolvedValue({ id: 'pay-1' });
     db.accountsReceivable.update.mockResolvedValue({
       id: 'ar-1',
       paidAmount: 1000,
@@ -192,6 +223,19 @@ describe('FinanceService', () => {
           receivableId: 'ar-1',
           bankAccountId: 'bank-1',
           amount: 1000,
+        }),
+      }),
+    );
+    expect(db.bankMovement.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          bankAccountId: 'bank-1',
+          type: BankMovementType.CREDIT,
+          amount: 1000,
+          originType: BankMovementOriginType.ACCOUNTS_RECEIVABLE_PAYMENT,
+          originId: 'pay-1',
+          receivableId: 'ar-1',
+          receivablePaymentId: 'pay-1',
         }),
       }),
     );
@@ -256,8 +300,23 @@ describe('FinanceService', () => {
         bankAccountId: 'bank-1',
         amount: 1000,
         method: PaymentMethod.TRANSFER,
+        paidAt: new Date('2026-02-10T12:00:00.000Z'),
+        status: FinancialPaymentStatus.POSTED,
+        originalMovementId: 'movement-1',
       })
       .mockResolvedValueOnce(null);
+    db.financialPeriodClosing.findUnique.mockResolvedValue(null);
+    db.bankMovement.findFirst.mockResolvedValue({
+      id: 'movement-1',
+      reconciledAt: null,
+    });
+    db.bankMovement.findUnique.mockResolvedValue(null);
+    db.bankMovement.create.mockResolvedValue({
+      id: 'reversal-movement-1',
+      type: BankMovementType.DEBIT,
+      amount: 1000,
+    });
+    db.bankMovement.update.mockResolvedValue({ id: 'movement-1' });
     db.accountsReceivable.findUnique.mockResolvedValue(
       receivableFixture({
         status: AccountsReceivableStatus.PAID,
@@ -269,6 +328,7 @@ describe('FinanceService', () => {
       id: 'reversal-1',
       amount: -1000,
     });
+    db.accountsReceivablePayment.update.mockResolvedValue({ id: 'pay-1' });
     db.accountsReceivable.update.mockResolvedValue({
       id: 'ar-1',
       paidAmount: 0,
@@ -294,7 +354,24 @@ describe('FinanceService', () => {
           receivableId: 'ar-1',
           bankAccountId: 'bank-1',
           amount: -1000,
+          status: FinancialPaymentStatus.REVERSAL,
+          originalPaymentId: 'pay-1',
+          originalMovementId: 'movement-1',
           notes: expect.stringContaining('Estorno da baixa pay-1'),
+        }),
+      }),
+    );
+    expect(db.bankMovement.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          bankAccountId: 'bank-1',
+          type: BankMovementType.DEBIT,
+          amount: 1000,
+          originType: BankMovementOriginType.REVERSAL,
+          originId: 'reversal-1',
+          receivableId: 'ar-1',
+          receivablePaymentId: 'reversal-1',
+          reversalOfMovementId: 'movement-1',
         }),
       }),
     );
@@ -327,6 +404,8 @@ describe('FinanceService', () => {
         bankAccountId: 'bank-1',
         amount: 1000,
         method: PaymentMethod.TRANSFER,
+        paidAt: new Date('2026-02-10T12:00:00.000Z'),
+        status: FinancialPaymentStatus.POSTED,
       })
       .mockResolvedValueOnce({ id: 'reversal-1' });
 
@@ -337,6 +416,115 @@ describe('FinanceService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
 
     expect(db.accountsReceivable.update).not.toHaveBeenCalled();
+  });
+
+  it('blocks receivable payment when financial period is closed', async () => {
+    db.accountsReceivable.findUnique.mockResolvedValue(
+      receivableFixture({ status: AccountsReceivableStatus.OPEN }),
+    );
+    db.bankAccount.findUnique.mockResolvedValue({
+      id: 'bank-1',
+      isActive: true,
+    });
+    db.financialPeriodClosing.findUnique.mockResolvedValue({
+      id: 'period-1',
+      status: FinancialPeriodStatus.CLOSED,
+    });
+
+    await expect(
+      service.payReceivable('ar-1', {
+        amount: 100,
+        method: PaymentMethod.TRANSFER,
+        bankAccountId: 'bank-1',
+        paidAt: '2026-02-10T12:00:00.000Z',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(db.accountsReceivablePayment.create).not.toHaveBeenCalled();
+    expect(db.bankMovement.create).not.toHaveBeenCalled();
+  });
+
+  it('reconciles and unreconciles bank movement with audit trail', async () => {
+    db.bankMovement.findUnique
+      .mockResolvedValueOnce({ id: 'movement-1', reconciledAt: null })
+      .mockResolvedValueOnce({
+        id: 'movement-1',
+        reconciledAt: new Date('2026-02-10T12:00:00.000Z'),
+      });
+    db.bankMovement.update
+      .mockResolvedValueOnce({
+        id: 'movement-1',
+        reconciledAt: new Date('2026-02-10T12:00:00.000Z'),
+      })
+      .mockResolvedValueOnce({ id: 'movement-1', reconciledAt: null });
+
+    await service.reconcileBankMovement(
+      'movement-1',
+      { reconciliationReference: 'OFX-123' },
+      'finance-user',
+    );
+    await service.unreconcileBankMovement(
+      'movement-1',
+      { reason: 'Divergencia no extrato' },
+      'finance-user',
+    );
+
+    expect(db.bankMovement.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'movement-1' },
+        data: expect.objectContaining({
+          reconciliationReference: 'OFX-123',
+          reconciledById: 'finance-user',
+        }),
+      }),
+    );
+    expect(db.financialAuditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          entityType: 'BANK_MOVEMENT',
+          action: 'UNRECONCILE',
+          reason: 'Divergencia no extrato',
+        }),
+      }),
+    );
+  });
+
+  it('blocks direct update of posted bank movement', async () => {
+    db.bankMovement.findUnique.mockResolvedValue({ id: 'movement-1' });
+
+    await expect(
+      service.updateBankMovement('movement-1'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('returns bank statement with opening balance and running balance', async () => {
+    db.bankAccount.findMany.mockResolvedValue([
+      { id: 'bank-1', initialBalance: 100 },
+    ]);
+    db.bankMovement.findMany.mockResolvedValue([
+      {
+        id: 'movement-1',
+        type: BankMovementType.CREDIT,
+        amount: 250,
+        movementDate: new Date('2026-02-10T12:00:00.000Z'),
+        createdAt: new Date('2026-02-10T12:00:00.000Z'),
+      },
+      {
+        id: 'movement-2',
+        type: BankMovementType.DEBIT,
+        amount: 40,
+        movementDate: new Date('2026-02-11T12:00:00.000Z'),
+        createdAt: new Date('2026-02-11T12:00:00.000Z'),
+      },
+    ]);
+
+    const result = await service.listBankMovements({ bankAccountId: 'bank-1' });
+
+    expect(result.openingBalance).toBe(100);
+    expect(result.finalBalance).toBe(310);
+    expect(result.entries.at(-1)).toEqual(
+      expect.objectContaining({ runningBalance: 310 }),
+    );
   });
 });
 
@@ -387,6 +575,7 @@ type FinanceDbMock = {
   accountsReceivablePayment: {
     findFirst: jest.Mock;
     create: jest.Mock;
+    update: jest.Mock;
     aggregate: jest.Mock;
   };
   accountsPayable: {
@@ -397,8 +586,26 @@ type FinanceDbMock = {
   };
   bankAccount: {
     findUnique: jest.Mock;
+    findMany: jest.Mock;
     update: jest.Mock;
     aggregate: jest.Mock;
+  };
+  bankMovement: {
+    findUnique: jest.Mock;
+    findFirst: jest.Mock;
+    findMany: jest.Mock;
+    aggregate: jest.Mock;
+    create: jest.Mock;
+    update: jest.Mock;
+  };
+  financialPeriodClosing: {
+    findUnique: jest.Mock;
+  };
+  commissionRule: {
+    findFirst: jest.Mock;
+  };
+  user: {
+    findUnique: jest.Mock;
   };
   contractInvoice: {
     findFirst: jest.Mock;

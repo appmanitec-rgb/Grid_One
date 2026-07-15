@@ -57,6 +57,9 @@ describe('ContractsService', () => {
         findFirst: jest.fn(),
         create: jest.fn(),
       },
+      commissionRule: {
+        findFirst: jest.fn(),
+      },
       costCenterEntry: {
         create: jest.fn(),
         updateMany: jest.fn(),
@@ -119,6 +122,7 @@ describe('ContractsService', () => {
       id: 'commission-1',
       amount: 30,
     });
+    db.commissionRule.findFirst.mockResolvedValue(null);
 
     return contract;
   }
@@ -217,6 +221,41 @@ describe('ContractsService', () => {
       }),
     );
   });
+
+  it('uses seller-specific commission rule when provisioning contract receivable', async () => {
+    arrangeActiveContract();
+    db.accountsReceivable.findFirst.mockResolvedValue(null);
+    db.commissionRule.findFirst.mockResolvedValueOnce({
+      id: 'rule-1',
+      percentage: 3.5,
+    });
+
+    await service.create(
+      {
+        title: 'Contrato Comissao Parametrizada',
+        clientId: 'client-1',
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        preventiveRecurrence: PreventiveRecurrence.MONTHLY,
+        recurringAmount: 1500,
+        dueDay: 10,
+        adjustmentIndex: BillingAdjustmentIndex.IPCA,
+        partsCoverage: PartsCoverageType.BILLED_SEPARATELY,
+        equipments: [{ generatorId: 'generator-1' }],
+      },
+      'admin-1',
+    );
+
+    expect(db.commissionEntry.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: 'sales-1',
+          percent: 3.5,
+          amount: 52.5,
+        }),
+      }),
+    );
+  });
 });
 
 type ContractDbMock = {
@@ -249,6 +288,9 @@ type ContractDbMock = {
   commissionEntry: {
     findFirst: jest.Mock;
     create: jest.Mock;
+  };
+  commissionRule: {
+    findFirst: jest.Mock;
   };
   costCenterEntry: {
     create: jest.Mock;

@@ -2,13 +2,17 @@ import {
   IsBoolean,
   IsDateString,
   IsEnum,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   Min,
 } from 'class-validator';
 import {
+  BankMovementOriginType,
+  BankMovementType,
   BankAccountType,
   CostCenterEntryType,
   CostCenterType,
@@ -79,6 +83,11 @@ export class CancelAccountsReceivableDto {
 }
 
 export class ReverseReceivablePaymentDto {
+  @IsString()
+  reason!: string;
+}
+
+export class ReversePayablePaymentDto {
   @IsString()
   reason!: string;
 }
@@ -254,4 +263,59 @@ export class SyncOrderReceivableDto {
   @IsString()
   @IsOptional()
   description?: string;
+}
+
+export class ReconcileBankMovementDto {
+  @IsString()
+  @IsOptional()
+  reconciliationReference?: string;
+
+  @IsString()
+  @IsOptional()
+  reconciliationNote?: string;
+}
+
+export class UnreconcileBankMovementDto {
+  @IsString()
+  reason!: string;
+}
+
+export class CloseFinancialPeriodDto {
+  @IsInt()
+  year!: number;
+
+  @IsInt()
+  @Min(1)
+  @Max(12)
+  month!: number;
+
+  @IsString()
+  reason!: string;
+}
+
+export class ReopenFinancialPeriodDto {
+  @IsString()
+  reason!: string;
+}
+
+export class BankMovementQueryDto {
+  @IsUUID()
+  @IsOptional()
+  bankAccountId?: string;
+
+  @IsDateString()
+  @IsOptional()
+  from?: string;
+
+  @IsDateString()
+  @IsOptional()
+  to?: string;
+
+  @IsEnum(BankMovementType)
+  @IsOptional()
+  type?: BankMovementType;
+
+  @IsEnum(BankMovementOriginType)
+  @IsOptional()
+  originType?: BankMovementOriginType;
 }

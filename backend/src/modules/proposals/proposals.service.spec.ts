@@ -33,6 +33,9 @@ describe('ProposalsService', () => {
       findFirst: jest.Mock;
       create: jest.Mock;
     };
+    commissionRule: {
+      findFirst: jest.Mock;
+    };
     costCenterEntry: { create: jest.Mock };
     generator: { updateMany: jest.Mock };
     $transaction: jest.Mock;
@@ -69,6 +72,9 @@ describe('ProposalsService', () => {
       commissionEntry: {
         findFirst: jest.fn(),
         create: jest.fn(),
+      },
+      commissionRule: {
+        findFirst: jest.fn(),
       },
       costCenterEntry: {
         create: jest.fn(),
@@ -217,6 +223,7 @@ describe('ProposalsService', () => {
       id: 'commission-1',
       amount: 24,
     });
+    db.commissionRule.findFirst.mockResolvedValue(null);
 
     const result = await service.convertWonProposalToContract(
       'proposal-1',
@@ -310,6 +317,7 @@ describe('ProposalsService', () => {
       id: 'commission-existing',
       amount: 24,
     });
+    db.commissionRule.findFirst.mockResolvedValue(null);
 
     await service.convertWonProposalToContract('proposal-1', 'admin-1');
 

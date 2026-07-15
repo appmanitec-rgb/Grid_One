@@ -9,6 +9,7 @@ import {
   ApprovalType,
   AuditDomain,
   BillingAdjustmentIndex,
+  CommissionRuleTrigger,
   CommissionStatus,
   ContractInvoiceStatus,
   ContractStatus,
@@ -1285,7 +1286,10 @@ export class ProposalsService {
     });
     if (existing) return;
 
-    const percent = this.defaultContractCommissionPercent;
+    const percent = await this.resolveCommissionPercent(tx, {
+      userId: input.userId,
+      trigger: CommissionRuleTrigger.RECEIVABLE_PAID,
+    });
     const commission = await tx.commissionEntry.create({
       data: {
         userId: input.userId,
@@ -1325,6 +1329,59 @@ export class ProposalsService {
       error !== null &&
       'code' in error &&
       (error as { code?: string }).code === 'P2002'
+    );
+  }
+
+  private async resolveCommissionPercent(
+    tx: Prisma.TransactionClient,
+    input: {
+      userId?: string | null;
+      trigger: CommissionRuleTrigger;
+    },
+  ) {
+    const now = new Date();
+    const activeWindow: Prisma.CommissionRuleWhereInput = {
+      active: true,
+      trigger: input.trigger,
+      OR: [
+        { validFrom: null, validUntil: null },
+        { validFrom: null, validUntil: { gte: now } },
+        { validFrom: { lte: now }, validUntil: null },
+        { validFrom: { lte: now }, validUntil: { gte: now } },
+      ],
+    };
+
+    if (input.userId) {
+      const sellerRule = await tx.commissionRule.findFirst({
+        where: { ...activeWindow, sellerId: input.userId },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (sellerRule) return Number(sellerRule.percentage || 0);
+
+      const seller = await tx.user.findUnique({
+        where: { id: input.userId },
+        select: { role: true },
+      });
+      if (seller?.role) {
+        const roleRule = await tx.commissionRule.findFirst({
+          where: {
+            ...activeWindow,
+            role: seller.role,
+            sellerId: null,
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (roleRule) return Number(roleRule.percentage || 0);
+      }
+    }
+
+    const generalRule = await tx.commissionRule.findFirst({
+      where: { ...activeWindow, sellerId: null, role: null },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return Number(
+      generalRule?.percentage ?? this.defaultContractCommissionPercent,
     );
   }
 }

@@ -1,4 +1,5 @@
 ﻿import {
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsInt,
@@ -6,14 +7,18 @@
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   Min,
 } from 'class-validator';
 import {
+  CommissionRuleTrigger,
   CommissionStatus,
   HrAssetStatus,
   HrAssetType,
   TimeEntryStatus,
+  UserRole,
 } from '@prisma/client';
+import { PartialType } from '@nestjs/mapped-types';
 
 export class CreateTimeEntryDto {
   @IsUUID()
@@ -83,6 +88,43 @@ export class UpdateCommissionStatusDto {
   @IsEnum(CommissionStatus)
   status!: CommissionStatus;
 }
+
+export class CreateCommissionRuleDto {
+  @IsString()
+  name!: string;
+
+  @IsUUID()
+  @IsOptional()
+  sellerId?: string;
+
+  @IsEnum(UserRole)
+  @IsOptional()
+  role?: UserRole;
+
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  percentage!: number;
+
+  @IsEnum(CommissionRuleTrigger)
+  trigger!: CommissionRuleTrigger;
+
+  @IsBoolean()
+  @IsOptional()
+  active?: boolean;
+
+  @IsDateString()
+  @IsOptional()
+  validFrom?: string;
+
+  @IsDateString()
+  @IsOptional()
+  validUntil?: string;
+}
+
+export class UpdateCommissionRuleDto extends PartialType(
+  CreateCommissionRuleDto,
+) {}
 
 export class AssignHrAssetDto {
   @IsUUID()

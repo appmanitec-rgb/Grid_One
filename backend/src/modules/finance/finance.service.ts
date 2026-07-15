@@ -7,24 +7,36 @@ import {
   AccountsPayableStatus,
   AccountsReceivableStatus,
   AuditDomain,
+  BankMovementOriginType,
+  BankMovementStatus,
+  BankMovementType,
+  CommissionRuleTrigger,
   CommissionStatus,
   ContractInvoiceStatus,
   CostCenterEntryType,
   CostCenterType,
+  FinancialPaymentStatus,
+  FinancialPeriodStatus,
   Prisma,
 } from '@prisma/client';
 import { DatabaseService } from 'src/database/database.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import {
+  BankMovementQueryDto,
   CreateAccountsPayableDto,
   CreateAccountsReceivableDto,
   CreateBankAccountDto,
   CreateCostCenterDto,
   CreateCostCenterEntryDto,
+  CloseFinancialPeriodDto,
   PayAccountsPayableDto,
   PayAccountsReceivableDto,
+  ReconcileBankMovementDto,
+  ReopenFinancialPeriodDto,
+  ReversePayablePaymentDto,
   ReverseReceivablePaymentDto,
   SyncOrderReceivableDto,
+  UnreconcileBankMovementDto,
   UpdateBankAccountDto,
   UpdateCostCenterDto,
 } from './dto/finance.dto';
@@ -175,13 +187,15 @@ export class FinanceService {
       }
 
       const effectivePaidAt = dto.paidAt ? new Date(dto.paidAt) : new Date();
+      await this.ensureFinancialPeriodOpen(tx, effectivePaidAt);
+
       const nextPaid =
         paidAmount + paymentAmount > totalDue &&
         paidAmount + paymentAmount - totalDue <= 0.009
           ? totalDue
           : paidAmount + paymentAmount;
 
-      await tx.accountsReceivablePayment.create({
+      const payment = await tx.accountsReceivablePayment.create({
         data: {
           receivableId: id,
           bankAccountId: dto.bankAccountId,
@@ -191,6 +205,30 @@ export class FinanceService {
           actorUserId,
           notes: dto.notes,
         },
+      });
+
+      const movement = await this.createBankMovement(tx, {
+        bankAccountId: dto.bankAccountId,
+        type: BankMovementType.CREDIT,
+        amount: paymentAmount,
+        movementDate: effectivePaidAt,
+        competenceDate: receivable.competenceDate,
+        description: `Recebimento: ${receivable.description}`,
+        originType: BankMovementOriginType.ACCOUNTS_RECEIVABLE_PAYMENT,
+        originId: payment.id,
+        receivableId: id,
+        receivablePaymentId: payment.id,
+        createdById: actorUserId,
+        metadata: {
+          clientId: receivable.clientId,
+          contractId: receivable.contractId,
+          maintenanceOrderId: receivable.maintenanceOrderId,
+        },
+      });
+
+      await tx.accountsReceivablePayment.update({
+        where: { id: payment.id },
+        data: { originalMovementId: movement.id },
       });
 
       await tx.bankAccount.update({
@@ -268,6 +306,8 @@ export class FinanceService {
           ...dto,
           amount: paymentAmount,
           bankAccountId: dto.bankAccountId,
+          paymentId: payment.id,
+          bankMovementId: movement.id,
           releasedCommissions,
         } as unknown as Prisma.InputJsonValue,
       });
@@ -302,12 +342,14 @@ export class FinanceService {
           'Lancamento de estorno nao pode ser estornado novamente.',
         );
       }
+      if (payment.status !== FinancialPaymentStatus.POSTED) {
+        throw new BadRequestException('Esta baixa ja foi estornada.');
+      }
 
       const existingReversal = await tx.accountsReceivablePayment.findFirst({
         where: {
-          receivableId,
-          amount: -paymentAmount,
-          notes: { contains: `Estorno da baixa ${payment.id}` },
+          originalPaymentId: payment.id,
+          status: FinancialPaymentStatus.REVERSAL,
         },
         select: { id: true },
       });
@@ -326,6 +368,31 @@ export class FinanceService {
       if (receivable.status === AccountsReceivableStatus.CANCELED) {
         throw new BadRequestException(
           'Titulo cancelado nao pode ter baixa estornada.',
+        );
+      }
+
+      await this.ensureFinancialPeriodOpen(tx, payment.paidAt);
+
+      const movementWhere: Prisma.BankMovementWhereInput[] = [
+        {
+          originType: BankMovementOriginType.ACCOUNTS_RECEIVABLE_PAYMENT,
+          originId: payment.id,
+        },
+      ];
+      if (payment.originalMovementId) {
+        movementWhere.unshift({ id: payment.originalMovementId });
+      }
+      const originalMovement = await tx.bankMovement.findFirst({
+        where: { OR: movementWhere },
+      });
+      if (!originalMovement) {
+        throw new BadRequestException(
+          'Baixa nao possui movimento financeiro original para estorno formal.',
+        );
+      }
+      if (originalMovement.reconciledAt) {
+        throw new BadRequestException(
+          'Movimento conciliado precisa ter conciliacao desfeita antes do estorno.',
         );
       }
 
@@ -355,8 +422,61 @@ export class FinanceService {
           method: payment.method,
           paidAt: now,
           actorUserId,
+          status: FinancialPaymentStatus.REVERSAL,
+          originalPaymentId: payment.id,
+          originalMovementId: originalMovement.id,
+          reversedById: actorUserId,
+          reversalReason: reason,
           notes: `Estorno da baixa ${payment.id}: ${reason}`,
         },
+      });
+
+      if (!payment.bankAccountId) {
+        throw new BadRequestException(
+          'Baixa sem conta bancaria nao pode ser estornada formalmente.',
+        );
+      }
+
+      const reversalMovement = await this.createBankMovement(tx, {
+        bankAccountId: payment.bankAccountId,
+        type: BankMovementType.DEBIT,
+        amount: paymentAmount,
+        movementDate: now,
+        competenceDate: receivable.competenceDate,
+        description: `Estorno de recebimento: ${receivable.description}`,
+        originType: BankMovementOriginType.REVERSAL,
+        originId: reversal.id,
+        receivableId,
+        receivablePaymentId: reversal.id,
+        reversalOfMovementId: originalMovement.id,
+        createdById: actorUserId,
+        metadata: {
+          originalPaymentId: payment.id,
+          originalMovementId: originalMovement.id,
+          reason,
+        },
+      });
+
+      await tx.accountsReceivablePayment.update({
+        where: { id: payment.id },
+        data: {
+          status: FinancialPaymentStatus.REVERSED,
+          reversedAt: now,
+          reversedById: actorUserId,
+          reversalReason: reason,
+          originalMovementId: originalMovement.id,
+          reversalMovementId: reversalMovement.id,
+        },
+      });
+
+      await tx.accountsReceivablePayment.update({
+        where: { id: reversal.id },
+        data: { reversalMovementId: reversalMovement.id },
+      });
+
+      await tx.bankMovement.update({
+        where: { id: originalMovement.id },
+        data: { status: BankMovementStatus.REVERSED },
       });
 
       if (payment.bankAccountId) {
@@ -434,6 +554,8 @@ export class FinanceService {
           reversalPaymentId: reversal.id,
           amount: paymentAmount,
           bankAccountId: payment.bankAccountId,
+          originalMovementId: originalMovement.id,
+          reversalMovementId: reversalMovement.id,
           status: nextStatus,
           pendingCommissions,
         } as unknown as Prisma.InputJsonValue,
@@ -820,17 +942,41 @@ export class FinanceService {
       }
 
       const effectivePaidAt = dto.paidAt ? new Date(dto.paidAt) : new Date();
+      await this.ensureFinancialPeriodOpen(tx, effectivePaidAt);
 
-      await tx.accountsPayablePayment.create({
+      const payment = await tx.accountsPayablePayment.create({
         data: {
           payableId: id,
           bankAccountId: dto.bankAccountId,
-          amount: dto.amount,
+          amount: paymentAmount,
           method: dto.method,
           paidAt: effectivePaidAt,
           actorUserId,
           notes: dto.notes,
         },
+      });
+
+      const movement = await this.createBankMovement(tx, {
+        bankAccountId: dto.bankAccountId,
+        type: BankMovementType.DEBIT,
+        amount: paymentAmount,
+        movementDate: effectivePaidAt,
+        competenceDate: payable.competenceDate ?? payable.dueDate,
+        description: `Pagamento: ${payable.description}`,
+        originType: BankMovementOriginType.ACCOUNTS_PAYABLE_PAYMENT,
+        originId: payment.id,
+        payableId: id,
+        payablePaymentId: payment.id,
+        createdById: actorUserId,
+        metadata: {
+          supplierId: payable.supplierId,
+          purchaseOrderId: payable.purchaseOrderId,
+        },
+      });
+
+      await tx.accountsPayablePayment.update({
+        where: { id: payment.id },
+        data: { originalMovementId: movement.id },
       });
 
       await tx.bankAccount.update({
@@ -862,10 +1008,211 @@ export class FinanceService {
         entityType: 'ACCOUNTS_PAYABLE',
         entityId: id,
         action: 'PAY',
-        payload: dto as unknown as Prisma.InputJsonValue,
+        payload: {
+          ...dto,
+          amount: paymentAmount,
+          paymentId: payment.id,
+          bankMovementId: movement.id,
+        } as unknown as Prisma.InputJsonValue,
       });
 
       return updated;
+    });
+  }
+
+  async reversePayablePayment(
+    payableId: string,
+    paymentId: string,
+    dto: ReversePayablePaymentDto,
+    actorUserId?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const reason = dto.reason?.trim();
+      if (!reason || reason.length < 4) {
+        throw new BadRequestException(
+          'Informe um motivo claro para estornar o pagamento.',
+        );
+      }
+
+      const payment = await tx.accountsPayablePayment.findFirst({
+        where: { id: paymentId, payableId },
+      });
+      if (!payment) {
+        throw new NotFoundException('Pagamento do titulo nao encontrado.');
+      }
+      const paymentAmount = Number(payment.amount || 0);
+      if (paymentAmount <= 0) {
+        throw new BadRequestException(
+          'Lancamento de estorno nao pode ser estornado novamente.',
+        );
+      }
+      if (payment.status !== FinancialPaymentStatus.POSTED) {
+        throw new BadRequestException('Este pagamento ja foi estornado.');
+      }
+
+      const existingReversal = await tx.accountsPayablePayment.findFirst({
+        where: {
+          originalPaymentId: payment.id,
+          status: FinancialPaymentStatus.REVERSAL,
+        },
+        select: { id: true },
+      });
+      if (existingReversal) {
+        throw new BadRequestException(
+          'Este pagamento ja possui estorno registrado.',
+        );
+      }
+
+      const payable = await tx.accountsPayable.findUnique({
+        where: { id: payableId },
+      });
+      if (!payable) {
+        throw new NotFoundException('Conta a pagar nao encontrada.');
+      }
+      if (payable.status === AccountsPayableStatus.CANCELED) {
+        throw new BadRequestException(
+          'Titulo cancelado nao pode ter pagamento estornado.',
+        );
+      }
+
+      await this.ensureFinancialPeriodOpen(tx, payment.paidAt);
+
+      const movementWhere: Prisma.BankMovementWhereInput[] = [
+        {
+          originType: BankMovementOriginType.ACCOUNTS_PAYABLE_PAYMENT,
+          originId: payment.id,
+        },
+      ];
+      if (payment.originalMovementId) {
+        movementWhere.unshift({ id: payment.originalMovementId });
+      }
+      const originalMovement = await tx.bankMovement.findFirst({
+        where: { OR: movementWhere },
+      });
+      if (!originalMovement) {
+        throw new BadRequestException(
+          'Pagamento nao possui movimento financeiro original para estorno formal.',
+        );
+      }
+      if (originalMovement.reconciledAt) {
+        throw new BadRequestException(
+          'Movimento conciliado precisa ter conciliacao desfeita antes do estorno.',
+        );
+      }
+      if (!payment.bankAccountId) {
+        throw new BadRequestException(
+          'Pagamento sem conta bancaria nao pode ser estornado formalmente.',
+        );
+      }
+
+      const now = new Date();
+      const nextPaid = Math.max(
+        0,
+        Number(payable.paidAmount || 0) - paymentAmount,
+      );
+      const nextStatus =
+        nextPaid <= 0
+          ? payable.dueDate < now
+            ? AccountsPayableStatus.OVERDUE
+            : AccountsPayableStatus.OPEN
+          : nextPaid >= Number(payable.amount || 0)
+            ? AccountsPayableStatus.PAID
+            : AccountsPayableStatus.OPEN;
+
+      const reversal = await tx.accountsPayablePayment.create({
+        data: {
+          payableId,
+          bankAccountId: payment.bankAccountId,
+          amount: -paymentAmount,
+          method: payment.method,
+          paidAt: now,
+          actorUserId,
+          status: FinancialPaymentStatus.REVERSAL,
+          originalPaymentId: payment.id,
+          originalMovementId: originalMovement.id,
+          reversedById: actorUserId,
+          reversalReason: reason,
+          notes: `Estorno do pagamento ${payment.id}: ${reason}`,
+        },
+      });
+
+      const reversalMovement = await this.createBankMovement(tx, {
+        bankAccountId: payment.bankAccountId,
+        type: BankMovementType.CREDIT,
+        amount: paymentAmount,
+        movementDate: now,
+        competenceDate: payable.competenceDate ?? payable.dueDate,
+        description: `Estorno de pagamento: ${payable.description}`,
+        originType: BankMovementOriginType.REVERSAL,
+        originId: reversal.id,
+        payableId,
+        payablePaymentId: reversal.id,
+        reversalOfMovementId: originalMovement.id,
+        createdById: actorUserId,
+        metadata: {
+          originalPaymentId: payment.id,
+          originalMovementId: originalMovement.id,
+          reason,
+        },
+      });
+
+      await tx.accountsPayablePayment.update({
+        where: { id: payment.id },
+        data: {
+          status: FinancialPaymentStatus.REVERSED,
+          reversedAt: now,
+          reversedById: actorUserId,
+          reversalReason: reason,
+          originalMovementId: originalMovement.id,
+          reversalMovementId: reversalMovement.id,
+        },
+      });
+      await tx.accountsPayablePayment.update({
+        where: { id: reversal.id },
+        data: { reversalMovementId: reversalMovement.id },
+      });
+      await tx.bankMovement.update({
+        where: { id: originalMovement.id },
+        data: { status: BankMovementStatus.REVERSED },
+      });
+
+      await tx.bankAccount.update({
+        where: { id: payment.bankAccountId },
+        data: { currentBalance: { increment: paymentAmount } },
+      });
+
+      const updated = await tx.accountsPayable.update({
+        where: { id: payableId },
+        data: {
+          paidAmount: nextPaid,
+          status: nextStatus,
+          paidAt:
+            nextStatus === AccountsPayableStatus.PAID ? payable.paidAt : null,
+        },
+      });
+
+      await this.audit(tx, {
+        actorUserId,
+        module: 'FINANCE',
+        entityType: 'ACCOUNTS_PAYABLE',
+        entityId: payableId,
+        action: 'REVERSE_PAYMENT',
+        reason,
+        payload: {
+          paymentId,
+          reversalPaymentId: reversal.id,
+          amount: paymentAmount,
+          bankAccountId: payment.bankAccountId,
+          originalMovementId: originalMovement.id,
+          reversalMovementId: reversalMovement.id,
+          status: nextStatus,
+        } as unknown as Prisma.InputJsonValue,
+      });
+
+      return {
+        payable: updated,
+        reversal,
+      };
     });
   }
 
@@ -966,6 +1313,304 @@ export class FinanceService {
     });
   }
 
+  async listBankMovements(query: BankMovementQueryDto = {}) {
+    const fromDate = query.from ? new Date(query.from) : undefined;
+    const toDate = query.to ? new Date(query.to) : undefined;
+    const where: Prisma.BankMovementWhereInput = {
+      ...(query.bankAccountId ? { bankAccountId: query.bankAccountId } : {}),
+      ...(query.type ? { type: query.type } : {}),
+      ...(query.originType ? { originType: query.originType } : {}),
+      ...(fromDate || toDate
+        ? {
+            movementDate: {
+              ...(fromDate ? { gte: fromDate } : {}),
+              ...(toDate ? { lte: toDate } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const allAccounts = await this.prisma.bankAccount.findMany({
+      where: query.bankAccountId
+        ? { id: query.bankAccountId }
+        : { isActive: true },
+      select: { id: true, initialBalance: true },
+    });
+
+    const accountIds = allAccounts.map((account) => account.id);
+    if (!query.bankAccountId) {
+      where.bankAccountId = { in: accountIds };
+    }
+    const openingInitial = allAccounts.reduce(
+      (sum, account) => sum + Number(account.initialBalance || 0),
+      0,
+    );
+
+    const beforeMovements = fromDate
+      ? await this.prisma.bankMovement.findMany({
+          where: {
+            bankAccountId: { in: accountIds },
+            movementDate: { lt: fromDate },
+          },
+          select: { type: true, amount: true },
+        })
+      : [];
+    const openingMovements = this.sumMovementDelta(beforeMovements);
+    const openingBalance = openingInitial + openingMovements;
+
+    const movements = await this.prisma.bankMovement.findMany({
+      where,
+      include: {
+        bankAccount: { select: { id: true, name: true, bankName: true } },
+        receivable: {
+          select: {
+            id: true,
+            description: true,
+            contractId: true,
+            maintenanceOrderId: true,
+          },
+        },
+        payable: {
+          select: { id: true, description: true, purchaseOrderId: true },
+        },
+        createdBy: { select: { id: true, name: true, email: true } },
+        reconciledBy: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: [{ movementDate: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    let runningBalance = openingBalance;
+    const entries = movements.map((movement) => {
+      runningBalance += this.movementDelta(movement);
+      return {
+        ...movement,
+        runningBalance,
+      };
+    });
+
+    const totals = {
+      credits: movements
+        .filter((movement) => movement.type === BankMovementType.CREDIT)
+        .reduce((sum, movement) => sum + Number(movement.amount || 0), 0),
+      debits: movements
+        .filter((movement) => movement.type === BankMovementType.DEBIT)
+        .reduce((sum, movement) => sum + Number(movement.amount || 0), 0),
+    };
+
+    return {
+      period: { from: fromDate, to: toDate },
+      openingBalance,
+      entries,
+      totals,
+      finalBalance: runningBalance,
+    };
+  }
+
+  async reconcileBankMovement(
+    id: string,
+    dto: ReconcileBankMovementDto,
+    actorUserId?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const movement = await tx.bankMovement.findUnique({ where: { id } });
+      if (!movement) {
+        throw new NotFoundException('Movimento financeiro nao encontrado.');
+      }
+      if (movement.reconciledAt) {
+        throw new BadRequestException('Movimento ja esta conciliado.');
+      }
+
+      const updated = await tx.bankMovement.update({
+        where: { id },
+        data: {
+          reconciledAt: new Date(),
+          reconciledById: actorUserId,
+          reconciliationReference: dto.reconciliationReference,
+          reconciliationNote: dto.reconciliationNote,
+        },
+      });
+
+      await this.audit(tx, {
+        actorUserId,
+        module: 'FINANCE',
+        entityType: 'BANK_MOVEMENT',
+        entityId: id,
+        action: 'RECONCILE',
+        payload: dto as unknown as Prisma.InputJsonValue,
+      });
+
+      return updated;
+    });
+  }
+
+  async unreconcileBankMovement(
+    id: string,
+    dto: UnreconcileBankMovementDto,
+    actorUserId?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const reason = dto.reason?.trim();
+      if (!reason || reason.length < 4) {
+        throw new BadRequestException(
+          'Informe um motivo claro para desfazer a conciliacao.',
+        );
+      }
+
+      const movement = await tx.bankMovement.findUnique({ where: { id } });
+      if (!movement) {
+        throw new NotFoundException('Movimento financeiro nao encontrado.');
+      }
+      if (!movement.reconciledAt) {
+        throw new BadRequestException('Movimento ainda nao esta conciliado.');
+      }
+
+      const updated = await tx.bankMovement.update({
+        where: { id },
+        data: {
+          reconciledAt: null,
+          reconciledById: null,
+          reconciliationReference: null,
+          reconciliationNote: null,
+        },
+      });
+
+      await this.audit(tx, {
+        actorUserId,
+        module: 'FINANCE',
+        entityType: 'BANK_MOVEMENT',
+        entityId: id,
+        action: 'UNRECONCILE',
+        reason,
+      });
+
+      return updated;
+    });
+  }
+
+  async updateBankMovement(id: string) {
+    const movement = await this.prisma.bankMovement.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!movement) {
+      throw new NotFoundException('Movimento financeiro nao encontrado.');
+    }
+
+    throw new BadRequestException(
+      'Movimento financeiro lancado e imutavel. Use estorno ou ajuste reverso.',
+    );
+  }
+
+  listPeriodClosings() {
+    return this.prisma.financialPeriodClosing.findMany({
+      include: {
+        closedBy: { select: { id: true, name: true, email: true } },
+        reopenedBy: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: [{ year: 'desc' }, { month: 'desc' }],
+    });
+  }
+
+  async closeFinancialPeriod(
+    dto: CloseFinancialPeriodDto,
+    actorUserId?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      this.validatePeriodInput(dto.year, dto.month, dto.reason);
+
+      const current = await tx.financialPeriodClosing.findUnique({
+        where: { year_month: { year: dto.year, month: dto.month } },
+      });
+      if (current?.status === FinancialPeriodStatus.CLOSED) {
+        throw new BadRequestException('Periodo financeiro ja esta fechado.');
+      }
+
+      const closedAt = new Date();
+      const closing = current
+        ? await tx.financialPeriodClosing.update({
+            where: { id: current.id },
+            data: {
+              status: FinancialPeriodStatus.CLOSED,
+              closedAt,
+              closedById: actorUserId,
+              closeReason: dto.reason.trim(),
+              reopenedAt: null,
+              reopenedById: null,
+              reopenReason: null,
+            },
+          })
+        : await tx.financialPeriodClosing.create({
+            data: {
+              year: dto.year,
+              month: dto.month,
+              status: FinancialPeriodStatus.CLOSED,
+              closedAt,
+              closedById: actorUserId,
+              closeReason: dto.reason.trim(),
+            },
+          });
+
+      await this.audit(tx, {
+        actorUserId,
+        module: 'FINANCE',
+        entityType: 'FINANCIAL_PERIOD_CLOSING',
+        entityId: closing.id,
+        action: 'CLOSE_PERIOD',
+        reason: dto.reason,
+        payload: { year: dto.year, month: dto.month },
+      });
+
+      return closing;
+    });
+  }
+
+  async reopenFinancialPeriod(
+    id: string,
+    dto: ReopenFinancialPeriodDto,
+    actorUserId?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const reason = dto.reason?.trim();
+      if (!reason || reason.length < 4) {
+        throw new BadRequestException(
+          'Informe um motivo claro para reabrir o periodo.',
+        );
+      }
+
+      const current = await tx.financialPeriodClosing.findUnique({
+        where: { id },
+      });
+      if (!current) {
+        throw new NotFoundException('Periodo financeiro nao encontrado.');
+      }
+      if (current.status !== FinancialPeriodStatus.CLOSED) {
+        throw new BadRequestException('Periodo financeiro ja esta aberto.');
+      }
+
+      const reopened = await tx.financialPeriodClosing.update({
+        where: { id },
+        data: {
+          status: FinancialPeriodStatus.OPEN,
+          reopenedAt: new Date(),
+          reopenedById: actorUserId,
+          reopenReason: reason,
+        },
+      });
+
+      await this.audit(tx, {
+        actorUserId,
+        module: 'FINANCE',
+        entityType: 'FINANCIAL_PERIOD_CLOSING',
+        entityId: id,
+        action: 'REOPEN_PERIOD',
+        reason,
+        payload: { year: current.year, month: current.month },
+      });
+
+      return reopened;
+    });
+  }
+
   async cashFlowProjection(days = 90) {
     const horizons = [30, 60, 90].filter((x) => x <= Math.max(days, 30));
     if (!horizons.includes(days)) horizons.push(days);
@@ -1022,27 +1667,28 @@ export class FinanceService {
         _sum: { amount: true, paidAmount: true },
       });
 
-      const receivablePaymentsAgg =
-        await this.prisma.accountsReceivablePayment.aggregate({
+      const [realizedCreditsAgg, realizedDebitsAgg] = await Promise.all([
+        this.prisma.bankMovement.aggregate({
           where: {
-            paidAt: {
+            type: BankMovementType.CREDIT,
+            movementDate: {
               gte: periodStart,
               lte: target,
             },
           },
           _sum: { amount: true },
-        });
-
-      const payablePaymentsAgg =
-        await this.prisma.accountsPayablePayment.aggregate({
+        }),
+        this.prisma.bankMovement.aggregate({
           where: {
-            paidAt: {
+            type: BankMovementType.DEBIT,
+            movementDate: {
               gte: periodStart,
               lte: target,
             },
           },
           _sum: { amount: true },
-        });
+        }),
+      ]);
 
       const expectedIn =
         Number(receivableAgg._sum.netAmount || 0) +
@@ -1053,8 +1699,8 @@ export class FinanceService {
       const expectedOut =
         Number(payableAgg._sum.amount || 0) -
         Number(payableAgg._sum.paidAmount || 0);
-      const realizedIn = Number(receivablePaymentsAgg._sum.amount || 0);
-      const realizedOut = Number(payablePaymentsAgg._sum.amount || 0);
+      const realizedIn = Number(realizedCreditsAgg._sum.amount || 0);
+      const realizedOut = Number(realizedDebitsAgg._sum.amount || 0);
 
       const projectedBalance = base + expectedIn - expectedOut;
 
@@ -1160,9 +1806,11 @@ export class FinanceService {
       .filter((e) => e.entryType === CostCenterEntryType.EXPENSE)
       .reduce((acc, e) => acc + Number(e.amount || 0), 0);
     const [realizedRevenueAgg, realizedExpensesAgg] = await Promise.all([
-      this.prisma.accountsReceivablePayment.aggregate({
+      this.prisma.bankMovement.aggregate({
         where: {
-          paidAt: {
+          type: BankMovementType.CREDIT,
+          originType: BankMovementOriginType.ACCOUNTS_RECEIVABLE_PAYMENT,
+          movementDate: {
             gte: fromDate,
             lte: toDate,
           },
@@ -1173,9 +1821,11 @@ export class FinanceService {
         },
         _sum: { amount: true },
       }),
-      this.prisma.accountsPayablePayment.aggregate({
+      this.prisma.bankMovement.aggregate({
         where: {
-          paidAt: {
+          type: BankMovementType.DEBIT,
+          originType: BankMovementOriginType.ACCOUNTS_PAYABLE_PAYMENT,
+          movementDate: {
             gte: fromDate,
             lte: toDate,
           },
@@ -1224,6 +1874,131 @@ export class FinanceService {
     };
   }
 
+  private movementDelta(movement: { type: BankMovementType; amount: number }) {
+    return movement.type === BankMovementType.CREDIT
+      ? Number(movement.amount || 0)
+      : -Number(movement.amount || 0);
+  }
+
+  private sumMovementDelta(
+    movements: Array<{ type: BankMovementType; amount: number }>,
+  ) {
+    return movements.reduce(
+      (sum, movement) => sum + this.movementDelta(movement),
+      0,
+    );
+  }
+
+  private validatePeriodInput(year: number, month: number, reason?: string) {
+    if (!Number.isInteger(year) || year < 2000 || year > 2999) {
+      throw new BadRequestException('Ano do periodo financeiro invalido.');
+    }
+    if (!Number.isInteger(month) || month < 1 || month > 12) {
+      throw new BadRequestException('Mes do periodo financeiro invalido.');
+    }
+    if (reason !== undefined && reason.trim().length < 4) {
+      throw new BadRequestException(
+        'Informe um motivo claro para a operacao do periodo.',
+      );
+    }
+  }
+
+  private getPeriodKey(date: Date) {
+    return {
+      year: date.getFullYear(),
+      month: date.getMonth() + 1,
+    };
+  }
+
+  private async ensureFinancialPeriodOpen(
+    tx: Prisma.TransactionClient,
+    date: Date,
+  ) {
+    const period = this.getPeriodKey(date);
+    const closing = await tx.financialPeriodClosing.findUnique({
+      where: { year_month: period },
+      select: { id: true, status: true },
+    });
+
+    if (closing?.status === FinancialPeriodStatus.CLOSED) {
+      throw new BadRequestException(
+        `Periodo financeiro ${String(period.month).padStart(2, '0')}/${period.year} esta fechado.`,
+      );
+    }
+  }
+
+  private async createBankMovement(
+    tx: Prisma.TransactionClient,
+    input: {
+      bankAccountId: string;
+      type: BankMovementType;
+      amount: number;
+      movementDate: Date;
+      competenceDate?: Date | null;
+      description: string;
+      originType: BankMovementOriginType;
+      originId: string;
+      receivableId?: string | null;
+      payableId?: string | null;
+      receivablePaymentId?: string | null;
+      payablePaymentId?: string | null;
+      reversalOfMovementId?: string | null;
+      createdById?: string;
+      metadata?: Prisma.InputJsonValue;
+    },
+  ) {
+    const amount = Number(input.amount || 0);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new BadRequestException(
+        'Movimento financeiro precisa ter valor maior que zero.',
+      );
+    }
+
+    const duplicate = await tx.bankMovement.findUnique({
+      where: {
+        originType_originId: {
+          originType: input.originType,
+          originId: input.originId,
+        },
+      },
+      select: { id: true },
+    });
+    if (duplicate) {
+      throw new BadRequestException(
+        'Movimento financeiro duplicado para a mesma origem.',
+      );
+    }
+
+    try {
+      return await tx.bankMovement.create({
+        data: {
+          bankAccountId: input.bankAccountId,
+          type: input.type,
+          amount,
+          movementDate: input.movementDate,
+          competenceDate: input.competenceDate,
+          description: input.description,
+          originType: input.originType,
+          originId: input.originId,
+          receivableId: input.receivableId,
+          payableId: input.payableId,
+          receivablePaymentId: input.receivablePaymentId,
+          payablePaymentId: input.payablePaymentId,
+          reversalOfMovementId: input.reversalOfMovementId,
+          createdById: input.createdById,
+          metadata: input.metadata,
+        },
+      });
+    } catch (error: unknown) {
+      if (this.isUniqueConstraintError(error)) {
+        throw new BadRequestException(
+          'Movimento financeiro duplicado para a mesma origem.',
+        );
+      }
+      throw error;
+    }
+  }
+
   private async createContractReceivableSafely(
     tx: Prisma.TransactionClient,
     receivableData: Prisma.AccountsReceivableUncheckedCreateInput,
@@ -1261,7 +2036,10 @@ export class FinanceService {
     });
     if (existing) return;
 
-    const percent = this.defaultContractCommissionPercent;
+    const percent = await this.resolveCommissionPercent(tx, {
+      userId: input.userId,
+      trigger: CommissionRuleTrigger.RECEIVABLE_PAID,
+    });
     const commission = await tx.commissionEntry.create({
       data: {
         userId: input.userId,
@@ -1330,6 +2108,78 @@ export class FinanceService {
         afterPayload: input.payload,
       },
       tx,
+    );
+  }
+
+  private async resolveCommissionPercent(
+    tx: Prisma.TransactionClient,
+    input: {
+      userId?: string | null;
+      trigger: CommissionRuleTrigger;
+    },
+  ) {
+    const now = new Date();
+    const activeWindow: Prisma.CommissionRuleWhereInput = {
+      active: true,
+      trigger: input.trigger,
+      OR: [
+        {
+          validFrom: null,
+          validUntil: null,
+        },
+        {
+          validFrom: null,
+          validUntil: { gte: now },
+        },
+        {
+          validFrom: { lte: now },
+          validUntil: null,
+        },
+        {
+          validFrom: { lte: now },
+          validUntil: { gte: now },
+        },
+      ],
+    };
+
+    if (input.userId) {
+      const sellerRule = await tx.commissionRule.findFirst({
+        where: {
+          ...activeWindow,
+          sellerId: input.userId,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (sellerRule) return Number(sellerRule.percentage || 0);
+
+      const seller = await tx.user.findUnique({
+        where: { id: input.userId },
+        select: { role: true },
+      });
+      if (seller?.role) {
+        const roleRule = await tx.commissionRule.findFirst({
+          where: {
+            ...activeWindow,
+            role: seller.role,
+            sellerId: null,
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (roleRule) return Number(roleRule.percentage || 0);
+      }
+    }
+
+    const generalRule = await tx.commissionRule.findFirst({
+      where: {
+        ...activeWindow,
+        sellerId: null,
+        role: null,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return Number(
+      generalRule?.percentage ?? this.defaultContractCommissionPercent,
     );
   }
 

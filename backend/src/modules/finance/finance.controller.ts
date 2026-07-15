@@ -15,8 +15,10 @@ import { AccessPolicyGuard } from '../auth/access-policy.guard';
 import { AuthGuard } from '../auth/auth.guard';
 import { FinanceService } from './finance.service';
 import {
+  BankMovementQueryDto,
   CancelAccountsPayableDto,
   CancelAccountsReceivableDto,
+  CloseFinancialPeriodDto,
   CreateAccountsPayableDto,
   CreateAccountsReceivableDto,
   CreateBankAccountDto,
@@ -24,8 +26,12 @@ import {
   CreateCostCenterEntryDto,
   PayAccountsPayableDto,
   PayAccountsReceivableDto,
+  ReconcileBankMovementDto,
+  ReopenFinancialPeriodDto,
+  ReversePayablePaymentDto,
   ReverseReceivablePaymentDto,
   SyncOrderReceivableDto,
+  UnreconcileBankMovementDto,
   UpdateBankAccountDto,
   UpdateCostCenterDto,
 } from './dto/finance.dto';
@@ -158,6 +164,23 @@ export class FinanceController {
 
   @UseGuards(AuthGuard)
   @RequireAccessPolicy('finance.cancel')
+  @Patch('payables/:id/payments/:paymentId/reverse')
+  reversePayablePayment(
+    @Param('id') id: string,
+    @Param('paymentId') paymentId: string,
+    @Body() dto: ReversePayablePaymentDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.reversePayablePayment(
+      id,
+      paymentId,
+      dto,
+      this.getActorUserId(req),
+    );
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.cancel')
   @Patch('payables/:id/cancel')
   cancelPayable(
     @Param('id') id: string,
@@ -200,6 +223,85 @@ export class FinanceController {
     @Body() dto: UpdateBankAccountDto,
   ) {
     return this.financeService.updateBankAccount(id, dto);
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.view')
+  @Get('bank-movements')
+  bankMovements(@Query() query: BankMovementQueryDto) {
+    return this.financeService.listBankMovements(query);
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.reconcile')
+  @Patch('bank-movements/:id/reconcile')
+  reconcileBankMovement(
+    @Param('id') id: string,
+    @Body() dto: ReconcileBankMovementDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.reconcileBankMovement(
+      id,
+      dto,
+      this.getActorUserId(req),
+    );
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.reconcile')
+  @Patch('bank-movements/:id/unreconcile')
+  unreconcileBankMovement(
+    @Param('id') id: string,
+    @Body() dto: UnreconcileBankMovementDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.unreconcileBankMovement(
+      id,
+      dto,
+      this.getActorUserId(req),
+    );
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.update')
+  @Patch('bank-movements/:id')
+  updateBankMovement(@Param('id') id: string) {
+    return this.financeService.updateBankMovement(id);
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.view')
+  @Get('period-closings')
+  periodClosings() {
+    return this.financeService.listPeriodClosings();
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('settings.admin')
+  @Post('period-closings/close')
+  closeFinancialPeriod(
+    @Body() dto: CloseFinancialPeriodDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.closeFinancialPeriod(
+      dto,
+      this.getActorUserId(req),
+    );
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('settings.admin')
+  @Patch('period-closings/:id/reopen')
+  reopenFinancialPeriod(
+    @Param('id') id: string,
+    @Body() dto: ReopenFinancialPeriodDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.reopenFinancialPeriod(
+      id,
+      dto,
+      this.getActorUserId(req),
+    );
   }
 
   @UseGuards(AuthGuard)

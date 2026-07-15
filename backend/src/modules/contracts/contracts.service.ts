@@ -7,11 +7,15 @@ import {
 import {
   AccountsReceivableStatus,
   AuditDomain,
+  BankMovementOriginType,
+  BankMovementType,
+  CommissionRuleTrigger,
   ClientType,
   CommissionStatus,
   ContractInvoiceStatus,
   ContractStatus,
   CostCenterEntryType,
+  FinancialPeriodStatus,
   GeneratorLifecycleStatus,
   PaymentMethod,
   Prisma,
@@ -492,6 +496,7 @@ export class ContractsService {
           'Conta bancaria/caixa inativa nao pode receber baixa.',
         );
       }
+      await this.ensureFinancialPeriodOpen(tx, effectivePaidAt);
 
       const invoice = await tx.contractInvoice.findUnique({
         where: { id: invoiceId },
@@ -513,6 +518,12 @@ export class ContractsService {
         },
         select: {
           id: true,
+          clientId: true,
+          contractId: true,
+          maintenanceOrderId: true,
+          costCenterId: true,
+          description: true,
+          competenceDate: true,
           netAmount: true,
           interestAmount: true,
           penaltyAmount: true,
@@ -535,7 +546,7 @@ export class ContractsService {
       );
 
       if (outstanding > 0) {
-        await tx.accountsReceivablePayment.create({
+        const payment = await tx.accountsReceivablePayment.create({
           data: {
             receivableId: receivable.id,
             bankAccountId,
@@ -546,6 +557,31 @@ export class ContractsService {
             notes:
               'Baixa automatica a partir da quitacao da fatura contratual.',
           },
+        });
+
+        const movement = await this.createBankMovement(tx, {
+          bankAccountId,
+          type: BankMovementType.CREDIT,
+          amount: outstanding,
+          movementDate: effectivePaidAt,
+          competenceDate: receivable.competenceDate,
+          description: `Recebimento: ${receivable.description}`,
+          originType: BankMovementOriginType.ACCOUNTS_RECEIVABLE_PAYMENT,
+          originId: payment.id,
+          receivableId: receivable.id,
+          receivablePaymentId: payment.id,
+          createdById: actorUserId,
+          metadata: {
+            clientId: receivable.clientId,
+            contractId: receivable.contractId,
+            maintenanceOrderId: receivable.maintenanceOrderId,
+            contractInvoiceId: invoice.id,
+          },
+        });
+
+        await tx.accountsReceivablePayment.update({
+          where: { id: payment.id },
+          data: { originalMovementId: movement.id },
         });
 
         await tx.bankAccount.update({
@@ -1182,7 +1218,10 @@ export class ContractsService {
     });
     if (existing) return;
 
-    const percent = this.defaultContractCommissionPercent;
+    const percent = await this.resolveCommissionPercent(tx, {
+      userId: input.userId,
+      trigger: CommissionRuleTrigger.RECEIVABLE_PAID,
+    });
     const commission = await tx.commissionEntry.create({
       data: {
         userId: input.userId,
@@ -1222,6 +1261,130 @@ export class ContractsService {
       error !== null &&
       'code' in error &&
       (error as { code?: string }).code === 'P2002'
+    );
+  }
+
+  private async ensureFinancialPeriodOpen(
+    tx: Prisma.TransactionClient,
+    date: Date,
+  ) {
+    const period = {
+      year: date.getFullYear(),
+      month: date.getMonth() + 1,
+    };
+    const closing = await tx.financialPeriodClosing.findUnique({
+      where: { year_month: period },
+      select: { id: true, status: true },
+    });
+
+    if (closing?.status === FinancialPeriodStatus.CLOSED) {
+      throw new BadRequestException(
+        `Periodo financeiro ${String(period.month).padStart(2, '0')}/${period.year} esta fechado.`,
+      );
+    }
+  }
+
+  private async createBankMovement(
+    tx: Prisma.TransactionClient,
+    input: {
+      bankAccountId: string;
+      type: BankMovementType;
+      amount: number;
+      movementDate: Date;
+      competenceDate?: Date | null;
+      description: string;
+      originType: BankMovementOriginType;
+      originId: string;
+      receivableId?: string | null;
+      receivablePaymentId?: string | null;
+      createdById?: string;
+      metadata?: Prisma.InputJsonValue;
+    },
+  ) {
+    const amount = Number(input.amount || 0);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new BadRequestException(
+        'Movimento financeiro precisa ter valor maior que zero.',
+      );
+    }
+
+    try {
+      return await tx.bankMovement.create({
+        data: {
+          bankAccountId: input.bankAccountId,
+          type: input.type,
+          amount,
+          movementDate: input.movementDate,
+          competenceDate: input.competenceDate,
+          description: input.description,
+          originType: input.originType,
+          originId: input.originId,
+          receivableId: input.receivableId,
+          receivablePaymentId: input.receivablePaymentId,
+          createdById: input.createdById,
+          metadata: input.metadata,
+        },
+      });
+    } catch (error: unknown) {
+      if (this.isUniqueConstraintError(error)) {
+        throw new BadRequestException(
+          'Movimento financeiro duplicado para a mesma origem.',
+        );
+      }
+      throw error;
+    }
+  }
+
+  private async resolveCommissionPercent(
+    tx: Prisma.TransactionClient,
+    input: {
+      userId?: string | null;
+      trigger: CommissionRuleTrigger;
+    },
+  ) {
+    const now = new Date();
+    const activeWindow: Prisma.CommissionRuleWhereInput = {
+      active: true,
+      trigger: input.trigger,
+      OR: [
+        { validFrom: null, validUntil: null },
+        { validFrom: null, validUntil: { gte: now } },
+        { validFrom: { lte: now }, validUntil: null },
+        { validFrom: { lte: now }, validUntil: { gte: now } },
+      ],
+    };
+
+    if (input.userId) {
+      const sellerRule = await tx.commissionRule.findFirst({
+        where: { ...activeWindow, sellerId: input.userId },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (sellerRule) return Number(sellerRule.percentage || 0);
+
+      const seller = await tx.user.findUnique({
+        where: { id: input.userId },
+        select: { role: true },
+      });
+      if (seller?.role) {
+        const roleRule = await tx.commissionRule.findFirst({
+          where: {
+            ...activeWindow,
+            role: seller.role,
+            sellerId: null,
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (roleRule) return Number(roleRule.percentage || 0);
+      }
+    }
+
+    const generalRule = await tx.commissionRule.findFirst({
+      where: { ...activeWindow, sellerId: null, role: null },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return Number(
+      generalRule?.percentage ?? this.defaultContractCommissionPercent,
     );
   }
 }

@@ -417,6 +417,41 @@ enum CommissionStatus {
   CANCELED
 }
 
+enum FinancialPaymentStatus {
+  POSTED
+  REVERSED
+  REVERSAL
+}
+
+enum BankMovementType {
+  CREDIT
+  DEBIT
+}
+
+enum BankMovementOriginType {
+  ACCOUNTS_RECEIVABLE_PAYMENT
+  ACCOUNTS_PAYABLE_PAYMENT
+  REVERSAL
+  MANUAL_ADJUSTMENT
+  OPENING_BALANCE
+}
+
+enum BankMovementStatus {
+  POSTED
+  REVERSED
+}
+
+enum FinancialPeriodStatus {
+  OPEN
+  CLOSED
+}
+
+enum CommissionRuleTrigger {
+  PROPOSAL_APPROVED
+  CONTRACT_CREATED
+  RECEIVABLE_PAID
+}
+
 enum HrAssetType {
   EPI
   TOOL
@@ -544,9 +579,16 @@ model User {
   companySettingsUpdated         CompanySettings[]           @relation("CompanySettingsUpdatedBy")
   financialAuditLogs             FinancialAuditLog[]         @relation("FinancialAuditActor")
   receivablePayments             AccountsReceivablePayment[] @relation("ReceivablePaymentActor")
+  reversedReceivablePayments     AccountsReceivablePayment[] @relation("ReceivablePaymentReversedBy")
   payablePayments                AccountsPayablePayment[]    @relation("PayablePaymentActor")
+  reversedPayablePayments        AccountsPayablePayment[]    @relation("PayablePaymentReversedBy")
+  createdBankMovements           BankMovement[]              @relation("BankMovementCreatedBy")
+  reconciledBankMovements        BankMovement[]              @relation("BankMovementReconciledBy")
+  closedFinancialPeriods         FinancialPeriodClosing[]    @relation("FinancialPeriodClosedBy")
+  reopenedFinancialPeriods       FinancialPeriodClosing[]    @relation("FinancialPeriodReopenedBy")
   timeEntries                    TimeEntry[]
   commissions                    CommissionEntry[]
+  commissionRules                CommissionRule[]            @relation("CommissionRuleSeller")
   hrAssetAssignments             HrAssetAssignment[]
   fleetAllocations               FleetAllocation[]
   authSessions                   AuthSession[]
@@ -1942,6 +1984,7 @@ model AccountsPayable {
   cancelReason    String?
   duplicateHash   String?
   payments        AccountsPayablePayment[]
+  bankMovements   BankMovement[]
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt
 
@@ -1966,6 +2009,7 @@ model BankAccount {
 
   receivablePayments AccountsReceivablePayment[]
   payablePayments    AccountsPayablePayment[]
+  bankMovements      BankMovement[]
 
   @@map("bank_accounts")
 }
@@ -1996,6 +2040,7 @@ model AccountsReceivable {
   commissionReleased Boolean                     @default(false)
   payments           AccountsReceivablePayment[]
   commissions        CommissionEntry[]
+  bankMovements      BankMovement[]
   createdAt          DateTime                    @default(now())
   updatedAt          DateTime                    @updatedAt
 
@@ -2005,39 +2050,108 @@ model AccountsReceivable {
 }
 
 model AccountsReceivablePayment {
-  id            String             @id @default(uuid())
-  receivableId  String
-  receivable    AccountsReceivable @relation(fields: [receivableId], references: [id], onDelete: Cascade)
-  bankAccountId String?
-  bankAccount   BankAccount?       @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
-  amount        Float
-  method        PaymentMethod      @default(TRANSFER)
-  paidAt        DateTime           @default(now())
-  actorUserId   String?
-  actorUser     User?              @relation("ReceivablePaymentActor", fields: [actorUserId], references: [id], onDelete: SetNull)
-  notes         String?
-  createdAt     DateTime           @default(now())
+  id                 String                      @id @default(uuid())
+  receivableId       String
+  receivable         AccountsReceivable          @relation(fields: [receivableId], references: [id], onDelete: Cascade)
+  bankAccountId      String?
+  bankAccount        BankAccount?                @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+  amount             Float
+  method             PaymentMethod               @default(TRANSFER)
+  paidAt             DateTime                    @default(now())
+  actorUserId        String?
+  actorUser          User?                       @relation("ReceivablePaymentActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  status             FinancialPaymentStatus      @default(POSTED)
+  originalPaymentId  String?
+  originalPayment    AccountsReceivablePayment?  @relation("ReceivablePaymentReversal", fields: [originalPaymentId], references: [id], onDelete: SetNull)
+  reversalPayments   AccountsReceivablePayment[] @relation("ReceivablePaymentReversal")
+  reversedAt         DateTime?
+  reversedById       String?
+  reversedBy         User?                       @relation("ReceivablePaymentReversedBy", fields: [reversedById], references: [id], onDelete: SetNull)
+  reversalReason     String?
+  originalMovementId String?
+  reversalMovementId String?
+  bankMovements      BankMovement[]              @relation("ReceivablePaymentBankMovements")
+  notes              String?
+  createdAt          DateTime                    @default(now())
 
   @@index([receivableId, paidAt])
+  @@index([originalPaymentId])
+  @@index([status, paidAt])
   @@map("accounts_receivable_payments")
 }
 
 model AccountsPayablePayment {
-  id            String          @id @default(uuid())
-  payableId     String
-  payable       AccountsPayable @relation(fields: [payableId], references: [id], onDelete: Cascade)
-  bankAccountId String?
-  bankAccount   BankAccount?    @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
-  amount        Float
-  method        PaymentMethod   @default(TRANSFER)
-  paidAt        DateTime        @default(now())
-  actorUserId   String?
-  actorUser     User?           @relation("PayablePaymentActor", fields: [actorUserId], references: [id], onDelete: SetNull)
-  notes         String?
-  createdAt     DateTime        @default(now())
+  id                 String                   @id @default(uuid())
+  payableId          String
+  payable            AccountsPayable          @relation(fields: [payableId], references: [id], onDelete: Cascade)
+  bankAccountId      String?
+  bankAccount        BankAccount?             @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+  amount             Float
+  method             PaymentMethod            @default(TRANSFER)
+  paidAt             DateTime                 @default(now())
+  actorUserId        String?
+  actorUser          User?                    @relation("PayablePaymentActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  status             FinancialPaymentStatus   @default(POSTED)
+  originalPaymentId  String?
+  originalPayment    AccountsPayablePayment?  @relation("PayablePaymentReversal", fields: [originalPaymentId], references: [id], onDelete: SetNull)
+  reversalPayments   AccountsPayablePayment[] @relation("PayablePaymentReversal")
+  reversedAt         DateTime?
+  reversedById       String?
+  reversedBy         User?                    @relation("PayablePaymentReversedBy", fields: [reversedById], references: [id], onDelete: SetNull)
+  reversalReason     String?
+  originalMovementId String?
+  reversalMovementId String?
+  bankMovements      BankMovement[]           @relation("PayablePaymentBankMovements")
+  notes              String?
+  createdAt          DateTime                 @default(now())
 
   @@index([payableId, paidAt])
+  @@index([originalPaymentId])
+  @@index([status, paidAt])
   @@map("accounts_payable_payments")
+}
+
+model BankMovement {
+  id                      String                     @id @default(uuid())
+  bankAccountId           String
+  bankAccount             BankAccount                @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  type                    BankMovementType
+  amount                  Float
+  movementDate            DateTime
+  competenceDate          DateTime?
+  description             String
+  originType              BankMovementOriginType
+  originId                String
+  receivableId            String?
+  receivable              AccountsReceivable?        @relation(fields: [receivableId], references: [id], onDelete: SetNull)
+  payableId               String?
+  payable                 AccountsPayable?           @relation(fields: [payableId], references: [id], onDelete: SetNull)
+  receivablePaymentId     String?
+  receivablePayment       AccountsReceivablePayment? @relation("ReceivablePaymentBankMovements", fields: [receivablePaymentId], references: [id], onDelete: SetNull)
+  payablePaymentId        String?
+  payablePayment          AccountsPayablePayment?    @relation("PayablePaymentBankMovements", fields: [payablePaymentId], references: [id], onDelete: SetNull)
+  reversalOfMovementId    String?                    @unique
+  reversalOfMovement      BankMovement?              @relation("BankMovementReversal", fields: [reversalOfMovementId], references: [id], onDelete: SetNull)
+  reversedByMovement      BankMovement?              @relation("BankMovementReversal")
+  status                  BankMovementStatus         @default(POSTED)
+  createdById             String?
+  createdBy               User?                      @relation("BankMovementCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  reconciledAt            DateTime?
+  reconciledById          String?
+  reconciledBy            User?                      @relation("BankMovementReconciledBy", fields: [reconciledById], references: [id], onDelete: SetNull)
+  reconciliationReference String?
+  reconciliationNote      String?
+  metadata                Json?
+  createdAt               DateTime                   @default(now())
+
+  @@unique([originType, originId])
+  @@index([bankAccountId, movementDate])
+  @@index([type, movementDate])
+  @@index([originType, originId])
+  @@index([receivableId])
+  @@index([payableId])
+  @@index([status, movementDate])
+  @@map("bank_movements")
 }
 
 model FinancialAuditLog {
@@ -2096,6 +2210,27 @@ model CostCenterEntry {
   @@map("cost_center_entries")
 }
 
+model FinancialPeriodClosing {
+  id           String                @id @default(uuid())
+  year         Int
+  month        Int
+  status       FinancialPeriodStatus @default(OPEN)
+  closedAt     DateTime?
+  closedById   String?
+  closedBy     User?                 @relation("FinancialPeriodClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  reopenedAt   DateTime?
+  reopenedById String?
+  reopenedBy   User?                 @relation("FinancialPeriodReopenedBy", fields: [reopenedById], references: [id], onDelete: SetNull)
+  closeReason  String?
+  reopenReason String?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  @@unique([year, month])
+  @@index([status, year, month])
+  @@map("financial_period_closings")
+}
+
 model TimeEntry {
   id                 String                 @id @default(uuid())
   userId             String
@@ -2142,6 +2277,26 @@ model CommissionEntry {
 
   @@index([userId, status])
   @@map("commission_entries")
+}
+
+model CommissionRule {
+  id         String                @id @default(uuid())
+  name       String
+  sellerId   String?
+  seller     User?                 @relation("CommissionRuleSeller", fields: [sellerId], references: [id], onDelete: SetNull)
+  role       UserRole?
+  percentage Float
+  trigger    CommissionRuleTrigger
+  active     Boolean               @default(true)
+  validFrom  DateTime?
+  validUntil DateTime?
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+
+  @@index([active, trigger])
+  @@index([sellerId, trigger, active])
+  @@index([role, trigger, active])
+  @@map("commission_rules")
 }
 
 model HrAssetAssignment {

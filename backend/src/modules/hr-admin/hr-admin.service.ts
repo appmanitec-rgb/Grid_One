@@ -16,8 +16,10 @@ import {
   AllocateFleetDto,
   AssignHrAssetDto,
   CreateCommissionDto,
+  CreateCommissionRuleDto,
   CreateFleetVehicleDto,
   CreateTimeEntryDto,
+  UpdateCommissionRuleDto,
 } from './dto/hr-admin.dto';
 
 @Injectable()
@@ -241,6 +243,162 @@ export class HrAdminService {
 
       return updated;
     });
+  }
+
+  listCommissionRules() {
+    return this.prisma.commissionRule.findMany({
+      include: {
+        seller: {
+          select: { id: true, name: true, email: true, role: true },
+        },
+      },
+      orderBy: [{ active: 'desc' }, { trigger: 'asc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  createCommissionRule(dto: CreateCommissionRuleDto, actorUserId?: string) {
+    this.assertCommissionRuleScope(dto);
+
+    return this.prisma.$transaction(async (tx) => {
+      const rule = await tx.commissionRule.create({
+        data: {
+          name: dto.name.trim(),
+          sellerId: dto.sellerId,
+          role: dto.role,
+          percentage: dto.percentage,
+          trigger: dto.trigger,
+          active: dto.active ?? true,
+          validFrom: dto.validFrom ? new Date(dto.validFrom) : undefined,
+          validUntil: dto.validUntil ? new Date(dto.validUntil) : undefined,
+        },
+      });
+
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.PEOPLE,
+          entityType: 'COMMISSION_RULE',
+          entityId: rule.id,
+          action: 'CREATE_COMMISSION_RULE',
+          actorUserId,
+          afterPayload: {
+            name: rule.name,
+            sellerId: rule.sellerId,
+            role: rule.role,
+            percentage: rule.percentage,
+            trigger: rule.trigger,
+            active: rule.active,
+          },
+        },
+        tx,
+      );
+
+      return rule;
+    });
+  }
+
+  updateCommissionRule(
+    id: string,
+    dto: UpdateCommissionRuleDto,
+    actorUserId?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const current = await tx.commissionRule.findUnique({ where: { id } });
+      if (!current) {
+        throw new NotFoundException('Regra de comissao nao encontrada.');
+      }
+
+      const nextScope = {
+        sellerId:
+          dto.sellerId === undefined
+            ? (current.sellerId ?? undefined)
+            : dto.sellerId,
+        role: dto.role === undefined ? (current.role ?? undefined) : dto.role,
+        validFrom:
+          dto.validFrom === undefined
+            ? current.validFrom?.toISOString()
+            : dto.validFrom,
+        validUntil:
+          dto.validUntil === undefined
+            ? current.validUntil?.toISOString()
+            : dto.validUntil,
+      };
+      this.assertCommissionRuleScope(nextScope);
+
+      const updated = await tx.commissionRule.update({
+        where: { id },
+        data: {
+          name: dto.name?.trim(),
+          sellerId: dto.sellerId,
+          role: dto.role,
+          percentage: dto.percentage,
+          trigger: dto.trigger,
+          active: dto.active,
+          validFrom:
+            dto.validFrom === undefined
+              ? undefined
+              : dto.validFrom
+                ? new Date(dto.validFrom)
+                : null,
+          validUntil:
+            dto.validUntil === undefined
+              ? undefined
+              : dto.validUntil
+                ? new Date(dto.validUntil)
+                : null,
+        },
+      });
+
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.PEOPLE,
+          entityType: 'COMMISSION_RULE',
+          entityId: id,
+          action: 'UPDATE_COMMISSION_RULE',
+          actorUserId,
+          beforePayload: {
+            name: current.name,
+            sellerId: current.sellerId,
+            role: current.role,
+            percentage: current.percentage,
+            trigger: current.trigger,
+            active: current.active,
+          },
+          afterPayload: {
+            name: updated.name,
+            sellerId: updated.sellerId,
+            role: updated.role,
+            percentage: updated.percentage,
+            trigger: updated.trigger,
+            active: updated.active,
+          },
+        },
+        tx,
+      );
+
+      return updated;
+    });
+  }
+
+  private assertCommissionRuleScope(input: {
+    sellerId?: string | null;
+    role?: string | null;
+    validFrom?: string | null;
+    validUntil?: string | null;
+  }) {
+    if (input.sellerId && input.role) {
+      throw new BadRequestException(
+        'Regra de comissao deve ser por vendedor ou por perfil, nao ambos.',
+      );
+    }
+    if (input.validFrom && input.validUntil) {
+      const from = new Date(input.validFrom);
+      const until = new Date(input.validUntil);
+      if (from > until) {
+        throw new BadRequestException(
+          'Validade final da regra deve ser posterior ao inicio.',
+        );
+      }
+    }
   }
 
   private assertCommissionOrigin(dto: CreateCommissionDto) {

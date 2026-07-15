@@ -69,6 +69,32 @@ type DrePayload = {
   };
 };
 
+type BankMovement = {
+  id: string;
+  type: "CREDIT" | "DEBIT";
+  amount: number;
+  originType: string;
+  receivableId?: string | null;
+  payableId?: string | null;
+  reconciledAt?: string | null;
+  status?: string | null;
+  runningBalance?: number;
+};
+
+type BankMovementPayload = {
+  openingBalance: number;
+  finalBalance: number;
+  totals: { credits: number; debits: number };
+  entries: BankMovement[];
+};
+
+type FinancialPeriodClosing = {
+  id: string;
+  year: number;
+  month: number;
+  status: string;
+};
+
 test.describe.serial("financeiro operacional, caixa, DRE e comissao", () => {
   test("financeiro baixa recebivel contratual, movimenta caixa, realiza DRE, libera comissao e permite estorno", async ({
     page,
@@ -159,6 +185,55 @@ test.describe.serial("financeiro operacional, caixa, DRE e comissao", () => {
       ),
     ).toBe(Math.round(amount * 100));
 
+    const statementAfterPayment = await apiRequest<BankMovementPayload>(
+      financeToken,
+      `/finance/bank-movements?bankAccountId=${bankBefore.id}`,
+    );
+    const creditMovement = statementAfterPayment.entries.find(
+      (movement) =>
+        movement.receivableId === receivable.id &&
+        movement.type === "CREDIT" &&
+        Math.round(Number(movement.amount) * 100) === Math.round(amount * 100),
+    );
+    expect(creditMovement?.id).toBeTruthy();
+    expect(
+      Number(statementAfterPayment.finalBalance.toFixed(2)),
+    ).toBeCloseTo(Number(bankAfterPayment.currentBalance.toFixed(2)), 2);
+
+    await apiRequest(
+      financeToken,
+      `/finance/bank-movements/${creditMovement!.id}/reconcile`,
+      {
+        method: "PATCH",
+        body: { reconciliationReference: `E2E-${suffix}` },
+      },
+    );
+
+    const positivePayment = paidReceivable.payments?.find(
+      (payment) =>
+        payment.amount > 0 && payment.bankAccountId === bankBefore.id,
+    );
+    expect(positivePayment?.id).toBeTruthy();
+
+    const blockedReverse = await apiRequestRaw(
+      financeToken,
+      `/finance/receivables/${receivable.id}/payments/${positivePayment!.id}/reverse`,
+      {
+        method: "PATCH",
+        body: { reason: "Tentativa com movimento conciliado" },
+      },
+    );
+    expect(blockedReverse.status).toBeGreaterThanOrEqual(400);
+
+    await apiRequest(
+      financeToken,
+      `/finance/bank-movements/${creditMovement!.id}/unreconcile`,
+      {
+        method: "PATCH",
+        body: { reason: "Liberar estorno validado no E2E" },
+      },
+    );
+
     const cashFlow = await apiRequest<CashFlowProjection>(
       financeToken,
       "/finance/cash-flow/projection?days=30",
@@ -195,12 +270,6 @@ test.describe.serial("financeiro operacional, caixa, DRE e comissao", () => {
       ),
     ).toBeTruthy();
 
-    const positivePayment = paidReceivable.payments?.find(
-      (payment) =>
-        payment.amount > 0 && payment.bankAccountId === bankBefore.id,
-    );
-    expect(positivePayment?.id).toBeTruthy();
-
     await apiRequest(
       financeToken,
       `/finance/receivables/${receivable.id}/payments/${positivePayment!.id}/reverse`,
@@ -225,6 +294,19 @@ test.describe.serial("financeiro operacional, caixa, DRE e comissao", () => {
       Math.round(bankBefore.currentBalance * 100),
     );
 
+    const statementAfterReversal = await apiRequest<BankMovementPayload>(
+      financeToken,
+      `/finance/bank-movements?bankAccountId=${bankBefore.id}`,
+    );
+    expect(
+      statementAfterReversal.entries.some(
+        (movement) =>
+          movement.receivableId === receivable.id &&
+          movement.type === "DEBIT" &&
+          movement.originType === "REVERSAL",
+      ),
+    ).toBeTruthy();
+
     const pendingCommissions = await apiRequest<Commission[]>(
       adminToken,
       "/hr-admin/commissions?status=PENDING",
@@ -236,6 +318,85 @@ test.describe.serial("financeiro operacional, caixa, DRE e comissao", () => {
           item.notes?.includes(`Ciclo 12 E2E ${suffix}`),
       ),
     ).toBeTruthy();
+  });
+
+  test("periodo financeiro fechado bloqueia baixa dentro do mes", async () => {
+    const [adminSession, financeSession] = await Promise.all([
+      apiLogin(accounts.admin),
+      apiLogin(accounts.finance),
+    ]);
+    const adminToken = adminSession.access_token;
+    const financeToken = financeSession.access_token;
+
+    const contract = await firstContract(adminToken);
+    const clientId = contract.clientId ?? contract.client?.id;
+    expect(clientId).toBeTruthy();
+
+    const bankAccount = await firstActiveBankAccount(financeToken);
+    const suffix = Date.now();
+    const closedDate = new Date(Date.now() + 370 * 24 * 60 * 60 * 1000);
+    const year = 2200 + (suffix % 500);
+    const month = closedDate.getUTCMonth() + 1;
+    const paidAt = new Date(
+      Date.UTC(year, month - 1, 15, 12, 0, 0),
+    ).toISOString();
+
+    const receivable = await apiRequest<Receivable>(
+      financeToken,
+      "/finance/receivables",
+      {
+        method: "POST",
+        body: {
+          clientId,
+          contractId: contract.id,
+          costCenterId: contract.costCenterId,
+          description: `Ciclo 13 periodo fechado ${suffix}`,
+          competenceDate: paidAt,
+          dueDate: paidAt,
+          grossAmount: 321.45,
+          discountAmount: 0,
+        },
+      },
+    );
+
+    const period = await apiRequest<FinancialPeriodClosing>(
+      adminToken,
+      "/finance/period-closings/close",
+      {
+        method: "POST",
+        body: {
+          year,
+          month,
+          reason: `Fechamento E2E Ciclo 13 ${suffix}`,
+        },
+      },
+    );
+    expect(period.status).toBe("CLOSED");
+
+    const blockedPayment = await apiRequestRaw(
+      financeToken,
+      `/finance/receivables/${receivable.id}/pay`,
+      {
+        method: "PATCH",
+        body: {
+          amount: 321.45,
+          method: "TRANSFER",
+          bankAccountId: bankAccount.id,
+          paidAt,
+        },
+      },
+    );
+    expect(blockedPayment.status).toBeGreaterThanOrEqual(400);
+
+    const reopened = await apiRequest<FinancialPeriodClosing>(
+      adminToken,
+      `/finance/period-closings/${period.id}/reopen`,
+      {
+        method: "PATCH",
+        body: { reason: `Reabertura E2E Ciclo 13 ${suffix}` },
+      },
+    );
+    expect(reopened.status).toBe("OPEN");
   });
 
   test("perfis tecnico e cliente nao acessam financeiro interno", async ({
@@ -257,6 +418,18 @@ test.describe.serial("financeiro operacional, caixa, DRE e comissao", () => {
       "/finance/receivables",
     );
     expect(clientReceivables.status).toBe(403);
+
+    const technicianStatement = await apiRequestRaw(
+      technicianSession.access_token,
+      "/finance/bank-movements",
+    );
+    expect(technicianStatement.status).toBe(403);
+
+    const clientStatement = await apiRequestRaw(
+      clientSession.access_token,
+      "/finance/bank-movements",
+    );
+    expect(clientStatement.status).toBe(403);
 
     await loginByApi(page, accounts.clientA);
     await page.goto("/dashboard/finance/accounts-receivable", {

@@ -279,6 +279,12 @@ const MAIN_SECTIONS: NavSection[] = [
         enabled: true,
       },
       {
+        key: "finance_statement",
+        label: "Extrato Financeiro",
+        href: "/dashboard/finance/bank-movements",
+        enabled: true,
+      },
+      {
         key: "finance_banks",
         label: "Contas Bancárias & Caixas",
         href: "/dashboard/finance/bank-accounts",

@@ -19,8 +19,10 @@ import {
   AllocateFleetDto,
   AssignHrAssetDto,
   CreateCommissionDto,
+  CreateCommissionRuleDto,
   CreateFleetVehicleDto,
   CreateTimeEntryDto,
+  UpdateCommissionRuleDto,
   ReleaseFleetDto,
   UpdateCommissionStatusDto,
   UpdateHrAssetStatusDto,
@@ -93,6 +95,41 @@ export class HrAdminController {
     return this.hrAdminService.updateCommissionStatus(
       id,
       dto.status,
+      this.extractUserId(req),
+    );
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('people.view')
+  @Get('commission-rules')
+  commissionRules() {
+    return this.hrAdminService.listCommissionRules();
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('people.create')
+  @Post('commission-rules')
+  createCommissionRule(
+    @Req() req: Request,
+    @Body() dto: CreateCommissionRuleDto,
+  ) {
+    return this.hrAdminService.createCommissionRule(
+      dto,
+      this.extractUserId(req),
+    );
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('people.update')
+  @Patch('commission-rules/:id')
+  updateCommissionRule(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: UpdateCommissionRuleDto,
+  ) {
+    return this.hrAdminService.updateCommissionRule(
+      id,
+      dto,
       this.extractUserId(req),
     );
   }
