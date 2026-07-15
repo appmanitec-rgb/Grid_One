@@ -24,6 +24,7 @@ import {
   CreateCostCenterEntryDto,
   PayAccountsPayableDto,
   PayAccountsReceivableDto,
+  ReverseReceivablePaymentDto,
   SyncOrderReceivableDto,
   UpdateBankAccountDto,
   UpdateCostCenterDto,
@@ -67,6 +68,23 @@ export class FinanceController {
     @Req() req: Request,
   ) {
     return this.financeService.payReceivable(id, dto, this.getActorUserId(req));
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.cancel')
+  @Patch('receivables/:id/payments/:paymentId/reverse')
+  reverseReceivablePayment(
+    @Param('id') id: string,
+    @Param('paymentId') paymentId: string,
+    @Body() dto: ReverseReceivablePaymentDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.reverseReceivablePayment(
+      id,
+      paymentId,
+      dto,
+      this.getActorUserId(req),
+    );
   }
 
   @UseGuards(AuthGuard)

@@ -8,6 +8,7 @@ import {
   AccountsReceivableStatus,
   AuditDomain,
   ClientType,
+  CommissionStatus,
   ContractInvoiceStatus,
   ContractStatus,
   CostCenterEntryType,
@@ -23,6 +24,8 @@ import { UpdateContractDto } from './dto/update-contract.dto';
 
 @Injectable()
 export class ContractsService {
+  private readonly defaultContractCommissionPercent = 2;
+
   constructor(
     private readonly prisma: DatabaseService,
     private readonly auditLogsService: AuditLogsService,
@@ -466,11 +469,30 @@ export class ContractsService {
   async markInvoicePaid(
     invoiceId: string,
     paidAt?: string,
+    bankAccountId?: string,
     actorUserId?: string,
   ) {
     await this.assertInternalActor(actorUserId);
+    if (!bankAccountId) {
+      throw new BadRequestException(
+        'Selecione uma conta bancaria/caixa para baixar a fatura contratual.',
+      );
+    }
     const effectivePaidAt = paidAt ? new Date(paidAt) : new Date();
     const updated = await this.prisma.$transaction(async (tx) => {
+      const bankAccount = await tx.bankAccount.findUnique({
+        where: { id: bankAccountId },
+        select: { id: true, isActive: true },
+      });
+      if (!bankAccount) {
+        throw new NotFoundException('Conta bancaria/caixa nao encontrada.');
+      }
+      if (!bankAccount.isActive) {
+        throw new BadRequestException(
+          'Conta bancaria/caixa inativa nao pode receber baixa.',
+        );
+      }
+
       const invoice = await tx.contractInvoice.findUnique({
         where: { id: invoiceId },
         include: {
@@ -479,6 +501,9 @@ export class ContractsService {
       });
 
       if (!invoice) throw new NotFoundException('Fatura nao encontrada.');
+      if (invoice.status === ContractInvoiceStatus.PAID) {
+        throw new BadRequestException('Fatura ja esta quitada.');
+      }
 
       const receivable = await tx.accountsReceivable.findFirst({
         where: {
@@ -495,44 +520,65 @@ export class ContractsService {
           status: true,
         },
       });
-
-      if (receivable) {
-        const outstanding = Math.max(
-          0,
-          Number(receivable.netAmount || 0) +
-            Number(receivable.interestAmount || 0) +
-            Number(receivable.penaltyAmount || 0) -
-            Number(receivable.paidAmount || 0),
+      if (!receivable) {
+        throw new BadRequestException(
+          'Fatura precisa estar espelhada em contas a receber antes da baixa.',
         );
-
-        if (outstanding > 0) {
-          await tx.accountsReceivablePayment.create({
-            data: {
-              receivableId: receivable.id,
-              amount: outstanding,
-              method: PaymentMethod.OTHER,
-              paidAt: effectivePaidAt,
-              actorUserId,
-              notes:
-                'Baixa automatica a partir da quitacao da fatura contratual.',
-            },
-          });
-        }
-
-        if (
-          outstanding > 0 ||
-          receivable.status !== AccountsReceivableStatus.PAID
-        ) {
-          await tx.accountsReceivable.update({
-            where: { id: receivable.id },
-            data: {
-              paidAmount: Number(receivable.paidAmount || 0) + outstanding,
-              status: AccountsReceivableStatus.PAID,
-              updatedAt: new Date(),
-            },
-          });
-        }
       }
+
+      const outstanding = Math.max(
+        0,
+        Number(receivable.netAmount || 0) +
+          Number(receivable.interestAmount || 0) +
+          Number(receivable.penaltyAmount || 0) -
+          Number(receivable.paidAmount || 0),
+      );
+
+      if (outstanding > 0) {
+        await tx.accountsReceivablePayment.create({
+          data: {
+            receivableId: receivable.id,
+            bankAccountId,
+            amount: outstanding,
+            method: PaymentMethod.OTHER,
+            paidAt: effectivePaidAt,
+            actorUserId,
+            notes:
+              'Baixa automatica a partir da quitacao da fatura contratual.',
+          },
+        });
+
+        await tx.bankAccount.update({
+          where: { id: bankAccountId },
+          data: { currentBalance: { increment: outstanding } },
+        });
+      }
+
+      if (
+        outstanding > 0 ||
+        receivable.status !== AccountsReceivableStatus.PAID
+      ) {
+        await tx.accountsReceivable.update({
+          where: { id: receivable.id },
+          data: {
+            paidAmount: Number(receivable.paidAmount || 0) + outstanding,
+            status: AccountsReceivableStatus.PAID,
+            commissionReleased: true,
+            updatedAt: new Date(),
+          },
+        });
+      }
+
+      await tx.commissionEntry.updateMany({
+        where: {
+          receivableId: receivable.id,
+          status: CommissionStatus.PENDING,
+        },
+        data: {
+          status: CommissionStatus.RELEASED,
+          releasedAt: effectivePaidAt,
+        },
+      });
 
       const paidInvoice = await tx.contractInvoice.update({
         where: { id: invoiceId },
@@ -559,6 +605,7 @@ export class ContractsService {
           afterPayload: {
             contractId: invoice.contractId,
             receivableId: receivable?.id,
+            bankAccountId,
             paidAt: effectivePaidAt.toISOString(),
           },
         },
@@ -802,6 +849,7 @@ export class ContractsService {
       where: { id: contractId },
       include: {
         equipments: true,
+        sourceProposal: { select: { userId: true } },
       },
     });
 
@@ -879,6 +927,8 @@ export class ContractsService {
           dueDate: invoice.dueDate,
           amount: invoice.amount,
           actorUserId,
+          commissionUserId:
+            contract.sourceProposal?.userId ?? contract.createdByUserId,
         });
         if (result === 'created') stats.receivablesCreated += 1;
         if (result === 'updated') stats.receivablesUpdated += 1;
@@ -972,6 +1022,7 @@ export class ContractsService {
       dueDate: Date;
       amount: number;
       actorUserId?: string;
+      commissionUserId?: string | null;
     },
   ): Promise<'created' | 'updated' | 'skipped'> {
     const amount = Number(input.amount || 0);
@@ -1023,15 +1074,33 @@ export class ContractsService {
           },
         });
 
+        await this.ensureCommissionProvision(tx, {
+          userId: input.commissionUserId,
+          receivableId: existing.id,
+          contractId: input.contractId,
+          baseAmount: amount,
+          actorUserId: input.actorUserId,
+        });
+
         return 'updated';
       }
+
+      await this.ensureCommissionProvision(tx, {
+        userId: input.commissionUserId,
+        receivableId: existing.id,
+        contractId: input.contractId,
+        baseAmount: amount,
+        actorUserId: input.actorUserId,
+      });
 
       return 'skipped';
     }
 
-    const receivable = await tx.accountsReceivable.create({
-      data: receivableData,
-    });
+    const receivable = await this.createContractReceivableSafely(
+      tx,
+      receivableData,
+    );
+    if (!receivable) return 'skipped';
 
     if (input.costCenterId) {
       await tx.costCenterEntry.create({
@@ -1064,6 +1133,95 @@ export class ContractsService {
       tx,
     );
 
+    await this.ensureCommissionProvision(tx, {
+      userId: input.commissionUserId,
+      receivableId: receivable.id,
+      contractId: input.contractId,
+      baseAmount: amount,
+      actorUserId: input.actorUserId,
+    });
+
     return 'created';
+  }
+
+  private async createContractReceivableSafely(
+    tx: Prisma.TransactionClient,
+    receivableData: Prisma.AccountsReceivableUncheckedCreateInput,
+  ) {
+    try {
+      return await tx.accountsReceivable.create({ data: receivableData });
+    } catch (error: unknown) {
+      if (!this.isUniqueConstraintError(error)) {
+        throw error;
+      }
+
+      return null;
+    }
+  }
+
+  private async ensureCommissionProvision(
+    tx: Prisma.TransactionClient,
+    input: {
+      userId?: string | null;
+      receivableId: string;
+      contractId: string;
+      baseAmount: number;
+      actorUserId?: string;
+    },
+  ) {
+    if (!input.userId || input.baseAmount <= 0) return;
+
+    const existing = await tx.commissionEntry.findFirst({
+      where: {
+        userId: input.userId,
+        receivableId: input.receivableId,
+        contractId: input.contractId,
+        status: { not: CommissionStatus.CANCELED },
+      },
+      select: { id: true },
+    });
+    if (existing) return;
+
+    const percent = this.defaultContractCommissionPercent;
+    const commission = await tx.commissionEntry.create({
+      data: {
+        userId: input.userId,
+        receivableId: input.receivableId,
+        contractId: input.contractId,
+        baseAmount: input.baseAmount,
+        percent,
+        amount: Number(((input.baseAmount * percent) / 100).toFixed(2)),
+        status: CommissionStatus.PENDING,
+        notes:
+          'Comissao provisionada automaticamente a partir de recebivel contratual.',
+      },
+    });
+
+    await this.auditLogsService.record(
+      {
+        domain: AuditDomain.FINANCE,
+        entityType: 'COMMISSION_ENTRY',
+        entityId: commission.id,
+        action: 'CREATE_FROM_CONTRACT_RECEIVABLE',
+        actorUserId: input.actorUserId,
+        afterPayload: {
+          receivableId: input.receivableId,
+          contractId: input.contractId,
+          userId: input.userId,
+          percent,
+          amount: commission.amount,
+        },
+      },
+      tx,
+    );
+  }
+
+  private isUniqueConstraintError(error: unknown) {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: string }).code === 'P2002'
+    );
   }
 }

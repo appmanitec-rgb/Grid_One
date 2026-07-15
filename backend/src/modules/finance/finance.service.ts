@@ -23,6 +23,7 @@ import {
   CreateCostCenterEntryDto,
   PayAccountsPayableDto,
   PayAccountsReceivableDto,
+  ReverseReceivablePaymentDto,
   SyncOrderReceivableDto,
   UpdateBankAccountDto,
   UpdateCostCenterDto,
@@ -30,6 +31,8 @@ import {
 
 @Injectable()
 export class FinanceService {
+  private readonly defaultContractCommissionPercent = 2;
+
   constructor(
     private readonly prisma: DatabaseService,
     private readonly auditLogsService: AuditLogsService,
@@ -42,7 +45,14 @@ export class FinanceService {
         contract: { select: { id: true, code: true } },
         maintenanceOrder: { select: { id: true, title: true } },
         costCenter: { select: { id: true, code: true, name: true } },
-        payments: { orderBy: { paidAt: 'desc' } },
+        payments: {
+          orderBy: { paidAt: 'desc' },
+          include: {
+            bankAccount: {
+              select: { id: true, name: true, bankName: true },
+            },
+          },
+        },
       },
       orderBy: { dueDate: 'asc' },
     });
@@ -120,32 +130,73 @@ export class FinanceService {
           'Titulo cancelado nao pode receber pagamento.',
         );
       }
+      if (receivable.status === AccountsReceivableStatus.PAID) {
+        throw new BadRequestException('Titulo ja esta quitado.');
+      }
+      if (!dto.bankAccountId) {
+        throw new BadRequestException(
+          'Selecione uma conta bancaria/caixa para registrar a baixa.',
+        );
+      }
 
-      const nextPaid =
-        Number(receivable.paidAmount || 0) + Number(dto.amount || 0);
+      const bankAccount = await tx.bankAccount.findUnique({
+        where: { id: dto.bankAccountId },
+        select: { id: true, isActive: true },
+      });
+      if (!bankAccount) {
+        throw new NotFoundException('Conta bancaria/caixa nao encontrada.');
+      }
+      if (!bankAccount.isActive) {
+        throw new BadRequestException(
+          'Conta bancaria/caixa inativa nao pode receber baixa.',
+        );
+      }
+
+      const paidAmount = Number(receivable.paidAmount || 0);
+      const paymentAmount = Number(dto.amount || 0);
+      if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+        throw new BadRequestException(
+          'Valor do recebimento deve ser maior que zero.',
+        );
+      }
+
       const totalDue =
         Number(receivable.netAmount || 0) +
         Number(receivable.interestAmount || 0) +
         Number(receivable.penaltyAmount || 0);
+      const outstanding = Math.max(0, totalDue - paidAmount);
+      if (outstanding <= 0) {
+        throw new BadRequestException('Titulo ja esta quitado.');
+      }
+      if (paymentAmount - outstanding > 0.009) {
+        throw new BadRequestException(
+          'Valor informado excede o saldo do titulo.',
+        );
+      }
+
+      const effectivePaidAt = dto.paidAt ? new Date(dto.paidAt) : new Date();
+      const nextPaid =
+        paidAmount + paymentAmount > totalDue &&
+        paidAmount + paymentAmount - totalDue <= 0.009
+          ? totalDue
+          : paidAmount + paymentAmount;
 
       await tx.accountsReceivablePayment.create({
         data: {
           receivableId: id,
           bankAccountId: dto.bankAccountId,
-          amount: dto.amount,
+          amount: paymentAmount,
           method: dto.method,
-          paidAt: dto.paidAt ? new Date(dto.paidAt) : new Date(),
+          paidAt: effectivePaidAt,
           actorUserId,
           notes: dto.notes,
         },
       });
 
-      if (dto.bankAccountId) {
-        await tx.bankAccount.update({
-          where: { id: dto.bankAccountId },
-          data: { currentBalance: { increment: dto.amount } },
-        });
-      }
+      await tx.bankAccount.update({
+        where: { id: dto.bankAccountId },
+        data: { currentBalance: { increment: paymentAmount } },
+      });
 
       const status =
         nextPaid >= totalDue
@@ -157,6 +208,10 @@ export class FinanceService {
         data: {
           paidAmount: nextPaid,
           status,
+          commissionReleased:
+            status === AccountsReceivableStatus.PAID
+              ? true
+              : receivable.commissionReleased,
           updatedAt: new Date(),
         },
       });
@@ -182,23 +237,25 @@ export class FinanceService {
             where: { id: linkedInvoice.id },
             data: {
               status: ContractInvoiceStatus.PAID,
-              paidAt: dto.paidAt ? new Date(dto.paidAt) : new Date(),
+              paidAt: effectivePaidAt,
             },
           });
         }
       }
 
+      let releasedCommissions = 0;
       if (status === AccountsReceivableStatus.PAID) {
-        await tx.commissionEntry.updateMany({
+        const result = await tx.commissionEntry.updateMany({
           where: {
             receivableId: id,
             status: CommissionStatus.PENDING,
           },
           data: {
             status: CommissionStatus.RELEASED,
-            releasedAt: new Date(),
+            releasedAt: effectivePaidAt,
           },
         });
+        releasedCommissions = result.count;
       }
 
       await this.audit(tx, {
@@ -207,10 +264,185 @@ export class FinanceService {
         entityType: 'ACCOUNTS_RECEIVABLE',
         entityId: id,
         action: 'PAY',
-        payload: dto as unknown as Prisma.InputJsonValue,
+        payload: {
+          ...dto,
+          amount: paymentAmount,
+          bankAccountId: dto.bankAccountId,
+          releasedCommissions,
+        } as unknown as Prisma.InputJsonValue,
       });
 
       return updated;
+    });
+  }
+
+  async reverseReceivablePayment(
+    receivableId: string,
+    paymentId: string,
+    dto: ReverseReceivablePaymentDto,
+    actorUserId?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const reason = dto.reason?.trim();
+      if (!reason || reason.length < 4) {
+        throw new BadRequestException(
+          'Informe um motivo claro para estornar a baixa.',
+        );
+      }
+
+      const payment = await tx.accountsReceivablePayment.findFirst({
+        where: { id: paymentId, receivableId },
+      });
+      if (!payment) {
+        throw new NotFoundException('Baixa do recebivel nao encontrada.');
+      }
+      const paymentAmount = Number(payment.amount || 0);
+      if (paymentAmount <= 0) {
+        throw new BadRequestException(
+          'Lancamento de estorno nao pode ser estornado novamente.',
+        );
+      }
+
+      const existingReversal = await tx.accountsReceivablePayment.findFirst({
+        where: {
+          receivableId,
+          amount: -paymentAmount,
+          notes: { contains: `Estorno da baixa ${payment.id}` },
+        },
+        select: { id: true },
+      });
+      if (existingReversal) {
+        throw new BadRequestException(
+          'Esta baixa ja possui estorno registrado.',
+        );
+      }
+
+      const receivable = await tx.accountsReceivable.findUnique({
+        where: { id: receivableId },
+      });
+      if (!receivable) {
+        throw new NotFoundException('Conta a receber nao encontrada.');
+      }
+      if (receivable.status === AccountsReceivableStatus.CANCELED) {
+        throw new BadRequestException(
+          'Titulo cancelado nao pode ter baixa estornada.',
+        );
+      }
+
+      const totalDue =
+        Number(receivable.netAmount || 0) +
+        Number(receivable.interestAmount || 0) +
+        Number(receivable.penaltyAmount || 0);
+      const nextPaid = Math.max(
+        0,
+        Number(receivable.paidAmount || 0) - paymentAmount,
+      );
+      const now = new Date();
+      const nextStatus =
+        nextPaid <= 0
+          ? receivable.dueDate < now
+            ? AccountsReceivableStatus.OVERDUE
+            : AccountsReceivableStatus.OPEN
+          : nextPaid >= totalDue
+            ? AccountsReceivableStatus.PAID
+            : AccountsReceivableStatus.PARTIAL;
+
+      const reversal = await tx.accountsReceivablePayment.create({
+        data: {
+          receivableId,
+          bankAccountId: payment.bankAccountId,
+          amount: -paymentAmount,
+          method: payment.method,
+          paidAt: now,
+          actorUserId,
+          notes: `Estorno da baixa ${payment.id}: ${reason}`,
+        },
+      });
+
+      if (payment.bankAccountId) {
+        await tx.bankAccount.update({
+          where: { id: payment.bankAccountId },
+          data: { currentBalance: { decrement: paymentAmount } },
+        });
+      }
+
+      const updated = await tx.accountsReceivable.update({
+        where: { id: receivableId },
+        data: {
+          paidAmount: nextPaid,
+          status: nextStatus,
+          commissionReleased:
+            nextStatus === AccountsReceivableStatus.PAID
+              ? receivable.commissionReleased
+              : false,
+          updatedAt: now,
+        },
+      });
+
+      if (
+        nextStatus !== AccountsReceivableStatus.PAID &&
+        receivable.contractId
+      ) {
+        const linkedInvoice = await tx.contractInvoice.findFirst({
+          where: {
+            contractId: receivable.contractId,
+            competenceDate: receivable.competenceDate,
+            status: ContractInvoiceStatus.PAID,
+          },
+          select: { id: true, dueDate: true },
+        });
+
+        if (linkedInvoice) {
+          await tx.contractInvoice.update({
+            where: { id: linkedInvoice.id },
+            data: {
+              status:
+                linkedInvoice.dueDate < now
+                  ? ContractInvoiceStatus.OVERDUE
+                  : ContractInvoiceStatus.PENDING,
+              paidAt: null,
+            },
+          });
+        }
+      }
+
+      let pendingCommissions = 0;
+      if (nextStatus !== AccountsReceivableStatus.PAID) {
+        const result = await tx.commissionEntry.updateMany({
+          where: {
+            receivableId,
+            status: CommissionStatus.RELEASED,
+            paidAt: null,
+          },
+          data: {
+            status: CommissionStatus.PENDING,
+            releasedAt: null,
+          },
+        });
+        pendingCommissions = result.count;
+      }
+
+      await this.audit(tx, {
+        actorUserId,
+        module: 'FINANCE',
+        entityType: 'ACCOUNTS_RECEIVABLE',
+        entityId: receivableId,
+        action: 'REVERSE_PAYMENT',
+        reason,
+        payload: {
+          paymentId,
+          reversalPaymentId: reversal.id,
+          amount: paymentAmount,
+          bankAccountId: payment.bankAccountId,
+          status: nextStatus,
+          pendingCommissions,
+        } as unknown as Prisma.InputJsonValue,
+      });
+
+      return {
+        receivable: updated,
+        reversal,
+      };
     });
   }
 
@@ -300,6 +532,8 @@ export class FinanceService {
               clientId: true,
               code: true,
               costCenterId: true,
+              createdByUserId: true,
+              sourceProposal: { select: { userId: true } },
             },
           },
         },
@@ -317,23 +551,22 @@ export class FinanceService {
         });
         if (exists) continue;
 
-        const receivable = await tx.accountsReceivable.create({
-          data: {
-            clientId: invoice.contract.clientId,
-            contractId: invoice.contractId,
-            costCenterId: invoice.contract.costCenterId,
-            description: `Parcela contrato ${invoice.contract.code}`,
-            competenceDate: invoice.competenceDate,
-            dueDate: invoice.dueDate,
-            grossAmount: invoice.amount,
-            discountAmount: 0,
-            netAmount: invoice.amount,
-            status:
-              invoice.status === 'OVERDUE'
-                ? AccountsReceivableStatus.OVERDUE
-                : AccountsReceivableStatus.OPEN,
-          },
+        const receivable = await this.createContractReceivableSafely(tx, {
+          clientId: invoice.contract.clientId,
+          contractId: invoice.contractId,
+          costCenterId: invoice.contract.costCenterId,
+          description: `Parcela contrato ${invoice.contract.code}`,
+          competenceDate: invoice.competenceDate,
+          dueDate: invoice.dueDate,
+          grossAmount: invoice.amount,
+          discountAmount: 0,
+          netAmount: invoice.amount,
+          status:
+            invoice.status === 'OVERDUE'
+              ? AccountsReceivableStatus.OVERDUE
+              : AccountsReceivableStatus.OPEN,
         });
+        if (!receivable) continue;
 
         if (invoice.contract.costCenterId) {
           await tx.costCenterEntry.create({
@@ -358,6 +591,14 @@ export class FinanceService {
             competenceDate: invoice.competenceDate.toISOString(),
             amount: invoice.amount,
           },
+        });
+        await this.ensureCommissionProvision(tx, {
+          userId:
+            invoice.contract.sourceProposal?.userId ??
+            invoice.contract.createdByUserId,
+          receivableId: receivable.id,
+          contractId: invoice.contractId,
+          baseAmount: invoice.amount,
         });
         created += 1;
       }
@@ -553,6 +794,25 @@ export class FinanceService {
       const outstanding = Math.max(0, totalAmount - paidAmount);
       const paymentAmount = Number(dto.amount || 0);
 
+      if (!dto.bankAccountId) {
+        throw new BadRequestException(
+          'Selecione uma conta bancaria/caixa para registrar o pagamento.',
+        );
+      }
+
+      const bankAccount = await tx.bankAccount.findUnique({
+        where: { id: dto.bankAccountId },
+        select: { id: true, isActive: true },
+      });
+      if (!bankAccount) {
+        throw new NotFoundException('Conta bancaria/caixa nao encontrada.');
+      }
+      if (!bankAccount.isActive) {
+        throw new BadRequestException(
+          'Conta bancaria/caixa inativa nao pode registrar pagamento.',
+        );
+      }
+
       if (paymentAmount > outstanding) {
         throw new BadRequestException(
           'Valor informado excede o saldo do titulo.',
@@ -573,12 +833,10 @@ export class FinanceService {
         },
       });
 
-      if (dto.bankAccountId) {
-        await tx.bankAccount.update({
-          where: { id: dto.bankAccountId },
-          data: { currentBalance: { decrement: dto.amount } },
-        });
-      }
+      await tx.bankAccount.update({
+        where: { id: dto.bankAccountId },
+        data: { currentBalance: { decrement: paymentAmount } },
+      });
 
       const nextPaid = paidAmount + paymentAmount;
       const status =
@@ -719,11 +977,14 @@ export class FinanceService {
 
     const base = Number(currentBalance._sum.currentBalance || 0);
     const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
     const projections = [] as Array<{
       horizonDays: number;
       expectedIn: number;
       expectedOut: number;
+      realizedIn: number;
+      realizedOut: number;
       projectedBalance: number;
       negative: boolean;
     }>;
@@ -761,6 +1022,28 @@ export class FinanceService {
         _sum: { amount: true, paidAmount: true },
       });
 
+      const receivablePaymentsAgg =
+        await this.prisma.accountsReceivablePayment.aggregate({
+          where: {
+            paidAt: {
+              gte: periodStart,
+              lte: target,
+            },
+          },
+          _sum: { amount: true },
+        });
+
+      const payablePaymentsAgg =
+        await this.prisma.accountsPayablePayment.aggregate({
+          where: {
+            paidAt: {
+              gte: periodStart,
+              lte: target,
+            },
+          },
+          _sum: { amount: true },
+        });
+
       const expectedIn =
         Number(receivableAgg._sum.netAmount || 0) +
         Number(receivableAgg._sum.interestAmount || 0) +
@@ -770,6 +1053,8 @@ export class FinanceService {
       const expectedOut =
         Number(payableAgg._sum.amount || 0) -
         Number(payableAgg._sum.paidAmount || 0);
+      const realizedIn = Number(receivablePaymentsAgg._sum.amount || 0);
+      const realizedOut = Number(payablePaymentsAgg._sum.amount || 0);
 
       const projectedBalance = base + expectedIn - expectedOut;
 
@@ -777,6 +1062,8 @@ export class FinanceService {
         horizonDays: h,
         expectedIn,
         expectedOut,
+        realizedIn,
+        realizedOut,
         projectedBalance,
         negative: projectedBalance < 0,
       });
@@ -872,9 +1159,40 @@ export class FinanceService {
     const expenses = entries
       .filter((e) => e.entryType === CostCenterEntryType.EXPENSE)
       .reduce((acc, e) => acc + Number(e.amount || 0), 0);
+    const [realizedRevenueAgg, realizedExpensesAgg] = await Promise.all([
+      this.prisma.accountsReceivablePayment.aggregate({
+        where: {
+          paidAt: {
+            gte: fromDate,
+            lte: toDate,
+          },
+          receivable: {
+            costCenterId: id,
+            status: { not: AccountsReceivableStatus.CANCELED },
+          },
+        },
+        _sum: { amount: true },
+      }),
+      this.prisma.accountsPayablePayment.aggregate({
+        where: {
+          paidAt: {
+            gte: fromDate,
+            lte: toDate,
+          },
+          payable: {
+            costCenterId: id,
+            status: { not: AccountsPayableStatus.CANCELED },
+          },
+        },
+        _sum: { amount: true },
+      }),
+    ]);
 
     const grossMargin = revenue - costs;
     const operationalResult = grossMargin - expenses;
+    const realizedRevenue = Number(realizedRevenueAgg._sum.amount || 0);
+    const realizedExpenses = Number(realizedExpensesAgg._sum.amount || 0);
+    const realizedOperationalResult = realizedRevenue - realizedExpenses;
 
     return {
       costCenterId: id,
@@ -889,9 +1207,92 @@ export class FinanceService {
           revenue > 0
             ? Number(((operationalResult / revenue) * 100).toFixed(2))
             : 0,
+        realizedRevenue,
+        realizedCosts: 0,
+        realizedExpenses,
+        realizedOperationalResult,
+        realizedMarginPercent:
+          realizedRevenue > 0
+            ? Number(
+                ((realizedOperationalResult / realizedRevenue) * 100).toFixed(
+                  2,
+                ),
+              )
+            : 0,
       },
       entries,
     };
+  }
+
+  private async createContractReceivableSafely(
+    tx: Prisma.TransactionClient,
+    receivableData: Prisma.AccountsReceivableUncheckedCreateInput,
+  ) {
+    try {
+      return await tx.accountsReceivable.create({ data: receivableData });
+    } catch (error: unknown) {
+      if (!this.isUniqueConstraintError(error)) {
+        throw error;
+      }
+      return null;
+    }
+  }
+
+  private async ensureCommissionProvision(
+    tx: Prisma.TransactionClient,
+    input: {
+      userId?: string | null;
+      receivableId: string;
+      contractId: string;
+      baseAmount: number;
+      actorUserId?: string;
+    },
+  ) {
+    if (!input.userId || input.baseAmount <= 0) return;
+
+    const existing = await tx.commissionEntry.findFirst({
+      where: {
+        userId: input.userId,
+        receivableId: input.receivableId,
+        contractId: input.contractId,
+        status: { not: CommissionStatus.CANCELED },
+      },
+      select: { id: true },
+    });
+    if (existing) return;
+
+    const percent = this.defaultContractCommissionPercent;
+    const commission = await tx.commissionEntry.create({
+      data: {
+        userId: input.userId,
+        receivableId: input.receivableId,
+        contractId: input.contractId,
+        baseAmount: input.baseAmount,
+        percent,
+        amount: Number(((input.baseAmount * percent) / 100).toFixed(2)),
+        status: CommissionStatus.PENDING,
+        notes:
+          'Comissao provisionada automaticamente a partir de recebivel contratual.',
+      },
+    });
+
+    await this.auditLogsService.record(
+      {
+        domain: AuditDomain.FINANCE,
+        entityType: 'COMMISSION_ENTRY',
+        entityId: commission.id,
+        action: 'CREATE_FROM_CONTRACT_RECEIVABLE',
+        actorUserId: input.actorUserId,
+        afterPayload: {
+          receivableId: input.receivableId,
+          contractId: input.contractId,
+          userId: input.userId,
+          percent,
+          amount: commission.amount,
+        },
+      },
+      tx,
+    );
   }
 
   private async audit(
@@ -929,6 +1330,15 @@ export class FinanceService {
         afterPayload: input.payload,
       },
       tx,
+    );
+  }
+
+  private isUniqueConstraintError(error: unknown) {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: string }).code === 'P2002'
     );
   }
 

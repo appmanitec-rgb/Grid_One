@@ -95,7 +95,9 @@ export default function BillingPage() {
   const [invoices, setInvoices] = useState<ContractInvoice[]>([]);
   const [receivables, setReceivables] = useState<Receivable[]>([]);
   const [orders, setOrders] = useState<BillingOrder[]>([]);
-  const [orderDrafts, setOrderDrafts] = useState<Record<string, OrderBillingDraft>>({});
+  const [orderDrafts, setOrderDrafts] = useState<
+    Record<string, OrderBillingDraft>
+  >({});
 
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -130,14 +132,26 @@ export default function BillingPage() {
       ]);
 
       const failed = [
-        { response: invoiceRes, fallback: "Nao foi possivel carregar as faturas de contrato." },
-        { response: receivableRes, fallback: "Nao foi possivel carregar os recebiveis." },
-        { response: ordersRes, fallback: "Nao foi possivel carregar as ordens para faturamento avulso." },
+        {
+          response: invoiceRes,
+          fallback: "Nao foi possivel carregar as faturas de contrato.",
+        },
+        {
+          response: receivableRes,
+          fallback: "Nao foi possivel carregar os recebiveis.",
+        },
+        {
+          response: ordersRes,
+          fallback:
+            "Nao foi possivel carregar as ordens para faturamento avulso.",
+        },
       ].find((entry) => !entry.response.ok);
 
       if (failed) {
         if (await handleUnauthorized(failed.response)) return;
-        throw new Error(await readApiErrorMessage(failed.response, failed.fallback));
+        throw new Error(
+          await readApiErrorMessage(failed.response, failed.fallback),
+        );
       }
 
       const [nextInvoices, nextReceivables, nextOrders] = (await Promise.all([
@@ -169,7 +183,10 @@ export default function BillingPage() {
     const map = new Map<string, Receivable>();
     for (const receivable of receivables) {
       if (!receivable.contract?.id) continue;
-      const key = buildInvoiceKey(receivable.contract.id, receivable.competenceDate);
+      const key = buildInvoiceKey(
+        receivable.contract.id,
+        receivable.competenceDate,
+      );
       if (!map.has(key)) map.set(key, receivable);
     }
     return map;
@@ -188,12 +205,11 @@ export default function BillingPage() {
     () =>
       invoices.map((invoice) => ({
         invoice,
-        linkedReceivable:
-          invoice.contract?.id
-            ? receivableByInvoiceKey.get(
-                buildInvoiceKey(invoice.contract.id, invoice.competenceDate),
-              ) || null
-            : null,
+        linkedReceivable: invoice.contract?.id
+          ? receivableByInvoiceKey.get(
+              buildInvoiceKey(invoice.contract.id, invoice.competenceDate),
+            ) || null
+          : null,
       })),
     [invoices, receivableByInvoiceKey],
   );
@@ -202,7 +218,8 @@ export default function BillingPage() {
     const term = query.trim().toLowerCase();
 
     return invoiceRows.filter(({ invoice, linkedReceivable }) => {
-      if (invoiceStatusFilter === "MISSING_SYNC" && linkedReceivable) return false;
+      if (invoiceStatusFilter === "MISSING_SYNC" && linkedReceivable)
+        return false;
       if (
         invoiceStatusFilter !== "ALL" &&
         invoiceStatusFilter !== "MISSING_SYNC" &&
@@ -266,10 +283,11 @@ export default function BillingPage() {
       .filter((item) => item.status === "OVERDUE")
       .reduce((acc, item) => acc + receivableOutstanding(item), 0);
     const openExposure = receivables
-      .filter((item) =>
-        item.status === "OPEN" ||
-        item.status === "PARTIAL" ||
-        item.status === "OVERDUE",
+      .filter(
+        (item) =>
+          item.status === "OPEN" ||
+          item.status === "PARTIAL" ||
+          item.status === "OVERDUE",
       )
       .reduce((acc, item) => acc + receivableOutstanding(item), 0);
 
@@ -298,13 +316,19 @@ export default function BillingPage() {
     setSuccessMessage("");
 
     try {
-      const res = await apiFetch(apiUrl("/finance/receivables/sync/contract-invoices"), {
-        method: "POST",
-      });
+      const res = await apiFetch(
+        apiUrl("/finance/receivables/sync/contract-invoices"),
+        {
+          method: "POST",
+        },
+      );
       if (await handleUnauthorized(res)) return;
       if (!res.ok) {
         throw new Error(
-          await readApiErrorMessage(res, "Falha ao sincronizar recebiveis de contrato."),
+          await readApiErrorMessage(
+            res,
+            "Falha ao sincronizar recebiveis de contrato.",
+          ),
         );
       }
 
@@ -330,37 +354,7 @@ export default function BillingPage() {
     const outstanding = receivableOutstanding(receivable);
     if (outstanding <= 0) return;
 
-    setBusyId(receivable.id);
-    setError("");
-    setSuccessMessage("");
-
-    try {
-      const res = await apiFetch(apiUrl(`/finance/receivables/${receivable.id}/pay`), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount: outstanding,
-          method: "TRANSFER",
-          notes: "Baixa registrada pela central de faturamento.",
-        }),
-      });
-
-      if (await handleUnauthorized(res)) return;
-      if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, "Falha ao registrar recebimento."));
-      }
-
-      setSuccessMessage("Recebimento registrado e espelhado na carteira contratual.");
-      await loadData();
-    } catch (paymentError: unknown) {
-      setError(
-        paymentError instanceof Error
-          ? paymentError.message
-          : "Falha ao registrar recebimento.",
-      );
-    } finally {
-      setBusyId(null);
-    }
+    router.push("/dashboard/finance/accounts-receivable");
   }
 
   async function createOrderReceivable(order: BillingOrder) {
@@ -377,19 +371,24 @@ export default function BillingPage() {
     setSuccessMessage("");
 
     try {
-      const res = await apiFetch(apiUrl(`/finance/receivables/sync/orders/${order.id}`), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount,
-          dueDate: new Date(draft.dueDate).toISOString(),
-          description: draft.description.trim() || undefined,
-        }),
-      });
+      const res = await apiFetch(
+        apiUrl(`/finance/receivables/sync/orders/${order.id}`),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            amount,
+            dueDate: new Date(draft.dueDate).toISOString(),
+            description: draft.description.trim() || undefined,
+          }),
+        },
+      );
 
       if (await handleUnauthorized(res)) return;
       if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, "Falha ao gerar titulo da O.S."));
+        throw new Error(
+          await readApiErrorMessage(res, "Falha ao gerar titulo da O.S."),
+        );
       }
 
       setSuccessMessage(`Titulo financeiro criado para a O.S. ${order.title}.`);
@@ -439,7 +438,11 @@ export default function BillingPage() {
         ]}
         actions={
           <>
-            <button type="button" onClick={() => void loadData()} className={SECONDARY_BUTTON}>
+            <button
+              type="button"
+              onClick={() => void loadData()}
+              className={SECONDARY_BUTTON}
+            >
               Atualizar carteira
             </button>
             <button
@@ -459,9 +462,9 @@ export default function BillingPage() {
                 Verificacao de fluxo
               </p>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Corrigimos a divergencia mais critica: agora a baixa no financeiro pode
-                refletir na fatura do contrato, e a quitacao da fatura contratual tambem
-                baixa o recebivel correspondente.
+                Corrigimos a divergencia mais critica: agora a baixa no
+                financeiro pode refletir na fatura do contrato, e a quitacao da
+                fatura contratual tambem baixa o recebivel correspondente.
               </p>
             </div>
             <BillingPulse
@@ -480,7 +483,9 @@ export default function BillingPage() {
         }
       />
 
-      {successMessage ? <StatusBanner tone="emerald">{successMessage}</StatusBanner> : null}
+      {successMessage ? (
+        <StatusBanner tone="emerald">{successMessage}</StatusBanner>
+      ) : null}
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
 
       <SectionCard
@@ -499,7 +504,10 @@ export default function BillingPage() {
               value={invoiceStatusFilter}
               onChange={(event) =>
                 setInvoiceStatusFilter(
-                  event.target.value as ContractInvoiceStatus | "ALL" | "MISSING_SYNC",
+                  event.target.value as
+                    | ContractInvoiceStatus
+                    | "ALL"
+                    | "MISSING_SYNC",
                 )
               }
               className="xl:w-[240px]"
@@ -583,7 +591,10 @@ export default function BillingPage() {
           title="Recebiveis em destaque"
           description="Leitura rapida da carteira financeira para validar baixa, atraso e origem do titulo."
           actions={
-            <Link href="/dashboard/finance/accounts-receivable" className={SECONDARY_BUTTON}>
+            <Link
+              href="/dashboard/finance/accounts-receivable"
+              className={SECONDARY_BUTTON}
+            >
               Abrir contas a receber
             </Link>
           }
@@ -632,7 +643,8 @@ function InvoiceBillingCard({
   onSync: () => Promise<void>;
   onPayReceivable: (receivable: Receivable) => Promise<void>;
 }) {
-  const grossValue = Number(invoice.amount || 0) + Number(invoice.variableAmount || 0);
+  const grossValue =
+    Number(invoice.amount || 0) + Number(invoice.variableAmount || 0);
 
   return (
     <article className="rounded-[28px] border border-slate-200 bg-white/92 px-5 py-5 shadow-[0_24px_60px_-48px_rgba(15,31,50,0.35)]">
@@ -657,14 +669,18 @@ function InvoiceBillingCard({
             ) : null}
           </div>
           <p className="max-w-4xl text-sm leading-6 text-slate-600">
-            {invoice.contract?.client?.companyName || "Cliente nao identificado"} • Competencia{" "}
-            {formatDate(invoice.competenceDate)}
+            {invoice.contract?.client?.companyName ||
+              "Cliente nao identificado"}{" "}
+            • Competencia {formatDate(invoice.competenceDate)}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
           {invoice.contract?.id ? (
-            <Link href={`/dashboard/contracts/${invoice.contract.id}`} className={SECONDARY_BUTTON}>
+            <Link
+              href={`/dashboard/contracts/${invoice.contract.id}`}
+              className={SECONDARY_BUTTON}
+            >
               Abrir contrato
             </Link>
           ) : null}
@@ -675,10 +691,15 @@ function InvoiceBillingCard({
               onClick={() => void onPayReceivable(linkedReceivable)}
               className={PRIMARY_BUTTON}
             >
-              {busy ? "Baixando..." : "Quitar no financeiro"}
+              {busy ? "Abrindo..." : "Abrir baixa"}
             </button>
           ) : (
-            <button type="button" onClick={() => void onSync()} disabled={busy} className={PRIMARY_BUTTON}>
+            <button
+              type="button"
+              onClick={() => void onSync()}
+              disabled={busy}
+              className={PRIMARY_BUTTON}
+            >
               Gerar espelho
             </button>
           )}
@@ -700,13 +721,21 @@ function InvoiceBillingCard({
         />
         <BillingInfo
           label="Espelho financeiro"
-          value={linkedReceivable ? formatCurrency(receivableOutstanding(linkedReceivable)) : "Pendente"}
+          value={
+            linkedReceivable
+              ? formatCurrency(receivableOutstanding(linkedReceivable))
+              : "Pendente"
+          }
           helper={
             linkedReceivable
               ? linkedReceivable.description
               : "A parcela ainda nao foi sincronizada para contas a receber."
           }
-          tone={linkedReceivable ? receivableStatusTone(linkedReceivable.status) : "amber"}
+          tone={
+            linkedReceivable
+              ? receivableStatusTone(linkedReceivable.status)
+              : "amber"
+          }
         />
         <BillingInfo
           label="Baixa"
@@ -743,17 +772,24 @@ function StandaloneOrderCard({
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-lg font-bold text-slate-950">{order.title}</p>
             <DataPill tone="emerald">Concluida</DataPill>
-            <DataPill tone={priorityTone(order.priority)}>{priorityLabel(order.priority)}</DataPill>
-            {order.type ? <DataPill tone="slate">{orderTypeLabel(order.type)}</DataPill> : null}
+            <DataPill tone={priorityTone(order.priority)}>
+              {priorityLabel(order.priority)}
+            </DataPill>
+            {order.type ? (
+              <DataPill tone="slate">{orderTypeLabel(order.type)}</DataPill>
+            ) : null}
           </div>
           <p className="max-w-3xl text-sm leading-6 text-slate-600">
-            {order.generator?.client?.companyName || "Cliente nao identificado"} •{" "}
-            {order.generator?.name || "Equipamento nao identificado"} •{" "}
+            {order.generator?.client?.companyName || "Cliente nao identificado"}{" "}
+            • {order.generator?.name || "Equipamento nao identificado"} •{" "}
             {order.technician?.user?.name || "Sem tecnico vinculado"}
           </p>
         </div>
 
-        <Link href={`/dashboard/orders/${order.id}`} className={SECONDARY_BUTTON}>
+        <Link
+          href={`/dashboard/orders/${order.id}`}
+          className={SECONDARY_BUTTON}
+        >
           Abrir O.S.
         </Link>
       </div>
@@ -762,7 +798,9 @@ function StandaloneOrderCard({
         <FormField label="Valor do titulo">
           <TextInput
             value={draft.amount}
-            onChange={(event) => onDraftChange(order.id, { amount: event.target.value })}
+            onChange={(event) =>
+              onDraftChange(order.id, { amount: event.target.value })
+            }
             inputMode="decimal"
             placeholder="0,00"
           />
@@ -770,7 +808,9 @@ function StandaloneOrderCard({
         <FormField label="Vencimento">
           <TextInput
             value={draft.dueDate}
-            onChange={(event) => onDraftChange(order.id, { dueDate: event.target.value })}
+            onChange={(event) =>
+              onDraftChange(order.id, { dueDate: event.target.value })
+            }
             type="date"
           />
         </FormField>
@@ -820,19 +860,31 @@ function ReceivableCard({
             <DataPill tone={receivableStatusTone(receivable.status)}>
               {receivableStatusLabel(receivable.status)}
             </DataPill>
-            {receivable.contract?.code ? <DataPill tone="blue">{receivable.contract.code}</DataPill> : null}
-            {receivable.maintenanceOrder?.title ? <DataPill tone="amber">O.S. avulsa</DataPill> : null}
+            {receivable.contract?.code ? (
+              <DataPill tone="blue">{receivable.contract.code}</DataPill>
+            ) : null}
+            {receivable.maintenanceOrder?.title ? (
+              <DataPill tone="amber">O.S. avulsa</DataPill>
+            ) : null}
           </div>
-          <p className="mt-2 text-sm leading-6 text-slate-600">{receivable.description}</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            {receivable.description}
+          </p>
         </div>
 
         <div className="flex flex-wrap gap-3">
           {receivable.contract?.id ? (
-            <Link href={`/dashboard/contracts/${receivable.contract.id}`} className={SECONDARY_BUTTON}>
+            <Link
+              href={`/dashboard/contracts/${receivable.contract.id}`}
+              className={SECONDARY_BUTTON}
+            >
               Contrato
             </Link>
           ) : receivable.maintenanceOrder?.id ? (
-            <Link href={`/dashboard/orders/${receivable.maintenanceOrder.id}`} className={SECONDARY_BUTTON}>
+            <Link
+              href={`/dashboard/orders/${receivable.maintenanceOrder.id}`}
+              className={SECONDARY_BUTTON}
+            >
               O.S.
             </Link>
           ) : null}
@@ -842,7 +894,7 @@ function ReceivableCard({
             disabled={busy || receivableOutstanding(receivable) <= 0}
             className={PRIMARY_BUTTON}
           >
-            {busy ? "Baixando..." : "Quitar saldo"}
+            {busy ? "Abrindo..." : "Abrir baixa"}
           </button>
         </div>
       </div>
@@ -936,7 +988,9 @@ function buildOrderDraft(order?: BillingOrder): OrderBillingDraft {
   return {
     amount: "",
     dueDate: defaultDueDate(),
-    description: order ? `Faturamento do servico avulso da O.S. ${order.title}` : "",
+    description: order
+      ? `Faturamento do servico avulso da O.S. ${order.title}`
+      : "",
   };
 }
 

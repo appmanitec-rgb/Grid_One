@@ -135,12 +135,13 @@ export class ContractsController {
   markInvoicePaid(
     @Req() req: Request,
     @Param('invoiceId') invoiceId: string,
-    @Body() body: { paidAt?: string },
+    @Body() body: { paidAt?: string; bankAccountId?: string },
   ) {
     const userId = (req['user'] as any)?.sub as string | undefined;
     return this.contractsService.markInvoicePaid(
       invoiceId,
       body?.paidAt,
+      body?.bankAccountId,
       userId,
     );
   }

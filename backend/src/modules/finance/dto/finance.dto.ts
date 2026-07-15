@@ -62,8 +62,7 @@ export class PayAccountsReceivableDto {
   method?: PaymentMethod;
 
   @IsUUID()
-  @IsOptional()
-  bankAccountId?: string;
+  bankAccountId!: string;
 
   @IsDateString()
   @IsOptional()
@@ -75,6 +74,11 @@ export class PayAccountsReceivableDto {
 }
 
 export class CancelAccountsReceivableDto {
+  @IsString()
+  reason!: string;
+}
+
+export class ReverseReceivablePaymentDto {
   @IsString()
   reason!: string;
 }
@@ -132,8 +136,7 @@ export class PayAccountsPayableDto {
   method?: PaymentMethod;
 
   @IsUUID()
-  @IsOptional()
-  bankAccountId?: string;
+  bankAccountId!: string;
 
   @IsDateString()
   @IsOptional()

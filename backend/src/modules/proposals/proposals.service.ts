@@ -9,6 +9,7 @@ import {
   ApprovalType,
   AuditDomain,
   BillingAdjustmentIndex,
+  CommissionStatus,
   ContractInvoiceStatus,
   ContractStatus,
   CostCenterEntryType,
@@ -28,6 +29,8 @@ import { UpdateProposalDto } from './dto/update-proposal.dto';
 
 @Injectable()
 export class ProposalsService {
+  private readonly defaultContractCommissionPercent = 2;
+
   private readonly kanbanTransitions: Partial<
     Record<ProposalStatus, ProposalStatus[]>
   > = {
@@ -1061,7 +1064,10 @@ export class ProposalsService {
   ) {
     const contract = await tx.serviceContract.findUnique({
       where: { id: contractId },
-      include: { equipments: true },
+      include: {
+        equipments: true,
+        sourceProposal: { select: { userId: true } },
+      },
     });
 
     if (!contract) return;
@@ -1099,6 +1105,8 @@ export class ProposalsService {
           dueDate: invoice.dueDate,
           amount: invoice.amount,
           actorUserId,
+          commissionUserId:
+            contract.sourceProposal?.userId ?? contract.createdByUserId,
         });
       }
     }
@@ -1138,6 +1146,7 @@ export class ProposalsService {
       dueDate: Date;
       amount: number;
       actorUserId?: string;
+      commissionUserId?: string | null;
     },
   ) {
     const amount = Number(input.amount || 0);
@@ -1173,23 +1182,31 @@ export class ProposalsService {
           },
         });
       }
+
+      await this.ensureCommissionProvision(tx, {
+        userId: input.commissionUserId,
+        receivableId: existing.id,
+        contractId: input.contractId,
+        baseAmount: amount,
+        actorUserId: input.actorUserId,
+      });
+
       return;
     }
 
-    const receivable = await tx.accountsReceivable.create({
-      data: {
-        clientId: input.clientId,
-        contractId: input.contractId,
-        costCenterId: input.costCenterId,
-        description: `Mensalidade contrato ${input.contractCode}`,
-        competenceDate: input.competenceDate,
-        dueDate: input.dueDate,
-        grossAmount: amount,
-        discountAmount: 0,
-        netAmount: amount,
-        status: AccountsReceivableStatus.OPEN,
-      },
+    const receivable = await this.createContractReceivableSafely(tx, {
+      clientId: input.clientId,
+      contractId: input.contractId,
+      costCenterId: input.costCenterId,
+      description: `Mensalidade contrato ${input.contractCode}`,
+      competenceDate: input.competenceDate,
+      dueDate: input.dueDate,
+      grossAmount: amount,
+      discountAmount: 0,
+      netAmount: amount,
+      status: AccountsReceivableStatus.OPEN,
     });
+    if (!receivable) return;
 
     if (input.costCenterId) {
       await tx.costCenterEntry.create({
@@ -1220,6 +1237,94 @@ export class ProposalsService {
         },
       },
       tx,
+    );
+
+    await this.ensureCommissionProvision(tx, {
+      userId: input.commissionUserId,
+      receivableId: receivable.id,
+      contractId: input.contractId,
+      baseAmount: amount,
+      actorUserId: input.actorUserId,
+    });
+  }
+
+  private async createContractReceivableSafely(
+    tx: Prisma.TransactionClient,
+    receivableData: Prisma.AccountsReceivableUncheckedCreateInput,
+  ) {
+    try {
+      return await tx.accountsReceivable.create({ data: receivableData });
+    } catch (error: unknown) {
+      if (!this.isUniqueConstraintError(error)) {
+        throw error;
+      }
+      return null;
+    }
+  }
+
+  private async ensureCommissionProvision(
+    tx: Prisma.TransactionClient,
+    input: {
+      userId?: string | null;
+      receivableId: string;
+      contractId: string;
+      baseAmount: number;
+      actorUserId?: string;
+    },
+  ) {
+    if (!input.userId || input.baseAmount <= 0) return;
+
+    const existing = await tx.commissionEntry.findFirst({
+      where: {
+        userId: input.userId,
+        receivableId: input.receivableId,
+        contractId: input.contractId,
+        status: { not: CommissionStatus.CANCELED },
+      },
+      select: { id: true },
+    });
+    if (existing) return;
+
+    const percent = this.defaultContractCommissionPercent;
+    const commission = await tx.commissionEntry.create({
+      data: {
+        userId: input.userId,
+        receivableId: input.receivableId,
+        contractId: input.contractId,
+        baseAmount: input.baseAmount,
+        percent,
+        amount: Number(((input.baseAmount * percent) / 100).toFixed(2)),
+        status: CommissionStatus.PENDING,
+        notes:
+          'Comissao provisionada automaticamente a partir de recebivel contratual.',
+      },
+    });
+
+    await this.auditLogsService.record(
+      {
+        domain: AuditDomain.FINANCE,
+        entityType: 'COMMISSION_ENTRY',
+        entityId: commission.id,
+        action: 'CREATE_FROM_CONTRACT_RECEIVABLE',
+        actorUserId: input.actorUserId,
+        afterPayload: {
+          receivableId: input.receivableId,
+          contractId: input.contractId,
+          userId: input.userId,
+          percent,
+          amount: commission.amount,
+        },
+      },
+      tx,
+    );
+  }
+
+  private isUniqueConstraintError(error: unknown) {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: string }).code === 'P2002'
     );
   }
 }

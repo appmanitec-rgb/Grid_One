@@ -53,6 +53,10 @@ describe('ContractsService', () => {
         create: jest.fn(),
         update: jest.fn(),
       },
+      commissionEntry: {
+        findFirst: jest.fn(),
+        create: jest.fn(),
+      },
       costCenterEntry: {
         create: jest.fn(),
         updateMany: jest.fn(),
@@ -75,6 +79,8 @@ describe('ContractsService', () => {
       id: 'contract-1',
       code: 'CTR-00001',
       clientId: 'client-1',
+      createdByUserId: 'sales-1',
+      sourceProposal: { userId: 'sales-1' },
       costCenterId: 'cc-1',
       status: ContractStatus.ACTIVE,
       startDate,
@@ -107,6 +113,11 @@ describe('ContractsService', () => {
     db.accountsReceivable.create.mockResolvedValue({
       id: 'ar-1',
       status: AccountsReceivableStatus.OPEN,
+    });
+    db.commissionEntry.findFirst.mockResolvedValue(null);
+    db.commissionEntry.create.mockResolvedValue({
+      id: 'commission-1',
+      amount: 30,
     });
 
     return contract;
@@ -156,6 +167,18 @@ describe('ContractsService', () => {
         entityType: 'ACCOUNTS_RECEIVABLE',
       }),
       db,
+    );
+    expect(db.commissionEntry.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: 'sales-1',
+          receivableId: 'ar-1',
+          contractId: 'contract-1',
+          baseAmount: 1500,
+          percent: 2,
+          amount: 30,
+        }),
+      }),
     );
   });
 
@@ -222,6 +245,10 @@ type ContractDbMock = {
     findFirst: jest.Mock;
     create: jest.Mock;
     update: jest.Mock;
+  };
+  commissionEntry: {
+    findFirst: jest.Mock;
+    create: jest.Mock;
   };
   costCenterEntry: {
     create: jest.Mock;

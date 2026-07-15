@@ -29,6 +29,10 @@ describe('ProposalsService', () => {
       create: jest.Mock;
       update: jest.Mock;
     };
+    commissionEntry: {
+      findFirst: jest.Mock;
+      create: jest.Mock;
+    };
     costCenterEntry: { create: jest.Mock };
     generator: { updateMany: jest.Mock };
     $transaction: jest.Mock;
@@ -61,6 +65,10 @@ describe('ProposalsService', () => {
         findFirst: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+      },
+      commissionEntry: {
+        findFirst: jest.fn(),
+        create: jest.fn(),
       },
       costCenterEntry: {
         create: jest.fn(),
@@ -195,12 +203,19 @@ describe('ProposalsService', () => {
       endDate: new Date('2027-01-01T00:00:00.000Z'),
       dueDay: 10,
       recurringAmount: 1200,
+      createdByUserId: 'seller-1',
+      sourceProposal: { userId: 'seller-1' },
       equipments: [{ generatorId: 'generator-1' }],
     });
     db.accountsReceivable.findFirst.mockResolvedValue(null);
     db.accountsReceivable.create.mockResolvedValue({
       id: 'ar-1',
       status: AccountsReceivableStatus.OPEN,
+    });
+    db.commissionEntry.findFirst.mockResolvedValue(null);
+    db.commissionEntry.create.mockResolvedValue({
+      id: 'commission-1',
+      amount: 24,
     });
 
     const result = await service.convertWonProposalToContract(
@@ -227,6 +242,18 @@ describe('ProposalsService', () => {
           grossAmount: 1200,
           netAmount: 1200,
           status: AccountsReceivableStatus.OPEN,
+        }),
+      }),
+    );
+    expect(db.commissionEntry.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: 'seller-1',
+          receivableId: 'ar-1',
+          contractId: 'contract-1',
+          baseAmount: 1200,
+          percent: 2,
+          amount: 24,
         }),
       }),
     );
@@ -270,11 +297,18 @@ describe('ProposalsService', () => {
       endDate: new Date('2026-01-01T00:00:00.000Z'),
       dueDay: 10,
       recurringAmount: 1200,
+      createdByUserId: 'seller-1',
+      sourceProposal: { userId: 'seller-1' },
       equipments: [{ generatorId: 'generator-1' }],
     });
     db.accountsReceivable.findFirst.mockResolvedValue({
       id: 'ar-existing',
       status: AccountsReceivableStatus.OPEN,
+    });
+    db.commissionEntry.findFirst.mockResolvedValue(null);
+    db.commissionEntry.create.mockResolvedValue({
+      id: 'commission-existing',
+      amount: 24,
     });
 
     await service.convertWonProposalToContract('proposal-1', 'admin-1');

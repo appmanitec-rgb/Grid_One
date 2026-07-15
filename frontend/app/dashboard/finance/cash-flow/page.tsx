@@ -22,6 +22,8 @@ type Projection = {
   horizonDays: number;
   expectedIn: number;
   expectedOut: number;
+  realizedIn?: number;
+  realizedOut?: number;
   projectedBalance: number;
   negative: boolean;
 };
@@ -78,7 +80,11 @@ function getDaysUntilDue(value: string) {
 
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const due = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+  const due = new Date(
+    parsed.getFullYear(),
+    parsed.getMonth(),
+    parsed.getDate(),
+  );
 
   return Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
@@ -128,36 +134,54 @@ export default function CashFlowPage() {
     setError("");
 
     try {
-      const [projectionRes, accountsRes, receivablesRes, payablesRes] = await Promise.all([
-        apiFetch(apiUrl("/finance/cash-flow/projection?days=90"), { cache: "no-store" }),
-        apiFetch(apiUrl("/finance/bank-accounts"), { cache: "no-store" }),
-        apiFetch(apiUrl("/finance/receivables"), { cache: "no-store" }),
-        apiFetch(apiUrl("/finance/payables"), { cache: "no-store" }),
-      ]);
+      const [projectionRes, accountsRes, receivablesRes, payablesRes] =
+        await Promise.all([
+          apiFetch(apiUrl("/finance/cash-flow/projection?days=90"), {
+            cache: "no-store",
+          }),
+          apiFetch(apiUrl("/finance/bank-accounts"), { cache: "no-store" }),
+          apiFetch(apiUrl("/finance/receivables"), { cache: "no-store" }),
+          apiFetch(apiUrl("/finance/payables"), { cache: "no-store" }),
+        ]);
 
       const failed = [
-        { response: projectionRes, fallback: "Nao foi possivel carregar a projecao de caixa." },
-        { response: accountsRes, fallback: "Nao foi possivel carregar as contas bancarias." },
-        { response: receivablesRes, fallback: "Nao foi possivel carregar os recebiveis." },
-        { response: payablesRes, fallback: "Nao foi possivel carregar os pagaveis." },
+        {
+          response: projectionRes,
+          fallback: "Nao foi possivel carregar a projecao de caixa.",
+        },
+        {
+          response: accountsRes,
+          fallback: "Nao foi possivel carregar as contas bancarias.",
+        },
+        {
+          response: receivablesRes,
+          fallback: "Nao foi possivel carregar os recebiveis.",
+        },
+        {
+          response: payablesRes,
+          fallback: "Nao foi possivel carregar os pagaveis.",
+        },
       ].find((entry) => !entry.response.ok);
 
       if (failed) {
         if (await handleUnauthorized(failed.response)) return;
-        throw new Error(await readApiErrorMessage(failed.response, failed.fallback));
+        throw new Error(
+          await readApiErrorMessage(failed.response, failed.fallback),
+        );
       }
 
-      const [projectionPayload, nextAccounts, nextReceivables, nextPayables] = (await Promise.all([
-        projectionRes.json(),
-        accountsRes.json(),
-        receivablesRes.json(),
-        payablesRes.json(),
-      ])) as [
-        { currentBalance?: number; projections?: Projection[] },
-        BankAccount[],
-        Receivable[],
-        Payable[],
-      ];
+      const [projectionPayload, nextAccounts, nextReceivables, nextPayables] =
+        (await Promise.all([
+          projectionRes.json(),
+          accountsRes.json(),
+          receivablesRes.json(),
+          payablesRes.json(),
+        ])) as [
+          { currentBalance?: number; projections?: Projection[] },
+          BankAccount[],
+          Receivable[],
+          Payable[],
+        ];
 
       setCurrentBalance(Number(projectionPayload.currentBalance || 0));
       setProjections(projectionPayload.projections || []);
@@ -166,7 +190,9 @@ export default function CashFlowPage() {
       setPayables(nextPayables);
     } catch (loadError: unknown) {
       setError(
-        loadError instanceof Error ? loadError.message : "Falha ao carregar o fluxo de caixa.",
+        loadError instanceof Error
+          ? loadError.message
+          : "Falha ao carregar o fluxo de caixa.",
       );
     } finally {
       setLoading(false);
@@ -178,36 +204,61 @@ export default function CashFlowPage() {
   }, [loadData]);
 
   const projectionsByHorizon = useMemo(() => {
-    return [...projections].sort((left, right) => left.horizonDays - right.horizonDays);
+    return [...projections].sort(
+      (left, right) => left.horizonDays - right.horizonDays,
+    );
   }, [projections]);
 
-  const mainProjection = projectionsByHorizon.find((item) => item.horizonDays === 30) || null;
-  const longProjection = projectionsByHorizon.find((item) => item.horizonDays === 90) || null;
-  const firstNegativeProjection = projectionsByHorizon.find((item) => item.negative) || null;
+  const mainProjection =
+    projectionsByHorizon.find((item) => item.horizonDays === 30) || null;
+  const longProjection =
+    projectionsByHorizon.find((item) => item.horizonDays === 90) || null;
+  const firstNegativeProjection =
+    projectionsByHorizon.find((item) => item.negative) || null;
 
   const soonReceivables = useMemo(() => {
     return receivables
-      .filter((item) => item.status === "OPEN" || item.status === "PARTIAL" || item.status === "OVERDUE")
-      .sort((left, right) => new Date(left.dueDate).getTime() - new Date(right.dueDate).getTime())
+      .filter(
+        (item) =>
+          item.status === "OPEN" ||
+          item.status === "PARTIAL" ||
+          item.status === "OVERDUE",
+      )
+      .sort(
+        (left, right) =>
+          new Date(left.dueDate).getTime() - new Date(right.dueDate).getTime(),
+      )
       .slice(0, 6);
   }, [receivables]);
 
   const soonPayables = useMemo(() => {
     return payables
       .filter((item) => item.status === "OPEN" || item.status === "OVERDUE")
-      .sort((left, right) => new Date(left.dueDate).getTime() - new Date(right.dueDate).getTime())
+      .sort(
+        (left, right) =>
+          new Date(left.dueDate).getTime() - new Date(right.dueDate).getTime(),
+      )
       .slice(0, 6);
   }, [payables]);
 
   const stats = useMemo(() => {
     const receivableExposure = receivables
-      .filter((item) => item.status === "OPEN" || item.status === "PARTIAL" || item.status === "OVERDUE")
+      .filter(
+        (item) =>
+          item.status === "OPEN" ||
+          item.status === "PARTIAL" ||
+          item.status === "OVERDUE",
+      )
       .reduce((total, item) => total + getReceivableOutstanding(item), 0);
     const payableExposure = payables
       .filter((item) => item.status === "OPEN" || item.status === "OVERDUE")
       .reduce((total, item) => total + getPayableOutstanding(item), 0);
-    const overdueReceivables = receivables.filter((item) => item.status === "OVERDUE").length;
-    const overduePayables = payables.filter((item) => item.status === "OVERDUE").length;
+    const overdueReceivables = receivables.filter(
+      (item) => item.status === "OVERDUE",
+    ).length;
+    const overduePayables = payables.filter(
+      (item) => item.status === "OVERDUE",
+    ).length;
 
     return {
       receivableExposure,
@@ -237,15 +288,19 @@ export default function CashFlowPage() {
           },
           {
             label: "Projecao 30 dias",
-            value: mainProjection ? formatCurrency(mainProjection.projectedBalance) : "-",
+            value: mainProjection
+              ? formatCurrency(mainProjection.projectedBalance)
+              : "-",
             helper: mainProjection
-              ? `${formatCurrency(mainProjection.expectedIn)} de entradas previstas e ${formatCurrency(mainProjection.expectedOut)} de saidas.`
+              ? `${formatCurrency(mainProjection.expectedIn)} previstas, ${formatCurrency(mainProjection.expectedOut)} de saidas e ${formatCurrency(Number(mainProjection.realizedIn || 0))} ja realizadas no mes.`
               : "Sem dados de horizonte carregados.",
             tone: mainProjection ? projectionTone(mainProjection) : "slate",
           },
           {
             label: "Projecao 90 dias",
-            value: longProjection ? formatCurrency(longProjection.projectedBalance) : "-",
+            value: longProjection
+              ? formatCurrency(longProjection.projectedBalance)
+              : "-",
             helper: longProjection
               ? "Leitura de folego para contrato, compras e caixa."
               : "Sem dados de horizonte carregados.",
@@ -253,7 +308,9 @@ export default function CashFlowPage() {
           },
           {
             label: "Risco imediato",
-            value: firstNegativeProjection ? `${firstNegativeProjection.horizonDays} dias` : "Controlado",
+            value: firstNegativeProjection
+              ? `${firstNegativeProjection.horizonDays} dias`
+              : "Controlado",
             helper: firstNegativeProjection
               ? "Primeiro horizonte com saldo projetado negativo."
               : "Nenhum horizonte negativo na projeção atual.",
@@ -262,13 +319,22 @@ export default function CashFlowPage() {
         ]}
         actions={
           <>
-            <Link href="/dashboard/finance/accounts-receivable" className={PRIMARY_LINK}>
+            <Link
+              href="/dashboard/finance/accounts-receivable"
+              className={PRIMARY_LINK}
+            >
               Ver recebiveis
             </Link>
-            <Link href="/dashboard/finance/accounts-payable" className={SECONDARY_LINK}>
+            <Link
+              href="/dashboard/finance/accounts-payable"
+              className={SECONDARY_LINK}
+            >
               Ver pagaveis
             </Link>
-            <Link href="/dashboard/finance/bank-accounts" className={SECONDARY_LINK}>
+            <Link
+              href="/dashboard/finance/bank-accounts"
+              className={SECONDARY_LINK}
+            >
               Ver contas bancarias
             </Link>
           </>
@@ -342,7 +408,9 @@ export default function CashFlowPage() {
                     }`}
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-bold text-slate-900">{item.horizonDays} dias</p>
+                      <p className="text-sm font-bold text-slate-900">
+                        {item.horizonDays} dias
+                      </p>
                       <DataPill tone={projectionTone(item)}>
                         {item.negative ? "Pressao" : "Estavel"}
                       </DataPill>
@@ -363,6 +431,18 @@ export default function CashFlowPage() {
                           {formatCurrency(item.expectedOut)}
                         </span>
                       </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span>Entradas realizadas</span>
+                        <span className="font-semibold text-emerald-700">
+                          {formatCurrency(Number(item.realizedIn || 0))}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span>Saidas realizadas</span>
+                        <span className="font-semibold text-rose-700">
+                          {formatCurrency(Number(item.realizedOut || 0))}
+                        </span>
+                      </div>
                     </div>
                   </article>
                 ))
@@ -379,12 +459,16 @@ export default function CashFlowPage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-slate-900">Recebimentos prioritarios</p>
+                    <p className="text-sm font-semibold text-slate-900">
+                      Recebimentos prioritarios
+                    </p>
                     <p className="text-sm text-slate-500">
                       Carteira ativa puxada de contas a receber.
                     </p>
                   </div>
-                  <DataPill tone="blue">{soonReceivables.length} titulo(s)</DataPill>
+                  <DataPill tone="blue">
+                    {soonReceivables.length} titulo(s)
+                  </DataPill>
                 </div>
 
                 {loading ? (
@@ -407,16 +491,29 @@ export default function CashFlowPage() {
                         className="block rounded-[24px] border border-slate-200 bg-white/92 p-4 transition hover:border-slate-300 hover:bg-white"
                       >
                         <div className="flex flex-wrap items-center gap-2">
-                          <DataPill tone={item.status === "OVERDUE" ? "rose" : "blue"}>
-                            {item.status === "OVERDUE" ? "Vencido" : item.status === "PARTIAL" ? "Parcial" : "Em aberto"}
+                          <DataPill
+                            tone={item.status === "OVERDUE" ? "rose" : "blue"}
+                          >
+                            {item.status === "OVERDUE"
+                              ? "Vencido"
+                              : item.status === "PARTIAL"
+                                ? "Parcial"
+                                : "Em aberto"}
                           </DataPill>
-                          {item.contract?.id ? <DataPill tone="slate">Contrato</DataPill> : null}
-                          {item.maintenanceOrder?.id ? <DataPill tone="amber">O.S.</DataPill> : null}
+                          {item.contract?.id ? (
+                            <DataPill tone="slate">Contrato</DataPill>
+                          ) : null}
+                          {item.maintenanceOrder?.id ? (
+                            <DataPill tone="amber">O.S.</DataPill>
+                          ) : null}
                         </div>
                         <p className="mt-3 text-sm font-semibold text-slate-900">
-                          {item.client?.companyName || "Cliente nao identificado"}
+                          {item.client?.companyName ||
+                            "Cliente nao identificado"}
                         </p>
-                        <p className="mt-1 text-sm text-slate-600">{item.description}</p>
+                        <p className="mt-1 text-sm text-slate-600">
+                          {item.description}
+                        </p>
                         <div className="mt-3 flex items-center justify-between gap-3 text-sm">
                           <span className="text-slate-500">
                             {dueInDays !== null && dueInDays < 0
@@ -438,12 +535,16 @@ export default function CashFlowPage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-slate-900">Pagamentos prioritarios</p>
+                    <p className="text-sm font-semibold text-slate-900">
+                      Pagamentos prioritarios
+                    </p>
                     <p className="text-sm text-slate-500">
                       Despesas ativas que pressionam o caixa nos proximos dias.
                     </p>
                   </div>
-                  <DataPill tone="amber">{soonPayables.length} titulo(s)</DataPill>
+                  <DataPill tone="amber">
+                    {soonPayables.length} titulo(s)
+                  </DataPill>
                 </div>
 
                 {loading ? (
@@ -466,15 +567,24 @@ export default function CashFlowPage() {
                         className="block rounded-[24px] border border-slate-200 bg-white/92 p-4 transition hover:border-slate-300 hover:bg-white"
                       >
                         <div className="flex flex-wrap items-center gap-2">
-                          <DataPill tone={item.status === "OVERDUE" ? "rose" : "amber"}>
-                            {item.status === "OVERDUE" ? "Vencido" : "Em aberto"}
+                          <DataPill
+                            tone={item.status === "OVERDUE" ? "rose" : "amber"}
+                          >
+                            {item.status === "OVERDUE"
+                              ? "Vencido"
+                              : "Em aberto"}
                           </DataPill>
-                          {item.purchaseOrder?.id ? <DataPill tone="slate">P.O.</DataPill> : null}
+                          {item.purchaseOrder?.id ? (
+                            <DataPill tone="slate">P.O.</DataPill>
+                          ) : null}
                         </div>
                         <p className="mt-3 text-sm font-semibold text-slate-900">
-                          {item.supplier?.companyName || "Fornecedor nao identificado"}
+                          {item.supplier?.companyName ||
+                            "Fornecedor nao identificado"}
                         </p>
-                        <p className="mt-1 text-sm text-slate-600">{item.description}</p>
+                        <p className="mt-1 text-sm text-slate-600">
+                          {item.description}
+                        </p>
                         <div className="mt-3 flex items-center justify-between gap-3 text-sm">
                           <span className="text-slate-500">
                             {dueInDays !== null && dueInDays < 0
@@ -504,20 +614,32 @@ export default function CashFlowPage() {
           >
             <div className="space-y-3">
               <FieldBox>
-                <p className="text-sm font-semibold text-slate-900">Recebiveis vencidos</p>
+                <p className="text-sm font-semibold text-slate-900">
+                  Recebiveis vencidos
+                </p>
                 <p className="mt-2 text-sm text-slate-600">
-                  {stats.overdueReceivables} titulo(s) atrasados, pressionando a entrada prevista.
+                  {stats.overdueReceivables} titulo(s) atrasados, pressionando a
+                  entrada prevista.
                 </p>
               </FieldBox>
 
               <FieldBox>
-                <p className="text-sm font-semibold text-slate-900">Pagaveis vencidos</p>
+                <p className="text-sm font-semibold text-slate-900">
+                  Pagaveis vencidos
+                </p>
                 <p className="mt-2 text-sm text-slate-600">
-                  {stats.overduePayables} titulo(s) em atraso, elevando a pressao de saida.
+                  {stats.overduePayables} titulo(s) em atraso, elevando a
+                  pressao de saida.
                 </p>
               </FieldBox>
 
-              <StatusBanner tone={stats.receivableExposure >= stats.payableExposure ? "blue" : "amber"}>
+              <StatusBanner
+                tone={
+                  stats.receivableExposure >= stats.payableExposure
+                    ? "blue"
+                    : "amber"
+                }
+              >
                 {stats.receivableExposure >= stats.payableExposure
                   ? "A carteira de entradas ainda cobre a de saidas, mas a velocidade de cobranca segue decisiva."
                   : "As saidas em aberto ja superam as entradas previstas; vale agir em cobranca e priorizacao de pagamentos."}
@@ -546,7 +668,8 @@ export default function CashFlowPage() {
                   .slice()
                   .sort(
                     (left, right) =>
-                      Number(right.currentBalance || 0) - Number(left.currentBalance || 0),
+                      Number(right.currentBalance || 0) -
+                      Number(left.currentBalance || 0),
                   )
                   .slice(0, 5)
                   .map((account) => (
@@ -556,14 +679,24 @@ export default function CashFlowPage() {
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <p className="text-sm font-semibold text-slate-900">{account.name}</p>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {account.name}
+                          </p>
                           <p className="mt-1 text-sm text-slate-500">
                             {account.bankName || "Banco nao informado"}
                             {account.type ? ` / ${account.type}` : ""}
                           </p>
                         </div>
-                        <DataPill tone={Number(account.currentBalance || 0) < 0 ? "rose" : "emerald"}>
-                          {Number(account.currentBalance || 0) < 0 ? "Negativo" : "Saudavel"}
+                        <DataPill
+                          tone={
+                            Number(account.currentBalance || 0) < 0
+                              ? "rose"
+                              : "emerald"
+                          }
+                        >
+                          {Number(account.currentBalance || 0) < 0
+                            ? "Negativo"
+                            : "Saudavel"}
                         </DataPill>
                       </div>
                       <p className="mt-3 text-lg font-bold text-slate-950">

@@ -70,7 +70,11 @@ type Payable = {
   cancelReason?: string | null;
   supplier?: { id: string; companyName?: string | null } | null;
   purchaseOrder?: { id: string; code?: string | null } | null;
-  costCenter?: { id: string; code?: string | null; name?: string | null } | null;
+  costCenter?: {
+    id: string;
+    code?: string | null;
+    name?: string | null;
+  } | null;
   payments: PayablePayment[];
 };
 
@@ -90,7 +94,10 @@ const SECONDARY_BUTTON =
 const DANGER_BUTTON =
   "inline-flex items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:border-rose-300 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50";
 
-const STATUS_META: Record<PayableStatus, { label: string; tone: Tone; helper: string }> = {
+const STATUS_META: Record<
+  PayableStatus,
+  { label: string; tone: Tone; helper: string }
+> = {
   OPEN: {
     label: "Em aberto",
     tone: "blue",
@@ -194,7 +201,11 @@ function getDaysUntilDue(value: string) {
 
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const due = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+  const due = new Date(
+    parsed.getFullYear(),
+    parsed.getMonth(),
+    parsed.getDate(),
+  );
 
   return Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
@@ -240,7 +251,10 @@ function sortPayables(items: Payable[]) {
   });
 }
 
-function syncDrafts(payables: Payable[], previous: Record<string, PaymentDraft>) {
+function syncDrafts(
+  payables: Payable[],
+  previous: Record<string, PaymentDraft>,
+) {
   const next: Record<string, PaymentDraft> = {};
   for (const item of payables) {
     next[item.id] = previous[item.id] || buildPaymentDraft(item);
@@ -257,11 +271,15 @@ export default function AccountsPayablePage() {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<PayableStatus | "ALL" | "ACTIVE">(
-    "ACTIVE",
+  const [statusFilter, setStatusFilter] = useState<
+    PayableStatus | "ALL" | "ACTIVE"
+  >("ACTIVE");
+  const [sourceFilter, setSourceFilter] = useState<PayableSource | "ALL">(
+    "ALL",
   );
-  const [sourceFilter, setSourceFilter] = useState<PayableSource | "ALL">("ALL");
-  const [categoryFilter, setCategoryFilter] = useState<PayableCategory | "ALL">("ALL");
+  const [categoryFilter, setCategoryFilter] = useState<PayableCategory | "ALL">(
+    "ALL",
+  );
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -298,7 +316,9 @@ export default function AccountsPayablePage() {
 
       if (failed) {
         if (await handleUnauthorized(failed.response)) return;
-        throw new Error(await readApiErrorMessage(failed.response, failed.fallback));
+        throw new Error(
+          await readApiErrorMessage(failed.response, failed.fallback),
+        );
       }
 
       const [nextPayables, nextBankAccounts] = (await Promise.all([
@@ -311,7 +331,9 @@ export default function AccountsPayablePage() {
       setDrafts((previous) => syncDrafts(nextPayables, previous));
     } catch (loadError: unknown) {
       setError(
-        loadError instanceof Error ? loadError.message : "Falha ao carregar contas a pagar.",
+        loadError instanceof Error
+          ? loadError.message
+          : "Falha ao carregar contas a pagar.",
       );
     } finally {
       setLoading(false);
@@ -338,7 +360,9 @@ export default function AccountsPayablePage() {
         item.status !== "PAID" &&
         item.status !== "CANCELED",
     );
-    const linkedOrders = payables.filter((item) => getPayableSource(item) === "PURCHASE_ORDER");
+    const linkedOrders = payables.filter(
+      (item) => getPayableSource(item) === "PURCHASE_ORDER",
+    );
 
     return {
       activeCount: activeTitles.length,
@@ -357,8 +381,11 @@ export default function AccountsPayablePage() {
 
   const sourceMix = useMemo(() => {
     return {
-      purchaseOrders: payables.filter((item) => getPayableSource(item) === "PURCHASE_ORDER").length,
-      manual: payables.filter((item) => getPayableSource(item) === "MANUAL").length,
+      purchaseOrders: payables.filter(
+        (item) => getPayableSource(item) === "PURCHASE_ORDER",
+      ).length,
+      manual: payables.filter((item) => getPayableSource(item) === "MANUAL")
+        .length,
     };
   }, [payables]);
 
@@ -378,7 +405,8 @@ export default function AccountsPayablePage() {
     return sortPayables(
       payables.filter((item) => {
         if (statusFilter === "ACTIVE") {
-          if (item.status === "PAID" || item.status === "CANCELED") return false;
+          if (item.status === "PAID" || item.status === "CANCELED")
+            return false;
         } else if (statusFilter !== "ALL" && item.status !== statusFilter) {
           return false;
         }
@@ -401,7 +429,8 @@ export default function AccountsPayablePage() {
     setDrafts((previous) => ({
       ...previous,
       [payableId]: {
-        ...(previous[payableId] || buildPaymentDraft(payables.find((item) => item.id === payableId))),
+        ...(previous[payableId] ||
+          buildPaymentDraft(payables.find((item) => item.id === payableId))),
         ...patch,
       },
     }));
@@ -428,14 +457,20 @@ export default function AccountsPayablePage() {
     setSuccessMessage("");
 
     try {
-      const response = await apiFetch(apiUrl("/finance/payables/cron/overdue-run"), {
-        method: "POST",
-      });
+      const response = await apiFetch(
+        apiUrl("/finance/payables/cron/overdue-run"),
+        {
+          method: "POST",
+        },
+      );
 
       if (await handleUnauthorized(response)) return;
       if (!response.ok) {
         throw new Error(
-          await readApiErrorMessage(response, "Falha ao atualizar os titulos vencidos."),
+          await readApiErrorMessage(
+            response,
+            "Falha ao atualizar os titulos vencidos.",
+          ),
         );
       }
 
@@ -472,26 +507,40 @@ export default function AccountsPayablePage() {
       return;
     }
 
+    if (!draft.bankAccountId) {
+      setError(
+        "Selecione uma conta bancaria/caixa ativa para registrar o pagamento.",
+      );
+      return;
+    }
+
     setBusyKey(item.id);
     setError("");
     setSuccessMessage("");
 
     try {
-      const response = await apiFetch(apiUrl(`/finance/payables/${item.id}/pay`), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount,
-          method: draft.method,
-          bankAccountId: draft.bankAccountId || undefined,
-          paidAt: draft.paidAt ? new Date(draft.paidAt).toISOString() : undefined,
-          notes: draft.notes.trim() || undefined,
-        }),
-      });
+      const response = await apiFetch(
+        apiUrl(`/finance/payables/${item.id}/pay`),
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            amount,
+            method: draft.method,
+            bankAccountId: draft.bankAccountId,
+            paidAt: draft.paidAt
+              ? new Date(draft.paidAt).toISOString()
+              : undefined,
+            notes: draft.notes.trim() || undefined,
+          }),
+        },
+      );
 
       if (await handleUnauthorized(response)) return;
       if (!response.ok) {
-        throw new Error(await readApiErrorMessage(response, "Falha ao registrar pagamento."));
+        throw new Error(
+          await readApiErrorMessage(response, "Falha ao registrar pagamento."),
+        );
       }
 
       setSuccessMessage(
@@ -503,7 +552,9 @@ export default function AccountsPayablePage() {
       await loadData();
     } catch (paymentError: unknown) {
       setError(
-        paymentError instanceof Error ? paymentError.message : "Falha ao registrar pagamento.",
+        paymentError instanceof Error
+          ? paymentError.message
+          : "Falha ao registrar pagamento.",
       );
     } finally {
       setBusyKey(null);
@@ -515,7 +566,9 @@ export default function AccountsPayablePage() {
     const reason = draft.cancelReason.trim();
 
     if (item.purchaseOrder?.id) {
-      setError("Titulos de pedido de compra devem ser tratados no proprio fluxo de suprimentos.");
+      setError(
+        "Titulos de pedido de compra devem ser tratados no proprio fluxo de suprimentos.",
+      );
       return;
     }
 
@@ -525,7 +578,9 @@ export default function AccountsPayablePage() {
     }
 
     if (reason.length < 4) {
-      setError("Descreva o motivo do cancelamento para manter a trilha financeira consistente.");
+      setError(
+        "Descreva o motivo do cancelamento para manter a trilha financeira consistente.",
+      );
       return;
     }
 
@@ -534,22 +589,33 @@ export default function AccountsPayablePage() {
     setSuccessMessage("");
 
     try {
-      const response = await apiFetch(apiUrl(`/finance/payables/${item.id}/cancel`), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason }),
-      });
+      const response = await apiFetch(
+        apiUrl(`/finance/payables/${item.id}/cancel`),
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason }),
+        },
+      );
 
       if (await handleUnauthorized(response)) return;
       if (!response.ok) {
-        throw new Error(await readApiErrorMessage(response, "Falha ao cancelar titulo."));
+        throw new Error(
+          await readApiErrorMessage(response, "Falha ao cancelar titulo."),
+        );
       }
 
-      setSuccessMessage("Titulo cancelado e retirado da esteira de pagamentos.");
+      setSuccessMessage(
+        "Titulo cancelado e retirado da esteira de pagamentos.",
+      );
       setExpandedId(null);
       await loadData();
     } catch (cancelError: unknown) {
-      setError(cancelError instanceof Error ? cancelError.message : "Falha ao cancelar titulo.");
+      setError(
+        cancelError instanceof Error
+          ? cancelError.message
+          : "Falha ao cancelar titulo.",
+      );
     } finally {
       setBusyKey(null);
     }
@@ -595,12 +661,20 @@ export default function AccountsPayablePage() {
               className={PRIMARY_BUTTON}
               disabled={busyKey === "overdue-cron" || loading}
             >
-              {busyKey === "overdue-cron" ? "Atualizando..." : "Atualizar vencidos"}
+              {busyKey === "overdue-cron"
+                ? "Atualizando..."
+                : "Atualizar vencidos"}
             </button>
-            <Link href="/dashboard/purchase-orders" className={SECONDARY_BUTTON}>
+            <Link
+              href="/dashboard/purchase-orders"
+              className={SECONDARY_BUTTON}
+            >
               Ver pedidos de compra
             </Link>
-            <Link href="/dashboard/finance/cash-flow" className={SECONDARY_BUTTON}>
+            <Link
+              href="/dashboard/finance/cash-flow"
+              className={SECONDARY_BUTTON}
+            >
               Ver fluxo de caixa
             </Link>
           </>
@@ -627,17 +701,21 @@ export default function AccountsPayablePage() {
               </div>
             </FieldBox>
 
-            <StatusBanner tone={activeBankAccounts.length > 0 ? "blue" : "amber"}>
+            <StatusBanner
+              tone={activeBankAccounts.length > 0 ? "blue" : "amber"}
+            >
               {activeBankAccounts.length > 0
                 ? `${activeBankAccounts.length} conta(s) bancarias ativa(s) prontas para registrar a saida do pagamento.`
-                : "Nenhuma conta bancaria ativa encontrada. O pagamento ainda pode ser registrado, mas o caixa perde conciliacao por conta."}
+                : "Nenhuma conta bancaria ativa encontrada. Cadastre ou reative uma conta/caixa antes de registrar pagamentos."}
             </StatusBanner>
           </div>
         }
       />
 
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
-      {successMessage ? <StatusBanner tone="emerald">{successMessage}</StatusBanner> : null}
+      {successMessage ? (
+        <StatusBanner tone="emerald">{successMessage}</StatusBanner>
+      ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.75fr)_360px]">
         <SectionCard
@@ -658,7 +736,9 @@ export default function AccountsPayablePage() {
               <SelectInput
                 value={statusFilter}
                 onChange={(event) =>
-                  setStatusFilter(event.target.value as PayableStatus | "ALL" | "ACTIVE")
+                  setStatusFilter(
+                    event.target.value as PayableStatus | "ALL" | "ACTIVE",
+                  )
                 }
               >
                 <option value="ACTIVE">Somente ativos</option>
@@ -673,7 +753,9 @@ export default function AccountsPayablePage() {
             <FormField label="Origem">
               <SelectInput
                 value={sourceFilter}
-                onChange={(event) => setSourceFilter(event.target.value as PayableSource | "ALL")}
+                onChange={(event) =>
+                  setSourceFilter(event.target.value as PayableSource | "ALL")
+                }
               >
                 <option value="ALL">Todas</option>
                 <option value="PURCHASE_ORDER">Pedido de compra</option>
@@ -685,7 +767,9 @@ export default function AccountsPayablePage() {
               <SelectInput
                 value={categoryFilter}
                 onChange={(event) =>
-                  setCategoryFilter(event.target.value as PayableCategory | "ALL")
+                  setCategoryFilter(
+                    event.target.value as PayableCategory | "ALL",
+                  )
                 }
               >
                 <option value="ALL">Todas</option>
@@ -699,9 +783,15 @@ export default function AccountsPayablePage() {
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            <DataPill tone="blue">{filteredPayables.length} titulo(s) na visao atual</DataPill>
-            <DataPill tone="amber">{formatCurrency(stats.outstandingAmount)} em aberto</DataPill>
-            <DataPill tone="rose">{formatCurrency(stats.overdueAmount)} vencidos</DataPill>
+            <DataPill tone="blue">
+              {filteredPayables.length} titulo(s) na visao atual
+            </DataPill>
+            <DataPill tone="amber">
+              {formatCurrency(stats.outstandingAmount)} em aberto
+            </DataPill>
+            <DataPill tone="rose">
+              {formatCurrency(stats.overdueAmount)} vencidos
+            </DataPill>
           </div>
 
           <div className="mt-5 space-y-4">
@@ -737,7 +827,8 @@ export default function AccountsPayablePage() {
                   Number(item.paidAmount || 0) > 0 &&
                   item.status !== "PAID" &&
                   item.status !== "CANCELED";
-                const canPay = item.status !== "PAID" && item.status !== "CANCELED";
+                const canPay =
+                  item.status !== "PAID" && item.status !== "CANCELED";
                 const canCancel =
                   !item.purchaseOrder?.id &&
                   item.status !== "PAID" &&
@@ -752,24 +843,39 @@ export default function AccountsPayablePage() {
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <DataPill tone={statusMeta.tone}>{statusMeta.label}</DataPill>
-                          <DataPill tone={sourceMeta.tone}>{sourceMeta.label}</DataPill>
-                          <DataPill tone="slate">{CATEGORY_LABELS[item.category] || item.category}</DataPill>
-                          {hasPartialPayment ? <DataPill tone="amber">Pagamento parcial</DataPill> : null}
+                          <DataPill tone={statusMeta.tone}>
+                            {statusMeta.label}
+                          </DataPill>
+                          <DataPill tone={sourceMeta.tone}>
+                            {sourceMeta.label}
+                          </DataPill>
+                          <DataPill tone="slate">
+                            {CATEGORY_LABELS[item.category] || item.category}
+                          </DataPill>
+                          {hasPartialPayment ? (
+                            <DataPill tone="amber">Pagamento parcial</DataPill>
+                          ) : null}
                           {dueInDays !== null && dueInDays < 0 ? (
                             <DataPill tone="rose">{`${Math.abs(dueInDays)} dia(s) em atraso`}</DataPill>
                           ) : null}
-                          {dueInDays !== null && dueInDays >= 0 && dueInDays <= 2 ? (
+                          {dueInDays !== null &&
+                          dueInDays >= 0 &&
+                          dueInDays <= 2 ? (
                             <DataPill tone="amber">
-                              {dueInDays === 0 ? "Vence hoje" : `Vence em ${dueInDays} dia(s)`}
+                              {dueInDays === 0
+                                ? "Vence hoje"
+                                : `Vence em ${dueInDays} dia(s)`}
                             </DataPill>
                           ) : null}
                         </div>
 
                         <h2 className="mt-3 text-xl font-bold text-slate-950">
-                          {item.supplier?.companyName || "Fornecedor nao identificado"}
+                          {item.supplier?.companyName ||
+                            "Fornecedor nao identificado"}
                         </h2>
-                        <p className="mt-1 text-sm leading-6 text-slate-600">{item.description}</p>
+                        <p className="mt-1 text-sm leading-6 text-slate-600">
+                          {item.description}
+                        </p>
 
                         <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-500">
                           {item.purchaseOrder?.id ? (
@@ -777,12 +883,15 @@ export default function AccountsPayablePage() {
                               href="/dashboard/purchase-orders"
                               className="font-semibold text-slate-700 underline-offset-4 hover:text-slate-950 hover:underline"
                             >
-                              Pedido {item.purchaseOrder.code || item.purchaseOrder.id.slice(0, 8)}
+                              Pedido{" "}
+                              {item.purchaseOrder.code ||
+                                item.purchaseOrder.id.slice(0, 8)}
                             </Link>
                           ) : null}
                           {item.costCenter?.id ? (
                             <span>
-                              Centro de custo {item.costCenter.code || "-"} {item.costCenter.name || ""}
+                              Centro de custo {item.costCenter.code || "-"}{" "}
+                              {item.costCenter.name || ""}
                             </span>
                           ) : null}
                           {item.proofUrl ? (
@@ -806,7 +915,9 @@ export default function AccountsPayablePage() {
                             className={PRIMARY_BUTTON}
                             disabled={busyKey === item.id}
                           >
-                            {expandedId === item.id ? "Ocultar pagamento" : "Registrar pagamento"}
+                            {expandedId === item.id
+                              ? "Ocultar pagamento"
+                              : "Registrar pagamento"}
                           </button>
                         ) : null}
                         {canPay ? (
@@ -864,7 +975,9 @@ export default function AccountsPayablePage() {
                         </p>
                         <div className="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-3">
                           <div>
-                            <p className="text-xs text-slate-500">Valor total</p>
+                            <p className="text-xs text-slate-500">
+                              Valor total
+                            </p>
                             <p className="mt-1 font-semibold text-slate-900">
                               {formatCurrency(Number(item.amount || 0))}
                             </p>
@@ -876,9 +989,15 @@ export default function AccountsPayablePage() {
                             </p>
                           </div>
                           <div>
-                            <p className="text-xs text-slate-500">Forma sugerida</p>
+                            <p className="text-xs text-slate-500">
+                              Forma sugerida
+                            </p>
                             <p className="mt-1 font-semibold text-slate-900">
-                              {item.pixCopyPaste ? "PIX" : item.barcode ? "Boleto" : "Livre"}
+                              {item.pixCopyPaste
+                                ? "PIX"
+                                : item.barcode
+                                  ? "Boleto"
+                                  : "Livre"}
                             </p>
                           </div>
                         </div>
@@ -891,13 +1010,19 @@ export default function AccountsPayablePage() {
                         {latestPayment ? (
                           <div className="mt-3 space-y-1 text-sm text-slate-600">
                             <p className="font-semibold text-slate-900">
-                              {formatCurrency(latestPayment.amount)} via {METHOD_LABELS[latestPayment.method]}
+                              {formatCurrency(latestPayment.amount)} via{" "}
+                              {METHOD_LABELS[latestPayment.method]}
                             </p>
                             <p>{formatDateTime(latestPayment.paidAt)}</p>
-                            <p>{latestPayment.bankAccount?.name || "Sem conta de saida vinculada"}</p>
+                            <p>
+                              {latestPayment.bankAccount?.name ||
+                                "Sem conta de saida vinculada"}
+                            </p>
                           </div>
                         ) : (
-                          <p className="mt-3 text-sm text-slate-500">Nenhum pagamento registrado ainda.</p>
+                          <p className="mt-3 text-sm text-slate-500">
+                            Nenhum pagamento registrado ainda.
+                          </p>
                         )}
                       </FieldBox>
                     </div>
@@ -909,7 +1034,9 @@ export default function AccountsPayablePage() {
                             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
                               Chave ou copia e cola PIX
                             </p>
-                            <p className="mt-2 break-all text-sm text-slate-700">{item.pixCopyPaste}</p>
+                            <p className="mt-2 break-all text-sm text-slate-700">
+                              {item.pixCopyPaste}
+                            </p>
                           </FieldBox>
                         ) : null}
                         {item.barcode ? (
@@ -917,7 +1044,9 @@ export default function AccountsPayablePage() {
                             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
                               Codigo de barras
                             </p>
-                            <p className="mt-2 break-all text-sm text-slate-700">{item.barcode}</p>
+                            <p className="mt-2 break-all text-sm text-slate-700">
+                              {item.barcode}
+                            </p>
                           </FieldBox>
                         ) : null}
                       </div>
@@ -934,7 +1063,9 @@ export default function AccountsPayablePage() {
                               Ate 3 ultimas saidas registradas para este titulo.
                             </p>
                           </div>
-                          <DataPill tone="slate">{item.payments.length} pagamento(s)</DataPill>
+                          <DataPill tone="slate">
+                            {item.payments.length} pagamento(s)
+                          </DataPill>
                         </div>
 
                         <div className="mt-4 grid gap-3">
@@ -945,15 +1076,21 @@ export default function AccountsPayablePage() {
                             >
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <p className="font-semibold text-slate-900">
-                                  {formatCurrency(payment.amount)} via {METHOD_LABELS[payment.method]}
+                                  {formatCurrency(payment.amount)} via{" "}
+                                  {METHOD_LABELS[payment.method]}
                                 </p>
                                 <p>{formatDateTime(payment.paidAt)}</p>
                               </div>
                               <p className="mt-1">
-                                {payment.bankAccount?.name || "Sem conta vinculada"}
-                                {payment.bankAccount?.bankName ? ` / ${payment.bankAccount.bankName}` : ""}
+                                {payment.bankAccount?.name ||
+                                  "Sem conta vinculada"}
+                                {payment.bankAccount?.bankName
+                                  ? ` / ${payment.bankAccount.bankName}`
+                                  : ""}
                               </p>
-                              {payment.notes ? <p className="mt-1">{payment.notes}</p> : null}
+                              {payment.notes ? (
+                                <p className="mt-1">{payment.notes}</p>
+                              ) : null}
                             </div>
                           ))}
                         </div>
@@ -963,21 +1100,28 @@ export default function AccountsPayablePage() {
                     {item.status === "CANCELED" ? (
                       <StatusBanner tone="slate">
                         Cancelado em {formatDateTime(item.canceledAt)}.
-                        {item.cancelReason ? ` Motivo: ${item.cancelReason}.` : ""}
+                        {item.cancelReason
+                          ? ` Motivo: ${item.cancelReason}.`
+                          : ""}
                       </StatusBanner>
                     ) : null}
 
                     {expandedId === item.id && canPay ? (
                       <div className="mt-4 rounded-[26px] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-4">
                         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                          <FormField label="Valor pago" hint={`Saldo ${formatCurrency(outstanding)}`}>
+                          <FormField
+                            label="Valor pago"
+                            hint={`Saldo ${formatCurrency(outstanding)}`}
+                          >
                             <TextInput
                               type="number"
                               min="0.01"
                               step="0.01"
                               value={draft.amount}
                               onChange={(event) =>
-                                updateDraft(item.id, { amount: event.target.value })
+                                updateDraft(item.id, {
+                                  amount: event.target.value,
+                                })
                               }
                             />
                           </FormField>
@@ -986,14 +1130,18 @@ export default function AccountsPayablePage() {
                             <SelectInput
                               value={draft.method}
                               onChange={(event) =>
-                                updateDraft(item.id, { method: event.target.value as PaymentMethod })
+                                updateDraft(item.id, {
+                                  method: event.target.value as PaymentMethod,
+                                })
                               }
                             >
-                              {Object.entries(METHOD_LABELS).map(([value, label]) => (
-                                <option key={value} value={value}>
-                                  {label}
-                                </option>
-                              ))}
+                              {Object.entries(METHOD_LABELS).map(
+                                ([value, label]) => (
+                                  <option key={value} value={value}>
+                                    {label}
+                                  </option>
+                                ),
+                              )}
                             </SelectInput>
                           </FormField>
 
@@ -1001,14 +1149,20 @@ export default function AccountsPayablePage() {
                             <SelectInput
                               value={draft.bankAccountId}
                               onChange={(event) =>
-                                updateDraft(item.id, { bankAccountId: event.target.value })
+                                updateDraft(item.id, {
+                                  bankAccountId: event.target.value,
+                                })
                               }
                             >
-                              <option value="">Nao vincular conta</option>
+                              <option value="">
+                                Selecione uma conta/caixa
+                              </option>
                               {activeBankAccounts.map((account) => (
                                 <option key={account.id} value={account.id}>
                                   {account.name}
-                                  {account.bankName ? ` / ${account.bankName}` : ""}
+                                  {account.bankName
+                                    ? ` / ${account.bankName}`
+                                    : ""}
                                 </option>
                               ))}
                             </SelectInput>
@@ -1019,7 +1173,9 @@ export default function AccountsPayablePage() {
                               type="datetime-local"
                               value={draft.paidAt}
                               onChange={(event) =>
-                                updateDraft(item.id, { paidAt: event.target.value })
+                                updateDraft(item.id, {
+                                  paidAt: event.target.value,
+                                })
                               }
                             />
                           </FormField>
@@ -1030,7 +1186,9 @@ export default function AccountsPayablePage() {
                             <TextAreaInput
                               value={draft.notes}
                               onChange={(event) =>
-                                updateDraft(item.id, { notes: event.target.value })
+                                updateDraft(item.id, {
+                                  notes: event.target.value,
+                                })
                               }
                               placeholder="Referencia do pagamento, banco, lote ou observacao de conciliacao."
                             />
@@ -1041,22 +1199,30 @@ export default function AccountsPayablePage() {
                               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
                                 Resultado esperado
                               </p>
-                              <p className="mt-2 text-sm text-slate-600">{statusMeta.helper}</p>
+                              <p className="mt-2 text-sm text-slate-600">
+                                {statusMeta.helper}
+                              </p>
                             </div>
                             <div className="flex flex-wrap gap-2">
                               <button
                                 type="button"
                                 onClick={() => void submitPayment(item)}
                                 className={PRIMARY_BUTTON}
-                                disabled={busyKey === item.id}
+                                disabled={
+                                  busyKey === item.id ||
+                                  activeBankAccounts.length === 0
+                                }
                               >
-                                {busyKey === item.id ? "Salvando..." : "Confirmar pagamento"}
+                                {busyKey === item.id
+                                  ? "Salvando..."
+                                  : "Confirmar pagamento"}
                               </button>
                               <button
                                 type="button"
                                 onClick={() =>
                                   updateDraft(item.id, {
-                                    amount: getPayableOutstanding(item).toFixed(2),
+                                    amount:
+                                      getPayableOutstanding(item).toFixed(2),
                                   })
                                 }
                                 className={SECONDARY_BUTTON}
@@ -1084,7 +1250,9 @@ export default function AccountsPayablePage() {
                               <TextAreaInput
                                 value={draft.cancelReason}
                                 onChange={(event) =>
-                                  updateDraft(item.id, { cancelReason: event.target.value })
+                                  updateDraft(item.id, {
+                                    cancelReason: event.target.value,
+                                  })
                                 }
                                 placeholder="Descreva a justificativa para auditoria financeira."
                               />
@@ -1095,9 +1263,13 @@ export default function AccountsPayablePage() {
                                 type="button"
                                 onClick={() => void cancelPayable(item)}
                                 className={DANGER_BUTTON}
-                                disabled={!canCancel || busyKey === `cancel-${item.id}`}
+                                disabled={
+                                  !canCancel || busyKey === `cancel-${item.id}`
+                                }
                               >
-                                {busyKey === `cancel-${item.id}` ? "Cancelando..." : "Cancelar titulo"}
+                                {busyKey === `cancel-${item.id}`
+                                  ? "Cancelando..."
+                                  : "Cancelar titulo"}
                               </button>
                             </div>
                           </div>
@@ -1140,14 +1312,19 @@ export default function AccountsPayablePage() {
                         <DataPill tone={STATUS_META[item.status].tone}>
                           {STATUS_META[item.status].label}
                         </DataPill>
-                        <DataPill tone={SOURCE_META[getPayableSource(item)].tone}>
+                        <DataPill
+                          tone={SOURCE_META[getPayableSource(item)].tone}
+                        >
                           {SOURCE_META[getPayableSource(item)].label}
                         </DataPill>
                       </div>
                       <p className="mt-3 text-sm font-semibold text-slate-900">
-                        {item.supplier?.companyName || "Fornecedor nao identificado"}
+                        {item.supplier?.companyName ||
+                          "Fornecedor nao identificado"}
                       </p>
-                      <p className="mt-1 text-sm text-slate-600">{item.description}</p>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {item.description}
+                      </p>
                       <div className="mt-3 flex items-center justify-between gap-3 text-sm">
                         <span className="text-slate-500">
                           {dueInDays !== null && dueInDays < 0
@@ -1174,26 +1351,33 @@ export default function AccountsPayablePage() {
           >
             <div className="space-y-3">
               <FieldBox>
-                <p className="text-sm font-semibold text-slate-900">Pedido de compra / contas a pagar</p>
+                <p className="text-sm font-semibold text-slate-900">
+                  Pedido de compra / contas a pagar
+                </p>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Titulos vindos de P.O. agora ficam evidentes na carteira, em vez de parecerem apenas mais uma linha
-                  solta do financeiro.
+                  Titulos vindos de P.O. agora ficam evidentes na carteira, em
+                  vez de parecerem apenas mais uma linha solta do financeiro.
                 </p>
               </FieldBox>
 
               <FieldBox>
-                <p className="text-sm font-semibold text-slate-900">Pagamento / conta bancaria</p>
+                <p className="text-sm font-semibold text-slate-900">
+                  Pagamento / conta bancaria
+                </p>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  O registro de pagamento expone metodo, conta de saida e historico, refletindo melhor o impacto no
-                  caixa projetado.
+                  O registro de pagamento expone metodo, conta de saida e
+                  historico, refletindo melhor o impacto no caixa projetado.
                 </p>
               </FieldBox>
 
               <FieldBox>
-                <p className="text-sm font-semibold text-slate-900">Protecoes de consistencia</p>
+                <p className="text-sm font-semibold text-slate-900">
+                  Protecoes de consistencia
+                </p>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Cancelamento de titulo com pagamento ou vinculado a pedido de compra e sobrepagamento passaram a ser
-                  bloqueados para evitar estados financeiros quebrados.
+                  Cancelamento de titulo com pagamento ou vinculado a pedido de
+                  compra e sobrepagamento passaram a ser bloqueados para evitar
+                  estados financeiros quebrados.
                 </p>
               </FieldBox>
             </div>
@@ -1216,7 +1400,9 @@ export default function AccountsPayablePage() {
                     key={account.id}
                     className="rounded-[22px] border border-slate-200 bg-slate-50/85 p-4"
                   >
-                    <p className="text-sm font-semibold text-slate-900">{account.name}</p>
+                    <p className="text-sm font-semibold text-slate-900">
+                      {account.name}
+                    </p>
                     <p className="mt-1 text-sm text-slate-500">
                       {account.bankName || "Banco nao informado"}
                       {account.type ? ` / ${account.type}` : ""}

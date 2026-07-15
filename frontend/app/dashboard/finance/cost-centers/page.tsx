@@ -50,7 +50,11 @@ type CostCenter = {
   isActive: boolean;
   client?: { id: string; companyName?: string | null } | null;
   contract?: { id: string; code?: string | null } | null;
-  generator?: { id: string; name?: string | null; serialNumber?: string | null } | null;
+  generator?: {
+    id: string;
+    name?: string | null;
+    serialNumber?: string | null;
+  } | null;
 };
 
 type DreEntry = {
@@ -71,6 +75,11 @@ type DreTotals = {
   grossMargin: number;
   operationalResult: number;
   marginPercent: number;
+  realizedRevenue?: number;
+  realizedCosts?: number;
+  realizedExpenses?: number;
+  realizedOperationalResult?: number;
+  realizedMarginPercent?: number;
 };
 
 type DrePayload = {
@@ -244,7 +253,8 @@ export default function CostCentersPage() {
   const [dre, setDre] = useState<DrePayload | null>(null);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [centerDraft, setCenterDraft] = useState<CostCenterDraft>(emptyCenterDraft);
+  const [centerDraft, setCenterDraft] =
+    useState<CostCenterDraft>(emptyCenterDraft);
   const [entryDraft, setEntryDraft] = useState<EntryDraft>(emptyEntryDraft);
   const [loading, setLoading] = useState(true);
   const [dreLoading, setDreLoading] = useState(false);
@@ -268,39 +278,65 @@ export default function CostCentersPage() {
     setError("");
 
     try {
-      const [centersRes, clientsRes, contractsRes, generatorsRes] = await Promise.all([
-        apiFetch(apiUrl("/finance/cost-centers"), { cache: "no-store" }),
-        apiFetch(apiUrl("/clients"), { cache: "no-store" }),
-        apiFetch(apiUrl("/contracts"), { cache: "no-store" }),
-        apiFetch(apiUrl("/generators"), { cache: "no-store" }),
-      ]);
+      const [centersRes, clientsRes, contractsRes, generatorsRes] =
+        await Promise.all([
+          apiFetch(apiUrl("/finance/cost-centers"), { cache: "no-store" }),
+          apiFetch(apiUrl("/clients"), { cache: "no-store" }),
+          apiFetch(apiUrl("/contracts"), { cache: "no-store" }),
+          apiFetch(apiUrl("/generators"), { cache: "no-store" }),
+        ]);
 
       const failed = [
-        { response: centersRes, fallback: "Nao foi possivel carregar os centros de custo." },
-        { response: clientsRes, fallback: "Nao foi possivel carregar os clientes." },
-        { response: contractsRes, fallback: "Nao foi possivel carregar os contratos." },
-        { response: generatorsRes, fallback: "Nao foi possivel carregar os geradores." },
+        {
+          response: centersRes,
+          fallback: "Nao foi possivel carregar os centros de custo.",
+        },
+        {
+          response: clientsRes,
+          fallback: "Nao foi possivel carregar os clientes.",
+        },
+        {
+          response: contractsRes,
+          fallback: "Nao foi possivel carregar os contratos.",
+        },
+        {
+          response: generatorsRes,
+          fallback: "Nao foi possivel carregar os geradores.",
+        },
       ].find((entry) => !entry.response.ok);
 
       if (failed) {
         if (await handleUnauthorized(failed.response)) return;
-        throw new Error(await readApiErrorMessage(failed.response, failed.fallback));
+        throw new Error(
+          await readApiErrorMessage(failed.response, failed.fallback),
+        );
       }
 
-      const [nextCenters, nextClients, nextContracts, nextGenerators] = (await Promise.all([
-        centersRes.json(),
-        clientsRes.json(),
-        contractsRes.json(),
-        generatorsRes.json(),
-      ])) as [CostCenter[], ClientOption[], ContractOption[], GeneratorOption[]];
+      const [nextCenters, nextClients, nextContracts, nextGenerators] =
+        (await Promise.all([
+          centersRes.json(),
+          clientsRes.json(),
+          contractsRes.json(),
+          generatorsRes.json(),
+        ])) as [
+          CostCenter[],
+          ClientOption[],
+          ContractOption[],
+          GeneratorOption[],
+        ];
 
       setCenters(nextCenters);
       setClients(nextClients);
       setContracts(nextContracts);
       setGenerators(nextGenerators);
       setSelectedId((current) => {
-        if (current && nextCenters.some((item) => item.id === current)) return current;
-        return nextCenters.find((item) => item.isActive)?.id || nextCenters[0]?.id || "";
+        if (current && nextCenters.some((item) => item.id === current))
+          return current;
+        return (
+          nextCenters.find((item) => item.isActive)?.id ||
+          nextCenters[0]?.id ||
+          ""
+        );
       });
     } catch (loadError: unknown) {
       setError(
@@ -323,18 +359,26 @@ export default function CostCentersPage() {
       setDreLoading(true);
       try {
         const response = await apiFetch(
-          apiUrl(`/finance/cost-centers/${centerId}/dre${buildDreQuery(fromDate, toDate)}`),
+          apiUrl(
+            `/finance/cost-centers/${centerId}/dre${buildDreQuery(fromDate, toDate)}`,
+          ),
           { cache: "no-store" },
         );
 
         if (await handleUnauthorized(response)) return;
         if (!response.ok) {
-          throw new Error(await readApiErrorMessage(response, "Falha ao carregar DRE."));
+          throw new Error(
+            await readApiErrorMessage(response, "Falha ao carregar DRE."),
+          );
         }
 
         setDre((await response.json()) as DrePayload);
       } catch (dreError: unknown) {
-        setError(dreError instanceof Error ? dreError.message : "Falha ao carregar DRE.");
+        setError(
+          dreError instanceof Error
+            ? dreError.message
+            : "Falha ao carregar DRE.",
+        );
       } finally {
         setDreLoading(false);
       }
@@ -440,7 +484,11 @@ export default function CostCentersPage() {
 
     try {
       const response = await apiFetch(
-        apiUrl(editingId ? `/finance/cost-centers/${editingId}` : "/finance/cost-centers"),
+        apiUrl(
+          editingId
+            ? `/finance/cost-centers/${editingId}`
+            : "/finance/cost-centers",
+        ),
         {
           method: editingId ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
@@ -493,7 +541,9 @@ export default function CostCentersPage() {
     event.preventDefault();
 
     if (!selectedCenter) {
-      setError("Selecione um centro de custo antes de lancar a entrada manual.");
+      setError(
+        "Selecione um centro de custo antes de lancar a entrada manual.",
+      );
       return;
     }
     if (!selectedCenter.isActive) {
@@ -533,7 +583,9 @@ export default function CostCentersPage() {
 
       if (await handleUnauthorized(response)) return;
       if (!response.ok) {
-        throw new Error(await readApiErrorMessage(response, "Falha ao criar lancamento."));
+        throw new Error(
+          await readApiErrorMessage(response, "Falha ao criar lancamento."),
+        );
       }
 
       setSuccessMessage("Lancamento manual registrado no DRE.");
@@ -592,7 +644,10 @@ export default function CostCentersPage() {
         ]}
         actions={
           <>
-            <Link href="/dashboard/finance/cash-flow" className={PRIMARY_BUTTON}>
+            <Link
+              href="/dashboard/finance/cash-flow"
+              className={PRIMARY_BUTTON}
+            >
               Ver fluxo de caixa
             </Link>
             <Link href="/dashboard/contracts" className={SECONDARY_BUTTON}>
@@ -612,16 +667,22 @@ export default function CostCentersPage() {
               <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
                 <div>
                   <p className="text-xs text-slate-500">Centros inativos</p>
-                  <p className="mt-1 text-lg font-bold text-slate-950">{stats.inactiveCount}</p>
+                  <p className="mt-1 text-lg font-bold text-slate-950">
+                    {stats.inactiveCount}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-500">Centro sob pressao</p>
-                  <p className="mt-1 text-lg font-bold text-slate-950">{stats.negativeCenters}</p>
+                  <p className="mt-1 text-lg font-bold text-slate-950">
+                    {stats.negativeCenters}
+                  </p>
                 </div>
               </div>
             </FieldBox>
 
-            <StatusBanner tone={selectedCenter?.isActive === false ? "amber" : "blue"}>
+            <StatusBanner
+              tone={selectedCenter?.isActive === false ? "amber" : "blue"}
+            >
               {selectedCenter
                 ? `${selectedCenter.code} · ${selectedCenter.name}${selectedCenter.isActive ? " esta ativo para novos lancamentos." : " esta inativo e so deve ser lido historicamente."}`
                 : "Selecione um centro para ler o DRE e operar o modulo."}
@@ -631,7 +692,9 @@ export default function CostCentersPage() {
       />
 
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
-      {successMessage ? <StatusBanner tone="emerald">{successMessage}</StatusBanner> : null}
+      {successMessage ? (
+        <StatusBanner tone="emerald">{successMessage}</StatusBanner>
+      ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_380px]">
         <div className="space-y-6">
@@ -755,6 +818,20 @@ export default function CostCentersPage() {
               )}
             </div>
 
+            {dre ? (
+              <StatusBanner tone="blue">
+                Realizado por baixas no periodo: receitas{" "}
+                {formatCurrency(Number(dre.totals.realizedRevenue || 0))},
+                despesas{" "}
+                {formatCurrency(Number(dre.totals.realizedExpenses || 0))} e
+                resultado{" "}
+                {formatCurrency(
+                  Number(dre.totals.realizedOperationalResult || 0),
+                )}
+                .
+              </StatusBanner>
+            ) : null}
+
             <div className="mt-5 space-y-4">
               {loading ? (
                 <div className="animate-pulse rounded-[26px] border border-slate-200 bg-slate-50/80 p-5">
@@ -779,17 +856,23 @@ export default function CostCentersPage() {
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <DataPill tone={center.isActive ? "emerald" : "slate"}>
+                          <DataPill
+                            tone={center.isActive ? "emerald" : "slate"}
+                          >
                             {center.isActive ? "Ativo" : "Inativo"}
                           </DataPill>
-                          <DataPill tone="blue">{TYPE_LABELS[center.type]}</DataPill>
+                          <DataPill tone="blue">
+                            {TYPE_LABELS[center.type]}
+                          </DataPill>
                         </div>
                         <p className="mt-3 text-sm font-semibold">
                           {center.code} · {center.name}
                         </p>
                         <p
                           className={`mt-1 text-sm ${
-                            selectedId === center.id ? "text-slate-200" : "text-slate-500"
+                            selectedId === center.id
+                              ? "text-slate-200"
+                              : "text-slate-500"
                           }`}
                         >
                           {describeCenterAnchor(center)}
@@ -806,7 +889,9 @@ export default function CostCentersPage() {
                               : "bg-slate-950 text-white"
                           }`}
                         >
-                          {selectedId === center.id ? "Selecionado" : "Selecionar"}
+                          {selectedId === center.id
+                            ? "Selecionado"
+                            : "Selecionar"}
                         </button>
                         <button
                           type="button"
@@ -826,7 +911,7 @@ export default function CostCentersPage() {
               )}
             </div>
           </SectionCard>
- 
+
           <SectionCard
             eyebrow="Historico contabil"
             title="Lancamentos do periodo selecionado"
@@ -863,10 +948,13 @@ export default function CostCentersPage() {
                             {ENTRY_LABELS[entry.entryType]}
                           </DataPill>
                           <DataPill tone="slate">
-                            {SOURCE_LABELS[entry.sourceType as EntrySourceType] ||
-                              entry.sourceType}
+                            {SOURCE_LABELS[
+                              entry.sourceType as EntrySourceType
+                            ] || entry.sourceType}
                           </DataPill>
-                          <DataPill tone="blue">{formatDate(entry.competenceDate)}</DataPill>
+                          <DataPill tone="blue">
+                            {formatDate(entry.competenceDate)}
+                          </DataPill>
                         </div>
                         <p className="mt-3 text-sm leading-6 text-slate-600">
                           {entry.notes?.trim()
@@ -902,7 +990,11 @@ export default function CostCentersPage() {
         <div className="space-y-6">
           <SectionCard
             eyebrow="Cadastro e governanca"
-            title={editingId ? "Editar centro de custo" : "Criar novo centro de custo"}
+            title={
+              editingId
+                ? "Editar centro de custo"
+                : "Criar novo centro de custo"
+            }
             description="O tipo do centro define a ancora do DRE. Contrato e gerador herdam o cliente automaticamente para evitar vinculos quebrados."
             actions={
               editingId ? (
@@ -921,7 +1013,9 @@ export default function CostCentersPage() {
                 <FormField label="Codigo">
                   <TextInput
                     value={centerDraft.code}
-                    onChange={(event) => updateCenterDraft("code", event.target.value)}
+                    onChange={(event) =>
+                      updateCenterDraft("code", event.target.value)
+                    }
                     placeholder="Ex.: CTR-ALPHA"
                     maxLength={24}
                   />
@@ -931,7 +1025,10 @@ export default function CostCentersPage() {
                   <SelectInput
                     value={centerDraft.type}
                     onChange={(event) =>
-                      updateCenterDraft("type", event.target.value as CostCenterType)
+                      updateCenterDraft(
+                        "type",
+                        event.target.value as CostCenterType,
+                      )
                     }
                   >
                     {Object.entries(TYPE_LABELS).map(([value, label]) => (
@@ -946,7 +1043,9 @@ export default function CostCentersPage() {
               <FormField label="Nome do centro">
                 <TextInput
                   value={centerDraft.name}
-                  onChange={(event) => updateCenterDraft("name", event.target.value)}
+                  onChange={(event) =>
+                    updateCenterDraft("name", event.target.value)
+                  }
                   placeholder="Ex.: Contrato Hospital Alpha"
                 />
               </FormField>
@@ -958,7 +1057,9 @@ export default function CostCentersPage() {
                 >
                   <SelectInput
                     value={centerDraft.clientId}
-                    onChange={(event) => updateCenterDraft("clientId", event.target.value)}
+                    onChange={(event) =>
+                      updateCenterDraft("clientId", event.target.value)
+                    }
                   >
                     <option value="">Selecione um cliente</option>
                     {clients.map((client) => (
@@ -977,7 +1078,9 @@ export default function CostCentersPage() {
                 >
                   <SelectInput
                     value={centerDraft.contractId}
-                    onChange={(event) => updateCenterDraft("contractId", event.target.value)}
+                    onChange={(event) =>
+                      updateCenterDraft("contractId", event.target.value)
+                    }
                   >
                     <option value="">Selecione um contrato</option>
                     {contracts.map((contract) => (
@@ -996,7 +1099,9 @@ export default function CostCentersPage() {
                 >
                   <SelectInput
                     value={centerDraft.generatorId}
-                    onChange={(event) => updateCenterDraft("generatorId", event.target.value)}
+                    onChange={(event) =>
+                      updateCenterDraft("generatorId", event.target.value)
+                    }
                   >
                     <option value="">Selecione um gerador</option>
                     {generators.map((generator) => (
@@ -1013,11 +1118,16 @@ export default function CostCentersPage() {
                   <SelectInput
                     value={centerDraft.isActive ? "active" : "inactive"}
                     onChange={(event) =>
-                      updateCenterDraft("isActive", event.target.value === "active")
+                      updateCenterDraft(
+                        "isActive",
+                        event.target.value === "active",
+                      )
                     }
                   >
                     <option value="active">Ativo para novos lancamentos</option>
-                    <option value="inactive">Inativo somente para historico</option>
+                    <option value="inactive">
+                      Inativo somente para historico
+                    </option>
                   </SelectInput>
                 </FormField>
               ) : null}
@@ -1033,7 +1143,11 @@ export default function CostCentersPage() {
               </StatusBanner>
 
               <div className="flex flex-wrap gap-3">
-                <button type="submit" className={PRIMARY_BUTTON} disabled={savingCenter}>
+                <button
+                  type="submit"
+                  className={PRIMARY_BUTTON}
+                  disabled={savingCenter}
+                >
                   {savingCenter
                     ? editingId
                       ? "Salvando..."
@@ -1064,10 +1178,16 @@ export default function CostCentersPage() {
               <div className="space-y-4">
                 <FieldBox className="space-y-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <DataPill tone={selectedCenter.isActive ? "emerald" : "amber"}>
-                      {selectedCenter.isActive ? "Centro apto" : "Centro inativo"}
+                    <DataPill
+                      tone={selectedCenter.isActive ? "emerald" : "amber"}
+                    >
+                      {selectedCenter.isActive
+                        ? "Centro apto"
+                        : "Centro inativo"}
                     </DataPill>
-                    <DataPill tone="blue">{TYPE_LABELS[selectedCenter.type]}</DataPill>
+                    <DataPill tone="blue">
+                      {TYPE_LABELS[selectedCenter.type]}
+                    </DataPill>
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-slate-900">
@@ -1081,7 +1201,8 @@ export default function CostCentersPage() {
 
                 {!selectedCenter.isActive ? (
                   <StatusBanner tone="amber">
-                    Este centro foi inativado e agora pode ser usado apenas para leitura historica do DRE.
+                    Este centro foi inativado e agora pode ser usado apenas para
+                    leitura historica do DRE.
                   </StatusBanner>
                 ) : null}
 
@@ -1209,13 +1330,17 @@ export default function CostCentersPage() {
           >
             <div className="space-y-3">
               <FieldBox>
-                Contratos e geradores agora carregam o cliente por heranca, e cada ancora aceita apenas um centro de custo vinculado.
+                Contratos e geradores agora carregam o cliente por heranca, e
+                cada ancora aceita apenas um centro de custo vinculado.
               </FieldBox>
               <FieldBox>
-                Centros inativos continuam disponiveis para leitura historica, mas ficam bloqueados para novos lancamentos.
+                Centros inativos continuam disponiveis para leitura historica,
+                mas ficam bloqueados para novos lancamentos.
               </FieldBox>
               <FieldBox>
-                Lancamentos manuais entram no DRE do centro selecionado e reaparecem no historico com data de competencia, tipo e origem contabil.
+                Lancamentos manuais entram no DRE do centro selecionado e
+                reaparecem no historico com data de competencia, tipo e origem
+                contabil.
               </FieldBox>
             </div>
           </SectionCard>

@@ -91,7 +91,9 @@ export default function ContractDetailPage() {
     if (!id) return;
 
     try {
-      const res = await apiFetch(apiUrl(`/contracts/${id}`), { cache: "no-store" });
+      const res = await apiFetch(apiUrl(`/contracts/${id}`), {
+        cache: "no-store",
+      });
       if (await handleUnauthorized(res)) return;
       if (!res.ok) {
         throw new Error(
@@ -120,14 +122,16 @@ export default function ContractDetailPage() {
 
   const overdueInvoices = useMemo(
     () =>
-      contract?.invoices.filter((invoice) => invoice.status === "OVERDUE") || [],
+      contract?.invoices.filter((invoice) => invoice.status === "OVERDUE") ||
+      [],
     [contract],
   );
 
   const generatedOrdersCount = useMemo(
     () =>
-      contract?.schedules.filter((schedule) => Boolean(schedule.generatedOrderId)).length ||
-      0,
+      contract?.schedules.filter((schedule) =>
+        Boolean(schedule.generatedOrderId),
+      ).length || 0,
     [contract],
   );
 
@@ -170,7 +174,11 @@ export default function ContractDetailPage() {
     }
   }
 
-  async function runContractAction(path: string, key: string, successMessage: string) {
+  async function runContractAction(
+    path: string,
+    key: string,
+    successMessage: string,
+  ) {
     await runAction<Record<string, never>>(
       key,
       () =>
@@ -179,7 +187,10 @@ export default function ContractDetailPage() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: path === "suspend" ? JSON.stringify({ note: "Suspensao manual" }) : undefined,
+          body:
+            path === "suspend"
+              ? JSON.stringify({ note: "Suspensao manual" })
+              : undefined,
         }),
       () => successMessage,
     );
@@ -199,20 +210,6 @@ export default function ContractDetailPage() {
         }
         return `${createdCount} O.S. preventiva(s) gerada(s) para este contrato.`;
       },
-    );
-  }
-
-  async function markInvoicePaid(invoiceId: string) {
-    await runAction<{ id?: string }>(
-      `invoice-${invoiceId}`,
-      () =>
-        apiFetch(apiUrl(`/contracts/invoices/${invoiceId}/pay`), {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }),
-      () => "Fatura marcada como paga e indicadores sincronizados.",
     );
   }
 
@@ -290,7 +287,13 @@ export default function ContractDetailPage() {
             {contract.status !== "ACTIVE" ? (
               <button
                 type="button"
-                onClick={() => void runContractAction("activate", "activate", "Contrato ativado com sucesso.")}
+                onClick={() =>
+                  void runContractAction(
+                    "activate",
+                    "activate",
+                    "Contrato ativado com sucesso.",
+                  )
+                }
                 disabled={Boolean(workingKey)}
                 className={PRIMARY_BUTTON}
               >
@@ -299,7 +302,13 @@ export default function ContractDetailPage() {
             ) : (
               <button
                 type="button"
-                onClick={() => void runContractAction("suspend", "suspend", "Contrato suspenso com sucesso.")}
+                onClick={() =>
+                  void runContractAction(
+                    "suspend",
+                    "suspend",
+                    "Contrato suspenso com sucesso.",
+                  )
+                }
                 disabled={Boolean(workingKey)}
                 className={PRIMARY_BUTTON}
               >
@@ -321,7 +330,9 @@ export default function ContractDetailPage() {
                 {contract.client.isDelinquent ? (
                   <DataPill tone="amber">Cliente inadimplente</DataPill>
                 ) : null}
-                {expiresSoon ? <DataPill tone="rose">Renovacao em atencao</DataPill> : null}
+                {expiresSoon ? (
+                  <DataPill tone="rose">Renovacao em atencao</DataPill>
+                ) : null}
               </div>
             </div>
             <MiniInfo
@@ -347,12 +358,14 @@ export default function ContractDetailPage() {
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
       {expiresSoon ? (
         <StatusBanner tone="amber">
-          Contrato proximo do vencimento. O ideal e iniciar a renovacao antes do prazo de alerta.
+          Contrato proximo do vencimento. O ideal e iniciar a renovacao antes do
+          prazo de alerta.
         </StatusBanner>
       ) : null}
       {contract.client.isDelinquent ? (
         <StatusBanner tone="amber">
-          O cliente esta marcado como inadimplente. Isso pode impactar status, cobertura e automacoes preventivas.
+          O cliente esta marcado como inadimplente. Isso pode impactar status,
+          cobertura e automacoes preventivas.
         </StatusBanner>
       ) : null}
 
@@ -379,8 +392,16 @@ export default function ContractDetailPage() {
                           Serie: {item.generator.serialNumber || "-"}
                         </p>
                       </div>
-                      <DataPill tone={item.generator.hasMaintenanceContract ? "emerald" : "amber"}>
-                        {item.generator.hasMaintenanceContract ? "Flag ativa" : "Flag pendente"}
+                      <DataPill
+                        tone={
+                          item.generator.hasMaintenanceContract
+                            ? "emerald"
+                            : "amber"
+                        }
+                      >
+                        {item.generator.hasMaintenanceContract
+                          ? "Flag ativa"
+                          : "Flag pendente"}
                       </DataPill>
                     </div>
                     <p className="mt-3 text-sm text-slate-600">
@@ -424,11 +445,15 @@ export default function ContractDetailPage() {
                 </thead>
                 <tbody>
                   {contract.invoices.map((invoice) => {
-                    const canMarkPaid =
-                      invoice.status === "PENDING" || invoice.status === "OVERDUE";
+                    const canOpenReceivable =
+                      invoice.status === "PENDING" ||
+                      invoice.status === "OVERDUE";
 
                     return (
-                      <tr key={invoice.id} className="border-b border-slate-100">
+                      <tr
+                        key={invoice.id}
+                        className="border-b border-slate-100"
+                      >
                         <td className="px-3 py-3 text-slate-700">
                           {formatMonth(invoice.competenceDate)}
                         </td>
@@ -444,17 +469,13 @@ export default function ContractDetailPage() {
                           </DataPill>
                         </td>
                         <td className="px-3 py-3">
-                          {canMarkPaid ? (
-                            <button
-                              type="button"
-                              onClick={() => void markInvoicePaid(invoice.id)}
-                              disabled={workingKey === `invoice-${invoice.id}`}
+                          {canOpenReceivable ? (
+                            <Link
+                              href="/dashboard/finance/accounts-receivable"
                               className={SECONDARY_BUTTON}
                             >
-                              {workingKey === `invoice-${invoice.id}`
-                                ? "Baixando..."
-                                : "Marcar pago"}
-                            </button>
+                              Abrir baixa
+                            </Link>
                           ) : (
                             <span className="text-xs text-slate-500">
                               {invoice.paidAt
@@ -684,7 +705,9 @@ function Info({
         </p>
         <DataPill tone={tone}>{value}</DataPill>
       </div>
-      <p className="mt-3 break-words text-sm font-medium text-slate-800">{value}</p>
+      <p className="mt-3 break-words text-sm font-medium text-slate-800">
+        {value}
+      </p>
     </div>
   );
 }
@@ -748,7 +771,9 @@ function recurrenceLabel(value: string) {
 }
 
 function partsCoverageLabel(value: string) {
-  return value === "INCLUDED" ? "Inclusa na mensalidade" : "Faturada separadamente";
+  return value === "INCLUDED"
+    ? "Inclusa na mensalidade"
+    : "Faturada separadamente";
 }
 
 function formatDate(date?: string | null) {
