@@ -27,6 +27,7 @@ type ImportStatus =
   | "CANCELLED";
 type MatchStatus = "UNMATCHED" | "AUTO_MATCHED" | "MANUAL_MATCHED" | "IGNORED";
 type IssueStatus = "OPEN" | "RESOLVED" | "IGNORED";
+type ClosingStatus = "OPEN" | "CLOSED" | "REOPENED";
 
 type BankAccount = {
   id: string;
@@ -39,6 +40,8 @@ type BankAccount = {
 type BankStatementImport = {
   id: string;
   bankAccountId: string;
+  profileId?: string | null;
+  profile?: BankImportProfile | null;
   fileName: string;
   fileType: FileType;
   status: ImportStatus;
@@ -72,6 +75,14 @@ type BankStatementEntry = {
   matchedMovement?: BankMovement | null;
 };
 
+type BankImportProfile = {
+  id: string;
+  name: string;
+  bankCode?: string | null;
+  fileType: FileType;
+  active: boolean;
+};
+
 type BankMovement = {
   id: string;
   bankAccountId: string;
@@ -94,7 +105,15 @@ type MatchCandidate = {
 type ReconciliationReport = {
   bankAccount: BankAccount;
   period: { from: string; to: string };
-  closing?: { id: string; status: string; closedAt?: string | null } | null;
+  closing?: {
+    id?: string;
+    status: ClosingStatus;
+    closedAt?: string | null;
+    difference?: number;
+    unreconciledMovementsCount?: number;
+    unreconciledEntriesCount?: number;
+    openIssuesCount?: number;
+  } | null;
   totals: {
     openingBalance: number;
     credits: number;
@@ -121,6 +140,20 @@ type ReconciliationReport = {
     reason: string;
     createdAt: string;
   }>;
+};
+
+type BankReconciliationClosing = {
+  id: string;
+  bankAccountId: string;
+  year: number;
+  month: number;
+  status: ClosingStatus;
+  difference: number;
+  unreconciledMovementsCount: number;
+  unreconciledEntriesCount: number;
+  openIssuesCount: number;
+  closedAt?: string | null;
+  reopenedAt?: string | null;
 };
 
 const PRIMARY_BUTTON =
@@ -200,9 +233,16 @@ export default function BankReconciliationPage() {
   const router = useRouter();
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [selectedBankAccountId, setSelectedBankAccountId] = useState("");
+  const [bankImportProfiles, setBankImportProfiles] = useState<
+    BankImportProfile[]
+  >([]);
+  const [selectedProfileId, setSelectedProfileId] = useState("");
   const [statementImports, setStatementImports] = useState<
     BankStatementImport[]
   >([]);
+  const [bankClosings, setBankClosings] = useState<BankReconciliationClosing[]>(
+    [],
+  );
   const [selectedImportId, setSelectedImportId] = useState("");
   const [entries, setEntries] = useState<BankStatementEntry[]>([]);
   const [movements, setMovements] = useState<BankMovement[]>([]);
@@ -232,6 +272,21 @@ export default function BankReconciliationPage() {
     [selectedImportId, statementImports],
   );
 
+  const compatibleProfiles = useMemo(
+    () =>
+      bankImportProfiles.filter(
+        (profile) => profile.active && profile.fileType === draft.fileType,
+      ),
+    [bankImportProfiles, draft.fileType],
+  );
+
+  const currentClosing = useMemo(() => {
+    if (!report?.closing?.id) return null;
+    return (
+      bankClosings.find((closing) => closing.id === report.closing?.id) || null
+    );
+  }, [bankClosings, report?.closing?.id]);
+
   const unreconciledMovements = useMemo(
     () =>
       movements.filter(
@@ -260,12 +315,25 @@ export default function BankReconciliationPage() {
   );
 
   const loadAccounts = useCallback(async () => {
-    const response = await apiFetch(apiUrl("/finance/bank-accounts"), {
-      cache: "no-store",
-    });
+    const [response, profilesResponse] = await Promise.all([
+      apiFetch(apiUrl("/finance/bank-accounts"), {
+        cache: "no-store",
+      }),
+      apiFetch(apiUrl("/finance/bank-import-profiles"), {
+        cache: "no-store",
+      }),
+    ]);
     await readOrThrow(response, "Nao foi possivel carregar contas bancarias.");
-    const accounts = (await response.json()) as BankAccount[];
+    await readOrThrow(
+      profilesResponse,
+      "Nao foi possivel carregar perfis bancarios.",
+    );
+    const [accounts, profiles] = (await Promise.all([
+      response.json(),
+      profilesResponse.json(),
+    ])) as [BankAccount[], BankImportProfile[]];
     setBankAccounts(accounts);
+    setBankImportProfiles(profiles);
     setSelectedBankAccountId((current) => current || accounts[0]?.id || "");
   }, [readOrThrow]);
 
@@ -280,7 +348,8 @@ export default function BankReconciliationPage() {
         filters.from,
         filters.to,
       );
-      const [importsRes, reportRes, movementsRes] = await Promise.all([
+      const [importsRes, reportRes, movementsRes, closingsRes] =
+        await Promise.all([
         apiFetch(
           apiUrl(`/finance/bank-accounts/${selectedBankAccountId}/statements`),
           { cache: "no-store" },
@@ -291,25 +360,39 @@ export default function BankReconciliationPage() {
         apiFetch(apiUrl(`/finance/bank-movements?${periodQuery}`), {
           cache: "no-store",
         }),
+        apiFetch(
+          apiUrl(
+            `/finance/bank-reconciliation-closings?bankAccountId=${selectedBankAccountId}`,
+          ),
+          { cache: "no-store" },
+        ),
       ]);
 
       await readOrThrow(importsRes, "Nao foi possivel carregar extratos.");
       await readOrThrow(reportRes, "Nao foi possivel carregar conciliacao.");
       await readOrThrow(movementsRes, "Nao foi possivel carregar movimentos.");
+      await readOrThrow(
+        closingsRes,
+        "Nao foi possivel carregar fechamentos bancarios.",
+      );
 
-      const [nextImports, nextReport, movementPayload] = (await Promise.all([
+      const [nextImports, nextReport, movementPayload, nextClosings] =
+        (await Promise.all([
         importsRes.json(),
         reportRes.json(),
         movementsRes.json(),
+        closingsRes.json(),
       ])) as [
         BankStatementImport[],
         ReconciliationReport,
         { entries: BankMovement[] },
+        BankReconciliationClosing[],
       ];
 
       setStatementImports(nextImports);
       setReport(nextReport);
       setMovements(movementPayload.entries || []);
+      setBankClosings(nextClosings);
       setSelectedImportId((current) => {
         if (current && nextImports.some((item) => item.id === current)) {
           return current;
@@ -366,6 +449,15 @@ export default function BankReconciliationPage() {
     });
   }, [loadEntries]);
 
+  useEffect(() => {
+    if (
+      selectedProfileId &&
+      !compatibleProfiles.some((profile) => profile.id === selectedProfileId)
+    ) {
+      setSelectedProfileId("");
+    }
+  }, [compatibleProfiles, selectedProfileId]);
+
   async function refreshAll() {
     await loadReconciliationData();
     await loadEntries();
@@ -385,7 +477,10 @@ export default function BankReconciliationPage() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(draft),
+          body: JSON.stringify({
+            ...draft,
+            profileId: selectedProfileId || undefined,
+          }),
         },
       );
       if (!response.ok) {
@@ -420,7 +515,10 @@ export default function BankReconciliationPage() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ dateWindowDays: 2 }),
+          body: JSON.stringify({
+            dateWindowDays: 2,
+            profileId: selectedImport?.profileId || selectedProfileId || undefined,
+          }),
         },
       );
       if (!response.ok) {
@@ -631,6 +729,98 @@ export default function BankReconciliationPage() {
     }
   }
 
+  async function closeCurrentBankReconciliation() {
+    if (!selectedBankAccountId) return;
+    const periodDate = new Date(`${filters.from}T00:00:00.000Z`);
+    const reason = window.prompt("Motivo do fechamento bancario", "");
+    if (!reason) return;
+    const hasPending =
+      (report?.totals.unmatchedStatementEntries || 0) > 0 ||
+      (report?.totals.unreconciledMovements || 0) > 0 ||
+      (report?.totals.openIssues || 0) > 0 ||
+      Math.abs(report?.balanceAudit?.difference || 0) > 0.009;
+    const allowOpenIssues = hasPending
+      ? window.confirm(
+          "Existem pendencias ou divergencia de saldo. Deseja fechar com ressalva registrada?",
+        )
+      : false;
+    if (hasPending && !allowOpenIssues) return;
+
+    setBusyId("close-bank-reconciliation");
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      const response = await apiFetch(
+        apiUrl(
+          `/finance/bank-accounts/${selectedBankAccountId}/reconciliation-closings/close`,
+        ),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            year: periodDate.getUTCFullYear(),
+            month: periodDate.getUTCMonth() + 1,
+            reason,
+            allowOpenIssues,
+          }),
+        },
+      );
+      if (!response.ok) {
+        throw new Error(
+          await readApiErrorMessage(response, "Falha ao fechar conciliacao."),
+        );
+      }
+      setSuccessMessage("Fechamento bancario registrado.");
+      await refreshAll();
+    } catch (actionError: unknown) {
+      setError(
+        actionError instanceof Error
+          ? actionError.message
+          : "Falha ao fechar conciliacao.",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function reopenCurrentBankReconciliation() {
+    const closingId = report?.closing?.id || currentClosing?.id;
+    if (!closingId) return;
+    const reason = window.prompt("Motivo para reabrir o fechamento", "");
+    if (!reason) return;
+
+    setBusyId("reopen-bank-reconciliation");
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      const response = await apiFetch(
+        apiUrl(`/finance/bank-reconciliation-closings/${closingId}/reopen`),
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason }),
+        },
+      );
+      if (!response.ok) {
+        throw new Error(
+          await readApiErrorMessage(response, "Falha ao reabrir conciliacao."),
+        );
+      }
+      setSuccessMessage("Fechamento bancario reaberto.");
+      await refreshAll();
+    } catch (actionError: unknown) {
+      setError(
+        actionError instanceof Error
+          ? actionError.message
+          : "Falha ao reabrir conciliacao.",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   const stats = report
     ? [
         {
@@ -807,6 +997,20 @@ export default function BankReconciliationPage() {
                 <option value="CNAB">CNAB inicial</option>
               </SelectInput>
             </FormField>
+            <FormField label="Perfil bancario">
+              <SelectInput
+                value={selectedProfileId}
+                onChange={(event) => setSelectedProfileId(event.target.value)}
+              >
+                <option value="">Autodetectar colunas</option>
+                {compatibleProfiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name}
+                    {profile.bankCode ? ` - ${profile.bankCode}` : ""}
+                  </option>
+                ))}
+              </SelectInput>
+            </FormField>
           </div>
           <div className="mt-3">
             <FormField label="Conteúdo">
@@ -870,6 +1074,11 @@ export default function BankReconciliationPage() {
                         {formatDate(statement.periodStart)} a{" "}
                         {formatDate(statement.periodEnd)}
                       </p>
+                      {statement.profile ? (
+                        <p className="mt-1 text-xs text-slate-500">
+                          Perfil: {statement.profile.name}
+                        </p>
+                      ) : null}
                     </div>
                     <DataPill tone={statusTone(statement.status)}>
                       {STATUS_LABEL[statement.status]}
@@ -1103,6 +1312,30 @@ export default function BankReconciliationPage() {
         <SectionCard
           title="Resumo do período"
           description="Leitura consolidada do ledger e das pendências de conciliação."
+          actions={
+            report?.closing?.status === "CLOSED" ? (
+              <button
+                type="button"
+                className={SECONDARY_BUTTON}
+                disabled={busyId === "reopen-bank-reconciliation"}
+                onClick={() => void reopenCurrentBankReconciliation()}
+              >
+                Reabrir mes
+              </button>
+            ) : (
+              <button
+                type="button"
+                className={PRIMARY_BUTTON}
+                disabled={
+                  !selectedBankAccountId ||
+                  busyId === "close-bank-reconciliation"
+                }
+                onClick={() => void closeCurrentBankReconciliation()}
+              >
+                Fechar mes
+              </button>
+            )
+          }
         >
           {report ? (
             <div className="grid gap-3 md:grid-cols-2">
@@ -1137,7 +1370,30 @@ export default function BankReconciliationPage() {
                 <p className="mt-2 text-xl font-bold text-slate-950">
                   {report.closing?.status === "CLOSED" ? "Fechado" : "Aberto"}
                 </p>
+                {report.closing?.status === "CLOSED" ? (
+                  <p className="mt-1 text-xs text-slate-500">
+                    {formatDate(report.closing.closedAt)} | dif.{" "}
+                    {formatCurrency(report.closing.difference || 0)}
+                  </p>
+                ) : null}
               </FieldBox>
+              {currentClosing ? (
+                <FieldBox>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+                    Ressalvas do fechamento
+                  </p>
+                  <p className="mt-2 text-xl font-bold text-slate-950">
+                    {currentClosing.unreconciledEntriesCount +
+                      currentClosing.unreconciledMovementsCount +
+                      currentClosing.openIssuesCount}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    entradas {currentClosing.unreconciledEntriesCount} |
+                    movimentos {currentClosing.unreconciledMovementsCount} |
+                    divergencias {currentClosing.openIssuesCount}
+                  </p>
+                </FieldBox>
+              ) : null}
               {report.balanceAudit ? (
                 <>
                   <FieldBox>

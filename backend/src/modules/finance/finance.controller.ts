@@ -16,14 +16,17 @@ import { AuthGuard } from '../auth/auth.guard';
 import { FinanceService } from './finance.service';
 import {
   AutoMatchBankStatementDto,
+  BankReconciliationClosingQueryDto,
   BankMovementQueryDto,
   CancelAccountsPayableDto,
   CancelAccountsReceivableDto,
+  CloseBankReconciliationDto,
   CloseFinancialPeriodDto,
   CreateAccountsPayableDto,
   CreateAccountsReceivableDto,
   CreateBankAdjustmentDto,
   CreateBankAccountDto,
+  CreateBankImportProfileDto,
   CreateCostCenterDto,
   CreateCostCenterEntryDto,
   CreateReconciliationIssueDto,
@@ -34,6 +37,7 @@ import {
   PayAccountsReceivableDto,
   ReconcileBankMovementDto,
   ReconciliationReportQueryDto,
+  ReopenBankReconciliationDto,
   ReopenFinancialPeriodDto,
   ResolveReconciliationIssueDto,
   ReversePayablePaymentDto,
@@ -42,6 +46,7 @@ import {
   UnmatchBankStatementEntryDto,
   UnreconcileBankMovementDto,
   UpdateBankAccountDto,
+  UpdateBankImportProfileDto,
   UpdateCostCenterDto,
 } from './dto/finance.dto';
 
@@ -239,6 +244,80 @@ export class FinanceController {
   @Get('bank-accounts/:id/balance-audit')
   balanceAudit(@Param('id') id: string) {
     return this.financeService.auditBankAccountBalance(id);
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.view')
+  @Get('bank-import-profiles')
+  bankImportProfiles() {
+    return this.financeService.listBankImportProfiles();
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.reconcile')
+  @Post('bank-import-profiles')
+  createBankImportProfile(
+    @Body() dto: CreateBankImportProfileDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.createBankImportProfile(
+      dto,
+      this.getActorUserId(req),
+    );
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.reconcile')
+  @Patch('bank-import-profiles/:id')
+  updateBankImportProfile(
+    @Param('id') id: string,
+    @Body() dto: UpdateBankImportProfileDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.updateBankImportProfile(
+      id,
+      dto,
+      this.getActorUserId(req),
+    );
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.view')
+  @Get('bank-reconciliation-closings')
+  bankReconciliationClosings(
+    @Query() query: BankReconciliationClosingQueryDto,
+  ) {
+    return this.financeService.listBankReconciliationClosings(query);
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.reconcile')
+  @Post('bank-accounts/:id/reconciliation-closings/close')
+  closeBankReconciliation(
+    @Param('id') id: string,
+    @Body() dto: CloseBankReconciliationDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.closeBankReconciliation(
+      id,
+      dto,
+      this.getActorUserId(req),
+    );
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.reconcile')
+  @Patch('bank-reconciliation-closings/:id/reopen')
+  reopenBankReconciliation(
+    @Param('id') id: string,
+    @Body() dto: ReopenBankReconciliationDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.reopenBankReconciliationClosing(
+      id,
+      dto,
+      this.getActorUserId(req),
+    );
   }
 
   @UseGuards(AuthGuard)

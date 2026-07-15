@@ -8,6 +8,7 @@ import {
   AccountsPayableStatus,
   AccountsReceivableStatus,
   AuditDomain,
+  BankReconciliationClosingStatus,
   BankReconciliationIssueStatus,
   BankReconciliationIssueType,
   BankMovementOriginType,
@@ -34,10 +35,13 @@ import {
   CreateAccountsReceivableDto,
   CreateBankAdjustmentDto,
   CreateBankAccountDto,
+  CreateBankImportProfileDto,
+  CloseBankReconciliationDto,
   CreateCostCenterDto,
   CreateCostCenterEntryDto,
   CreateReconciliationIssueDto,
   CloseFinancialPeriodDto,
+  BankReconciliationClosingQueryDto,
   IgnoreBankStatementEntryDto,
   ImportBankStatementDto,
   MatchBankStatementEntryDto,
@@ -45,6 +49,7 @@ import {
   PayAccountsReceivableDto,
   ReconcileBankMovementDto,
   ReconciliationReportQueryDto,
+  ReopenBankReconciliationDto,
   ReopenFinancialPeriodDto,
   ResolveReconciliationIssueDto,
   ReversePayablePaymentDto,
@@ -53,6 +58,7 @@ import {
   UnmatchBankStatementEntryDto,
   UnreconcileBankMovementDto,
   UpdateBankAccountDto,
+  UpdateBankImportProfileDto,
   UpdateCostCenterDto,
 } from './dto/finance.dto';
 
@@ -91,6 +97,38 @@ type StatementMatchCandidate = {
   movement: BankMovementCandidate;
   score: number;
   reason: string;
+};
+
+type RuntimeBankImportProfile = {
+  id: string;
+  name: string;
+  fileType: BankStatementFileType;
+  active?: boolean;
+  dateFormat?: string | null;
+  decimalSeparator?: string | null;
+  amountMode?: string | null;
+  columnMapping?: Prisma.JsonValue | null;
+  matchingConfig?: Prisma.JsonValue | null;
+};
+
+type CsvColumnMapping = Partial<
+  Record<
+    'date' | 'description' | 'amount' | 'type' | 'documentNumber' | 'reference',
+    string
+  >
+>;
+
+type BankMatchingConfig = {
+  dateWindowDays: number;
+  minAutoMatchScore: number;
+  amountWeight: number;
+  exactDateWeight: number;
+  windowDateWeight: number;
+  referenceWeight: number;
+  descriptionHighWeight: number;
+  descriptionLowWeight: number;
+  highSimilarityThreshold: number;
+  lowSimilarityThreshold: number;
 };
 
 @Injectable()
@@ -1365,6 +1403,73 @@ export class FinanceService {
     });
   }
 
+  listBankImportProfiles() {
+    return this.prisma.bankImportProfile.findMany({
+      orderBy: [{ active: 'desc' }, { name: 'asc' }],
+    });
+  }
+
+  createBankImportProfile(
+    dto: CreateBankImportProfileDto,
+    actorUserId?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const profile = await tx.bankImportProfile.create({
+        data: this.prepareBankImportProfileData(dto),
+      });
+
+      await this.audit(tx, {
+        actorUserId,
+        module: 'FINANCE',
+        entityType: 'BANK_IMPORT_PROFILE',
+        entityId: profile.id,
+        action: 'CREATE_IMPORT_PROFILE',
+        payload: {
+          fileType: profile.fileType,
+          bankCode: profile.bankCode,
+          active: profile.active,
+        },
+      });
+
+      return profile;
+    });
+  }
+
+  updateBankImportProfile(
+    id: string,
+    dto: UpdateBankImportProfileDto,
+    actorUserId?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const current = await tx.bankImportProfile.findUnique({ where: { id } });
+      if (!current) {
+        throw new NotFoundException(
+          'Perfil de importacao bancaria nao encontrado.',
+        );
+      }
+
+      const updated = await tx.bankImportProfile.update({
+        where: { id },
+        data: this.prepareBankImportProfileData(dto, current),
+      });
+
+      await this.audit(tx, {
+        actorUserId,
+        module: 'FINANCE',
+        entityType: 'BANK_IMPORT_PROFILE',
+        entityId: id,
+        action: 'UPDATE_IMPORT_PROFILE',
+        payload: {
+          fileType: updated.fileType,
+          bankCode: updated.bankCode,
+          active: updated.active,
+        },
+      });
+
+      return updated;
+    });
+  }
+
   async auditBankAccountBalance(id: string) {
     const bankAccount = await this.prisma.bankAccount.findUnique({
       where: { id },
@@ -1380,24 +1485,39 @@ export class FinanceService {
       throw new NotFoundException('Conta bancaria/caixa nao encontrada.');
     }
 
-    const [postedMovements, reversedMovements, unreconciledMovements] =
-      await Promise.all([
-        this.prisma.bankMovement.findMany({
-          where: { bankAccountId: id, status: BankMovementStatus.POSTED },
-          select: { type: true, amount: true, movementDate: true },
-          orderBy: { movementDate: 'desc' },
-        }),
-        this.prisma.bankMovement.count({
-          where: { bankAccountId: id, status: BankMovementStatus.REVERSED },
-        }),
-        this.prisma.bankMovement.count({
-          where: {
-            bankAccountId: id,
-            status: BankMovementStatus.POSTED,
-            reconciledAt: null,
-          },
-        }),
-      ]);
+    const [
+      postedMovements,
+      reversedMovements,
+      unreconciledMovements,
+      openIssues,
+      lastClosing,
+    ] = await Promise.all([
+      this.prisma.bankMovement.findMany({
+        where: { bankAccountId: id, status: BankMovementStatus.POSTED },
+        select: { type: true, amount: true, movementDate: true },
+        orderBy: { movementDate: 'desc' },
+      }),
+      this.prisma.bankMovement.count({
+        where: { bankAccountId: id, status: BankMovementStatus.REVERSED },
+      }),
+      this.prisma.bankMovement.count({
+        where: {
+          bankAccountId: id,
+          status: BankMovementStatus.POSTED,
+          reconciledAt: null,
+        },
+      }),
+      this.prisma.bankReconciliationIssue.count({
+        where: {
+          bankAccountId: id,
+          status: BankReconciliationIssueStatus.OPEN,
+        },
+      }),
+      this.prisma.bankReconciliationClosing.findFirst({
+        where: { bankAccountId: id },
+        orderBy: [{ year: 'desc' }, { month: 'desc' }, { updatedAt: 'desc' }],
+      }),
+    ]);
 
     const ledgerCalculatedBalance =
       Number(bankAccount.initialBalance || 0) +
@@ -1415,6 +1535,8 @@ export class FinanceService {
       lastMovementDate: postedMovements[0]?.movementDate ?? null,
       unreconciledMovements,
       reversedMovements,
+      openIssues,
+      lastClosing,
       status: Math.abs(difference) <= 0.009 ? 'OK' : 'DIVERGENT',
     };
   }
@@ -1425,11 +1547,18 @@ export class FinanceService {
     actorUserId?: string,
   ) {
     const content = this.decodeStatementContent(dto);
+    const profile = dto.profileId
+      ? await this.getActiveBankImportProfile(dto.profileId, dto.fileType)
+      : null;
     const checksumSha256 = createHash('sha256')
       .update(content, 'utf8')
       .digest('hex');
 
-    const parsedEntries = this.parseStatementEntries(dto.fileType, content);
+    const parsedEntries = this.parseStatementEntries(
+      dto.fileType,
+      content,
+      profile,
+    );
     if (parsedEntries.length === 0) {
       throw new BadRequestException('Extrato bancario nao possui lancamentos.');
     }
@@ -1474,6 +1603,7 @@ export class FinanceService {
       const statementImport = await tx.bankStatementImport.create({
         data: {
           bankAccountId,
+          profileId: profile?.id,
           fileName: dto.fileName.trim(),
           fileType: dto.fileType,
           importedById: actorUserId,
@@ -1483,6 +1613,8 @@ export class FinanceService {
           metadata: {
             rows: parsedEntries.length,
             parser: dto.fileType.toLowerCase(),
+            profileId: profile?.id,
+            profileName: profile?.name,
           },
         },
       });
@@ -1538,6 +1670,7 @@ export class FinanceService {
         where: { id: statementImport.id },
         include: {
           bankAccount: { select: { id: true, name: true, bankName: true } },
+          profile: { select: { id: true, name: true, bankCode: true } },
           entries: { orderBy: [{ postedDate: 'asc' }, { createdAt: 'asc' }] },
         },
       });
@@ -1549,6 +1682,7 @@ export class FinanceService {
       where: { bankAccountId },
       include: {
         bankAccount: { select: { id: true, name: true, bankName: true } },
+        profile: { select: { id: true, name: true, bankCode: true } },
         _count: { select: { entries: true, issues: true } },
       },
       orderBy: { importedAt: 'desc' },
@@ -1560,6 +1694,7 @@ export class FinanceService {
       where: { id },
       include: {
         bankAccount: { select: { id: true, name: true, bankName: true } },
+        profile: { select: { id: true, name: true, bankCode: true } },
         importedBy: { select: { id: true, name: true, email: true } },
         entries: {
           include: {
@@ -1604,12 +1739,11 @@ export class FinanceService {
     dto: AutoMatchBankStatementDto = {},
     actorUserId?: string,
   ) {
-    const dateWindowDays = dto.dateWindowDays ?? 2;
-
     return this.prisma.$transaction(async (tx) => {
       const statement = await tx.bankStatementImport.findUnique({
         where: { id },
         include: {
+          profile: true,
           entries: {
             where: { matchStatus: BankStatementEntryMatchStatus.UNMATCHED },
             orderBy: [{ postedDate: 'asc' }, { createdAt: 'asc' }],
@@ -1619,23 +1753,42 @@ export class FinanceService {
       if (!statement) {
         throw new NotFoundException('Extrato importado nao encontrado.');
       }
+      const overrideProfile = dto.profileId
+        ? await tx.bankImportProfile.findUnique({
+            where: { id: dto.profileId },
+          })
+        : null;
+      if (dto.profileId && !overrideProfile) {
+        throw new NotFoundException(
+          'Perfil de importacao bancaria nao encontrado.',
+        );
+      }
+      const profile = overrideProfile ?? statement.profile ?? null;
+      this.assertProfileUsableForStatement(profile, statement.fileType);
+      const matchingConfig = this.resolveBankMatchingConfig(profile, dto);
 
       let autoMatched = 0;
       let ambiguous = 0;
       let unmatched = 0;
 
       for (const entry of statement.entries) {
+        await this.ensureBankReconciliationPeriodOpen(
+          tx,
+          entry.bankAccountId,
+          entry.postedDate,
+        );
         const candidates = await this.findMovementCandidates(
           tx,
           entry,
-          dateWindowDays,
+          matchingConfig.dateWindowDays,
         );
         const scoredCandidates = this.scoreMovementCandidates(
           entry,
           candidates,
+          matchingConfig,
         );
         const strongCandidates = scoredCandidates.filter(
-          (candidate) => candidate.score >= 0.8,
+          (candidate) => candidate.score >= matchingConfig.minAutoMatchScore,
         );
         const bestCandidate = scoredCandidates[0];
 
@@ -1651,6 +1804,12 @@ export class FinanceService {
             reference: entry.bankReference ?? entry.externalId ?? entry.id,
             note: `Conciliacao automatica do extrato ${statement.fileName}: ${candidate.reason}`,
           });
+          await this.resolveOpenIssuesForEntry(
+            tx,
+            entry.id,
+            actorUserId,
+            'Lancamento conciliado automaticamente.',
+          );
           autoMatched += 1;
         } else if (strongCandidates.length > 1) {
           ambiguous += 1;
@@ -1662,7 +1821,7 @@ export class FinanceService {
             statementImportId: entry.importId,
             statementEntryId: entry.id,
             movementId: bestCandidate?.movement.id,
-            type: BankReconciliationIssueType.MISSING_MOVEMENT,
+            type: BankReconciliationIssueType.POSSIBLE_MATCH_AMBIGUOUS,
             reason:
               'Matching automatico encontrou mais de um movimento candidato forte.',
           });
@@ -1670,6 +1829,15 @@ export class FinanceService {
           unmatched += 1;
           if (bestCandidate) {
             await this.saveStatementSuggestion(tx, entry.id, bestCandidate);
+          } else {
+            await this.createReconciliationIssueSafely(tx, {
+              bankAccountId: entry.bankAccountId,
+              statementImportId: entry.importId,
+              statementEntryId: entry.id,
+              type: BankReconciliationIssueType.BANK_ENTRY_WITHOUT_MOVEMENT,
+              reason:
+                'Lancamento bancario importado sem movimento interno candidato.',
+            });
           }
         }
       }
@@ -1682,7 +1850,14 @@ export class FinanceService {
         entityType: 'BANK_STATEMENT_IMPORT',
         entityId: id,
         action: 'AUTO_MATCH_STATEMENT',
-        payload: { autoMatched, ambiguous, unmatched, dateWindowDays },
+        payload: {
+          autoMatched,
+          ambiguous,
+          unmatched,
+          dateWindowDays: matchingConfig.dateWindowDays,
+          minAutoMatchScore: matchingConfig.minAutoMatchScore,
+          profileId: profile?.id,
+        },
       });
 
       return { autoMatched, ambiguous, unmatched };
@@ -1697,6 +1872,7 @@ export class FinanceService {
     return this.prisma.$transaction(async (tx) => {
       const entry = await tx.bankStatementEntry.findUnique({
         where: { id },
+        include: { import: { include: { profile: true } } },
       });
       if (!entry) {
         throw new NotFoundException('Lancamento do extrato nao encontrado.');
@@ -1704,23 +1880,42 @@ export class FinanceService {
       if (entry.matchStatus !== BankStatementEntryMatchStatus.UNMATCHED) {
         return { entryId: id, candidates: [] };
       }
+      const overrideProfile = dto.profileId
+        ? await tx.bankImportProfile.findUnique({
+            where: { id: dto.profileId },
+          })
+        : null;
+      if (dto.profileId && !overrideProfile) {
+        throw new NotFoundException(
+          'Perfil de importacao bancaria nao encontrado.',
+        );
+      }
+      const statementFileType =
+        entry.import?.fileType ?? BankStatementFileType.CSV;
+      const profile = overrideProfile ?? entry.import?.profile ?? null;
+      this.assertProfileUsableForStatement(profile, statementFileType);
+      const matchingConfig = this.resolveBankMatchingConfig(profile, {
+        ...dto,
+        dateWindowDays,
+      });
 
       const candidates = await this.findMovementCandidates(
         tx,
         entry,
-        dateWindowDays,
+        matchingConfig.dateWindowDays,
       );
-      const scored = this.scoreMovementCandidates(entry, candidates).slice(
-        0,
-        5,
-      );
+      const scored = this.scoreMovementCandidates(
+        entry,
+        candidates,
+        matchingConfig,
+      ).slice(0, 5);
       return {
         entryId: id,
         candidates: scored.map((candidate) => ({
           movement: candidate.movement,
           score: candidate.score,
           reason: candidate.reason,
-          canAutoMatch: candidate.score >= 0.8,
+          canAutoMatch: candidate.score >= matchingConfig.minAutoMatchScore,
         })),
       };
     });
@@ -1752,6 +1947,11 @@ export class FinanceService {
       }
       await this.assertCanMatchEntryWithMovement(tx, entry, movement);
       await this.ensureFinancialPeriodOpen(tx, entry.postedDate);
+      await this.ensureBankReconciliationPeriodOpen(
+        tx,
+        entry.bankAccountId,
+        entry.postedDate,
+      );
 
       await this.applyStatementMatch(tx, {
         entryId: entry.id,
@@ -1763,6 +1963,12 @@ export class FinanceService {
         reference: entry.bankReference ?? entry.externalId ?? entry.id,
         note: 'Conciliacao manual com extrato bancario importado.',
       });
+      await this.resolveOpenIssuesForEntry(
+        tx,
+        entry.id,
+        actorUserId,
+        'Lancamento conciliado manualmente.',
+      );
 
       await this.updateBankStatementStatus(tx, entry.importId);
       await this.audit(tx, {
@@ -1802,6 +2008,11 @@ export class FinanceService {
         throw new BadRequestException('Lancamento ainda nao esta conciliado.');
       }
       await this.ensureFinancialPeriodOpen(tx, entry.postedDate);
+      await this.ensureBankReconciliationPeriodOpen(
+        tx,
+        entry.bankAccountId,
+        entry.postedDate,
+      );
 
       await tx.bankStatementEntry.update({
         where: { id },
@@ -1867,6 +2078,11 @@ export class FinanceService {
           'Lancamento conciliado precisa ter match desfeito antes de ignorar.',
         );
       }
+      await this.ensureBankReconciliationPeriodOpen(
+        tx,
+        entry.bankAccountId,
+        entry.postedDate,
+      );
 
       const ignored = await tx.bankStatementEntry.update({
         where: { id },
@@ -1878,6 +2094,12 @@ export class FinanceService {
           suggestionReason: null,
         },
       });
+      await this.resolveOpenIssuesForEntry(
+        tx,
+        entry.id,
+        actorUserId,
+        'Lancamento ignorado com justificativa.',
+      );
 
       await this.createReconciliationIssueSafely(tx, {
         bankAccountId: entry.bankAccountId,
@@ -1934,6 +2156,11 @@ export class FinanceService {
 
       const postedDate = new Date(dto.postedDate);
       await this.ensureFinancialPeriodOpen(tx, postedDate);
+      await this.ensureBankReconciliationPeriodOpen(
+        tx,
+        entry.bankAccountId,
+        postedDate,
+      );
       const movement = await this.createBankMovement(tx, {
         bankAccountId: entry.bankAccountId,
         type: dto.type,
@@ -1971,6 +2198,12 @@ export class FinanceService {
         reference: entry.bankReference ?? entry.externalId ?? entry.id,
         note: `Ajuste controlado: ${reason}`,
       });
+      await this.resolveOpenIssuesForEntry(
+        tx,
+        entry.id,
+        actorUserId,
+        'Ajuste controlado criado para o lancamento.',
+      );
 
       await this.createReconciliationIssueSafely(tx, {
         bankAccountId: entry.bankAccountId,
@@ -2068,6 +2301,174 @@ export class FinanceService {
     });
   }
 
+  listBankReconciliationClosings(
+    query: BankReconciliationClosingQueryDto = {},
+  ) {
+    return this.prisma.bankReconciliationClosing.findMany({
+      where: {
+        ...(query.bankAccountId ? { bankAccountId: query.bankAccountId } : {}),
+        ...(query.year ? { year: query.year } : {}),
+        ...(query.month ? { month: query.month } : {}),
+      },
+      include: {
+        bankAccount: { select: { id: true, name: true, bankName: true } },
+        closedBy: { select: { id: true, name: true, email: true } },
+        reopenedBy: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: [{ year: 'desc' }, { month: 'desc' }, { updatedAt: 'desc' }],
+    });
+  }
+
+  async closeBankReconciliation(
+    bankAccountId: string,
+    dto: CloseBankReconciliationDto,
+    actorUserId?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      this.validatePeriodInput(dto.year, dto.month, dto.reason);
+      const bankAccount = await tx.bankAccount.findUnique({
+        where: { id: bankAccountId },
+        select: { id: true, name: true },
+      });
+      if (!bankAccount) {
+        throw new NotFoundException('Conta bancaria/caixa nao encontrada.');
+      }
+
+      const current = await tx.bankReconciliationClosing.findUnique({
+        where: {
+          bankAccountId_year_month: {
+            bankAccountId,
+            year: dto.year,
+            month: dto.month,
+          },
+        },
+      });
+      if (current?.status === BankReconciliationClosingStatus.CLOSED) {
+        throw new BadRequestException(
+          'Conciliacao bancaria mensal ja fechada.',
+        );
+      }
+
+      const summary = await this.buildBankReconciliationPeriodSummary(tx, {
+        bankAccountId,
+        year: dto.year,
+        month: dto.month,
+        bankStatementClosingBalance: dto.bankStatementClosingBalance,
+      });
+
+      const hasOperationalPending =
+        summary.unreconciledMovementsCount > 0 ||
+        summary.unreconciledEntriesCount > 0 ||
+        summary.openIssuesCount > 0 ||
+        Math.abs(summary.difference) > 0.009;
+      if (hasOperationalPending && !dto.allowOpenIssues) {
+        throw new BadRequestException(
+          'Fechamento bancario bloqueado por pendencias, divergencias ou saldo divergente.',
+        );
+      }
+
+      const data = {
+        status: BankReconciliationClosingStatus.CLOSED,
+        ledgerOpeningBalance: summary.ledgerOpeningBalance,
+        ledgerClosingBalance: summary.ledgerClosingBalance,
+        bankStatementOpeningBalance: summary.bankStatementOpeningBalance,
+        bankStatementClosingBalance: summary.bankStatementClosingBalance,
+        difference: summary.difference,
+        unreconciledMovementsCount: summary.unreconciledMovementsCount,
+        unreconciledEntriesCount: summary.unreconciledEntriesCount,
+        openIssuesCount: summary.openIssuesCount,
+        closedAt: new Date(),
+        closedById: actorUserId,
+        closeReason: dto.reason.trim(),
+        reopenedAt: null,
+        reopenedById: null,
+        reopenReason: null,
+      };
+
+      const closing = current
+        ? await tx.bankReconciliationClosing.update({
+            where: { id: current.id },
+            data,
+          })
+        : await tx.bankReconciliationClosing.create({
+            data: {
+              bankAccountId,
+              year: dto.year,
+              month: dto.month,
+              ...data,
+            },
+          });
+
+      await this.audit(tx, {
+        actorUserId,
+        module: 'FINANCE',
+        entityType: 'BANK_RECONCILIATION_CLOSING',
+        entityId: closing.id,
+        action: 'CLOSE_BANK_RECONCILIATION',
+        reason: dto.reason,
+        payload: {
+          bankAccountId,
+          year: dto.year,
+          month: dto.month,
+          ...summary,
+        },
+      });
+
+      return closing;
+    });
+  }
+
+  async reopenBankReconciliationClosing(
+    id: string,
+    dto: ReopenBankReconciliationDto,
+    actorUserId?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const reason = dto.reason?.trim();
+      if (!reason || reason.length < 4) {
+        throw new BadRequestException(
+          'Informe um motivo claro para reabrir a conciliacao bancaria.',
+        );
+      }
+
+      const current = await tx.bankReconciliationClosing.findUnique({
+        where: { id },
+      });
+      if (!current) {
+        throw new NotFoundException('Fechamento bancario nao encontrado.');
+      }
+      if (current.status !== BankReconciliationClosingStatus.CLOSED) {
+        throw new BadRequestException('Fechamento bancario ja esta aberto.');
+      }
+
+      const reopened = await tx.bankReconciliationClosing.update({
+        where: { id },
+        data: {
+          status: BankReconciliationClosingStatus.REOPENED,
+          reopenedAt: new Date(),
+          reopenedById: actorUserId,
+          reopenReason: reason,
+        },
+      });
+
+      await this.audit(tx, {
+        actorUserId,
+        module: 'FINANCE',
+        entityType: 'BANK_RECONCILIATION_CLOSING',
+        entityId: id,
+        action: 'REOPEN_BANK_RECONCILIATION',
+        reason,
+        payload: {
+          bankAccountId: current.bankAccountId,
+          year: current.year,
+          month: current.month,
+        },
+      });
+
+      return reopened;
+    });
+  }
+
   async reconciliationReport(query: ReconciliationReportQueryDto) {
     const fromDate = new Date(query.from);
     const toDate = new Date(query.to);
@@ -2131,10 +2532,15 @@ export class FinanceService {
       },
       select: { id: true, status: true, type: true },
     });
-    const periodKey = this.getPeriodKey(fromDate);
+    const periodKey = this.getBankPeriodKey(fromDate);
     const [closing, balanceAudit] = await Promise.all([
-      this.prisma.financialPeriodClosing.findUnique({
-        where: { year_month: periodKey },
+      this.prisma.bankReconciliationClosing.findUnique({
+        where: {
+          bankAccountId_year_month: {
+            bankAccountId: query.bankAccountId,
+            ...periodKey,
+          },
+        },
       }),
       this.auditBankAccountBalance(query.bankAccountId),
     ]);
@@ -2167,8 +2573,16 @@ export class FinanceService {
       bankAccount,
       period: { from: fromDate, to: toDate },
       closing: closing
-        ? { id: closing.id, status: closing.status, closedAt: closing.closedAt }
-        : { status: FinancialPeriodStatus.OPEN },
+        ? {
+            id: closing.id,
+            status: closing.status,
+            closedAt: closing.closedAt,
+            difference: closing.difference,
+            unreconciledMovementsCount: closing.unreconciledMovementsCount,
+            unreconciledEntriesCount: closing.unreconciledEntriesCount,
+            openIssuesCount: closing.openIssuesCount,
+          }
+        : { status: BankReconciliationClosingStatus.OPEN },
       totals: {
         openingBalance,
         finalBalance,
@@ -2293,6 +2707,11 @@ export class FinanceService {
       if (movement.reconciledAt) {
         throw new BadRequestException('Movimento ja esta conciliado.');
       }
+      await this.ensureBankReconciliationPeriodOpen(
+        tx,
+        movement.bankAccountId,
+        movement.movementDate,
+      );
 
       const updated = await tx.bankMovement.update({
         where: { id },
@@ -2337,6 +2756,11 @@ export class FinanceService {
       if (!movement.reconciledAt) {
         throw new BadRequestException('Movimento ainda nao esta conciliado.');
       }
+      await this.ensureBankReconciliationPeriodOpen(
+        tx,
+        movement.bankAccountId,
+        movement.movementDate,
+      );
 
       const updated = await tx.bankMovement.update({
         where: { id },
@@ -2762,12 +3186,175 @@ export class FinanceService {
     return dto.content;
   }
 
+  private prepareBankImportProfileData(
+    dto: CreateBankImportProfileDto | UpdateBankImportProfileDto,
+    current?: {
+      name: string;
+      bankCode: string | null;
+      fileType: BankStatementFileType;
+      dateFormat: string | null;
+      decimalSeparator: string | null;
+      amountMode: string;
+      columnMapping: Prisma.JsonValue | null;
+      matchingConfig: Prisma.JsonValue | null;
+      active: boolean;
+    },
+  ): Prisma.BankImportProfileUncheckedCreateInput &
+    Prisma.BankImportProfileUncheckedUpdateInput {
+    const name = (dto.name ?? current?.name ?? '').trim();
+    if (!name) {
+      throw new BadRequestException('Nome do perfil bancario e obrigatorio.');
+    }
+
+    const fileType = dto.fileType ?? current?.fileType;
+    if (!fileType) {
+      throw new BadRequestException('Tipo de arquivo do perfil e obrigatorio.');
+    }
+
+    const amountMode = (dto.amountMode ?? current?.amountMode ?? 'SIGNED')
+      .trim()
+      .toUpperCase();
+    if (!['SIGNED', 'ABSOLUTE_WITH_TYPE'].includes(amountMode)) {
+      throw new BadRequestException(
+        'Modo de valor do perfil deve ser SIGNED ou ABSOLUTE_WITH_TYPE.',
+      );
+    }
+
+    const decimalSeparator =
+      dto.decimalSeparator ?? current?.decimalSeparator ?? undefined;
+    if (
+      decimalSeparator !== undefined &&
+      decimalSeparator !== ',' &&
+      decimalSeparator !== '.'
+    ) {
+      throw new BadRequestException(
+        'Separador decimal deve ser "," ou "." quando informado.',
+      );
+    }
+
+    return {
+      name,
+      bankCode: dto.bankCode?.trim() ?? current?.bankCode ?? null,
+      fileType,
+      dateFormat: dto.dateFormat?.trim() ?? current?.dateFormat ?? null,
+      decimalSeparator: decimalSeparator ?? null,
+      amountMode,
+      columnMapping:
+        dto.columnMapping !== undefined
+          ? (dto.columnMapping as Prisma.InputJsonValue)
+          : ((current?.columnMapping ?? undefined) as
+              | Prisma.InputJsonValue
+              | undefined),
+      matchingConfig:
+        dto.matchingConfig !== undefined
+          ? (dto.matchingConfig as Prisma.InputJsonValue)
+          : ((current?.matchingConfig ?? undefined) as
+              | Prisma.InputJsonValue
+              | undefined),
+      active: dto.active ?? current?.active ?? true,
+    };
+  }
+
+  private async getActiveBankImportProfile(
+    profileId: string,
+    expectedFileType?: BankStatementFileType,
+  ): Promise<RuntimeBankImportProfile> {
+    const profile = await this.prisma.bankImportProfile.findUnique({
+      where: { id: profileId },
+      select: {
+        id: true,
+        name: true,
+        fileType: true,
+        dateFormat: true,
+        decimalSeparator: true,
+        amountMode: true,
+        columnMapping: true,
+        matchingConfig: true,
+        active: true,
+      },
+    });
+    if (!profile) {
+      throw new NotFoundException(
+        'Perfil de importacao bancaria nao encontrado.',
+      );
+    }
+    if (!profile.active) {
+      throw new BadRequestException('Perfil de importacao bancaria inativo.');
+    }
+    if (expectedFileType && profile.fileType !== expectedFileType) {
+      throw new BadRequestException(
+        'Perfil de importacao nao corresponde ao tipo de arquivo informado.',
+      );
+    }
+    return profile;
+  }
+
+  private assertProfileUsableForStatement(
+    profile: RuntimeBankImportProfile | null,
+    expectedFileType: BankStatementFileType,
+  ) {
+    if (!profile) return;
+    if (profile.active === false) {
+      throw new BadRequestException('Perfil de importacao bancaria inativo.');
+    }
+    if (profile.fileType !== expectedFileType) {
+      throw new BadRequestException(
+        'Perfil de importacao nao corresponde ao tipo de arquivo do extrato.',
+      );
+    }
+  }
+
+  private resolveBankMatchingConfig(
+    profile: RuntimeBankImportProfile | null,
+    dto: AutoMatchBankStatementDto = {},
+  ): BankMatchingConfig {
+    const rawConfig =
+      profile?.matchingConfig &&
+      typeof profile.matchingConfig === 'object' &&
+      !Array.isArray(profile.matchingConfig)
+        ? (profile.matchingConfig as Record<string, unknown>)
+        : {};
+    const numberValue = (
+      key: string,
+      fallback: number,
+      min: number,
+      max: number,
+    ) => {
+      const raw = rawConfig[key];
+      const parsed = typeof raw === 'number' ? raw : Number(raw);
+      if (!Number.isFinite(parsed)) return fallback;
+      return Math.min(Math.max(parsed, min), max);
+    };
+
+    return {
+      dateWindowDays: Math.round(
+        dto.dateWindowDays ?? numberValue('dateWindowDays', 2, 0, 10),
+      ),
+      minAutoMatchScore:
+        dto.minAutoMatchScore ?? numberValue('minAutoMatchScore', 0.8, 0.5, 1),
+      amountWeight: numberValue('amountWeight', 0.55, 0, 1),
+      exactDateWeight: numberValue('exactDateWeight', 0.2, 0, 1),
+      windowDateWeight: numberValue('windowDateWeight', 0.08, 0, 1),
+      referenceWeight: numberValue('referenceWeight', 0.25, 0, 1),
+      descriptionHighWeight: numberValue('descriptionHighWeight', 0.18, 0, 1),
+      descriptionLowWeight: numberValue('descriptionLowWeight', 0.1, 0, 1),
+      highSimilarityThreshold: numberValue(
+        'highSimilarityThreshold',
+        0.7,
+        0,
+        1,
+      ),
+      lowSimilarityThreshold: numberValue('lowSimilarityThreshold', 0.45, 0, 1),
+    };
+  }
+
   private parseStatementEntries(
     fileType: BankStatementFileType,
     content: string,
+    profile?: RuntimeBankImportProfile | null,
   ): ParsedStatementEntry[] {
     if (fileType === BankStatementFileType.CSV) {
-      return this.parseCsvStatement(content);
+      return this.parseCsvStatement(content, profile);
     }
     if (fileType === BankStatementFileType.OFX) {
       return this.parseOfxStatement(content);
@@ -2775,7 +3362,10 @@ export class FinanceService {
     return this.parseCnabStatement(content);
   }
 
-  private parseCsvStatement(content: string): ParsedStatementEntry[] {
+  private parseCsvStatement(
+    content: string,
+    profile?: RuntimeBankImportProfile | null,
+  ): ParsedStatementEntry[] {
     const rows = content
       .replace(/^\uFEFF/, '')
       .split(/\r?\n/)
@@ -2791,11 +3381,28 @@ export class FinanceService {
     const headers = this.splitCsvLine(rows[0], delimiter).map((header) =>
       this.normalizeHeader(header),
     );
-    const findColumn = (...names: string[]) =>
-      names.map((name) => headers.indexOf(name)).find((index) => index !== -1);
+    const mapping = this.readCsvColumnMapping(profile);
+    const findColumn = (field: keyof CsvColumnMapping, ...names: string[]) => {
+      const configured = mapping[field];
+      if (configured) {
+        const configuredIndex = headers.indexOf(
+          this.normalizeHeader(configured),
+        );
+        if (configuredIndex === -1) {
+          throw new BadRequestException(
+            `Coluna configurada "${configured}" nao encontrada no CSV.`,
+          );
+        }
+        return configuredIndex;
+      }
+      return names
+        .map((name) => headers.indexOf(name))
+        .find((index) => index !== -1);
+    };
 
-    const dateIndex = findColumn('data', 'posteddate', 'dtposted');
+    const dateIndex = findColumn('date', 'data', 'posteddate', 'dtposted');
     const descriptionIndex = findColumn(
+      'description',
       'descricao',
       'description',
       'historico',
@@ -2803,8 +3410,15 @@ export class FinanceService {
       'memo',
       'name',
     );
-    const amountIndex = findColumn('valor', 'amount', 'vlr', 'valorlancamento');
+    const amountIndex = findColumn(
+      'amount',
+      'valor',
+      'amount',
+      'vlr',
+      'valorlancamento',
+    );
     const typeIndex = findColumn(
+      'type',
       'tipo',
       'type',
       'natureza',
@@ -2813,6 +3427,7 @@ export class FinanceService {
       'creditooudebito',
     );
     const documentIndex = findColumn(
+      'documentNumber',
       'documento',
       'documentnumber',
       'doc',
@@ -2820,6 +3435,7 @@ export class FinanceService {
       'document',
     );
     const referenceIndex = findColumn(
+      'reference',
       'referencia',
       'bankreference',
       'reference',
@@ -2841,10 +3457,15 @@ export class FinanceService {
 
     return rows.slice(1).map((row, offset) => {
       const cells = this.splitCsvLine(row, delimiter);
-      const postedDate = this.parseStatementDate(cells[dateIndex], offset + 2);
+      const postedDate = this.parseStatementDate(
+        cells[dateIndex],
+        offset + 2,
+        profile?.dateFormat,
+      );
       const rawAmount = this.parseStatementAmount(
         cells[amountIndex],
         offset + 2,
+        profile?.decimalSeparator,
       );
       const type = this.resolveStatementType(
         typeIndex !== undefined ? cells[typeIndex] : undefined,
@@ -3006,6 +3627,32 @@ export class FinanceService {
       bankReference: documentNumber,
       externalId,
     });
+  }
+
+  private readCsvColumnMapping(
+    profile?: RuntimeBankImportProfile | null,
+  ): CsvColumnMapping {
+    const raw = profile?.columnMapping;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      return {};
+    }
+
+    const mapping: CsvColumnMapping = {};
+    const record = raw as Record<string, unknown>;
+    for (const key of [
+      'date',
+      'description',
+      'amount',
+      'type',
+      'documentNumber',
+      'reference',
+    ] as Array<keyof CsvColumnMapping>) {
+      const value = record[key];
+      if (typeof value === 'string' && value.trim()) {
+        mapping[key] = value.trim();
+      }
+    }
+    return mapping;
   }
 
   private detectCsvDelimiter(header: string) {
@@ -3189,10 +3836,49 @@ export class FinanceService {
     return match?.[1]?.trim();
   }
 
-  private parseStatementDate(value: string | undefined, rowNumber: number) {
+  private parseStatementDate(
+    value: string | undefined,
+    rowNumber: number,
+    dateFormat?: string | null,
+  ) {
     const raw = String(value || '').trim();
     if (!raw) {
       throw new BadRequestException(`Data ausente na linha ${rowNumber}.`);
+    }
+    const normalizedFormat = this.normalizeHeader(dateFormat || '');
+    if (normalizedFormat === 'ddmmyyyy') {
+      const brConfigured = /^(\d{2})[/-](\d{2})[/-](\d{4})$/.exec(raw);
+      if (!brConfigured) {
+        throw new BadRequestException(`Data invalida na linha ${rowNumber}.`);
+      }
+      const parsed = new Date(
+        Date.UTC(
+          Number(brConfigured[3]),
+          Number(brConfigured[2]) - 1,
+          Number(brConfigured[1]),
+        ),
+      );
+      if (
+        parsed.getUTCFullYear() !== Number(brConfigured[3]) ||
+        parsed.getUTCMonth() !== Number(brConfigured[2]) - 1 ||
+        parsed.getUTCDate() !== Number(brConfigured[1])
+      ) {
+        throw new BadRequestException(`Data invalida na linha ${rowNumber}.`);
+      }
+      return parsed;
+    }
+    if (normalizedFormat === 'yyyymmdd') {
+      const isoConfigured = /^(\d{4})[/-]?(\d{2})[/-]?(\d{2})$/.exec(raw);
+      if (!isoConfigured) {
+        throw new BadRequestException(`Data invalida na linha ${rowNumber}.`);
+      }
+      return new Date(
+        Date.UTC(
+          Number(isoConfigured[1]),
+          Number(isoConfigured[2]) - 1,
+          Number(isoConfigured[3]),
+        ),
+      );
     }
     const ofxDate = /^(\d{4})(\d{2})(\d{2})/.exec(raw);
     if (ofxDate) {
@@ -3241,7 +3927,11 @@ export class FinanceService {
     return parsed;
   }
 
-  private parseStatementAmount(value: string | undefined, rowNumber: number) {
+  private parseStatementAmount(
+    value: string | undefined,
+    rowNumber: number,
+    decimalSeparator?: string | null,
+  ) {
     const raw = String(value || '')
       .trim()
       .replace(/^\((.*)\)$/, '-$1')
@@ -3251,10 +3941,17 @@ export class FinanceService {
       throw new BadRequestException(`Valor ausente na linha ${rowNumber}.`);
     }
 
-    const normalized =
-      raw.includes(',') && raw.lastIndexOf(',') > raw.lastIndexOf('.')
-        ? raw.replace(/\./g, '').replace(',', '.')
-        : raw.replace(/,/g, '');
+    let normalized: string;
+    if (decimalSeparator === ',') {
+      normalized = raw.replace(/\./g, '').replace(',', '.');
+    } else if (decimalSeparator === '.') {
+      normalized = raw.replace(/,/g, '');
+    } else {
+      normalized =
+        raw.includes(',') && raw.lastIndexOf(',') > raw.lastIndexOf('.')
+          ? raw.replace(/\./g, '').replace(',', '.')
+          : raw.replace(/,/g, '');
+    }
     const amount = Number(normalized);
     if (!Number.isFinite(amount) || amount === 0) {
       throw new BadRequestException(`Valor invalido na linha ${rowNumber}.`);
@@ -3379,9 +4076,10 @@ export class FinanceService {
       documentNumber?: string | null;
     },
     candidates: BankMovementCandidate[],
+    config: BankMatchingConfig,
   ): StatementMatchCandidate[] {
     return candidates
-      .map((movement) => this.scoreMovementCandidate(entry, movement))
+      .map((movement) => this.scoreMovementCandidate(entry, movement, config))
       .sort((left, right) => right.score - left.score);
   }
 
@@ -3398,15 +4096,16 @@ export class FinanceService {
       documentNumber?: string | null;
     },
     movement: BankMovementCandidate,
+    config: BankMatchingConfig,
   ): StatementMatchCandidate {
     const reasons: string[] = ['valor e tipo iguais'];
-    let score = 0.55;
+    let score = config.amountWeight;
 
     if (this.sameBankDay(movement.movementDate, entry.postedDate)) {
-      score += 0.2;
+      score += config.exactDateWeight;
       reasons.push('data exata');
     } else {
-      score += 0.08;
+      score += config.windowDateWeight;
       reasons.push('janela de data');
     }
 
@@ -3429,7 +4128,7 @@ export class FinanceService {
         entryReferences.includes(reference),
       )
     ) {
-      score += 0.25;
+      score += config.referenceWeight;
       reasons.push('referencia/documento igual');
     }
 
@@ -3437,11 +4136,11 @@ export class FinanceService {
       entry.normalizedDescription || this.normalizeBankText(entry.description),
       this.normalizeBankText(movement.description),
     );
-    if (similarity >= 0.7) {
-      score += 0.18;
+    if (similarity >= config.highSimilarityThreshold) {
+      score += config.descriptionHighWeight;
       reasons.push('descricao muito parecida');
-    } else if (similarity >= 0.45) {
-      score += 0.1;
+    } else if (similarity >= config.lowSimilarityThreshold) {
+      score += config.descriptionLowWeight;
       reasons.push('descricao parcialmente parecida');
     }
 
@@ -3678,6 +4377,128 @@ export class FinanceService {
     };
   }
 
+  private getBankPeriodKey(date: Date) {
+    return {
+      year: date.getUTCFullYear(),
+      month: date.getUTCMonth() + 1,
+    };
+  }
+
+  private getBankPeriodRange(year: number, month: number) {
+    const from = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
+    const to = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+    return { from, to };
+  }
+
+  private async buildBankReconciliationPeriodSummary(
+    tx: Prisma.TransactionClient,
+    input: {
+      bankAccountId: string;
+      year: number;
+      month: number;
+      bankStatementClosingBalance?: number;
+    },
+  ) {
+    const { from, to } = this.getBankPeriodRange(input.year, input.month);
+    const bankAccount = await tx.bankAccount.findUnique({
+      where: { id: input.bankAccountId },
+      select: { id: true, initialBalance: true, currentBalance: true },
+    });
+    if (!bankAccount) {
+      throw new NotFoundException('Conta bancaria/caixa nao encontrada.');
+    }
+
+    const [beforeMovements, periodMovements, statementEntries, openIssues] =
+      await Promise.all([
+        tx.bankMovement.findMany({
+          where: {
+            bankAccountId: input.bankAccountId,
+            movementDate: { lt: from },
+            status: BankMovementStatus.POSTED,
+          },
+          select: { type: true, amount: true },
+        }),
+        tx.bankMovement.findMany({
+          where: {
+            bankAccountId: input.bankAccountId,
+            movementDate: { gte: from, lte: to },
+            status: BankMovementStatus.POSTED,
+          },
+          select: {
+            id: true,
+            type: true,
+            amount: true,
+            reconciledAt: true,
+          },
+        }),
+        tx.bankStatementEntry.findMany({
+          where: {
+            bankAccountId: input.bankAccountId,
+            postedDate: { gte: from, lte: to },
+          },
+          select: {
+            id: true,
+            type: true,
+            amount: true,
+            matchStatus: true,
+          },
+        }),
+        tx.bankReconciliationIssue.count({
+          where: {
+            bankAccountId: input.bankAccountId,
+            status: BankReconciliationIssueStatus.OPEN,
+            createdAt: { gte: from, lte: to },
+          },
+        }),
+      ]);
+
+    const ledgerOpeningBalance =
+      Number(bankAccount.initialBalance || 0) +
+      this.sumMovementDelta(beforeMovements);
+    const periodDelta = this.sumMovementDelta(periodMovements);
+    const ledgerClosingBalance = ledgerOpeningBalance + periodDelta;
+    const statementDelta = this.sumMovementDelta(statementEntries);
+    const bankStatementClosingBalance =
+      input.bankStatementClosingBalance !== undefined
+        ? Number(input.bankStatementClosingBalance)
+        : undefined;
+    const bankStatementOpeningBalance =
+      bankStatementClosingBalance !== undefined
+        ? bankStatementClosingBalance - statementDelta
+        : undefined;
+    const difference = Number(
+      (
+        (bankStatementClosingBalance ??
+          Number(bankAccount.currentBalance || 0)) - ledgerClosingBalance
+      ).toFixed(2),
+    );
+
+    return {
+      period: { from, to },
+      ledgerOpeningBalance: Number(ledgerOpeningBalance.toFixed(2)),
+      ledgerClosingBalance: Number(ledgerClosingBalance.toFixed(2)),
+      bankStatementOpeningBalance:
+        bankStatementOpeningBalance !== undefined
+          ? Number(bankStatementOpeningBalance.toFixed(2))
+          : null,
+      bankStatementClosingBalance:
+        bankStatementClosingBalance !== undefined
+          ? Number(bankStatementClosingBalance.toFixed(2))
+          : null,
+      difference,
+      unreconciledMovementsCount: periodMovements.filter(
+        (movement) => !movement.reconciledAt,
+      ).length,
+      unreconciledEntriesCount: statementEntries.filter(
+        (entry) =>
+          entry.matchStatus === BankStatementEntryMatchStatus.UNMATCHED,
+      ).length,
+      openIssuesCount: openIssues,
+      statementEntriesCount: statementEntries.length,
+      movementsCount: periodMovements.length,
+    };
+  }
+
   private async ensureFinancialPeriodOpen(
     tx: Prisma.TransactionClient,
     date: Date,
@@ -3692,6 +4513,57 @@ export class FinanceService {
       throw new BadRequestException(
         `Periodo financeiro ${String(period.month).padStart(2, '0')}/${period.year} esta fechado.`,
       );
+    }
+  }
+
+  private async ensureBankReconciliationPeriodOpen(
+    tx: Prisma.TransactionClient,
+    bankAccountId: string,
+    date: Date,
+  ) {
+    const period = this.getBankPeriodKey(date);
+    const closing = await tx.bankReconciliationClosing.findUnique({
+      where: {
+        bankAccountId_year_month: {
+          bankAccountId,
+          year: period.year,
+          month: period.month,
+        },
+      },
+      select: { id: true, status: true },
+    });
+
+    if (closing?.status === BankReconciliationClosingStatus.CLOSED) {
+      throw new BadRequestException(
+        `Conciliacao bancaria ${String(period.month).padStart(2, '0')}/${period.year} esta fechada.`,
+      );
+    }
+  }
+
+  private async resolveOpenIssuesForEntry(
+    tx: Prisma.TransactionClient,
+    statementEntryId: string,
+    actorUserId: string | undefined,
+    reason: string,
+  ) {
+    const openIssues = await tx.bankReconciliationIssue.findMany({
+      where: {
+        statementEntryId,
+        status: BankReconciliationIssueStatus.OPEN,
+      },
+      select: { id: true },
+    });
+
+    for (const issue of openIssues) {
+      await tx.bankReconciliationIssue.update({
+        where: { id: issue.id },
+        data: {
+          status: BankReconciliationIssueStatus.RESOLVED,
+          reason,
+          resolvedAt: new Date(),
+          resolvedById: actorUserId,
+        },
+      });
     }
   }
 

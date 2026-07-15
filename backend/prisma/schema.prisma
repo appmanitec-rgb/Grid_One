@@ -480,12 +480,22 @@ enum BankReconciliationIssueType {
   DUPLICATE_BANK_ENTRY
   IGNORED_ENTRY
   MANUAL_ADJUSTMENT
+  BANK_ENTRY_WITHOUT_MOVEMENT
+  MOVEMENT_WITHOUT_BANK_ENTRY
+  POSSIBLE_MATCH_AMBIGUOUS
+  MANUAL_ADJUSTMENT_REQUIRED
 }
 
 enum BankReconciliationIssueStatus {
   OPEN
   RESOLVED
   IGNORED
+}
+
+enum BankReconciliationClosingStatus {
+  OPEN
+  CLOSED
+  REOPENED
 }
 
 enum HrAssetType {
@@ -622,6 +632,8 @@ model User {
   reconciledBankMovements        BankMovement[]              @relation("BankMovementReconciledBy")
   importedBankStatements         BankStatementImport[]       @relation("BankStatementImportedBy")
   resolvedReconciliationIssues   BankReconciliationIssue[]   @relation("BankReconciliationIssueResolvedBy")
+  closedBankReconciliations      BankReconciliationClosing[] @relation("BankReconciliationClosedBy")
+  reopenedBankReconciliations    BankReconciliationClosing[] @relation("BankReconciliationReopenedBy")
   closedFinancialPeriods         FinancialPeriodClosing[]    @relation("FinancialPeriodClosedBy")
   reopenedFinancialPeriods       FinancialPeriodClosing[]    @relation("FinancialPeriodReopenedBy")
   timeEntries                    TimeEntry[]
@@ -2051,6 +2063,7 @@ model BankAccount {
   statementImports     BankStatementImport[]
   statementEntries     BankStatementEntry[]
   reconciliationIssues BankReconciliationIssue[]
+  reconciliationClosings BankReconciliationClosing[]
 
   @@map("bank_accounts")
 }
@@ -2201,6 +2214,8 @@ model BankStatementImport {
   id             String                    @id @default(uuid())
   bankAccountId  String
   bankAccount    BankAccount               @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  profileId      String?
+  profile        BankImportProfile?        @relation(fields: [profileId], references: [id], onDelete: SetNull)
   fileName       String
   fileType       BankStatementFileType
   importedAt     DateTime                  @default(now())
@@ -2216,8 +2231,30 @@ model BankStatementImport {
 
   @@unique([bankAccountId, checksumSha256])
   @@index([bankAccountId, importedAt])
+  @@index([profileId])
   @@index([status, importedAt])
   @@map("bank_statement_imports")
+}
+
+model BankImportProfile {
+  id              String                @id @default(uuid())
+  name            String
+  bankCode        String?
+  fileType        BankStatementFileType
+  dateFormat      String?
+  decimalSeparator String?
+  amountMode      String                @default("SIGNED")
+  columnMapping   Json?
+  matchingConfig  Json?
+  active          Boolean               @default(true)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  imports BankStatementImport[]
+
+  @@index([fileType, active])
+  @@index([bankCode])
+  @@map("bank_import_profiles")
 }
 
 model BankStatementEntry {
@@ -2285,6 +2322,38 @@ model BankReconciliationIssue {
   @@index([movementId])
   @@index([type, status])
   @@map("bank_reconciliation_issues")
+}
+
+model BankReconciliationClosing {
+  id                          String                          @id @default(uuid())
+  bankAccountId               String
+  bankAccount                 BankAccount                     @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  year                        Int
+  month                       Int
+  status                      BankReconciliationClosingStatus @default(OPEN)
+  ledgerOpeningBalance        Float                           @default(0)
+  ledgerClosingBalance        Float                           @default(0)
+  bankStatementOpeningBalance Float?
+  bankStatementClosingBalance Float?
+  difference                  Float                           @default(0)
+  unreconciledMovementsCount  Int                             @default(0)
+  unreconciledEntriesCount    Int                             @default(0)
+  openIssuesCount             Int                             @default(0)
+  closedAt                    DateTime?
+  closedById                  String?
+  closedBy                    User?                           @relation("BankReconciliationClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  closeReason                 String?
+  reopenedAt                  DateTime?
+  reopenedById                String?
+  reopenedBy                  User?                           @relation("BankReconciliationReopenedBy", fields: [reopenedById], references: [id], onDelete: SetNull)
+  reopenReason                String?
+  createdAt                   DateTime                        @default(now())
+  updatedAt                   DateTime                        @updatedAt
+
+  @@unique([bankAccountId, year, month])
+  @@index([status, year, month])
+  @@index([bankAccountId, status])
+  @@map("bank_reconciliation_closings")
 }
 
 model FinancialAuditLog {

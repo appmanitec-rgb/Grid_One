@@ -93,6 +93,8 @@ type BankMovementPayload = {
 type BankStatementImport = {
   id: string;
   status: string;
+  profileId?: string | null;
+  profile?: { id: string; name: string } | null;
   entries?: BankStatementEntry[];
 };
 
@@ -131,6 +133,19 @@ type MatchSuggestions = {
     reason: string;
     canAutoMatch: boolean;
   }>;
+};
+
+type BankImportProfile = {
+  id: string;
+  name: string;
+  fileType: string;
+  active: boolean;
+};
+
+type BankReconciliationClosing = {
+  id: string;
+  status: string;
+  difference: number;
 };
 
 type FinancialPeriodClosing = {
@@ -483,6 +498,55 @@ test.describe.serial("financeiro operacional, caixa, DRE e comissao", () => {
     );
     expect(duplicateImport.status).toBeGreaterThanOrEqual(400);
 
+    const importProfile = await apiRequest<BankImportProfile>(
+      financeToken,
+      "/finance/bank-import-profiles",
+      {
+        method: "POST",
+        body: {
+          name: `Perfil CSV banco E2E ${suffix}`,
+          bankCode: "E2E",
+          fileType: "CSV",
+          dateFormat: "YYYY-MM-DD",
+          decimalSeparator: ".",
+          amountMode: "SIGNED",
+          columnMapping: {
+            date: "posted_on",
+            description: "history",
+            amount: "transaction_value",
+            type: "nature",
+            documentNumber: "doc_id",
+            reference: "bank_id",
+          },
+          matchingConfig: {
+            dateWindowDays: 3,
+            minAutoMatchScore: 0.82,
+          },
+        },
+      },
+    );
+    expect(importProfile.id).toBeTruthy();
+
+    const profileCsv = [
+      "posted_on,history,transaction_value,nature,doc_id,bank_id",
+      `${paidAt.slice(0, 10)},Tarifa pequena perfil ${suffix},-12.34,DEBIT,TAR-PERFIL-${suffix},E2E-PERFIL-${suffix}`,
+    ].join("\n");
+    const profileImport = await apiRequest<BankStatementImport>(
+      financeToken,
+      `/finance/bank-accounts/${bankAccount.id}/statements/import`,
+      {
+        method: "POST",
+        body: {
+          fileName: `perfil-ciclo-16-${suffix}.csv`,
+          fileType: "CSV",
+          profileId: importProfile.id,
+          content: profileCsv,
+        },
+      },
+    );
+    expect(profileImport.profileId).toBe(importProfile.id);
+    expect(profileImport.entries?.[0]?.matchStatus).toBe("UNMATCHED");
+
     const autoMatch = await apiRequest<{
       autoMatched: number;
       unmatched: number;
@@ -690,6 +754,71 @@ test.describe.serial("financeiro operacional, caixa, DRE e comissao", () => {
       entriesAfterManualReview.find((entry) => entry.id === ignoredEntry!.id)
         ?.matchStatus,
     ).toBe("IGNORED");
+
+    const profileEntry = profileImport.entries?.[0];
+    expect(profileEntry?.id).toBeTruthy();
+    const periodDate = new Date(paidAt);
+    const closePayload = {
+      year: periodDate.getUTCFullYear(),
+      month: periodDate.getUTCMonth() + 1,
+      reason: `Fechamento bancario E2E ${suffix}`,
+    };
+    const blockedClosing = await apiRequestRaw(
+      financeToken,
+      `/finance/bank-accounts/${bankAccount.id}/reconciliation-closings/close`,
+      {
+        method: "POST",
+        body: closePayload,
+      },
+    );
+    expect(blockedClosing.status).toBeGreaterThanOrEqual(400);
+
+    const auditorClosing = await apiRequestRaw(
+      auditorSession.access_token,
+      `/finance/bank-accounts/${bankAccount.id}/reconciliation-closings/close`,
+      {
+        method: "POST",
+        body: { ...closePayload, allowOpenIssues: true },
+      },
+    );
+    expect(auditorClosing.status).toBe(403);
+
+    const bankClosing = await apiRequest<BankReconciliationClosing>(
+      financeToken,
+      `/finance/bank-accounts/${bankAccount.id}/reconciliation-closings/close`,
+      {
+        method: "POST",
+        body: { ...closePayload, allowOpenIssues: true },
+      },
+    );
+    expect(bankClosing.status).toBe("CLOSED");
+
+    const blockedClosedPeriodAction = await apiRequestRaw(
+      financeToken,
+      `/finance/bank-statement-entries/${profileEntry!.id}/ignore`,
+      {
+        method: "POST",
+        body: { reason: "Tentativa bloqueada por fechamento bancario" },
+      },
+    );
+    expect(blockedClosedPeriodAction.status).toBeGreaterThanOrEqual(400);
+
+    await apiRequest(
+      financeToken,
+      `/finance/bank-reconciliation-closings/${bankClosing.id}/reopen`,
+      {
+        method: "PATCH",
+        body: { reason: "Reabertura E2E para tratar pendencia" },
+      },
+    );
+    await apiRequest(
+      financeToken,
+      `/finance/bank-statement-entries/${profileEntry!.id}/ignore`,
+      {
+        method: "POST",
+        body: { reason: "Tarifa pequena tratada apos reabertura" },
+      },
+    );
 
     const technicianImport = await apiRequestRaw(
       technicianSession.access_token,

@@ -4,6 +4,7 @@ import {
   IsEnum,
   IsInt,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   IsUUID,
@@ -332,6 +333,10 @@ export class ImportBankStatementDto {
   @IsString()
   content!: string;
 
+  @IsUUID()
+  @IsOptional()
+  profileId?: string;
+
   @IsBoolean()
   @IsOptional()
   contentBase64?: boolean;
@@ -343,7 +348,57 @@ export class AutoMatchBankStatementDto {
   @Max(10)
   @IsOptional()
   dateWindowDays?: number;
+
+  @IsUUID()
+  @IsOptional()
+  profileId?: string;
+
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  @IsOptional()
+  minAutoMatchScore?: number;
 }
+
+export class CreateBankImportProfileDto {
+  @IsString()
+  name!: string;
+
+  @IsString()
+  @IsOptional()
+  bankCode?: string;
+
+  @IsEnum(BankStatementFileType)
+  fileType!: BankStatementFileType;
+
+  @IsString()
+  @IsOptional()
+  dateFormat?: string;
+
+  @IsString()
+  @IsOptional()
+  decimalSeparator?: string;
+
+  @IsString()
+  @IsOptional()
+  amountMode?: string;
+
+  @IsObject()
+  @IsOptional()
+  columnMapping?: Record<string, unknown>;
+
+  @IsObject()
+  @IsOptional()
+  matchingConfig?: Record<string, unknown>;
+
+  @IsBoolean()
+  @IsOptional()
+  active?: boolean;
+}
+
+export class UpdateBankImportProfileDto extends PartialType(
+  CreateBankImportProfileDto,
+) {}
 
 export class MatchBankStatementEntryDto {
   @IsUUID()
@@ -379,6 +434,52 @@ export class CreateBankAdjustmentDto {
 }
 
 export class ResolveReconciliationIssueDto {
+  @IsString()
+  reason!: string;
+}
+
+export class BankReconciliationClosingQueryDto {
+  @IsUUID()
+  @IsOptional()
+  bankAccountId?: string;
+
+  @IsInt()
+  @Min(2000)
+  @Max(2999)
+  @IsOptional()
+  year?: number;
+
+  @IsInt()
+  @Min(1)
+  @Max(12)
+  @IsOptional()
+  month?: number;
+}
+
+export class CloseBankReconciliationDto {
+  @IsInt()
+  @Min(2000)
+  @Max(2999)
+  year!: number;
+
+  @IsInt()
+  @Min(1)
+  @Max(12)
+  month!: number;
+
+  @IsString()
+  reason!: string;
+
+  @IsNumber()
+  @IsOptional()
+  bankStatementClosingBalance?: number;
+
+  @IsBoolean()
+  @IsOptional()
+  allowOpenIssues?: boolean;
+}
+
+export class ReopenBankReconciliationDto {
   @IsString()
   reason!: string;
 }
