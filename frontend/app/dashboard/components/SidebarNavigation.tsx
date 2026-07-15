@@ -285,6 +285,12 @@ const MAIN_SECTIONS: NavSection[] = [
         enabled: true,
       },
       {
+        key: "finance_reconciliation",
+        label: "Conciliação Bancária",
+        href: "/dashboard/finance/reconciliation",
+        enabled: true,
+      },
+      {
         key: "finance_banks",
         label: "Contas Bancárias & Caixas",
         href: "/dashboard/finance/bank-accounts",

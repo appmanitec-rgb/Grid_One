@@ -88,6 +88,29 @@ type BankMovementPayload = {
   entries: BankMovement[];
 };
 
+type BankStatementImport = {
+  id: string;
+  status: string;
+  entries?: BankStatementEntry[];
+};
+
+type BankStatementEntry = {
+  id: string;
+  amount: number;
+  type: "CREDIT" | "DEBIT";
+  description: string;
+  matchStatus: string;
+  matchedMovementId?: string | null;
+};
+
+type ReconciliationReport = {
+  totals: {
+    reconciledMovements: number;
+    unmatchedStatementEntries: number;
+    openIssues: number;
+  };
+};
+
 type FinancialPeriodClosing = {
   id: string;
   year: number;
@@ -136,6 +159,11 @@ test.describe.serial("financeiro operacional, caixa, DRE e comissao", () => {
           discountAmount: 0,
         },
       },
+    );
+
+    const statementBeforePayment = await apiRequest<BankMovementPayload>(
+      financeToken,
+      `/finance/bank-movements?bankAccountId=${bankBefore.id}`,
     );
 
     await apiRequest<Commission>(adminToken, "/hr-admin/commissions", {
@@ -196,9 +224,10 @@ test.describe.serial("financeiro operacional, caixa, DRE e comissao", () => {
         Math.round(Number(movement.amount) * 100) === Math.round(amount * 100),
     );
     expect(creditMovement?.id).toBeTruthy();
-    expect(
-      Number(statementAfterPayment.finalBalance.toFixed(2)),
-    ).toBeCloseTo(Number(bankAfterPayment.currentBalance.toFixed(2)), 2);
+    expect(Number(statementAfterPayment.finalBalance.toFixed(2))).toBeCloseTo(
+      Number((statementBeforePayment.finalBalance + amount).toFixed(2)),
+      2,
+    );
 
     await apiRequest(
       financeToken,
@@ -318,6 +347,192 @@ test.describe.serial("financeiro operacional, caixa, DRE e comissao", () => {
           item.notes?.includes(`Ciclo 12 E2E ${suffix}`),
       ),
     ).toBeTruthy();
+  });
+
+  test("conciliacao bancaria importa CSV, faz matching, registra ajuste e bloqueia perfis externos", async ({
+    page,
+  }) => {
+    const [adminSession, financeSession, technicianSession, clientSession] =
+      await Promise.all([
+        apiLogin(accounts.admin),
+        apiLogin(accounts.finance),
+        apiLogin(accounts.technician),
+        apiLogin(accounts.clientA),
+      ]);
+    const adminToken = adminSession.access_token;
+    const financeToken = financeSession.access_token;
+
+    const contract = await firstContract(adminToken);
+    const clientId = contract.clientId ?? contract.client?.id;
+    expect(clientId).toBeTruthy();
+
+    const bankAccount = await firstActiveBankAccount(financeToken);
+    const suffix = Date.now();
+    const amount = 2789 + (suffix % 97) + 0.37;
+    const feeAmount = 17.89;
+    const paidAt = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+    const description = `Ciclo 14 conciliacao ${suffix}`;
+
+    const receivable = await apiRequest<Receivable>(
+      financeToken,
+      "/finance/receivables",
+      {
+        method: "POST",
+        body: {
+          clientId,
+          contractId: contract.id,
+          costCenterId: contract.costCenterId,
+          description,
+          competenceDate: paidAt,
+          dueDate: paidAt,
+          grossAmount: amount,
+          discountAmount: 0,
+        },
+      },
+    );
+
+    await apiRequest(
+      financeToken,
+      `/finance/receivables/${receivable.id}/pay`,
+      {
+        method: "PATCH",
+        body: {
+          amount,
+          method: "TRANSFER",
+          bankAccountId: bankAccount.id,
+          paidAt,
+        },
+      },
+    );
+
+    const statementBefore = await apiRequest<BankMovementPayload>(
+      financeToken,
+      `/finance/bank-movements?bankAccountId=${bankAccount.id}`,
+    );
+    const creditMovement = statementBefore.entries.find(
+      (movement) =>
+        movement.receivableId === receivable.id &&
+        movement.type === "CREDIT" &&
+        Math.round(movement.amount * 100) === Math.round(amount * 100),
+    );
+    expect(creditMovement?.id).toBeTruthy();
+
+    const bankDate = formatBrDate(paidAt);
+    const csv = [
+      "data;descricao;valor;referencia",
+      `${bankDate};Recebimento ${suffix};${formatBrMoney(amount)};E2E-C14-${suffix}`,
+      `${bankDate};Tarifa bancaria ${suffix};-${formatBrMoney(feeAmount)};E2E-C14-TAR-${suffix}`,
+    ].join("\n");
+
+    const imported = await apiRequest<BankStatementImport>(
+      financeToken,
+      `/finance/bank-accounts/${bankAccount.id}/statements/import`,
+      {
+        method: "POST",
+        body: {
+          fileName: `ciclo-14-${suffix}.csv`,
+          fileType: "CSV",
+          content: csv,
+        },
+      },
+    );
+    expect(imported.id).toBeTruthy();
+    expect(imported.entries?.length).toBe(2);
+
+    const duplicateImport = await apiRequestRaw(
+      financeToken,
+      `/finance/bank-accounts/${bankAccount.id}/statements/import`,
+      {
+        method: "POST",
+        body: {
+          fileName: `ciclo-14-${suffix}.csv`,
+          fileType: "CSV",
+          content: csv,
+        },
+      },
+    );
+    expect(duplicateImport.status).toBeGreaterThanOrEqual(400);
+
+    const autoMatch = await apiRequest<{
+      autoMatched: number;
+      unmatched: number;
+    }>(financeToken, `/finance/bank-statements/${imported.id}/auto-match`, {
+      method: "POST",
+      body: { dateWindowDays: 2 },
+    });
+    expect(autoMatch.autoMatched).toBeGreaterThanOrEqual(1);
+    expect(autoMatch.unmatched).toBeGreaterThanOrEqual(1);
+
+    const entriesAfterMatch = await apiRequest<BankStatementEntry[]>(
+      financeToken,
+      `/finance/bank-statements/${imported.id}/entries`,
+    );
+    const matchedCredit = entriesAfterMatch.find(
+      (entry) =>
+        entry.type === "CREDIT" &&
+        Math.round(entry.amount * 100) === Math.round(amount * 100),
+    );
+    expect(matchedCredit?.matchStatus).toBe("AUTO_MATCHED");
+    expect(matchedCredit?.matchedMovementId).toBe(creditMovement!.id);
+
+    const feeEntry = entriesAfterMatch.find(
+      (entry) =>
+        entry.type === "DEBIT" &&
+        Math.round(entry.amount * 100) === Math.round(feeAmount * 100),
+    );
+    expect(feeEntry?.id).toBeTruthy();
+    expect(feeEntry?.matchStatus).toBe("UNMATCHED");
+
+    await apiRequest(
+      financeToken,
+      `/finance/bank-statement-entries/${feeEntry!.id}/adjustment`,
+      {
+        method: "POST",
+        body: {
+          amount: feeAmount,
+          type: "DEBIT",
+          description: `Ajuste tarifa bancaria ${suffix}`,
+          postedDate: paidAt,
+          reason: "Tarifa bancaria importada sem titulo interno",
+        },
+      },
+    );
+
+    const entriesAfterAdjustment = await apiRequest<BankStatementEntry[]>(
+      financeToken,
+      `/finance/bank-statements/${imported.id}/entries`,
+    );
+    const adjustedFee = entriesAfterAdjustment.find(
+      (entry) => entry.id === feeEntry!.id,
+    );
+    expect(adjustedFee?.matchStatus).toBe("MANUAL_MATCHED");
+    expect(adjustedFee?.matchedMovementId).toBeTruthy();
+
+    const report = await apiRequest<ReconciliationReport>(
+      financeToken,
+      `/finance/reconciliation/report?bankAccountId=${bankAccount.id}&from=${paidAt.slice(0, 10)}T00:00:00.000Z&to=${paidAt.slice(0, 10)}T23:59:59.999Z`,
+    );
+    expect(report.totals.reconciledMovements).toBeGreaterThanOrEqual(2);
+    expect(report.totals.unmatchedStatementEntries).toBeGreaterThanOrEqual(0);
+
+    const technicianImport = await apiRequestRaw(
+      technicianSession.access_token,
+      `/finance/bank-accounts/${bankAccount.id}/statements`,
+    );
+    expect(technicianImport.status).toBe(403);
+
+    const clientReport = await apiRequestRaw(
+      clientSession.access_token,
+      `/finance/reconciliation/report?bankAccountId=${bankAccount.id}`,
+    );
+    expect(clientReport.status).toBe(403);
+
+    await loginByApi(page, accounts.finance);
+    await page.goto("/dashboard/finance/reconciliation", {
+      waitUntil: "domcontentloaded",
+      timeout: 45_000,
+    });
+    await expectLoaded(page, /Conciliação bancária|Financeiro/i);
   });
 
   test("periodo financeiro fechado bloqueia baixa dentro do mes", async () => {
@@ -484,4 +699,15 @@ async function reloadReceivable(token: string, id: string) {
   const receivable = receivables.find((item) => item.id === id);
   if (!receivable) throw new Error(`Recebivel nao encontrado: ${id}`);
   return receivable;
+}
+
+function formatBrDate(value: string) {
+  const date = new Date(value);
+  return `${String(date.getUTCDate()).padStart(2, "0")}/${String(
+    date.getUTCMonth() + 1,
+  ).padStart(2, "0")}/${date.getUTCFullYear()}`;
+}
+
+function formatBrMoney(value: number) {
+  return value.toFixed(2).replace(".", ",");
 }

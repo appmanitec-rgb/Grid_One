@@ -2,8 +2,13 @@ import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   AccountsReceivableStatus,
+  BankReconciliationIssueStatus,
+  BankReconciliationIssueType,
   BankMovementOriginType,
   BankMovementType,
+  BankStatementEntryMatchStatus,
+  BankStatementFileType,
+  BankStatementImportStatus,
   CommissionStatus,
   ContractInvoiceStatus,
   FinancialPaymentStatus,
@@ -57,6 +62,25 @@ describe('FinanceService', () => {
         findFirst: jest.fn(),
         findMany: jest.fn(),
         aggregate: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      bankStatementImport: {
+        findUnique: jest.fn(),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      bankStatementEntry: {
+        findUnique: jest.fn(),
+        findFirst: jest.fn(),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      bankReconciliationIssue: {
+        findUnique: jest.fn(),
+        findMany: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
       },
@@ -526,6 +550,380 @@ describe('FinanceService', () => {
       expect.objectContaining({ runningBalance: 310 }),
     );
   });
+
+  it('imports valid CSV bank statement entries and audits import', async () => {
+    db.bankAccount.findUnique.mockResolvedValue({
+      id: 'bank-1',
+      isActive: true,
+    });
+    db.bankStatementImport.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'import-1',
+        entries: [{ id: 'entry-1' }],
+      });
+    db.bankStatementImport.create.mockResolvedValue({ id: 'import-1' });
+    db.bankStatementEntry.create.mockResolvedValue({ id: 'entry-1' });
+
+    await service.importBankStatement(
+      'bank-1',
+      {
+        fileName: 'extrato.csv',
+        fileType: BankStatementFileType.CSV,
+        content:
+          'data;descricao;valor;referencia\n10/02/2026;PIX Cliente;100,00;FIT-1',
+      },
+      'finance-user',
+    );
+
+    expect(db.bankStatementEntry.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          importId: 'import-1',
+          bankAccountId: 'bank-1',
+          amount: 100,
+          type: BankMovementType.CREDIT,
+          externalId: 'FIT-1',
+        }),
+      }),
+    );
+    expect(db.financialAuditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          entityType: 'BANK_STATEMENT_IMPORT',
+          action: 'IMPORT_STATEMENT',
+        }),
+      }),
+    );
+  });
+
+  it('rejects duplicated bank statement import by checksum', async () => {
+    db.bankAccount.findUnique.mockResolvedValue({
+      id: 'bank-1',
+      isActive: true,
+    });
+    db.bankStatementImport.findUnique.mockResolvedValue({ id: 'import-1' });
+
+    await expect(
+      service.importBankStatement('bank-1', {
+        fileName: 'extrato.csv',
+        fileType: BankStatementFileType.CSV,
+        content: 'data;descricao;valor\n10/02/2026;PIX Cliente;100,00',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(db.bankStatementEntry.create).not.toHaveBeenCalled();
+  });
+
+  it('auto-matches exact statement entry with unreconciled bank movement', async () => {
+    db.bankStatementImport.findUnique.mockResolvedValue({
+      id: 'import-1',
+      fileName: 'extrato.csv',
+      entries: [
+        {
+          id: 'entry-1',
+          importId: 'import-1',
+          bankAccountId: 'bank-1',
+          postedDate: new Date('2026-02-10T00:00:00.000Z'),
+          amount: 100,
+          type: BankMovementType.CREDIT,
+          bankReference: 'FIT-1',
+          externalId: 'FIT-1',
+        },
+      ],
+    });
+    db.bankMovement.findMany.mockResolvedValueOnce([
+      {
+        id: 'movement-1',
+        bankAccountId: 'bank-1',
+        movementDate: new Date('2026-02-10T12:00:00.000Z'),
+        amount: 100,
+        type: BankMovementType.CREDIT,
+      },
+    ]);
+    db.bankStatementEntry.update.mockResolvedValue({ id: 'entry-1' });
+    db.bankMovement.update.mockResolvedValue({ id: 'movement-1' });
+    db.bankStatementEntry.findMany.mockResolvedValue([
+      { matchStatus: BankStatementEntryMatchStatus.AUTO_MATCHED },
+    ]);
+    db.bankStatementImport.update.mockResolvedValue({
+      id: 'import-1',
+      status: BankStatementImportStatus.RECONCILED,
+    });
+
+    const result = await service.autoMatchBankStatement(
+      'import-1',
+      { dateWindowDays: 1 },
+      'finance-user',
+    );
+
+    expect(result.autoMatched).toBe(1);
+    expect(db.bankStatementEntry.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'entry-1' },
+        data: expect.objectContaining({
+          matchedMovementId: 'movement-1',
+          matchStatus: BankStatementEntryMatchStatus.AUTO_MATCHED,
+        }),
+      }),
+    );
+    expect(db.bankMovement.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'movement-1' },
+        data: expect.objectContaining({
+          reconciledById: 'finance-user',
+        }),
+      }),
+    );
+  });
+
+  it('blocks ambiguous auto-match without reconciling automatically', async () => {
+    db.bankStatementImport.findUnique.mockResolvedValue({
+      id: 'import-1',
+      fileName: 'extrato.csv',
+      entries: [
+        {
+          id: 'entry-1',
+          importId: 'import-1',
+          bankAccountId: 'bank-1',
+          postedDate: new Date('2026-02-10T00:00:00.000Z'),
+          amount: 100,
+          type: BankMovementType.CREDIT,
+        },
+      ],
+    });
+    db.bankMovement.findMany.mockResolvedValueOnce([
+      {
+        id: 'movement-1',
+        movementDate: new Date('2026-02-10T09:00:00.000Z'),
+      },
+      {
+        id: 'movement-2',
+        movementDate: new Date('2026-02-10T10:00:00.000Z'),
+      },
+    ]);
+    db.bankReconciliationIssue.create.mockResolvedValue({ id: 'issue-1' });
+    db.bankStatementEntry.findMany.mockResolvedValue([
+      { matchStatus: BankStatementEntryMatchStatus.UNMATCHED },
+    ]);
+    db.bankStatementImport.update.mockResolvedValue({
+      id: 'import-1',
+      status: BankStatementImportStatus.IMPORTED,
+    });
+
+    const result = await service.autoMatchBankStatement('import-1');
+
+    expect(result.ambiguous).toBe(1);
+    expect(db.bankStatementEntry.update).not.toHaveBeenCalled();
+    expect(db.bankReconciliationIssue.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: BankReconciliationIssueType.MISSING_MOVEMENT,
+        }),
+      }),
+    );
+  });
+
+  it('manually matches and unmatches statement entry with audit trail', async () => {
+    db.bankStatementEntry.findUnique
+      .mockResolvedValueOnce({
+        id: 'entry-1',
+        importId: 'import-1',
+        bankAccountId: 'bank-1',
+        postedDate: new Date('2026-02-10T00:00:00.000Z'),
+        amount: 100,
+        type: BankMovementType.CREDIT,
+        matchStatus: BankStatementEntryMatchStatus.UNMATCHED,
+        matchedMovementId: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'entry-1',
+        matchedMovement: { id: 'movement-1' },
+      })
+      .mockResolvedValueOnce({
+        id: 'entry-1',
+        importId: 'import-1',
+        bankAccountId: 'bank-1',
+        postedDate: new Date('2026-02-10T00:00:00.000Z'),
+        matchedMovementId: 'movement-1',
+      });
+    db.bankMovement.findUnique.mockResolvedValue({
+      id: 'movement-1',
+      bankAccountId: 'bank-1',
+      type: BankMovementType.CREDIT,
+      amount: 100,
+      reconciledAt: null,
+    });
+    db.financialPeriodClosing.findUnique.mockResolvedValue(null);
+    db.bankStatementEntry.findFirst.mockResolvedValue(null);
+    db.bankStatementEntry.update.mockResolvedValue({ id: 'entry-1' });
+    db.bankMovement.update.mockResolvedValue({ id: 'movement-1' });
+    db.bankStatementEntry.findMany.mockResolvedValue([
+      { matchStatus: BankStatementEntryMatchStatus.MANUAL_MATCHED },
+    ]);
+    db.bankStatementImport.update.mockResolvedValue({ id: 'import-1' });
+    db.bankReconciliationIssue.create.mockResolvedValue({ id: 'issue-1' });
+
+    await service.matchBankStatementEntry(
+      'entry-1',
+      { movementId: 'movement-1' },
+      'finance-user',
+    );
+    await service.unmatchBankStatementEntry(
+      'entry-1',
+      { reason: 'Divergencia revisada' },
+      'finance-user',
+    );
+
+    expect(db.bankStatementEntry.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          matchStatus: BankStatementEntryMatchStatus.MANUAL_MATCHED,
+        }),
+      }),
+    );
+    expect(db.bankReconciliationIssue.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          reason: 'Divergencia revisada',
+        }),
+      }),
+    );
+  });
+
+  it('ignores statement entry with reason and creates ignored issue', async () => {
+    db.bankStatementEntry.findUnique.mockResolvedValue({
+      id: 'entry-1',
+      importId: 'import-1',
+      bankAccountId: 'bank-1',
+      matchedMovementId: null,
+    });
+    db.bankStatementEntry.update.mockResolvedValue({
+      id: 'entry-1',
+      matchStatus: BankStatementEntryMatchStatus.IGNORED,
+    });
+    db.bankReconciliationIssue.create.mockResolvedValue({ id: 'issue-1' });
+    db.bankStatementEntry.findMany.mockResolvedValue([
+      { matchStatus: BankStatementEntryMatchStatus.IGNORED },
+    ]);
+    db.bankStatementImport.update.mockResolvedValue({ id: 'import-1' });
+
+    await service.ignoreBankStatementEntry(
+      'entry-1',
+      { reason: 'Tarifa bancaria ja contabilizada fora do periodo' },
+      'finance-user',
+    );
+
+    expect(db.bankReconciliationIssue.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: BankReconciliationIssueType.IGNORED_ENTRY,
+          status: BankReconciliationIssueStatus.IGNORED,
+        }),
+      }),
+    );
+  });
+
+  it('creates controlled manual adjustment from unmatched statement entry', async () => {
+    db.bankStatementEntry.findUnique.mockResolvedValue({
+      id: 'entry-1',
+      importId: 'import-1',
+      bankAccountId: 'bank-1',
+      postedDate: new Date('2026-02-10T00:00:00.000Z'),
+      amount: 25,
+      type: BankMovementType.DEBIT,
+      bankReference: 'TAR-1',
+      externalId: 'TAR-1',
+      matchedMovementId: null,
+    });
+    db.financialPeriodClosing.findUnique.mockResolvedValue(null);
+    db.bankMovement.findUnique.mockResolvedValue(null);
+    db.bankMovement.create.mockResolvedValue({ id: 'movement-adjustment-1' });
+    db.bankAccount.update.mockResolvedValue({ id: 'bank-1' });
+    db.bankStatementEntry.update.mockResolvedValue({ id: 'entry-1' });
+    db.bankMovement.update.mockResolvedValue({ id: 'movement-adjustment-1' });
+    db.bankReconciliationIssue.create.mockResolvedValue({ id: 'issue-1' });
+    db.bankStatementEntry.findMany.mockResolvedValue([
+      { matchStatus: BankStatementEntryMatchStatus.MANUAL_MATCHED },
+    ]);
+    db.bankStatementImport.update.mockResolvedValue({ id: 'import-1' });
+
+    const result = await service.createBankAdjustmentFromStatementEntry(
+      'entry-1',
+      {
+        amount: 25,
+        type: BankMovementType.DEBIT,
+        description: 'Tarifa bancaria importada',
+        postedDate: '2026-02-10T00:00:00.000Z',
+        reason: 'Tarifa sem titulo interno',
+      },
+      'finance-user',
+    );
+
+    expect(result).toEqual({
+      movementId: 'movement-adjustment-1',
+      matched: true,
+    });
+    expect(db.bankMovement.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          originType: BankMovementOriginType.MANUAL_ADJUSTMENT,
+          originId: 'entry-1',
+        }),
+      }),
+    );
+  });
+
+  it('returns reconciliation report totals and issue counters', async () => {
+    db.bankAccount.findUnique.mockResolvedValue({
+      id: 'bank-1',
+      name: 'Conta teste',
+      initialBalance: 100,
+    });
+    db.bankMovement.findMany
+      .mockResolvedValueOnce([{ type: BankMovementType.CREDIT, amount: 50 }])
+      .mockResolvedValueOnce([
+        {
+          id: 'movement-1',
+          type: BankMovementType.CREDIT,
+          amount: 100,
+          reconciledAt: new Date(),
+        },
+        {
+          id: 'movement-2',
+          type: BankMovementType.DEBIT,
+          amount: 25,
+          reconciledAt: null,
+        },
+      ]);
+    db.bankStatementEntry.findMany.mockResolvedValue([
+      {
+        id: 'entry-1',
+        matchStatus: BankStatementEntryMatchStatus.AUTO_MATCHED,
+      },
+      { id: 'entry-2', matchStatus: BankStatementEntryMatchStatus.UNMATCHED },
+    ]);
+    db.bankReconciliationIssue.findMany.mockResolvedValue([
+      { id: 'issue-1', status: BankReconciliationIssueStatus.OPEN },
+      { id: 'issue-2', status: BankReconciliationIssueStatus.RESOLVED },
+    ]);
+    db.financialPeriodClosing.findUnique.mockResolvedValue({
+      id: 'period-1',
+      status: FinancialPeriodStatus.CLOSED,
+      closedAt: new Date(),
+    });
+
+    const report = await service.reconciliationReport({
+      bankAccountId: 'bank-1',
+      from: '2026-02-01T00:00:00.000Z',
+      to: '2026-02-28T23:59:59.999Z',
+    });
+
+    expect(report.totals.openingBalance).toBe(150);
+    expect(report.totals.finalBalance).toBe(225);
+    expect(report.totals.unmatchedStatementEntries).toBe(1);
+    expect(report.totals.openIssues).toBe(1);
+  });
 });
 
 function receivableFixture(
@@ -595,6 +993,25 @@ type FinanceDbMock = {
     findFirst: jest.Mock;
     findMany: jest.Mock;
     aggregate: jest.Mock;
+    create: jest.Mock;
+    update: jest.Mock;
+  };
+  bankStatementImport: {
+    findUnique: jest.Mock;
+    findMany: jest.Mock;
+    create: jest.Mock;
+    update: jest.Mock;
+  };
+  bankStatementEntry: {
+    findUnique: jest.Mock;
+    findFirst: jest.Mock;
+    findMany: jest.Mock;
+    create: jest.Mock;
+    update: jest.Mock;
+  };
+  bankReconciliationIssue: {
+    findUnique: jest.Mock;
+    findMany: jest.Mock;
     create: jest.Mock;
     update: jest.Mock;
   };

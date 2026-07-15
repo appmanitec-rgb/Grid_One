@@ -452,6 +452,42 @@ enum CommissionRuleTrigger {
   RECEIVABLE_PAID
 }
 
+enum BankStatementFileType {
+  OFX
+  CNAB
+  CSV
+}
+
+enum BankStatementImportStatus {
+  IMPORTED
+  PARTIALLY_RECONCILED
+  RECONCILED
+  CANCELLED
+}
+
+enum BankStatementEntryMatchStatus {
+  UNMATCHED
+  AUTO_MATCHED
+  MANUAL_MATCHED
+  IGNORED
+}
+
+enum BankReconciliationIssueType {
+  MISSING_MOVEMENT
+  MISSING_STATEMENT_ENTRY
+  AMOUNT_MISMATCH
+  DATE_MISMATCH
+  DUPLICATE_BANK_ENTRY
+  IGNORED_ENTRY
+  MANUAL_ADJUSTMENT
+}
+
+enum BankReconciliationIssueStatus {
+  OPEN
+  RESOLVED
+  IGNORED
+}
+
 enum HrAssetType {
   EPI
   TOOL
@@ -584,6 +620,8 @@ model User {
   reversedPayablePayments        AccountsPayablePayment[]    @relation("PayablePaymentReversedBy")
   createdBankMovements           BankMovement[]              @relation("BankMovementCreatedBy")
   reconciledBankMovements        BankMovement[]              @relation("BankMovementReconciledBy")
+  importedBankStatements         BankStatementImport[]       @relation("BankStatementImportedBy")
+  resolvedReconciliationIssues   BankReconciliationIssue[]   @relation("BankReconciliationIssueResolvedBy")
   closedFinancialPeriods         FinancialPeriodClosing[]    @relation("FinancialPeriodClosedBy")
   reopenedFinancialPeriods       FinancialPeriodClosing[]    @relation("FinancialPeriodReopenedBy")
   timeEntries                    TimeEntry[]
@@ -2007,9 +2045,12 @@ model BankAccount {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
-  receivablePayments AccountsReceivablePayment[]
-  payablePayments    AccountsPayablePayment[]
-  bankMovements      BankMovement[]
+  receivablePayments   AccountsReceivablePayment[]
+  payablePayments      AccountsPayablePayment[]
+  bankMovements        BankMovement[]
+  statementImports     BankStatementImport[]
+  statementEntries     BankStatementEntry[]
+  reconciliationIssues BankReconciliationIssue[]
 
   @@map("bank_accounts")
 }
@@ -2143,6 +2184,8 @@ model BankMovement {
   reconciliationNote      String?
   metadata                Json?
   createdAt               DateTime                   @default(now())
+  statementEntries        BankStatementEntry[]       @relation("StatementEntryMatchedMovement")
+  reconciliationIssues    BankReconciliationIssue[]
 
   @@unique([originType, originId])
   @@index([bankAccountId, movementDate])
@@ -2152,6 +2195,86 @@ model BankMovement {
   @@index([payableId])
   @@index([status, movementDate])
   @@map("bank_movements")
+}
+
+model BankStatementImport {
+  id             String                    @id @default(uuid())
+  bankAccountId  String
+  bankAccount    BankAccount               @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  fileName       String
+  fileType       BankStatementFileType
+  importedAt     DateTime                  @default(now())
+  importedById   String?
+  importedBy     User?                     @relation("BankStatementImportedBy", fields: [importedById], references: [id], onDelete: SetNull)
+  periodStart    DateTime?
+  periodEnd      DateTime?
+  status         BankStatementImportStatus @default(IMPORTED)
+  checksumSha256 String
+  metadata       Json?
+  entries        BankStatementEntry[]
+  issues         BankReconciliationIssue[]
+
+  @@unique([bankAccountId, checksumSha256])
+  @@index([bankAccountId, importedAt])
+  @@index([status, importedAt])
+  @@map("bank_statement_imports")
+}
+
+model BankStatementEntry {
+  id                   String                        @id @default(uuid())
+  importId             String
+  import               BankStatementImport           @relation(fields: [importId], references: [id], onDelete: Cascade)
+  bankAccountId        String
+  bankAccount          BankAccount                   @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  postedDate           DateTime
+  amount               Float
+  type                 BankMovementType
+  description          String
+  documentNumber       String?
+  bankReference        String?
+  fitId                String?
+  externalId           String?
+  matchedMovementId    String?
+  matchedMovement      BankMovement?                 @relation("StatementEntryMatchedMovement", fields: [matchedMovementId], references: [id], onDelete: SetNull)
+  matchStatus          BankStatementEntryMatchStatus @default(UNMATCHED)
+  confidenceScore      Float?
+  ignoreReason         String?
+  createdAt            DateTime                      @default(now())
+  reconciliationIssues BankReconciliationIssue[]
+
+  @@unique([bankAccountId, externalId])
+  @@index([importId, postedDate])
+  @@index([bankAccountId, postedDate])
+  @@index([matchedMovementId])
+  @@index([matchStatus, postedDate])
+  @@map("bank_statement_entries")
+}
+
+model BankReconciliationIssue {
+  id                String                        @id @default(uuid())
+  bankAccountId     String
+  bankAccount       BankAccount                   @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  statementImportId String?
+  statementImport   BankStatementImport?          @relation(fields: [statementImportId], references: [id], onDelete: SetNull)
+  statementEntryId  String?
+  statementEntry    BankStatementEntry?           @relation(fields: [statementEntryId], references: [id], onDelete: SetNull)
+  movementId        String?
+  movement          BankMovement?                 @relation(fields: [movementId], references: [id], onDelete: SetNull)
+  type              BankReconciliationIssueType
+  status            BankReconciliationIssueStatus @default(OPEN)
+  reason            String?
+  resolvedAt        DateTime?
+  resolvedById      String?
+  resolvedBy        User?                         @relation("BankReconciliationIssueResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  createdAt         DateTime                      @default(now())
+  updatedAt         DateTime                      @updatedAt
+
+  @@index([bankAccountId, status])
+  @@index([statementImportId])
+  @@index([statementEntryId])
+  @@index([movementId])
+  @@index([type, status])
+  @@map("bank_reconciliation_issues")
 }
 
 model FinancialAuditLog {

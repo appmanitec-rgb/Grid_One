@@ -11,6 +11,8 @@ import {
   Min,
 } from 'class-validator';
 import {
+  BankReconciliationIssueType,
+  BankStatementFileType,
   BankMovementOriginType,
   BankMovementType,
   BankAccountType,
@@ -318,4 +320,95 @@ export class BankMovementQueryDto {
   @IsEnum(BankMovementOriginType)
   @IsOptional()
   originType?: BankMovementOriginType;
+}
+
+export class ImportBankStatementDto {
+  @IsString()
+  fileName!: string;
+
+  @IsEnum(BankStatementFileType)
+  fileType!: BankStatementFileType;
+
+  @IsString()
+  content!: string;
+
+  @IsBoolean()
+  @IsOptional()
+  contentBase64?: boolean;
+}
+
+export class AutoMatchBankStatementDto {
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  @IsOptional()
+  dateWindowDays?: number;
+}
+
+export class MatchBankStatementEntryDto {
+  @IsUUID()
+  movementId!: string;
+}
+
+export class UnmatchBankStatementEntryDto {
+  @IsString()
+  reason!: string;
+}
+
+export class IgnoreBankStatementEntryDto {
+  @IsString()
+  reason!: string;
+}
+
+export class CreateBankAdjustmentDto {
+  @IsNumber()
+  @Min(0.01)
+  amount!: number;
+
+  @IsEnum(BankMovementType)
+  type!: BankMovementType;
+
+  @IsString()
+  description!: string;
+
+  @IsDateString()
+  postedDate!: string;
+
+  @IsString()
+  reason!: string;
+}
+
+export class ResolveReconciliationIssueDto {
+  @IsString()
+  reason!: string;
+}
+
+export class ReconciliationReportQueryDto {
+  @IsUUID()
+  bankAccountId!: string;
+
+  @IsDateString()
+  from!: string;
+
+  @IsDateString()
+  to!: string;
+}
+
+export class CreateReconciliationIssueDto {
+  @IsUUID()
+  bankAccountId!: string;
+
+  @IsUUID()
+  @IsOptional()
+  statementEntryId?: string;
+
+  @IsUUID()
+  @IsOptional()
+  movementId?: string;
+
+  @IsEnum(BankReconciliationIssueType)
+  type!: BankReconciliationIssueType;
+
+  @IsString()
+  reason!: string;
 }

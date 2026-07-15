@@ -293,10 +293,7 @@ export default function BankMovementsPage() {
       );
       if (!response.ok) {
         throw new Error(
-          await readApiErrorMessage(
-            response,
-            "Falha ao desfazer conciliacao.",
-          ),
+          await readApiErrorMessage(response, "Falha ao desfazer conciliacao."),
         );
       }
       setSuccessMessage("Conciliacao desfeita.");
@@ -321,11 +318,14 @@ export default function BankMovementsPage() {
     setSuccessMessage("");
 
     try {
-      const response = await apiFetch(apiUrl("/finance/period-closings/close"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ year, month, reason }),
-      });
+      const response = await apiFetch(
+        apiUrl("/finance/period-closings/close"),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ year, month, reason }),
+        },
+      );
       if (!response.ok) {
         throw new Error(
           await readApiErrorMessage(response, "Falha ao fechar periodo."),
@@ -420,6 +420,12 @@ export default function BankMovementsPage() {
             >
               Fluxo de caixa
             </Link>
+            <Link
+              href="/dashboard/finance/reconciliation"
+              className={SECONDARY_BUTTON}
+            >
+              Conciliação bancária
+            </Link>
           </>
         }
       />
@@ -469,7 +475,10 @@ export default function BankMovementsPage() {
               type="date"
               value={filters.to}
               onChange={(event) =>
-                setFilters((current) => ({ ...current, to: event.target.value }))
+                setFilters((current) => ({
+                  ...current,
+                  to: event.target.value,
+                }))
               }
             />
           </FormField>

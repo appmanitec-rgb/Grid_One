@@ -3,13 +3,19 @@
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { createHash } from 'crypto';
 import {
   AccountsPayableStatus,
   AccountsReceivableStatus,
   AuditDomain,
+  BankReconciliationIssueStatus,
+  BankReconciliationIssueType,
   BankMovementOriginType,
   BankMovementStatus,
   BankMovementType,
+  BankStatementEntryMatchStatus,
+  BankStatementFileType,
+  BankStatementImportStatus,
   CommissionRuleTrigger,
   CommissionStatus,
   ContractInvoiceStatus,
@@ -22,20 +28,29 @@ import {
 import { DatabaseService } from 'src/database/database.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import {
+  AutoMatchBankStatementDto,
   BankMovementQueryDto,
   CreateAccountsPayableDto,
   CreateAccountsReceivableDto,
+  CreateBankAdjustmentDto,
   CreateBankAccountDto,
   CreateCostCenterDto,
   CreateCostCenterEntryDto,
+  CreateReconciliationIssueDto,
   CloseFinancialPeriodDto,
+  IgnoreBankStatementEntryDto,
+  ImportBankStatementDto,
+  MatchBankStatementEntryDto,
   PayAccountsPayableDto,
   PayAccountsReceivableDto,
   ReconcileBankMovementDto,
+  ReconciliationReportQueryDto,
   ReopenFinancialPeriodDto,
+  ResolveReconciliationIssueDto,
   ReversePayablePaymentDto,
   ReverseReceivablePaymentDto,
   SyncOrderReceivableDto,
+  UnmatchBankStatementEntryDto,
   UnreconcileBankMovementDto,
   UpdateBankAccountDto,
   UpdateCostCenterDto,
@@ -1313,6 +1328,698 @@ export class FinanceService {
     });
   }
 
+  async importBankStatement(
+    bankAccountId: string,
+    dto: ImportBankStatementDto,
+    actorUserId?: string,
+  ) {
+    const content = this.decodeStatementContent(dto);
+    const checksumSha256 = createHash('sha256')
+      .update(content, 'utf8')
+      .digest('hex');
+
+    const parsedEntries = this.parseStatementEntries(dto.fileType, content);
+    if (parsedEntries.length === 0) {
+      throw new BadRequestException('Extrato bancario nao possui lancamentos.');
+    }
+
+    this.assertNoDuplicatedExternalIds(parsedEntries);
+    const periodStart = new Date(
+      Math.min(...parsedEntries.map((entry) => entry.postedDate.getTime())),
+    );
+    const periodEnd = new Date(
+      Math.max(...parsedEntries.map((entry) => entry.postedDate.getTime())),
+    );
+
+    return this.prisma.$transaction(async (tx) => {
+      const bankAccount = await tx.bankAccount.findUnique({
+        where: { id: bankAccountId },
+        select: { id: true, isActive: true },
+      });
+      if (!bankAccount) {
+        throw new NotFoundException('Conta bancaria/caixa nao encontrada.');
+      }
+      if (!bankAccount.isActive) {
+        throw new BadRequestException(
+          'Conta bancaria/caixa inativa nao pode receber importacao.',
+        );
+      }
+
+      const duplicate = await tx.bankStatementImport.findUnique({
+        where: {
+          bankAccountId_checksumSha256: {
+            bankAccountId,
+            checksumSha256,
+          },
+        },
+        select: { id: true },
+      });
+      if (duplicate) {
+        throw new BadRequestException(
+          'Este arquivo de extrato ja foi importado para a conta selecionada.',
+        );
+      }
+
+      const statementImport = await tx.bankStatementImport.create({
+        data: {
+          bankAccountId,
+          fileName: dto.fileName.trim(),
+          fileType: dto.fileType,
+          importedById: actorUserId,
+          periodStart,
+          periodEnd,
+          checksumSha256,
+          metadata: {
+            rows: parsedEntries.length,
+            parser: dto.fileType === BankStatementFileType.CSV ? 'csv' : 'ofx',
+          },
+        },
+      });
+
+      for (const entry of parsedEntries) {
+        try {
+          await tx.bankStatementEntry.create({
+            data: {
+              importId: statementImport.id,
+              bankAccountId,
+              postedDate: entry.postedDate,
+              amount: entry.amount,
+              type: entry.type,
+              description: entry.description,
+              documentNumber: entry.documentNumber,
+              bankReference: entry.bankReference,
+              fitId: entry.fitId,
+              externalId: entry.externalId,
+            },
+          });
+        } catch (error: unknown) {
+          if (this.isUniqueConstraintError(error)) {
+            throw new BadRequestException(
+              'Lancamento bancario duplicado pelo identificador externo.',
+            );
+          }
+          throw error;
+        }
+      }
+
+      await this.audit(tx, {
+        actorUserId,
+        module: 'FINANCE',
+        entityType: 'BANK_STATEMENT_IMPORT',
+        entityId: statementImport.id,
+        action: 'IMPORT_STATEMENT',
+        payload: {
+          bankAccountId,
+          fileName: dto.fileName,
+          fileType: dto.fileType,
+          entries: parsedEntries.length,
+          checksumSha256,
+        },
+      });
+
+      return tx.bankStatementImport.findUnique({
+        where: { id: statementImport.id },
+        include: {
+          bankAccount: { select: { id: true, name: true, bankName: true } },
+          entries: { orderBy: [{ postedDate: 'asc' }, { createdAt: 'asc' }] },
+        },
+      });
+    });
+  }
+
+  listBankStatements(bankAccountId: string) {
+    return this.prisma.bankStatementImport.findMany({
+      where: { bankAccountId },
+      include: {
+        bankAccount: { select: { id: true, name: true, bankName: true } },
+        _count: { select: { entries: true, issues: true } },
+      },
+      orderBy: { importedAt: 'desc' },
+    });
+  }
+
+  getBankStatement(id: string) {
+    return this.prisma.bankStatementImport.findUnique({
+      where: { id },
+      include: {
+        bankAccount: { select: { id: true, name: true, bankName: true } },
+        importedBy: { select: { id: true, name: true, email: true } },
+        entries: {
+          include: {
+            matchedMovement: {
+              select: {
+                id: true,
+                description: true,
+                movementDate: true,
+                amount: true,
+                type: true,
+              },
+            },
+          },
+          orderBy: [{ postedDate: 'asc' }, { createdAt: 'asc' }],
+        },
+        issues: { orderBy: { createdAt: 'desc' } },
+      },
+    });
+  }
+
+  listBankStatementEntries(id: string) {
+    return this.prisma.bankStatementEntry.findMany({
+      where: { importId: id },
+      include: {
+        matchedMovement: {
+          select: {
+            id: true,
+            description: true,
+            movementDate: true,
+            amount: true,
+            type: true,
+            reconciledAt: true,
+          },
+        },
+      },
+      orderBy: [{ postedDate: 'asc' }, { createdAt: 'asc' }],
+    });
+  }
+
+  async autoMatchBankStatement(
+    id: string,
+    dto: AutoMatchBankStatementDto = {},
+    actorUserId?: string,
+  ) {
+    const dateWindowDays = dto.dateWindowDays ?? 2;
+
+    return this.prisma.$transaction(async (tx) => {
+      const statement = await tx.bankStatementImport.findUnique({
+        where: { id },
+        include: {
+          entries: {
+            where: { matchStatus: BankStatementEntryMatchStatus.UNMATCHED },
+            orderBy: [{ postedDate: 'asc' }, { createdAt: 'asc' }],
+          },
+        },
+      });
+      if (!statement) {
+        throw new NotFoundException('Extrato importado nao encontrado.');
+      }
+
+      let autoMatched = 0;
+      let ambiguous = 0;
+      let unmatched = 0;
+
+      for (const entry of statement.entries) {
+        const exactCandidates = await this.findMovementCandidates(tx, entry, 0);
+        const candidates =
+          exactCandidates.length > 0
+            ? exactCandidates
+            : await this.findMovementCandidates(tx, entry, dateWindowDays);
+
+        if (candidates.length === 1) {
+          const movement = candidates[0];
+          const confidenceScore = exactCandidates.length === 1 ? 1 : 0.82;
+          await this.applyStatementMatch(tx, {
+            entryId: entry.id,
+            movementId: movement.id,
+            status: BankStatementEntryMatchStatus.AUTO_MATCHED,
+            confidenceScore,
+            actorUserId,
+            reference: entry.bankReference ?? entry.externalId ?? entry.id,
+            note: `Conciliacao automatica do extrato ${statement.fileName}`,
+          });
+          autoMatched += 1;
+        } else if (candidates.length > 1) {
+          ambiguous += 1;
+          await this.createReconciliationIssueSafely(tx, {
+            bankAccountId: entry.bankAccountId,
+            statementImportId: entry.importId,
+            statementEntryId: entry.id,
+            type: BankReconciliationIssueType.MISSING_MOVEMENT,
+            reason:
+              'Matching automatico encontrou mais de um movimento candidato.',
+          });
+        } else {
+          unmatched += 1;
+        }
+      }
+
+      await this.updateBankStatementStatus(tx, id);
+
+      await this.audit(tx, {
+        actorUserId,
+        module: 'FINANCE',
+        entityType: 'BANK_STATEMENT_IMPORT',
+        entityId: id,
+        action: 'AUTO_MATCH_STATEMENT',
+        payload: { autoMatched, ambiguous, unmatched, dateWindowDays },
+      });
+
+      return { autoMatched, ambiguous, unmatched };
+    });
+  }
+
+  async matchBankStatementEntry(
+    id: string,
+    dto: MatchBankStatementEntryDto,
+    actorUserId?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const entry = await tx.bankStatementEntry.findUnique({
+        where: { id },
+      });
+      if (!entry) {
+        throw new NotFoundException('Lancamento do extrato nao encontrado.');
+      }
+      if (entry.matchStatus !== BankStatementEntryMatchStatus.UNMATCHED) {
+        throw new BadRequestException(
+          'Lancamento bancario ja possui tratamento de conciliacao.',
+        );
+      }
+
+      const movement = await tx.bankMovement.findUnique({
+        where: { id: dto.movementId },
+      });
+      if (!movement) {
+        throw new NotFoundException('Movimento financeiro nao encontrado.');
+      }
+      await this.assertCanMatchEntryWithMovement(tx, entry, movement);
+      await this.ensureFinancialPeriodOpen(tx, entry.postedDate);
+
+      await this.applyStatementMatch(tx, {
+        entryId: entry.id,
+        movementId: movement.id,
+        status: BankStatementEntryMatchStatus.MANUAL_MATCHED,
+        confidenceScore: 1,
+        actorUserId,
+        reference: entry.bankReference ?? entry.externalId ?? entry.id,
+        note: 'Conciliacao manual com extrato bancario importado.',
+      });
+
+      await this.updateBankStatementStatus(tx, entry.importId);
+      await this.audit(tx, {
+        actorUserId,
+        module: 'FINANCE',
+        entityType: 'BANK_STATEMENT_ENTRY',
+        entityId: id,
+        action: 'MANUAL_MATCH',
+        payload: { movementId: movement.id },
+      });
+
+      return tx.bankStatementEntry.findUnique({
+        where: { id },
+        include: { matchedMovement: true },
+      });
+    });
+  }
+
+  async unmatchBankStatementEntry(
+    id: string,
+    dto: UnmatchBankStatementEntryDto,
+    actorUserId?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const reason = dto.reason?.trim();
+      if (!reason || reason.length < 4) {
+        throw new BadRequestException(
+          'Informe um motivo claro para desfazer o match.',
+        );
+      }
+
+      const entry = await tx.bankStatementEntry.findUnique({ where: { id } });
+      if (!entry) {
+        throw new NotFoundException('Lancamento do extrato nao encontrado.');
+      }
+      if (!entry.matchedMovementId) {
+        throw new BadRequestException('Lancamento ainda nao esta conciliado.');
+      }
+      await this.ensureFinancialPeriodOpen(tx, entry.postedDate);
+
+      await tx.bankStatementEntry.update({
+        where: { id },
+        data: {
+          matchedMovementId: null,
+          matchStatus: BankStatementEntryMatchStatus.UNMATCHED,
+          confidenceScore: null,
+        },
+      });
+
+      await tx.bankMovement.update({
+        where: { id: entry.matchedMovementId },
+        data: {
+          reconciledAt: null,
+          reconciledById: null,
+          reconciliationReference: null,
+          reconciliationNote: null,
+        },
+      });
+
+      await this.createReconciliationIssueSafely(tx, {
+        bankAccountId: entry.bankAccountId,
+        statementImportId: entry.importId,
+        statementEntryId: entry.id,
+        movementId: entry.matchedMovementId,
+        type: BankReconciliationIssueType.MISSING_MOVEMENT,
+        reason,
+      });
+      await this.updateBankStatementStatus(tx, entry.importId);
+      await this.audit(tx, {
+        actorUserId,
+        module: 'FINANCE',
+        entityType: 'BANK_STATEMENT_ENTRY',
+        entityId: id,
+        action: 'UNMATCH',
+        reason,
+      });
+
+      return { id, unmatched: true };
+    });
+  }
+
+  async ignoreBankStatementEntry(
+    id: string,
+    dto: IgnoreBankStatementEntryDto,
+    actorUserId?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const reason = dto.reason?.trim();
+      if (!reason || reason.length < 4) {
+        throw new BadRequestException(
+          'Informe um motivo claro para ignorar o lancamento.',
+        );
+      }
+
+      const entry = await tx.bankStatementEntry.findUnique({ where: { id } });
+      if (!entry) {
+        throw new NotFoundException('Lancamento do extrato nao encontrado.');
+      }
+      if (entry.matchedMovementId) {
+        throw new BadRequestException(
+          'Lancamento conciliado precisa ter match desfeito antes de ignorar.',
+        );
+      }
+
+      const ignored = await tx.bankStatementEntry.update({
+        where: { id },
+        data: {
+          matchStatus: BankStatementEntryMatchStatus.IGNORED,
+          ignoreReason: reason,
+        },
+      });
+
+      await this.createReconciliationIssueSafely(tx, {
+        bankAccountId: entry.bankAccountId,
+        statementImportId: entry.importId,
+        statementEntryId: entry.id,
+        type: BankReconciliationIssueType.IGNORED_ENTRY,
+        status: BankReconciliationIssueStatus.IGNORED,
+        reason,
+        resolvedAt: new Date(),
+        resolvedById: actorUserId,
+      });
+      await this.updateBankStatementStatus(tx, entry.importId);
+      await this.audit(tx, {
+        actorUserId,
+        module: 'FINANCE',
+        entityType: 'BANK_STATEMENT_ENTRY',
+        entityId: id,
+        action: 'IGNORE_STATEMENT_ENTRY',
+        reason,
+      });
+
+      return ignored;
+    });
+  }
+
+  async createBankAdjustmentFromStatementEntry(
+    id: string,
+    dto: CreateBankAdjustmentDto,
+    actorUserId?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const reason = dto.reason?.trim();
+      if (!reason || reason.length < 4) {
+        throw new BadRequestException(
+          'Informe um motivo claro para criar o ajuste.',
+        );
+      }
+
+      const entry = await tx.bankStatementEntry.findUnique({ where: { id } });
+      if (!entry) {
+        throw new NotFoundException('Lancamento do extrato nao encontrado.');
+      }
+      if (entry.matchedMovementId) {
+        throw new BadRequestException('Lancamento ja esta conciliado.');
+      }
+      if (
+        entry.type !== dto.type ||
+        Math.abs(entry.amount - dto.amount) > 0.009
+      ) {
+        throw new BadRequestException(
+          'Ajuste controlado deve ter mesmo tipo e valor do lancamento bancario.',
+        );
+      }
+
+      const postedDate = new Date(dto.postedDate);
+      await this.ensureFinancialPeriodOpen(tx, postedDate);
+      const movement = await this.createBankMovement(tx, {
+        bankAccountId: entry.bankAccountId,
+        type: dto.type,
+        amount: dto.amount,
+        movementDate: postedDate,
+        competenceDate: postedDate,
+        description: dto.description,
+        originType: BankMovementOriginType.MANUAL_ADJUSTMENT,
+        originId: entry.id,
+        createdById: actorUserId,
+        metadata: {
+          statementEntryId: entry.id,
+          reason,
+          bankReference: entry.bankReference,
+        },
+      });
+
+      await tx.bankAccount.update({
+        where: { id: entry.bankAccountId },
+        data: {
+          currentBalance:
+            dto.type === BankMovementType.CREDIT
+              ? { increment: dto.amount }
+              : { decrement: dto.amount },
+        },
+      });
+
+      await this.applyStatementMatch(tx, {
+        entryId: entry.id,
+        movementId: movement.id,
+        status: BankStatementEntryMatchStatus.MANUAL_MATCHED,
+        confidenceScore: 1,
+        actorUserId,
+        reference: entry.bankReference ?? entry.externalId ?? entry.id,
+        note: `Ajuste controlado: ${reason}`,
+      });
+
+      await this.createReconciliationIssueSafely(tx, {
+        bankAccountId: entry.bankAccountId,
+        statementImportId: entry.importId,
+        statementEntryId: entry.id,
+        movementId: movement.id,
+        type: BankReconciliationIssueType.MANUAL_ADJUSTMENT,
+        status: BankReconciliationIssueStatus.RESOLVED,
+        reason,
+        resolvedAt: new Date(),
+        resolvedById: actorUserId,
+      });
+      await this.updateBankStatementStatus(tx, entry.importId);
+      await this.audit(tx, {
+        actorUserId,
+        module: 'FINANCE',
+        entityType: 'BANK_STATEMENT_ENTRY',
+        entityId: id,
+        action: 'CREATE_CONTROLLED_ADJUSTMENT',
+        reason,
+        payload: {
+          movementId: movement.id,
+          amount: dto.amount,
+          type: dto.type,
+        },
+      });
+
+      return { movementId: movement.id, matched: true };
+    });
+  }
+
+  async createReconciliationIssue(
+    dto: CreateReconciliationIssueDto,
+    actorUserId?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const issue = await this.createReconciliationIssueSafely(tx, {
+        bankAccountId: dto.bankAccountId,
+        statementEntryId: dto.statementEntryId,
+        movementId: dto.movementId,
+        type: dto.type,
+        reason: dto.reason,
+      });
+      await this.audit(tx, {
+        actorUserId,
+        module: 'FINANCE',
+        entityType: 'BANK_RECONCILIATION_ISSUE',
+        entityId: issue.id,
+        action: 'CREATE_ISSUE',
+        reason: dto.reason,
+      });
+      return issue;
+    });
+  }
+
+  async resolveReconciliationIssue(
+    id: string,
+    dto: ResolveReconciliationIssueDto,
+    actorUserId?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const reason = dto.reason?.trim();
+      if (!reason || reason.length < 4) {
+        throw new BadRequestException(
+          'Informe um motivo claro para resolver a divergencia.',
+        );
+      }
+      const issue = await tx.bankReconciliationIssue.findUnique({
+        where: { id },
+      });
+      if (!issue) {
+        throw new NotFoundException(
+          'Divergencia de conciliacao nao encontrada.',
+        );
+      }
+
+      const updated = await tx.bankReconciliationIssue.update({
+        where: { id },
+        data: {
+          status: BankReconciliationIssueStatus.RESOLVED,
+          reason,
+          resolvedAt: new Date(),
+          resolvedById: actorUserId,
+        },
+      });
+      await this.audit(tx, {
+        actorUserId,
+        module: 'FINANCE',
+        entityType: 'BANK_RECONCILIATION_ISSUE',
+        entityId: id,
+        action: 'RESOLVE_ISSUE',
+        reason,
+      });
+      return updated;
+    });
+  }
+
+  async reconciliationReport(query: ReconciliationReportQueryDto) {
+    const fromDate = new Date(query.from);
+    const toDate = new Date(query.to);
+    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+      throw new BadRequestException('Periodo do relatorio invalido.');
+    }
+
+    const bankAccount = await this.prisma.bankAccount.findUnique({
+      where: { id: query.bankAccountId },
+      select: { id: true, name: true, bankName: true, initialBalance: true },
+    });
+    if (!bankAccount) {
+      throw new NotFoundException('Conta bancaria/caixa nao encontrada.');
+    }
+
+    const beforeMovements = await this.prisma.bankMovement.findMany({
+      where: {
+        bankAccountId: query.bankAccountId,
+        movementDate: { lt: fromDate },
+      },
+      select: { type: true, amount: true },
+    });
+    const movements = await this.prisma.bankMovement.findMany({
+      where: {
+        bankAccountId: query.bankAccountId,
+        movementDate: { gte: fromDate, lte: toDate },
+      },
+      select: {
+        id: true,
+        type: true,
+        amount: true,
+        movementDate: true,
+        reconciledAt: true,
+      },
+    });
+    const statementEntries = await this.prisma.bankStatementEntry.findMany({
+      where: {
+        bankAccountId: query.bankAccountId,
+        postedDate: { gte: fromDate, lte: toDate },
+      },
+      select: {
+        id: true,
+        amount: true,
+        type: true,
+        matchStatus: true,
+        matchedMovementId: true,
+      },
+    });
+    const issues = await this.prisma.bankReconciliationIssue.findMany({
+      where: {
+        bankAccountId: query.bankAccountId,
+        createdAt: { gte: fromDate, lte: toDate },
+      },
+      select: { id: true, status: true, type: true },
+    });
+    const periodKey = this.getPeriodKey(fromDate);
+    const closing = await this.prisma.financialPeriodClosing.findUnique({
+      where: { year_month: periodKey },
+    });
+
+    const openingBalance =
+      Number(bankAccount.initialBalance || 0) +
+      this.sumMovementDelta(beforeMovements);
+    const credits = movements
+      .filter((movement) => movement.type === BankMovementType.CREDIT)
+      .reduce((sum, movement) => sum + Number(movement.amount || 0), 0);
+    const debits = movements
+      .filter((movement) => movement.type === BankMovementType.DEBIT)
+      .reduce((sum, movement) => sum + Number(movement.amount || 0), 0);
+    const finalBalance = openingBalance + credits - debits;
+    const reconciledMovements = movements.filter(
+      (movement) => movement.reconciledAt,
+    ).length;
+    const unreconciledMovements = movements.length - reconciledMovements;
+    const unmatchedStatementEntries = statementEntries.filter(
+      (entry) => entry.matchStatus === BankStatementEntryMatchStatus.UNMATCHED,
+    ).length;
+    const openIssues = issues.filter(
+      (issue) => issue.status === BankReconciliationIssueStatus.OPEN,
+    ).length;
+    const resolvedIssues = issues.filter(
+      (issue) => issue.status === BankReconciliationIssueStatus.RESOLVED,
+    ).length;
+
+    return {
+      bankAccount,
+      period: { from: fromDate, to: toDate },
+      closing: closing
+        ? { id: closing.id, status: closing.status, closedAt: closing.closedAt }
+        : { status: FinancialPeriodStatus.OPEN },
+      totals: {
+        openingBalance,
+        finalBalance,
+        credits,
+        debits,
+        movements: movements.length,
+        reconciledMovements,
+        unreconciledMovements,
+        statementEntries: statementEntries.length,
+        unmatchedStatementEntries,
+        openIssues,
+        resolvedIssues,
+      },
+      issues,
+    };
+  }
+
   async listBankMovements(query: BankMovementQueryDto = {}) {
     const fromDate = query.from ? new Date(query.from) : undefined;
     const toDate = query.to ? new Date(query.to) : undefined;
@@ -1872,6 +2579,502 @@ export class FinanceService {
       },
       entries,
     };
+  }
+
+  private decodeStatementContent(dto: ImportBankStatementDto) {
+    if (!dto.content?.trim()) {
+      throw new BadRequestException('Conteudo do extrato nao informado.');
+    }
+    if (dto.contentBase64) {
+      try {
+        return Buffer.from(dto.content, 'base64').toString('utf8');
+      } catch {
+        throw new BadRequestException('Conteudo base64 do extrato invalido.');
+      }
+    }
+    return dto.content;
+  }
+
+  private parseStatementEntries(
+    fileType: BankStatementFileType,
+    content: string,
+  ) {
+    if (fileType === BankStatementFileType.CSV) {
+      return this.parseCsvStatement(content);
+    }
+    if (fileType === BankStatementFileType.OFX) {
+      return this.parseOfxStatement(content);
+    }
+    throw new BadRequestException(
+      'Importacao CNAB esta preparada no modelo, mas ainda nao foi habilitada neste ciclo.',
+    );
+  }
+
+  private parseCsvStatement(content: string) {
+    const rows = content
+      .replace(/^\uFEFF/, '')
+      .split(/\r?\n/)
+      .map((row) => row.trim())
+      .filter(Boolean);
+    if (rows.length < 2) {
+      throw new BadRequestException(
+        'CSV de extrato precisa ter cabecalho e ao menos uma linha.',
+      );
+    }
+
+    const delimiter = rows[0].includes(';') ? ';' : ',';
+    const headers = this.splitCsvLine(rows[0], delimiter).map((header) =>
+      this.normalizeHeader(header),
+    );
+    const findColumn = (...names: string[]) =>
+      names.map((name) => headers.indexOf(name)).find((index) => index !== -1);
+
+    const dateIndex = findColumn('data', 'posteddate', 'dtposted');
+    const descriptionIndex = findColumn(
+      'descricao',
+      'description',
+      'historico',
+    );
+    const amountIndex = findColumn('valor', 'amount', 'vlr');
+    const typeIndex = findColumn('tipo', 'type', 'natureza');
+    const documentIndex = findColumn('documento', 'documentnumber', 'doc');
+    const referenceIndex = findColumn(
+      'referencia',
+      'bankreference',
+      'reference',
+      'fitid',
+      'externalid',
+    );
+
+    if (
+      dateIndex === undefined ||
+      descriptionIndex === undefined ||
+      amountIndex === undefined
+    ) {
+      throw new BadRequestException(
+        'CSV precisa conter colunas data, descricao e valor.',
+      );
+    }
+
+    return rows.slice(1).map((row, offset) => {
+      const cells = this.splitCsvLine(row, delimiter);
+      const postedDate = this.parseStatementDate(cells[dateIndex], offset + 2);
+      const rawAmount = this.parseStatementAmount(
+        cells[amountIndex],
+        offset + 2,
+      );
+      const type = this.resolveStatementType(
+        typeIndex !== undefined ? cells[typeIndex] : undefined,
+        rawAmount,
+        offset + 2,
+      );
+      const description = (cells[descriptionIndex] || '').trim();
+      if (!description) {
+        throw new BadRequestException(
+          `Descricao invalida na linha ${offset + 2} do CSV.`,
+        );
+      }
+      const documentNumber =
+        documentIndex !== undefined ? cells[documentIndex]?.trim() : undefined;
+      const bankReference =
+        referenceIndex !== undefined
+          ? cells[referenceIndex]?.trim()
+          : undefined;
+      const externalId = bankReference || documentNumber || undefined;
+
+      return {
+        postedDate,
+        amount: Math.abs(rawAmount),
+        type,
+        description,
+        documentNumber: documentNumber || undefined,
+        bankReference: bankReference || undefined,
+        fitId: bankReference || undefined,
+        externalId,
+      };
+    });
+  }
+
+  private parseOfxStatement(content: string) {
+    const blocks = content.match(
+      /<STMTTRN>[\s\S]*?(?=<STMTTRN>|<\/BANKTRANLIST>)/gi,
+    );
+    if (!blocks?.length) {
+      throw new BadRequestException(
+        'OFX nao possui blocos STMTTRN reconheciveis.',
+      );
+    }
+
+    return blocks.map((block, index) => {
+      const amount = this.parseStatementAmount(
+        this.readOfxTag(block, 'TRNAMT') || '',
+        index + 1,
+      );
+      const type = this.resolveStatementType(
+        this.readOfxTag(block, 'TRNTYPE') || undefined,
+        amount,
+        index + 1,
+      );
+      const postedDate = this.parseStatementDate(
+        this.readOfxTag(block, 'DTPOSTED') || '',
+        index + 1,
+      );
+      const fitId = this.readOfxTag(block, 'FITID') || undefined;
+      const documentNumber = this.readOfxTag(block, 'CHECKNUM') || undefined;
+      const description =
+        this.readOfxTag(block, 'MEMO') ||
+        this.readOfxTag(block, 'NAME') ||
+        `Lancamento OFX ${index + 1}`;
+
+      return {
+        postedDate,
+        amount: Math.abs(amount),
+        type,
+        description: description.trim(),
+        documentNumber,
+        bankReference: fitId,
+        fitId,
+        externalId: fitId,
+      };
+    });
+  }
+
+  private splitCsvLine(line: string, delimiter = ',') {
+    const cells: string[] = [];
+    let current = '';
+    let quoted = false;
+
+    for (let index = 0; index < line.length; index += 1) {
+      const char = line[index];
+      const next = line[index + 1];
+      if (char === '"' && quoted && next === '"') {
+        current += '"';
+        index += 1;
+      } else if (char === '"') {
+        quoted = !quoted;
+      } else if (char === delimiter && !quoted) {
+        cells.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+
+    cells.push(current.trim());
+    return cells;
+  }
+
+  private normalizeHeader(value: string) {
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .toLowerCase();
+  }
+
+  private readOfxTag(block: string, tag: string) {
+    const match = new RegExp(`<${tag}>([^<\\r\\n]+)`, 'i').exec(block);
+    return match?.[1]?.trim();
+  }
+
+  private parseStatementDate(value: string | undefined, rowNumber: number) {
+    const raw = String(value || '').trim();
+    if (!raw) {
+      throw new BadRequestException(`Data ausente na linha ${rowNumber}.`);
+    }
+    const ofxDate = /^(\d{4})(\d{2})(\d{2})/.exec(raw);
+    if (ofxDate) {
+      return new Date(
+        Date.UTC(
+          Number(ofxDate[1]),
+          Number(ofxDate[2]) - 1,
+          Number(ofxDate[3]),
+        ),
+      );
+    }
+    const brDate = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(raw);
+    if (brDate) {
+      return new Date(
+        Date.UTC(Number(brDate[3]), Number(brDate[2]) - 1, Number(brDate[1])),
+      );
+    }
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new BadRequestException(`Data invalida na linha ${rowNumber}.`);
+    }
+    return parsed;
+  }
+
+  private parseStatementAmount(value: string | undefined, rowNumber: number) {
+    const raw = String(value || '')
+      .trim()
+      .replace(/\s/g, '')
+      .replace(/^R\$/i, '');
+    if (!raw) {
+      throw new BadRequestException(`Valor ausente na linha ${rowNumber}.`);
+    }
+
+    const normalized =
+      raw.includes(',') && raw.lastIndexOf(',') > raw.lastIndexOf('.')
+        ? raw.replace(/\./g, '').replace(',', '.')
+        : raw.replace(/,/g, '');
+    const amount = Number(normalized);
+    if (!Number.isFinite(amount) || amount === 0) {
+      throw new BadRequestException(`Valor invalido na linha ${rowNumber}.`);
+    }
+    return amount;
+  }
+
+  private resolveStatementType(
+    value: string | undefined,
+    amount: number,
+    rowNumber: number,
+  ) {
+    const normalized = this.normalizeHeader(value || '');
+    if (
+      ['credito', 'credit', 'entrada', 'c', 'cr', 'dep', 'deposit'].includes(
+        normalized,
+      )
+    ) {
+      return BankMovementType.CREDIT;
+    }
+    if (
+      ['debito', 'debit', 'saida', 'd', 'db', 'pagamento', 'payment'].includes(
+        normalized,
+      )
+    ) {
+      return BankMovementType.DEBIT;
+    }
+    if (!normalized && amount !== 0) {
+      return amount > 0 ? BankMovementType.CREDIT : BankMovementType.DEBIT;
+    }
+    throw new BadRequestException(`Tipo invalido na linha ${rowNumber}.`);
+  }
+
+  private assertNoDuplicatedExternalIds(
+    entries: Array<{ externalId?: string }>,
+  ) {
+    const seen = new Set<string>();
+    for (const entry of entries) {
+      if (!entry.externalId) continue;
+      if (seen.has(entry.externalId)) {
+        throw new BadRequestException(
+          'CSV/OFX contem identificador bancario duplicado.',
+        );
+      }
+      seen.add(entry.externalId);
+    }
+  }
+
+  private sameBankDay(left: Date, right: Date) {
+    return (
+      left.getUTCFullYear() === right.getUTCFullYear() &&
+      left.getUTCMonth() === right.getUTCMonth() &&
+      left.getUTCDate() === right.getUTCDate()
+    );
+  }
+
+  private dateWindow(date: Date, days: number) {
+    const from = new Date(date);
+    from.setUTCDate(from.getUTCDate() - days);
+    from.setUTCHours(0, 0, 0, 0);
+    const to = new Date(date);
+    to.setUTCDate(to.getUTCDate() + days);
+    to.setUTCHours(23, 59, 59, 999);
+    return { from, to };
+  }
+
+  private async findMovementCandidates(
+    tx: Prisma.TransactionClient,
+    entry: {
+      bankAccountId: string;
+      type: BankMovementType;
+      amount: number;
+      postedDate: Date;
+    },
+    dateWindowDays: number,
+  ) {
+    const { from, to } = this.dateWindow(entry.postedDate, dateWindowDays);
+    const candidates = await tx.bankMovement.findMany({
+      where: {
+        bankAccountId: entry.bankAccountId,
+        type: entry.type,
+        amount: { gte: entry.amount - 0.009, lte: entry.amount + 0.009 },
+        movementDate: { gte: from, lte: to },
+        reconciledAt: null,
+        status: BankMovementStatus.POSTED,
+        statementEntries: {
+          none: {
+            matchStatus: {
+              in: [
+                BankStatementEntryMatchStatus.AUTO_MATCHED,
+                BankStatementEntryMatchStatus.MANUAL_MATCHED,
+              ],
+            },
+          },
+        },
+      },
+      orderBy: [{ movementDate: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    if (dateWindowDays === 0) {
+      return candidates.filter((candidate) =>
+        this.sameBankDay(candidate.movementDate, entry.postedDate),
+      );
+    }
+    return candidates;
+  }
+
+  private async assertCanMatchEntryWithMovement(
+    tx: Prisma.TransactionClient,
+    entry: {
+      id: string;
+      bankAccountId: string;
+      type: BankMovementType;
+      amount: number;
+    },
+    movement: {
+      id: string;
+      bankAccountId: string;
+      type: BankMovementType;
+      amount: number;
+      reconciledAt: Date | null;
+    },
+  ) {
+    if (entry.bankAccountId !== movement.bankAccountId) {
+      throw new BadRequestException(
+        'Lancamento e movimento pertencem a contas diferentes.',
+      );
+    }
+    if (entry.type !== movement.type) {
+      throw new BadRequestException(
+        'Tipo do lancamento bancario nao bate com o movimento interno.',
+      );
+    }
+    if (
+      Math.abs(Number(entry.amount || 0) - Number(movement.amount || 0)) > 0.009
+    ) {
+      throw new BadRequestException(
+        'Valor do lancamento bancario diverge do movimento interno.',
+      );
+    }
+    if (movement.reconciledAt) {
+      throw new BadRequestException('Movimento financeiro ja esta conciliado.');
+    }
+
+    const alreadyMatched = await tx.bankStatementEntry.findFirst({
+      where: {
+        matchedMovementId: movement.id,
+        id: { not: entry.id },
+        matchStatus: {
+          in: [
+            BankStatementEntryMatchStatus.AUTO_MATCHED,
+            BankStatementEntryMatchStatus.MANUAL_MATCHED,
+          ],
+        },
+      },
+      select: { id: true },
+    });
+    if (alreadyMatched) {
+      throw new BadRequestException(
+        'Movimento financeiro ja foi vinculado a outro lancamento bancario.',
+      );
+    }
+  }
+
+  private async applyStatementMatch(
+    tx: Prisma.TransactionClient,
+    input: {
+      entryId: string;
+      movementId: string;
+      status: BankStatementEntryMatchStatus;
+      confidenceScore: number;
+      actorUserId?: string;
+      reference?: string | null;
+      note?: string | null;
+    },
+  ) {
+    await tx.bankStatementEntry.update({
+      where: { id: input.entryId },
+      data: {
+        matchedMovementId: input.movementId,
+        matchStatus: input.status,
+        confidenceScore: input.confidenceScore,
+      },
+    });
+
+    await tx.bankMovement.update({
+      where: { id: input.movementId },
+      data: {
+        reconciledAt: new Date(),
+        reconciledById: input.actorUserId,
+        reconciliationReference: input.reference,
+        reconciliationNote: input.note,
+      },
+    });
+  }
+
+  private async updateBankStatementStatus(
+    tx: Prisma.TransactionClient,
+    importId: string,
+  ) {
+    const entries = await tx.bankStatementEntry.findMany({
+      where: { importId },
+      select: { matchStatus: true },
+    });
+    const unmatched = entries.filter(
+      (entry) => entry.matchStatus === BankStatementEntryMatchStatus.UNMATCHED,
+    ).length;
+    const matchedStatuses: BankStatementEntryMatchStatus[] = [
+      BankStatementEntryMatchStatus.AUTO_MATCHED,
+      BankStatementEntryMatchStatus.MANUAL_MATCHED,
+    ];
+    const matched = entries.filter((entry) =>
+      matchedStatuses.includes(entry.matchStatus),
+    ).length;
+    const ignored = entries.filter(
+      (entry) => entry.matchStatus === BankStatementEntryMatchStatus.IGNORED,
+    ).length;
+    const status =
+      unmatched === 0 && ignored === 0
+        ? BankStatementImportStatus.RECONCILED
+        : matched > 0 || ignored > 0
+          ? BankStatementImportStatus.PARTIALLY_RECONCILED
+          : BankStatementImportStatus.IMPORTED;
+
+    await tx.bankStatementImport.update({
+      where: { id: importId },
+      data: { status },
+    });
+  }
+
+  private async createReconciliationIssueSafely(
+    tx: Prisma.TransactionClient,
+    input: {
+      bankAccountId: string;
+      statementImportId?: string | null;
+      statementEntryId?: string | null;
+      movementId?: string | null;
+      type: BankReconciliationIssueType;
+      status?: BankReconciliationIssueStatus;
+      reason?: string | null;
+      resolvedAt?: Date | null;
+      resolvedById?: string | null;
+    },
+  ) {
+    return tx.bankReconciliationIssue.create({
+      data: {
+        bankAccountId: input.bankAccountId,
+        statementImportId: input.statementImportId,
+        statementEntryId: input.statementEntryId,
+        movementId: input.movementId,
+        type: input.type,
+        status: input.status ?? BankReconciliationIssueStatus.OPEN,
+        reason: input.reason,
+        resolvedAt: input.resolvedAt,
+        resolvedById: input.resolvedById,
+      },
+    });
   }
 
   private movementDelta(movement: { type: BankMovementType; amount: number }) {

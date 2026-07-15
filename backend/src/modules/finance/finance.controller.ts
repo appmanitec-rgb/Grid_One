@@ -15,22 +15,31 @@ import { AccessPolicyGuard } from '../auth/access-policy.guard';
 import { AuthGuard } from '../auth/auth.guard';
 import { FinanceService } from './finance.service';
 import {
+  AutoMatchBankStatementDto,
   BankMovementQueryDto,
   CancelAccountsPayableDto,
   CancelAccountsReceivableDto,
   CloseFinancialPeriodDto,
   CreateAccountsPayableDto,
   CreateAccountsReceivableDto,
+  CreateBankAdjustmentDto,
   CreateBankAccountDto,
   CreateCostCenterDto,
   CreateCostCenterEntryDto,
+  CreateReconciliationIssueDto,
+  IgnoreBankStatementEntryDto,
+  ImportBankStatementDto,
+  MatchBankStatementEntryDto,
   PayAccountsPayableDto,
   PayAccountsReceivableDto,
   ReconcileBankMovementDto,
+  ReconciliationReportQueryDto,
   ReopenFinancialPeriodDto,
+  ResolveReconciliationIssueDto,
   ReversePayablePaymentDto,
   ReverseReceivablePaymentDto,
   SyncOrderReceivableDto,
+  UnmatchBankStatementEntryDto,
   UnreconcileBankMovementDto,
   UpdateBankAccountDto,
   UpdateCostCenterDto,
@@ -223,6 +232,152 @@ export class FinanceController {
     @Body() dto: UpdateBankAccountDto,
   ) {
     return this.financeService.updateBankAccount(id, dto);
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.reconcile')
+  @Post('bank-accounts/:id/statements/import')
+  importBankStatement(
+    @Param('id') id: string,
+    @Body() dto: ImportBankStatementDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.importBankStatement(
+      id,
+      dto,
+      this.getActorUserId(req),
+    );
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.view')
+  @Get('bank-accounts/:id/statements')
+  bankStatements(@Param('id') id: string) {
+    return this.financeService.listBankStatements(id);
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.view')
+  @Get('bank-statements/:id')
+  bankStatement(@Param('id') id: string) {
+    return this.financeService.getBankStatement(id);
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.view')
+  @Get('bank-statements/:id/entries')
+  bankStatementEntries(@Param('id') id: string) {
+    return this.financeService.listBankStatementEntries(id);
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.reconcile')
+  @Post('bank-statements/:id/auto-match')
+  autoMatchBankStatement(
+    @Param('id') id: string,
+    @Body() dto: AutoMatchBankStatementDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.autoMatchBankStatement(
+      id,
+      dto,
+      this.getActorUserId(req),
+    );
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.reconcile')
+  @Post('bank-statement-entries/:id/match')
+  matchBankStatementEntry(
+    @Param('id') id: string,
+    @Body() dto: MatchBankStatementEntryDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.matchBankStatementEntry(
+      id,
+      dto,
+      this.getActorUserId(req),
+    );
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.reconcile')
+  @Post('bank-statement-entries/:id/unmatch')
+  unmatchBankStatementEntry(
+    @Param('id') id: string,
+    @Body() dto: UnmatchBankStatementEntryDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.unmatchBankStatementEntry(
+      id,
+      dto,
+      this.getActorUserId(req),
+    );
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.reconcile')
+  @Post('bank-statement-entries/:id/ignore')
+  ignoreBankStatementEntry(
+    @Param('id') id: string,
+    @Body() dto: IgnoreBankStatementEntryDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.ignoreBankStatementEntry(
+      id,
+      dto,
+      this.getActorUserId(req),
+    );
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.reconcile')
+  @Post('bank-statement-entries/:id/adjustment')
+  createBankAdjustment(
+    @Param('id') id: string,
+    @Body() dto: CreateBankAdjustmentDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.createBankAdjustmentFromStatementEntry(
+      id,
+      dto,
+      this.getActorUserId(req),
+    );
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.create')
+  @Post('reconciliation/issues')
+  createReconciliationIssue(
+    @Body() dto: CreateReconciliationIssueDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.createReconciliationIssue(
+      dto,
+      this.getActorUserId(req),
+    );
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.reconcile')
+  @Patch('reconciliation/issues/:id/resolve')
+  resolveReconciliationIssue(
+    @Param('id') id: string,
+    @Body() dto: ResolveReconciliationIssueDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.resolveReconciliationIssue(
+      id,
+      dto,
+      this.getActorUserId(req),
+    );
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.view')
+  @Get('reconciliation/report')
+  reconciliationReport(@Query() query: ReconciliationReportQueryDto) {
+    return this.financeService.reconciliationReport(query);
   }
 
   @UseGuards(AuthGuard)
