@@ -19,7 +19,7 @@ import {
 } from "../../components/DashboardPageKit";
 
 type MovementType = "CREDIT" | "DEBIT";
-type FileType = "CSV" | "OFX";
+type FileType = "CSV" | "OFX" | "CNAB";
 type ImportStatus =
   | "IMPORTED"
   | "PARTIALLY_RECONCILED"
@@ -57,9 +57,17 @@ type BankStatementEntry = {
   type: MovementType;
   description: string;
   documentNumber?: string | null;
+  normalizedDescription?: string | null;
+  normalizedDocumentNumber?: string | null;
   bankReference?: string | null;
+  normalizedReference?: string | null;
   externalId?: string | null;
   matchStatus: MatchStatus;
+  confidenceScore?: number | null;
+  matchReason?: string | null;
+  suggestedMovementId?: string | null;
+  suggestionScore?: number | null;
+  suggestionReason?: string | null;
   matchedMovementId?: string | null;
   matchedMovement?: BankMovement | null;
 };
@@ -76,6 +84,13 @@ type BankMovement = {
   reconciliationReference?: string | null;
 };
 
+type MatchCandidate = {
+  movement: BankMovement;
+  score: number;
+  reason: string;
+  canAutoMatch: boolean;
+};
+
 type ReconciliationReport = {
   bankAccount: BankAccount;
   period: { from: string; to: string };
@@ -90,6 +105,14 @@ type ReconciliationReport = {
     unmatchedStatementEntries: number;
     openIssues: number;
     resolvedIssues: number;
+  };
+  balanceAudit?: {
+    currentBalance: number;
+    ledgerCalculatedBalance: number;
+    difference: number;
+    unreconciledMovements: number;
+    reversedMovements: number;
+    status: "OK" | "DIVERGENT";
   };
   issues: Array<{
     id: string;
@@ -195,6 +218,9 @@ export default function BankReconciliationPage() {
   });
   const [matchMovementByEntry, setMatchMovementByEntry] = useState<
     Record<string, string>
+  >({});
+  const [suggestionsByEntry, setSuggestionsByEntry] = useState<
+    Record<string, MatchCandidate[]>
   >({});
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -312,6 +338,7 @@ export default function BankReconciliationPage() {
     );
     await readOrThrow(response, "Nao foi possivel carregar lancamentos.");
     setEntries((await response.json()) as BankStatementEntry[]);
+    setSuggestionsByEntry({});
   }, [readOrThrow, selectedImportId]);
 
   useEffect(() => {
@@ -421,8 +448,46 @@ export default function BankReconciliationPage() {
     }
   }
 
-  async function manualMatch(entry: BankStatementEntry) {
-    const movementId = matchMovementByEntry[entry.id];
+  async function loadSuggestions(entry: BankStatementEntry) {
+    setBusyId(`suggestions-${entry.id}`);
+    setError("");
+
+    try {
+      const response = await apiFetch(
+        apiUrl(`/finance/bank-statement-entries/${entry.id}/suggestions`),
+        { cache: "no-store" },
+      );
+      if (!response.ok) {
+        throw new Error(
+          await readApiErrorMessage(response, "Falha ao buscar sugestoes."),
+        );
+      }
+      const payload = (await response.json()) as {
+        candidates: MatchCandidate[];
+      };
+      setSuggestionsByEntry((current) => ({
+        ...current,
+        [entry.id]: payload.candidates,
+      }));
+      if (!payload.candidates.length) {
+        setSuccessMessage("Nenhuma sugestao encontrada para este lancamento.");
+      }
+    } catch (actionError: unknown) {
+      setError(
+        actionError instanceof Error
+          ? actionError.message
+          : "Falha ao buscar sugestoes.",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function manualMatch(
+    entry: BankStatementEntry,
+    movementIdOverride?: string | null,
+  ) {
+    const movementId = movementIdOverride || matchMovementByEntry[entry.id];
     if (!movementId) {
       setError("Selecione um movimento para conciliar manualmente.");
       return;
@@ -629,6 +694,16 @@ export default function BankReconciliationPage() {
       {successMessage ? (
         <StatusBanner tone="emerald">{successMessage}</StatusBanner>
       ) : null}
+      {report?.balanceAudit ? (
+        <StatusBanner
+          tone={report.balanceAudit.status === "OK" ? "emerald" : "rose"}
+        >
+          Auditoria de saldo: conta{" "}
+          {formatCurrency(report.balanceAudit.currentBalance)} | ledger{" "}
+          {formatCurrency(report.balanceAudit.ledgerCalculatedBalance)} |
+          diferenca {formatCurrency(report.balanceAudit.difference)}.
+        </StatusBanner>
+      ) : null}
 
       <SectionCard
         title="Conta e período"
@@ -721,12 +796,15 @@ export default function BankReconciliationPage() {
                     fileName:
                       event.target.value === "OFX"
                         ? "extrato.ofx"
-                        : "extrato.csv",
+                        : event.target.value === "CNAB"
+                          ? "extrato.rem"
+                          : "extrato.csv",
                   }))
                 }
               >
                 <option value="CSV">CSV</option>
                 <option value="OFX">OFX básico</option>
+                <option value="CNAB">CNAB inicial</option>
               </SelectInput>
             </FormField>
           </div>
@@ -846,6 +924,11 @@ export default function BankReconciliationPage() {
                           entry.externalId ||
                           "Sem referencia"}
                       </p>
+                      {entry.normalizedDescription ? (
+                        <p className="mt-1 text-xs text-slate-400">
+                          Normalizado: {entry.normalizedDescription}
+                        </p>
+                      ) : null}
                     </td>
                     <td
                       className={`px-3 py-3 text-right font-semibold ${
@@ -861,6 +944,16 @@ export default function BankReconciliationPage() {
                       <DataPill tone={statusTone(entry.matchStatus)}>
                         {MATCH_LABEL[entry.matchStatus]}
                       </DataPill>
+                      {entry.confidenceScore ? (
+                        <p className="mt-2 text-xs text-slate-500">
+                          Score {Math.round(entry.confidenceScore * 100)}%
+                        </p>
+                      ) : null}
+                      {entry.matchReason ? (
+                        <p className="mt-1 max-w-44 text-xs leading-5 text-slate-500">
+                          {entry.matchReason}
+                        </p>
+                      ) : null}
                     </td>
                     <td className="px-3 py-3 min-w-64">
                       {entry.matchedMovementId ? (
@@ -876,30 +969,60 @@ export default function BankReconciliationPage() {
                           </p>
                         </FieldBox>
                       ) : (
-                        <SelectInput
-                          value={matchMovementByEntry[entry.id] || ""}
-                          onChange={(event) =>
-                            setMatchMovementByEntry((current) => ({
-                              ...current,
-                              [entry.id]: event.target.value,
-                            }))
-                          }
-                        >
-                          <option value="">Selecionar movimento</option>
-                          {unreconciledMovements
-                            .filter(
-                              (movement) =>
-                                movement.type === entry.type &&
-                                Number(movement.amount) ===
-                                  Number(entry.amount),
-                            )
-                            .map((movement) => (
-                              <option key={movement.id} value={movement.id}>
-                                {formatDate(movement.movementDate)} -{" "}
-                                {movement.description}
-                              </option>
-                            ))}
-                        </SelectInput>
+                        <div className="space-y-2">
+                          {entry.suggestedMovementId ? (
+                            <FieldBox>
+                              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+                                Sugestao
+                              </p>
+                              <p className="mt-1 text-sm font-semibold text-slate-950">
+                                {Math.round((entry.suggestionScore || 0) * 100)}
+                                % - {entry.suggestionReason}
+                              </p>
+                            </FieldBox>
+                          ) : null}
+                          {(suggestionsByEntry[entry.id] || []).map(
+                            (candidate) => (
+                              <FieldBox key={candidate.movement.id}>
+                                <p className="text-sm font-semibold text-slate-950">
+                                  {candidate.movement.description}
+                                </p>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {formatDate(candidate.movement.movementDate)}{" "}
+                                  - {formatCurrency(candidate.movement.amount)}{" "}
+                                  - {Math.round(candidate.score * 100)}%
+                                </p>
+                                <p className="mt-1 text-xs leading-5 text-slate-500">
+                                  {candidate.reason}
+                                </p>
+                              </FieldBox>
+                            ),
+                          )}
+                          <SelectInput
+                            value={matchMovementByEntry[entry.id] || ""}
+                            onChange={(event) =>
+                              setMatchMovementByEntry((current) => ({
+                                ...current,
+                                [entry.id]: event.target.value,
+                              }))
+                            }
+                          >
+                            <option value="">Selecionar movimento</option>
+                            {unreconciledMovements
+                              .filter(
+                                (movement) =>
+                                  movement.type === entry.type &&
+                                  Number(movement.amount) ===
+                                    Number(entry.amount),
+                              )
+                              .map((movement) => (
+                                <option key={movement.id} value={movement.id}>
+                                  {formatDate(movement.movementDate)} -{" "}
+                                  {movement.description}
+                                </option>
+                              ))}
+                          </SelectInput>
+                        </div>
                       )}
                     </td>
                     <td className="px-3 py-3">
@@ -914,6 +1037,29 @@ export default function BankReconciliationPage() {
                               onClick={() => void manualMatch(entry)}
                             >
                               Conciliar
+                            </button>
+                            {entry.suggestedMovementId ? (
+                              <button
+                                type="button"
+                                className={SECONDARY_BUTTON}
+                                disabled={busyId === entry.id}
+                                onClick={() =>
+                                  void manualMatch(
+                                    entry,
+                                    entry.suggestedMovementId,
+                                  )
+                                }
+                              >
+                                Aceitar sugestao
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              className={SECONDARY_BUTTON}
+                              disabled={busyId === `suggestions-${entry.id}`}
+                              onClick={() => void loadSuggestions(entry)}
+                            >
+                              Sugestoes
                             </button>
                             <button
                               type="button"
@@ -992,6 +1138,32 @@ export default function BankReconciliationPage() {
                   {report.closing?.status === "CLOSED" ? "Fechado" : "Aberto"}
                 </p>
               </FieldBox>
+              {report.balanceAudit ? (
+                <>
+                  <FieldBox>
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+                      Saldo da conta
+                    </p>
+                    <p className="mt-2 text-xl font-bold text-slate-950">
+                      {formatCurrency(report.balanceAudit.currentBalance)}
+                    </p>
+                  </FieldBox>
+                  <FieldBox>
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+                      Diferenca ledger
+                    </p>
+                    <p
+                      className={`mt-2 text-xl font-bold ${
+                        report.balanceAudit.status === "OK"
+                          ? "text-emerald-700"
+                          : "text-rose-700"
+                      }`}
+                    >
+                      {formatCurrency(report.balanceAudit.difference)}
+                    </p>
+                  </FieldBox>
+                </>
+              ) : null}
             </div>
           ) : (
             <EmptyState

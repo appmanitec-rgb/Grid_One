@@ -2221,31 +2221,41 @@ model BankStatementImport {
 }
 
 model BankStatementEntry {
-  id                   String                        @id @default(uuid())
-  importId             String
-  import               BankStatementImport           @relation(fields: [importId], references: [id], onDelete: Cascade)
-  bankAccountId        String
-  bankAccount          BankAccount                   @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
-  postedDate           DateTime
-  amount               Float
-  type                 BankMovementType
-  description          String
-  documentNumber       String?
-  bankReference        String?
-  fitId                String?
-  externalId           String?
-  matchedMovementId    String?
-  matchedMovement      BankMovement?                 @relation("StatementEntryMatchedMovement", fields: [matchedMovementId], references: [id], onDelete: SetNull)
-  matchStatus          BankStatementEntryMatchStatus @default(UNMATCHED)
-  confidenceScore      Float?
-  ignoreReason         String?
-  createdAt            DateTime                      @default(now())
-  reconciliationIssues BankReconciliationIssue[]
+  id                       String                        @id @default(uuid())
+  importId                 String
+  import                   BankStatementImport           @relation(fields: [importId], references: [id], onDelete: Cascade)
+  bankAccountId            String
+  bankAccount              BankAccount                   @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  postedDate               DateTime
+  amount                   Float
+  type                     BankMovementType
+  description              String
+  normalizedDescription    String?
+  documentNumber           String?
+  normalizedDocumentNumber String?
+  bankReference            String?
+  normalizedReference      String?
+  fitId                    String?
+  externalId               String?
+  matchedMovementId        String?
+  matchedMovement          BankMovement?                 @relation("StatementEntryMatchedMovement", fields: [matchedMovementId], references: [id], onDelete: SetNull)
+  matchStatus              BankStatementEntryMatchStatus @default(UNMATCHED)
+  confidenceScore          Float?
+  matchReason              String?
+  suggestedMovementId      String?
+  suggestionScore          Float?
+  suggestionReason         String?
+  descriptionTokens        Json?
+  dateOnly                 DateTime?
+  ignoreReason             String?
+  createdAt                DateTime                      @default(now())
+  reconciliationIssues     BankReconciliationIssue[]
 
   @@unique([bankAccountId, externalId])
   @@index([importId, postedDate])
   @@index([bankAccountId, postedDate])
   @@index([matchedMovementId])
+  @@index([suggestedMovementId])
   @@index([matchStatus, postedDate])
   @@map("bank_statement_entries")
 }

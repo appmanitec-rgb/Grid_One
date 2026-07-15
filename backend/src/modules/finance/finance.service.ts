@@ -56,6 +56,43 @@ import {
   UpdateCostCenterDto,
 } from './dto/finance.dto';
 
+type ParsedStatementEntry = {
+  postedDate: Date;
+  amount: number;
+  type: BankMovementType;
+  description: string;
+  normalizedDescription: string;
+  descriptionTokens: string[];
+  dateOnly: Date;
+  documentNumber?: string;
+  normalizedDocumentNumber?: string;
+  bankReference?: string;
+  normalizedReference?: string;
+  fitId?: string;
+  externalId?: string;
+};
+
+type BankMovementCandidate = {
+  id: string;
+  bankAccountId: string;
+  type: BankMovementType;
+  amount: number;
+  movementDate: Date;
+  description: string;
+  originType: BankMovementOriginType;
+  originId: string;
+  receivableId?: string | null;
+  payableId?: string | null;
+  reconciledAt?: Date | null;
+  reconciliationReference?: string | null;
+};
+
+type StatementMatchCandidate = {
+  movement: BankMovementCandidate;
+  score: number;
+  reason: string;
+};
+
 @Injectable()
 export class FinanceService {
   private readonly defaultContractCommissionPercent = 2;
@@ -1328,6 +1365,60 @@ export class FinanceService {
     });
   }
 
+  async auditBankAccountBalance(id: string) {
+    const bankAccount = await this.prisma.bankAccount.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        bankName: true,
+        initialBalance: true,
+        currentBalance: true,
+      },
+    });
+    if (!bankAccount) {
+      throw new NotFoundException('Conta bancaria/caixa nao encontrada.');
+    }
+
+    const [postedMovements, reversedMovements, unreconciledMovements] =
+      await Promise.all([
+        this.prisma.bankMovement.findMany({
+          where: { bankAccountId: id, status: BankMovementStatus.POSTED },
+          select: { type: true, amount: true, movementDate: true },
+          orderBy: { movementDate: 'desc' },
+        }),
+        this.prisma.bankMovement.count({
+          where: { bankAccountId: id, status: BankMovementStatus.REVERSED },
+        }),
+        this.prisma.bankMovement.count({
+          where: {
+            bankAccountId: id,
+            status: BankMovementStatus.POSTED,
+            reconciledAt: null,
+          },
+        }),
+      ]);
+
+    const ledgerCalculatedBalance =
+      Number(bankAccount.initialBalance || 0) +
+      this.sumMovementDelta(postedMovements);
+    const currentBalance = Number(bankAccount.currentBalance || 0);
+    const difference = Number(
+      (currentBalance - ledgerCalculatedBalance).toFixed(2),
+    );
+
+    return {
+      bankAccount,
+      currentBalance,
+      ledgerCalculatedBalance,
+      difference,
+      lastMovementDate: postedMovements[0]?.movementDate ?? null,
+      unreconciledMovements,
+      reversedMovements,
+      status: Math.abs(difference) <= 0.009 ? 'OK' : 'DIVERGENT',
+    };
+  }
+
   async importBankStatement(
     bankAccountId: string,
     dto: ImportBankStatementDto,
@@ -1391,7 +1482,7 @@ export class FinanceService {
           checksumSha256,
           metadata: {
             rows: parsedEntries.length,
-            parser: dto.fileType === BankStatementFileType.CSV ? 'csv' : 'ofx',
+            parser: dto.fileType.toLowerCase(),
           },
         },
       });
@@ -1406,6 +1497,12 @@ export class FinanceService {
               amount: entry.amount,
               type: entry.type,
               description: entry.description,
+              normalizedDescription: entry.normalizedDescription,
+              normalizedDocumentNumber: entry.normalizedDocumentNumber,
+              normalizedReference: entry.normalizedReference,
+              descriptionTokens:
+                entry.descriptionTokens as Prisma.InputJsonValue,
+              dateOnly: entry.dateOnly,
               documentNumber: entry.documentNumber,
               bankReference: entry.bankReference,
               fitId: entry.fitId,
@@ -1528,37 +1625,52 @@ export class FinanceService {
       let unmatched = 0;
 
       for (const entry of statement.entries) {
-        const exactCandidates = await this.findMovementCandidates(tx, entry, 0);
-        const candidates =
-          exactCandidates.length > 0
-            ? exactCandidates
-            : await this.findMovementCandidates(tx, entry, dateWindowDays);
+        const candidates = await this.findMovementCandidates(
+          tx,
+          entry,
+          dateWindowDays,
+        );
+        const scoredCandidates = this.scoreMovementCandidates(
+          entry,
+          candidates,
+        );
+        const strongCandidates = scoredCandidates.filter(
+          (candidate) => candidate.score >= 0.8,
+        );
+        const bestCandidate = scoredCandidates[0];
 
-        if (candidates.length === 1) {
-          const movement = candidates[0];
-          const confidenceScore = exactCandidates.length === 1 ? 1 : 0.82;
+        if (strongCandidates.length === 1) {
+          const candidate = strongCandidates[0];
           await this.applyStatementMatch(tx, {
             entryId: entry.id,
-            movementId: movement.id,
+            movementId: candidate.movement.id,
             status: BankStatementEntryMatchStatus.AUTO_MATCHED,
-            confidenceScore,
+            confidenceScore: candidate.score,
+            matchReason: candidate.reason,
             actorUserId,
             reference: entry.bankReference ?? entry.externalId ?? entry.id,
-            note: `Conciliacao automatica do extrato ${statement.fileName}`,
+            note: `Conciliacao automatica do extrato ${statement.fileName}: ${candidate.reason}`,
           });
           autoMatched += 1;
-        } else if (candidates.length > 1) {
+        } else if (strongCandidates.length > 1) {
           ambiguous += 1;
+          if (bestCandidate) {
+            await this.saveStatementSuggestion(tx, entry.id, bestCandidate);
+          }
           await this.createReconciliationIssueSafely(tx, {
             bankAccountId: entry.bankAccountId,
             statementImportId: entry.importId,
             statementEntryId: entry.id,
+            movementId: bestCandidate?.movement.id,
             type: BankReconciliationIssueType.MISSING_MOVEMENT,
             reason:
-              'Matching automatico encontrou mais de um movimento candidato.',
+              'Matching automatico encontrou mais de um movimento candidato forte.',
           });
         } else {
           unmatched += 1;
+          if (bestCandidate) {
+            await this.saveStatementSuggestion(tx, entry.id, bestCandidate);
+          }
         }
       }
 
@@ -1574,6 +1686,43 @@ export class FinanceService {
       });
 
       return { autoMatched, ambiguous, unmatched };
+    });
+  }
+
+  async suggestBankStatementEntryMatches(
+    id: string,
+    dto: AutoMatchBankStatementDto = {},
+  ) {
+    const dateWindowDays = Number(dto.dateWindowDays ?? 3);
+    return this.prisma.$transaction(async (tx) => {
+      const entry = await tx.bankStatementEntry.findUnique({
+        where: { id },
+      });
+      if (!entry) {
+        throw new NotFoundException('Lancamento do extrato nao encontrado.');
+      }
+      if (entry.matchStatus !== BankStatementEntryMatchStatus.UNMATCHED) {
+        return { entryId: id, candidates: [] };
+      }
+
+      const candidates = await this.findMovementCandidates(
+        tx,
+        entry,
+        dateWindowDays,
+      );
+      const scored = this.scoreMovementCandidates(entry, candidates).slice(
+        0,
+        5,
+      );
+      return {
+        entryId: id,
+        candidates: scored.map((candidate) => ({
+          movement: candidate.movement,
+          score: candidate.score,
+          reason: candidate.reason,
+          canAutoMatch: candidate.score >= 0.8,
+        })),
+      };
     });
   }
 
@@ -1609,6 +1758,7 @@ export class FinanceService {
         movementId: movement.id,
         status: BankStatementEntryMatchStatus.MANUAL_MATCHED,
         confidenceScore: 1,
+        matchReason: 'Conciliacao manual aceita pelo usuario.',
         actorUserId,
         reference: entry.bankReference ?? entry.externalId ?? entry.id,
         note: 'Conciliacao manual com extrato bancario importado.',
@@ -1659,6 +1809,7 @@ export class FinanceService {
           matchedMovementId: null,
           matchStatus: BankStatementEntryMatchStatus.UNMATCHED,
           confidenceScore: null,
+          matchReason: null,
         },
       });
 
@@ -1722,6 +1873,9 @@ export class FinanceService {
         data: {
           matchStatus: BankStatementEntryMatchStatus.IGNORED,
           ignoreReason: reason,
+          suggestedMovementId: null,
+          suggestionScore: null,
+          suggestionReason: null,
         },
       });
 
@@ -1812,6 +1966,7 @@ export class FinanceService {
         movementId: movement.id,
         status: BankStatementEntryMatchStatus.MANUAL_MATCHED,
         confidenceScore: 1,
+        matchReason: `Ajuste controlado criado para divergencia: ${reason}`,
         actorUserId,
         reference: entry.bankReference ?? entry.externalId ?? entry.id,
         note: `Ajuste controlado: ${reason}`,
@@ -1922,7 +2077,13 @@ export class FinanceService {
 
     const bankAccount = await this.prisma.bankAccount.findUnique({
       where: { id: query.bankAccountId },
-      select: { id: true, name: true, bankName: true, initialBalance: true },
+      select: {
+        id: true,
+        name: true,
+        bankName: true,
+        initialBalance: true,
+        currentBalance: true,
+      },
     });
     if (!bankAccount) {
       throw new NotFoundException('Conta bancaria/caixa nao encontrada.');
@@ -1932,6 +2093,7 @@ export class FinanceService {
       where: {
         bankAccountId: query.bankAccountId,
         movementDate: { lt: fromDate },
+        status: BankMovementStatus.POSTED,
       },
       select: { type: true, amount: true },
     });
@@ -1939,6 +2101,7 @@ export class FinanceService {
       where: {
         bankAccountId: query.bankAccountId,
         movementDate: { gte: fromDate, lte: toDate },
+        status: BankMovementStatus.POSTED,
       },
       select: {
         id: true,
@@ -1969,9 +2132,12 @@ export class FinanceService {
       select: { id: true, status: true, type: true },
     });
     const periodKey = this.getPeriodKey(fromDate);
-    const closing = await this.prisma.financialPeriodClosing.findUnique({
-      where: { year_month: periodKey },
-    });
+    const [closing, balanceAudit] = await Promise.all([
+      this.prisma.financialPeriodClosing.findUnique({
+        where: { year_month: periodKey },
+      }),
+      this.auditBankAccountBalance(query.bankAccountId),
+    ]);
 
     const openingBalance =
       Number(bankAccount.initialBalance || 0) +
@@ -2016,6 +2182,7 @@ export class FinanceService {
         openIssues,
         resolvedIssues,
       },
+      balanceAudit,
       issues,
     };
   }
@@ -2598,19 +2765,17 @@ export class FinanceService {
   private parseStatementEntries(
     fileType: BankStatementFileType,
     content: string,
-  ) {
+  ): ParsedStatementEntry[] {
     if (fileType === BankStatementFileType.CSV) {
       return this.parseCsvStatement(content);
     }
     if (fileType === BankStatementFileType.OFX) {
       return this.parseOfxStatement(content);
     }
-    throw new BadRequestException(
-      'Importacao CNAB esta preparada no modelo, mas ainda nao foi habilitada neste ciclo.',
-    );
+    return this.parseCnabStatement(content);
   }
 
-  private parseCsvStatement(content: string) {
+  private parseCsvStatement(content: string): ParsedStatementEntry[] {
     const rows = content
       .replace(/^\uFEFF/, '')
       .split(/\r?\n/)
@@ -2622,7 +2787,7 @@ export class FinanceService {
       );
     }
 
-    const delimiter = rows[0].includes(';') ? ';' : ',';
+    const delimiter = this.detectCsvDelimiter(rows[0]);
     const headers = this.splitCsvLine(rows[0], delimiter).map((header) =>
       this.normalizeHeader(header),
     );
@@ -2634,16 +2799,34 @@ export class FinanceService {
       'descricao',
       'description',
       'historico',
+      'historicooperacao',
+      'memo',
+      'name',
     );
-    const amountIndex = findColumn('valor', 'amount', 'vlr');
-    const typeIndex = findColumn('tipo', 'type', 'natureza');
-    const documentIndex = findColumn('documento', 'documentnumber', 'doc');
+    const amountIndex = findColumn('valor', 'amount', 'vlr', 'valorlancamento');
+    const typeIndex = findColumn(
+      'tipo',
+      'type',
+      'natureza',
+      'debcred',
+      'dc',
+      'creditooudebito',
+    );
+    const documentIndex = findColumn(
+      'documento',
+      'documentnumber',
+      'doc',
+      'numerodocumento',
+      'document',
+    );
     const referenceIndex = findColumn(
       'referencia',
       'bankreference',
       'reference',
+      'ref',
       'fitid',
       'externalid',
+      'idexterno',
     );
 
     if (
@@ -2680,9 +2863,18 @@ export class FinanceService {
         referenceIndex !== undefined
           ? cells[referenceIndex]?.trim()
           : undefined;
-      const externalId = bankReference || documentNumber || undefined;
+      const externalId =
+        bankReference ||
+        documentNumber ||
+        this.buildSyntheticStatementId({
+          postedDate,
+          amount: Math.abs(rawAmount),
+          type,
+          description,
+          rowNumber: offset + 2,
+        });
 
-      return {
+      return this.normalizeParsedStatementEntry({
         postedDate,
         amount: Math.abs(rawAmount),
         type,
@@ -2691,11 +2883,11 @@ export class FinanceService {
         bankReference: bankReference || undefined,
         fitId: bankReference || undefined,
         externalId,
-      };
+      });
     });
   }
 
-  private parseOfxStatement(content: string) {
+  private parseOfxStatement(content: string): ParsedStatementEntry[] {
     const blocks = content.match(
       /<STMTTRN>[\s\S]*?(?=<STMTTRN>|<\/BANKTRANLIST>)/gi,
     );
@@ -2725,18 +2917,238 @@ export class FinanceService {
         this.readOfxTag(block, 'MEMO') ||
         this.readOfxTag(block, 'NAME') ||
         `Lancamento OFX ${index + 1}`;
+      const bankReference = fitId || documentNumber || undefined;
+      const externalId =
+        fitId ||
+        this.buildSyntheticStatementId({
+          postedDate,
+          amount: Math.abs(amount),
+          type,
+          description,
+          rowNumber: index + 1,
+        });
 
-      return {
+      return this.normalizeParsedStatementEntry({
         postedDate,
         amount: Math.abs(amount),
         type,
         description: description.trim(),
         documentNumber,
-        bankReference: fitId,
+        bankReference,
         fitId,
-        externalId: fitId,
-      };
+        externalId,
+      });
     });
+  }
+
+  private parseCnabStatement(content: string): ParsedStatementEntry[] {
+    const rows = content
+      .replace(/^\uFEFF/, '')
+      .split(/\r?\n/)
+      .map((row) => row.trimEnd())
+      .filter(Boolean);
+    if (!rows.length) {
+      throw new BadRequestException('CNAB vazio ou sem linhas reconheciveis.');
+    }
+
+    const entries: ParsedStatementEntry[] = [];
+    rows.forEach((row, index) => {
+      const clean = row.trim();
+      if (clean.length < 40) return;
+      if (!/^\d+$/.test(clean)) return;
+
+      const parsed = this.parseCnabDetailLine(clean, index + 1);
+      if (parsed) entries.push(parsed);
+    });
+
+    if (!entries.length) {
+      throw new BadRequestException(
+        'CNAB inicial nao encontrou linhas de detalhe reconheciveis. Homologue o layout do banco antes de uso operacional.',
+      );
+    }
+
+    return entries;
+  }
+
+  private parseCnabDetailLine(
+    row: string,
+    rowNumber: number,
+  ): ParsedStatementEntry | null {
+    const date = this.extractCnabDate(row);
+    const amount = this.extractCnabAmount(row);
+    if (!date || !amount) return null;
+
+    const type = this.extractCnabType(row, amount);
+    const documentNumber =
+      this.cleanDocumentNumber(row.slice(37, 57)) ||
+      this.cleanDocumentNumber(row.slice(62, 82)) ||
+      undefined;
+    const description =
+      row.slice(176, 216).trim() ||
+      row.slice(80, 120).trim() ||
+      `Lancamento CNAB ${rowNumber}`;
+    const externalId =
+      documentNumber ||
+      this.buildSyntheticStatementId({
+        postedDate: date,
+        amount: Math.abs(amount),
+        type,
+        description,
+        rowNumber,
+      });
+
+    return this.normalizeParsedStatementEntry({
+      postedDate: date,
+      amount: Math.abs(amount),
+      type,
+      description,
+      documentNumber,
+      bankReference: documentNumber,
+      externalId,
+    });
+  }
+
+  private detectCsvDelimiter(header: string) {
+    const semicolonCount = (header.match(/;/g) || []).length;
+    const commaCount = (header.match(/,/g) || []).length;
+    return semicolonCount >= commaCount ? ';' : ',';
+  }
+
+  private normalizeParsedStatementEntry(input: {
+    postedDate: Date;
+    amount: number;
+    type: BankMovementType;
+    description: string;
+    documentNumber?: string;
+    bankReference?: string;
+    fitId?: string;
+    externalId?: string;
+  }): ParsedStatementEntry {
+    const normalizedDescription = this.normalizeBankText(input.description);
+    const normalizedDocumentNumber = this.cleanDocumentNumber(
+      input.documentNumber,
+    );
+    const normalizedReference = this.cleanReference(
+      input.bankReference || input.fitId || input.externalId,
+    );
+
+    return {
+      ...input,
+      normalizedDescription,
+      normalizedDocumentNumber,
+      normalizedReference,
+      descriptionTokens: this.tokenizeBankDescription(normalizedDescription),
+      dateOnly: this.toBankDateOnly(input.postedDate),
+      documentNumber: input.documentNumber?.trim() || undefined,
+      bankReference: input.bankReference?.trim() || undefined,
+      fitId: input.fitId?.trim() || undefined,
+      externalId: input.externalId?.trim() || undefined,
+    };
+  }
+
+  private normalizeBankText(value: string | null | undefined) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, ' ')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toLowerCase();
+  }
+
+  private tokenizeBankDescription(value: string) {
+    return value
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 3)
+      .slice(0, 20);
+  }
+
+  private cleanDocumentNumber(value: string | null | undefined) {
+    const clean = String(value || '').replace(/[^a-zA-Z0-9]/g, '');
+    return clean || undefined;
+  }
+
+  private cleanReference(value: string | null | undefined) {
+    const clean = this.normalizeBankText(value).replace(/\s+/g, '');
+    return clean || undefined;
+  }
+
+  private toBankDateOnly(value: Date) {
+    return new Date(
+      Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()),
+    );
+  }
+
+  private buildSyntheticStatementId(input: {
+    postedDate: Date;
+    amount: number;
+    type: BankMovementType;
+    description: string;
+    rowNumber: number;
+  }) {
+    return createHash('sha1')
+      .update(
+        [
+          input.postedDate.toISOString().slice(0, 10),
+          input.type,
+          input.amount.toFixed(2),
+          this.normalizeBankText(input.description),
+          input.rowNumber,
+        ].join('|'),
+      )
+      .digest('hex')
+      .slice(0, 24);
+  }
+
+  private extractCnabDate(row: string) {
+    const candidates = [
+      row.slice(93, 101),
+      row.slice(142, 150),
+      row.slice(110, 118),
+      row.slice(181, 189),
+    ];
+    for (const candidate of candidates) {
+      if (/^\d{8}$/.test(candidate)) {
+        const day = Number(candidate.slice(0, 2));
+        const month = Number(candidate.slice(2, 4));
+        const year = Number(candidate.slice(4, 8));
+        if (day >= 1 && day <= 31 && month >= 1 && month <= 12 && year > 1900) {
+          return new Date(Date.UTC(year, month - 1, day));
+        }
+      }
+    }
+    return null;
+  }
+
+  private extractCnabAmount(row: string) {
+    const candidates = [
+      row.slice(119, 134),
+      row.slice(152, 167),
+      row.slice(81, 96),
+      row.slice(150, 165),
+    ];
+    for (const candidate of candidates) {
+      if (/^\d{1,15}$/.test(candidate) && Number(candidate) > 0) {
+        return Number(candidate) / 100;
+      }
+    }
+    return null;
+  }
+
+  private extractCnabType(row: string, amount: number) {
+    const markers = [
+      row.slice(13, 14),
+      row.slice(168, 169),
+      row.slice(230, 231),
+    ].map((value) => this.normalizeHeader(value));
+    if (markers.some((marker) => ['d', '1', 'debito'].includes(marker))) {
+      return BankMovementType.DEBIT;
+    }
+    if (markers.some((marker) => ['c', '2', 'credito'].includes(marker))) {
+      return BankMovementType.CREDIT;
+    }
+    return amount < 0 ? BankMovementType.DEBIT : BankMovementType.CREDIT;
   }
 
   private splitCsvLine(line: string, delimiter = ',') {
@@ -2794,9 +3206,33 @@ export class FinanceService {
     }
     const brDate = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(raw);
     if (brDate) {
-      return new Date(
-        Date.UTC(Number(brDate[3]), Number(brDate[2]) - 1, Number(brDate[1])),
-      );
+      const day = Number(brDate[1]);
+      const month = Number(brDate[2]);
+      const year = Number(brDate[3]);
+      const parsed = new Date(Date.UTC(year, month - 1, day));
+      if (
+        parsed.getUTCFullYear() !== year ||
+        parsed.getUTCMonth() !== month - 1 ||
+        parsed.getUTCDate() !== day
+      ) {
+        throw new BadRequestException(`Data invalida na linha ${rowNumber}.`);
+      }
+      return parsed;
+    }
+    const isoDate = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+    if (isoDate) {
+      const year = Number(isoDate[1]);
+      const month = Number(isoDate[2]);
+      const day = Number(isoDate[3]);
+      const parsed = new Date(Date.UTC(year, month - 1, day));
+      if (
+        parsed.getUTCFullYear() !== year ||
+        parsed.getUTCMonth() !== month - 1 ||
+        parsed.getUTCDate() !== day
+      ) {
+        throw new BadRequestException(`Data invalida na linha ${rowNumber}.`);
+      }
+      return parsed;
     }
     const parsed = new Date(raw);
     if (Number.isNaN(parsed.getTime())) {
@@ -2808,6 +3244,7 @@ export class FinanceService {
   private parseStatementAmount(value: string | undefined, rowNumber: number) {
     const raw = String(value || '')
       .trim()
+      .replace(/^\((.*)\)$/, '-$1')
       .replace(/\s/g, '')
       .replace(/^R\$/i, '');
     if (!raw) {
@@ -2840,6 +3277,9 @@ export class FinanceService {
     }
     if (
       ['debito', 'debit', 'saida', 'd', 'db', 'pagamento', 'payment'].includes(
+        normalized,
+      ) ||
+      ['pos', 'atm', 'check', 'xfer', 'fee', 'srvchg', 'cash'].includes(
         normalized,
       )
     ) {
@@ -2893,7 +3333,7 @@ export class FinanceService {
       postedDate: Date;
     },
     dateWindowDays: number,
-  ) {
+  ): Promise<BankMovementCandidate[]> {
     const { from, to } = this.dateWindow(entry.postedDate, dateWindowDays);
     const candidates = await tx.bankMovement.findMany({
       where: {
@@ -2925,6 +3365,120 @@ export class FinanceService {
     return candidates;
   }
 
+  private scoreMovementCandidates(
+    entry: {
+      postedDate: Date;
+      amount: number;
+      type: BankMovementType;
+      description: string;
+      normalizedDescription?: string | null;
+      normalizedReference?: string | null;
+      normalizedDocumentNumber?: string | null;
+      bankReference?: string | null;
+      externalId?: string | null;
+      documentNumber?: string | null;
+    },
+    candidates: BankMovementCandidate[],
+  ): StatementMatchCandidate[] {
+    return candidates
+      .map((movement) => this.scoreMovementCandidate(entry, movement))
+      .sort((left, right) => right.score - left.score);
+  }
+
+  private scoreMovementCandidate(
+    entry: {
+      postedDate: Date;
+      amount: number;
+      description: string;
+      normalizedDescription?: string | null;
+      normalizedReference?: string | null;
+      normalizedDocumentNumber?: string | null;
+      bankReference?: string | null;
+      externalId?: string | null;
+      documentNumber?: string | null;
+    },
+    movement: BankMovementCandidate,
+  ): StatementMatchCandidate {
+    const reasons: string[] = ['valor e tipo iguais'];
+    let score = 0.55;
+
+    if (this.sameBankDay(movement.movementDate, entry.postedDate)) {
+      score += 0.2;
+      reasons.push('data exata');
+    } else {
+      score += 0.08;
+      reasons.push('janela de data');
+    }
+
+    const entryReferences = [
+      entry.normalizedReference,
+      entry.normalizedDocumentNumber,
+      this.cleanReference(entry.bankReference),
+      this.cleanReference(entry.externalId),
+      this.cleanReference(entry.documentNumber),
+    ].filter(Boolean) as string[];
+    const movementReferences = [
+      this.cleanReference(movement.reconciliationReference),
+      this.cleanReference(movement.originId),
+      this.cleanReference(movement.receivableId),
+      this.cleanReference(movement.payableId),
+    ].filter(Boolean) as string[];
+    if (
+      entryReferences.length > 0 &&
+      movementReferences.some((reference) =>
+        entryReferences.includes(reference),
+      )
+    ) {
+      score += 0.25;
+      reasons.push('referencia/documento igual');
+    }
+
+    const similarity = this.descriptionSimilarity(
+      entry.normalizedDescription || this.normalizeBankText(entry.description),
+      this.normalizeBankText(movement.description),
+    );
+    if (similarity >= 0.7) {
+      score += 0.18;
+      reasons.push('descricao muito parecida');
+    } else if (similarity >= 0.45) {
+      score += 0.1;
+      reasons.push('descricao parcialmente parecida');
+    }
+
+    const roundedScore = Number(Math.min(score, 1).toFixed(2));
+    return {
+      movement,
+      score: roundedScore,
+      reason: `${reasons.join('; ')} (score ${roundedScore})`,
+    };
+  }
+
+  private descriptionSimilarity(left: string, right: string) {
+    const leftTokens = new Set(this.tokenizeBankDescription(left));
+    const rightTokens = new Set(this.tokenizeBankDescription(right));
+    if (!leftTokens.size || !rightTokens.size) return 0;
+    const intersection = [...leftTokens].filter((token) =>
+      rightTokens.has(token),
+    ).length;
+    const union = new Set([...leftTokens, ...rightTokens]).size;
+    return union ? intersection / union : 0;
+  }
+
+  private async saveStatementSuggestion(
+    tx: Prisma.TransactionClient,
+    entryId: string,
+    candidate: StatementMatchCandidate,
+  ) {
+    await tx.bankStatementEntry.update({
+      where: { id: entryId },
+      data: {
+        suggestedMovementId: candidate.movement.id,
+        suggestionScore: candidate.score,
+        suggestionReason: candidate.reason,
+      },
+    });
+  }
+
   private async assertCanMatchEntryWithMovement(
     tx: Prisma.TransactionClient,
     entry: {
@@ -2939,6 +3493,7 @@ export class FinanceService {
       type: BankMovementType;
       amount: number;
       reconciledAt: Date | null;
+      status?: BankMovementStatus;
     },
   ) {
     if (entry.bankAccountId !== movement.bankAccountId) {
@@ -2960,6 +3515,11 @@ export class FinanceService {
     }
     if (movement.reconciledAt) {
       throw new BadRequestException('Movimento financeiro ja esta conciliado.');
+    }
+    if (movement.status && movement.status !== BankMovementStatus.POSTED) {
+      throw new BadRequestException(
+        'Movimento financeiro estornado nao pode ser conciliado.',
+      );
     }
 
     const alreadyMatched = await tx.bankStatementEntry.findFirst({
@@ -2989,6 +3549,7 @@ export class FinanceService {
       movementId: string;
       status: BankStatementEntryMatchStatus;
       confidenceScore: number;
+      matchReason?: string | null;
       actorUserId?: string;
       reference?: string | null;
       note?: string | null;
@@ -3000,6 +3561,10 @@ export class FinanceService {
         matchedMovementId: input.movementId,
         matchStatus: input.status,
         confidenceScore: input.confidenceScore,
+        matchReason: input.matchReason,
+        suggestedMovementId: null,
+        suggestionScore: null,
+        suggestionReason: null,
       },
     });
 

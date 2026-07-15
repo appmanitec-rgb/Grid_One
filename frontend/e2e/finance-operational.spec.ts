@@ -73,6 +73,8 @@ type BankMovement = {
   id: string;
   type: "CREDIT" | "DEBIT";
   amount: number;
+  movementDate?: string;
+  description?: string;
   originType: string;
   receivableId?: string | null;
   payableId?: string | null;
@@ -100,6 +102,9 @@ type BankStatementEntry = {
   type: "CREDIT" | "DEBIT";
   description: string;
   matchStatus: string;
+  suggestedMovementId?: string | null;
+  suggestionScore?: number | null;
+  suggestionReason?: string | null;
   matchedMovementId?: string | null;
 };
 
@@ -109,6 +114,23 @@ type ReconciliationReport = {
     unmatchedStatementEntries: number;
     openIssues: number;
   };
+  balanceAudit?: BalanceAudit;
+};
+
+type BalanceAudit = {
+  currentBalance: number;
+  ledgerCalculatedBalance: number;
+  difference: number;
+  status: "OK" | "DIVERGENT";
+};
+
+type MatchSuggestions = {
+  candidates: Array<{
+    movement: BankMovement;
+    score: number;
+    reason: string;
+    canAutoMatch: boolean;
+  }>;
 };
 
 type FinancialPeriodClosing = {
@@ -352,13 +374,21 @@ test.describe.serial("financeiro operacional, caixa, DRE e comissao", () => {
   test("conciliacao bancaria importa CSV, faz matching, registra ajuste e bloqueia perfis externos", async ({
     page,
   }) => {
-    const [adminSession, financeSession, technicianSession, clientSession] =
-      await Promise.all([
-        apiLogin(accounts.admin),
-        apiLogin(accounts.finance),
-        apiLogin(accounts.technician),
-        apiLogin(accounts.clientA),
-      ]);
+    const [
+      adminSession,
+      financeSession,
+      technicianSession,
+      clientSession,
+      auditorSession,
+      salesSession,
+    ] = await Promise.all([
+      apiLogin(accounts.admin),
+      apiLogin(accounts.finance),
+      apiLogin(accounts.technician),
+      apiLogin(accounts.clientA),
+      apiLogin(accounts.auditor),
+      apiLogin(accounts.sales),
+    ]);
     const adminToken = adminSession.access_token;
     const financeToken = financeSession.access_token;
 
@@ -514,6 +544,152 @@ test.describe.serial("financeiro operacional, caixa, DRE e comissao", () => {
     );
     expect(report.totals.reconciledMovements).toBeGreaterThanOrEqual(2);
     expect(report.totals.unmatchedStatementEntries).toBeGreaterThanOrEqual(0);
+    expect(report.balanceAudit?.status).toMatch(/OK|DIVERGENT/);
+
+    const balanceAudit = await apiRequest<BalanceAudit>(
+      financeToken,
+      `/finance/bank-accounts/${bankAccount.id}/balance-audit`,
+    );
+    expect(balanceAudit.status).toMatch(/OK|DIVERGENT/);
+    expect(Number.isFinite(balanceAudit.ledgerCalculatedBalance)).toBeTruthy();
+
+    const ambiguousAmount = 1800 + (suffix % 83) + 0.73;
+    const ambiguousDescription = `Ciclo 15 ambiguidade ${suffix}`;
+    const ambiguousReceivables = await Promise.all(
+      [1, 2].map((index) =>
+        apiRequest<Receivable>(financeToken, "/finance/receivables", {
+          method: "POST",
+          body: {
+            clientId,
+            costCenterId: contract.costCenterId,
+            description: ambiguousDescription,
+            competenceDate: new Date(
+              new Date(paidAt).getTime() + index * 1000,
+            ).toISOString(),
+            dueDate: paidAt,
+            grossAmount: ambiguousAmount,
+            discountAmount: 0,
+          },
+        }).then(async (item) => {
+          await apiRequest(
+            financeToken,
+            `/finance/receivables/${item.id}/pay`,
+            {
+              method: "PATCH",
+              body: {
+                amount: ambiguousAmount,
+                method: "TRANSFER",
+                bankAccountId: bankAccount.id,
+                paidAt,
+                notes: `Ambiguidade Ciclo 15 ${index}`,
+              },
+            },
+          );
+          return item;
+        }),
+      ),
+    );
+
+    const movementsAfterAmbiguity = await apiRequest<BankMovementPayload>(
+      financeToken,
+      `/finance/bank-movements?bankAccountId=${bankAccount.id}`,
+    );
+    const ambiguousMovements = movementsAfterAmbiguity.entries.filter(
+      (movement) =>
+        ambiguousReceivables.some(
+          (item) => item.id === movement.receivableId,
+        ) &&
+        movement.type === "CREDIT" &&
+        Math.round(movement.amount * 100) === Math.round(ambiguousAmount * 100),
+    );
+    expect(ambiguousMovements.length).toBe(2);
+
+    const ignoreAmount = 9.87;
+    const ambiguousCsv = [
+      "data;descricao;valor",
+      `${bankDate};${ambiguousDescription};${formatBrMoney(ambiguousAmount)}`,
+      `${bankDate};Tarifa menor ${suffix};-${formatBrMoney(ignoreAmount)}`,
+    ].join("\n");
+    const ambiguousImport = await apiRequest<BankStatementImport>(
+      financeToken,
+      `/finance/bank-accounts/${bankAccount.id}/statements/import`,
+      {
+        method: "POST",
+        body: {
+          fileName: `ciclo-15-ambiguidade-${suffix}.csv`,
+          fileType: "CSV",
+          content: ambiguousCsv,
+        },
+      },
+    );
+    const ambiguousAutoMatch = await apiRequest<{
+      autoMatched: number;
+      ambiguous: number;
+      unmatched: number;
+    }>(
+      financeToken,
+      `/finance/bank-statements/${ambiguousImport.id}/auto-match`,
+      {
+        method: "POST",
+        body: { dateWindowDays: 2 },
+      },
+    );
+    expect(ambiguousAutoMatch.ambiguous).toBeGreaterThanOrEqual(1);
+
+    const ambiguousEntries = await apiRequest<BankStatementEntry[]>(
+      financeToken,
+      `/finance/bank-statements/${ambiguousImport.id}/entries`,
+    );
+    const ambiguousEntry = ambiguousEntries.find(
+      (entry) =>
+        entry.type === "CREDIT" &&
+        Math.round(entry.amount * 100) === Math.round(ambiguousAmount * 100),
+    );
+    expect(ambiguousEntry?.matchStatus).toBe("UNMATCHED");
+    expect(ambiguousEntry?.suggestedMovementId).toBeTruthy();
+
+    const suggestions = await apiRequest<MatchSuggestions>(
+      financeToken,
+      `/finance/bank-statement-entries/${ambiguousEntry!.id}/suggestions`,
+    );
+    expect(suggestions.candidates.length).toBeGreaterThanOrEqual(2);
+
+    await apiRequest(
+      financeToken,
+      `/finance/bank-statement-entries/${ambiguousEntry!.id}/match`,
+      {
+        method: "POST",
+        body: { movementId: suggestions.candidates[0].movement.id },
+      },
+    );
+
+    const ignoredEntry = ambiguousEntries.find(
+      (entry) =>
+        entry.type === "DEBIT" &&
+        Math.round(entry.amount * 100) === Math.round(ignoreAmount * 100),
+    );
+    expect(ignoredEntry?.id).toBeTruthy();
+    await apiRequest(
+      financeToken,
+      `/finance/bank-statement-entries/${ignoredEntry!.id}/ignore`,
+      {
+        method: "POST",
+        body: { reason: "Tarifa bancaria fora da politica de ajuste do E2E" },
+      },
+    );
+
+    const entriesAfterManualReview = await apiRequest<BankStatementEntry[]>(
+      financeToken,
+      `/finance/bank-statements/${ambiguousImport.id}/entries`,
+    );
+    expect(
+      entriesAfterManualReview.find((entry) => entry.id === ambiguousEntry!.id)
+        ?.matchStatus,
+    ).toBe("MANUAL_MATCHED");
+    expect(
+      entriesAfterManualReview.find((entry) => entry.id === ignoredEntry!.id)
+        ?.matchStatus,
+    ).toBe("IGNORED");
 
     const technicianImport = await apiRequestRaw(
       technicianSession.access_token,
@@ -526,6 +702,32 @@ test.describe.serial("financeiro operacional, caixa, DRE e comissao", () => {
       `/finance/reconciliation/report?bankAccountId=${bankAccount.id}`,
     );
     expect(clientReport.status).toBe(403);
+
+    const salesReport = await apiRequestRaw(
+      salesSession.access_token,
+      `/finance/reconciliation/report?bankAccountId=${bankAccount.id}`,
+    );
+    expect(salesReport.status).toBe(403);
+
+    const auditorReport = await apiRequestRaw(
+      auditorSession.access_token,
+      `/finance/reconciliation/report?bankAccountId=${bankAccount.id}&from=${paidAt.slice(0, 10)}T00:00:00.000Z&to=${paidAt.slice(0, 10)}T23:59:59.999Z`,
+    );
+    expect(auditorReport.status).toBe(200);
+
+    const auditorImport = await apiRequestRaw(
+      auditorSession.access_token,
+      `/finance/bank-accounts/${bankAccount.id}/statements/import`,
+      {
+        method: "POST",
+        body: {
+          fileName: `auditor-bloqueado-${suffix}.csv`,
+          fileType: "CSV",
+          content: csv,
+        },
+      },
+    );
+    expect(auditorImport.status).toBe(403);
 
     await loginByApi(page, accounts.finance);
     await page.goto("/dashboard/finance/reconciliation", {

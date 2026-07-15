@@ -235,6 +235,13 @@ export class FinanceController {
   }
 
   @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.view')
+  @Get('bank-accounts/:id/balance-audit')
+  balanceAudit(@Param('id') id: string) {
+    return this.financeService.auditBankAccountBalance(id);
+  }
+
+  @UseGuards(AuthGuard)
   @RequireAccessPolicy('finance.reconcile')
   @Post('bank-accounts/:id/statements/import')
   importBankStatement(
@@ -268,6 +275,16 @@ export class FinanceController {
   @Get('bank-statements/:id/entries')
   bankStatementEntries(@Param('id') id: string) {
     return this.financeService.listBankStatementEntries(id);
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.view')
+  @Get('bank-statement-entries/:id/suggestions')
+  bankStatementEntrySuggestions(
+    @Param('id') id: string,
+    @Query() query: AutoMatchBankStatementDto,
+  ) {
+    return this.financeService.suggestBankStatementEntryMatches(id, query);
   }
 
   @UseGuards(AuthGuard)
