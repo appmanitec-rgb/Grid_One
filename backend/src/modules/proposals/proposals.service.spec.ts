@@ -1,5 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ProposalStatus, ProposalType, UserRole } from '@prisma/client';
+import {
+  AccountsReceivableStatus,
+  ProposalStatus,
+  ProposalType,
+  UserRole,
+} from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
@@ -19,6 +24,12 @@ describe('ProposalsService', () => {
     };
     contractInvoice: { createMany: jest.Mock };
     contractPreventiveSchedule: { createMany: jest.Mock };
+    accountsReceivable: {
+      findFirst: jest.Mock;
+      create: jest.Mock;
+      update: jest.Mock;
+    };
+    costCenterEntry: { create: jest.Mock };
     generator: { updateMany: jest.Mock };
     $transaction: jest.Mock;
   };
@@ -45,6 +56,14 @@ describe('ProposalsService', () => {
       },
       contractPreventiveSchedule: {
         createMany: jest.fn(),
+      },
+      accountsReceivable: {
+        findFirst: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      costCenterEntry: {
+        create: jest.fn(),
       },
       generator: {
         updateMany: jest.fn(),
@@ -160,6 +179,8 @@ describe('ProposalsService', () => {
     db.serviceContract.create.mockResolvedValue({
       id: 'contract-1',
       code: 'CTR-00001',
+      clientId: 'client-1',
+      costCenterId: null,
       startDate,
       endDate: new Date('2027-01-01T00:00:00.000Z'),
       dueDay: 10,
@@ -168,11 +189,18 @@ describe('ProposalsService', () => {
     db.serviceContract.findUnique.mockResolvedValue({
       id: 'contract-1',
       code: 'CTR-00001',
+      clientId: 'client-1',
+      costCenterId: null,
       startDate,
       endDate: new Date('2027-01-01T00:00:00.000Z'),
       dueDay: 10,
       recurringAmount: 1200,
       equipments: [{ generatorId: 'generator-1' }],
+    });
+    db.accountsReceivable.findFirst.mockResolvedValue(null);
+    db.accountsReceivable.create.mockResolvedValue({
+      id: 'ar-1',
+      status: AccountsReceivableStatus.OPEN,
     });
 
     const result = await service.convertWonProposalToContract(
@@ -190,6 +218,76 @@ describe('ProposalsService', () => {
         entityId: 'proposal-1',
       }),
       db,
+    );
+    expect(db.accountsReceivable.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          clientId: 'client-1',
+          contractId: 'contract-1',
+          grossAmount: 1200,
+          netAmount: 1200,
+          status: AccountsReceivableStatus.OPEN,
+        }),
+      }),
+    );
+  });
+
+  it('does not duplicate receivable when proposal contract automation finds one', async () => {
+    const startDate = new Date('2026-01-01T00:00:00.000Z');
+    db.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      role: UserRole.ADMIN,
+      linkedClientId: null,
+    });
+    db.proposal.findUnique.mockResolvedValue({
+      id: 'proposal-1',
+      code: 'PROP-00001',
+      status: ProposalStatus.WON,
+      type: ProposalType.CONTRACT,
+      clientId: 'client-1',
+      userId: 'seller-1',
+      generatorId: 'generator-1',
+      totalValue: 1200,
+      generatedContract: null,
+    });
+    db.serviceContract.findMany.mockResolvedValue([]);
+    db.serviceContract.create.mockResolvedValue({
+      id: 'contract-1',
+      code: 'CTR-00001',
+      clientId: 'client-1',
+      costCenterId: null,
+      startDate,
+      endDate: new Date('2026-01-01T00:00:00.000Z'),
+      dueDay: 10,
+      recurringAmount: 1200,
+    });
+    db.serviceContract.findUnique.mockResolvedValue({
+      id: 'contract-1',
+      code: 'CTR-00001',
+      clientId: 'client-1',
+      costCenterId: null,
+      startDate,
+      endDate: new Date('2026-01-01T00:00:00.000Z'),
+      dueDay: 10,
+      recurringAmount: 1200,
+      equipments: [{ generatorId: 'generator-1' }],
+    });
+    db.accountsReceivable.findFirst.mockResolvedValue({
+      id: 'ar-existing',
+      status: AccountsReceivableStatus.OPEN,
+    });
+
+    await service.convertWonProposalToContract('proposal-1', 'admin-1');
+
+    expect(db.accountsReceivable.create).not.toHaveBeenCalled();
+    expect(db.accountsReceivable.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'ar-existing' },
+        data: expect.objectContaining({
+          contractId: 'contract-1',
+          netAmount: 1200,
+        }),
+      }),
     );
   });
 });

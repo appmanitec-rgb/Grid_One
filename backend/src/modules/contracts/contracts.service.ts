@@ -10,6 +10,7 @@ import {
   ClientType,
   ContractInvoiceStatus,
   ContractStatus,
+  CostCenterEntryType,
   GeneratorLifecycleStatus,
   PaymentMethod,
   Prisma,
@@ -64,7 +65,7 @@ export class ContractsService {
         },
       });
 
-      await this.syncContractAutomation(tx, contract.id);
+      await this.syncContractAutomation(tx, contract.id, actorUserId);
       await this.auditLogsService.record(
         {
           domain: AuditDomain.CONTRACTS,
@@ -169,7 +170,7 @@ export class ContractsService {
         }
       }
 
-      await this.syncContractAutomation(tx, id);
+      await this.syncContractAutomation(tx, id, actorUserId);
       await this.auditLogsService.record(
         {
           domain: AuditDomain.CONTRACTS,
@@ -204,7 +205,7 @@ export class ContractsService {
         },
       });
 
-      await this.syncContractAutomation(tx, id);
+      await this.syncContractAutomation(tx, id, actorUserId);
       await this.auditLogsService.record(
         {
           domain: AuditDomain.CONTRACTS,
@@ -232,7 +233,7 @@ export class ContractsService {
         where: { id },
         data: { status: ContractStatus.ACTIVE },
       });
-      await this.syncContractAutomation(tx, id);
+      await this.syncContractAutomation(tx, id, actorUserId);
       await this.auditLogsService.record(
         {
           domain: AuditDomain.CONTRACTS,
@@ -416,7 +417,7 @@ export class ContractsService {
         where: { id },
         data: { status: ContractStatus.CANCELED },
       });
-      await this.syncContractAutomation(tx, id);
+      await this.syncContractAutomation(tx, id, actorUserId);
       await this.auditLogsService.record(
         {
           domain: AuditDomain.CONTRACTS,
@@ -795,6 +796,7 @@ export class ContractsService {
   private async syncContractAutomation(
     tx: Prisma.TransactionClient,
     contractId: string,
+    actorUserId?: string,
   ) {
     const contract = await tx.serviceContract.findUnique({
       where: { id: contractId },
@@ -804,6 +806,19 @@ export class ContractsService {
     });
 
     if (!contract) throw new NotFoundException('Contrato nao encontrado.');
+
+    const stats = {
+      invoicesCreated: 0,
+      schedulesCreated: 0,
+      receivablesCreated: 0,
+      receivablesUpdated: 0,
+    };
+    const activeForAutomation =
+      contract.status === ContractStatus.ACTIVE ||
+      contract.status === ContractStatus.RENEWAL;
+    const coveredGeneratorIds = contract.equipments.map(
+      (item) => item.generatorId,
+    );
 
     await tx.contractInvoice.deleteMany({
       where: {
@@ -819,6 +834,16 @@ export class ContractsService {
       },
     });
 
+    if (!activeForAutomation) {
+      await this.updateContractCoverageState(tx, {
+        contractId: contract.id,
+        clientId: contract.clientId,
+        coveredGeneratorIds,
+        activeForAutomation,
+      });
+      return stats;
+    }
+
     const stepMonths = this.recurrenceToMonths(contract.preventiveRecurrence);
     const competenceDates: Date[] = [];
 
@@ -829,17 +854,35 @@ export class ContractsService {
     }
 
     if (competenceDates.length) {
-      await tx.contractInvoice.createMany({
-        data: competenceDates.map((competenceDate) => ({
-          contractId,
-          competenceDate,
-          dueDate: this.buildDueDate(competenceDate, contract.dueDay),
-          amount: contract.recurringAmount,
-          variableAmount: 0,
-          status: ContractInvoiceStatus.PENDING,
-          description: `Mensalidade contrato ${contract.code}`,
-        })),
+      const invoiceData = competenceDates.map((competenceDate) => ({
+        contractId,
+        competenceDate,
+        dueDate: this.buildDueDate(competenceDate, contract.dueDay),
+        amount: contract.recurringAmount,
+        variableAmount: 0,
+        status: ContractInvoiceStatus.PENDING,
+        description: `Mensalidade contrato ${contract.code}`,
+      }));
+      const invoiceResult = await tx.contractInvoice.createMany({
+        data: invoiceData,
+        skipDuplicates: true,
       });
+      stats.invoicesCreated = invoiceResult?.count ?? 0;
+
+      for (const invoice of invoiceData) {
+        const result = await this.syncReceivableFromContractInvoice(tx, {
+          contractId: contract.id,
+          clientId: contract.clientId,
+          costCenterId: contract.costCenterId,
+          contractCode: contract.code,
+          competenceDate: invoice.competenceDate,
+          dueDate: invoice.dueDate,
+          amount: invoice.amount,
+          actorUserId,
+        });
+        if (result === 'created') stats.receivablesCreated += 1;
+        if (result === 'updated') stats.receivablesUpdated += 1;
+      }
     }
 
     const scheduleData: Array<{
@@ -860,44 +903,167 @@ export class ContractsService {
     }
 
     if (scheduleData.length) {
-      await tx.contractPreventiveSchedule.createMany({
+      const scheduleResult = await tx.contractPreventiveSchedule.createMany({
         data: scheduleData,
+        skipDuplicates: true,
       });
+      stats.schedulesCreated = scheduleResult?.count ?? 0;
     }
 
-    const coveredGeneratorIds = contract.equipments.map(
-      (item) => item.generatorId,
-    );
+    await this.updateContractCoverageState(tx, {
+      contractId: contract.id,
+      clientId: contract.clientId,
+      coveredGeneratorIds,
+      activeForAutomation,
+    });
 
-    if (coveredGeneratorIds.length) {
+    return stats;
+  }
+
+  private async updateContractCoverageState(
+    tx: Prisma.TransactionClient,
+    input: {
+      contractId: string;
+      clientId: string;
+      coveredGeneratorIds: string[];
+      activeForAutomation: boolean;
+    },
+  ) {
+    if (input.coveredGeneratorIds.length) {
       await tx.generator.updateMany({
-        where: { id: { in: coveredGeneratorIds } },
+        where: { id: { in: input.coveredGeneratorIds } },
         data: {
-          hasMaintenanceContract: contract.status === ContractStatus.ACTIVE,
+          hasMaintenanceContract: input.activeForAutomation,
         },
       });
     }
 
-    if (contract.status === ContractStatus.ACTIVE) {
+    if (input.activeForAutomation) {
       await tx.client.update({
-        where: { id: contract.clientId },
+        where: { id: input.clientId },
         data: { clientType: ClientType.CONTRACT },
       });
     } else {
       const activeForClient = await tx.serviceContract.count({
         where: {
-          clientId: contract.clientId,
-          status: ContractStatus.ACTIVE,
-          id: { not: contract.id },
+          clientId: input.clientId,
+          status: { in: [ContractStatus.ACTIVE, ContractStatus.RENEWAL] },
+          id: { not: input.contractId },
         },
       });
 
       if (activeForClient === 0) {
         await tx.client.update({
-          where: { id: contract.clientId },
+          where: { id: input.clientId },
           data: { clientType: ClientType.NO_CONTRACT },
         });
       }
     }
+  }
+
+  private async syncReceivableFromContractInvoice(
+    tx: Prisma.TransactionClient,
+    input: {
+      contractId: string;
+      clientId: string;
+      costCenterId: string | null;
+      contractCode: string;
+      competenceDate: Date;
+      dueDate: Date;
+      amount: number;
+      actorUserId?: string;
+    },
+  ): Promise<'created' | 'updated' | 'skipped'> {
+    const amount = Number(input.amount || 0);
+    if (amount <= 0) {
+      return 'skipped';
+    }
+
+    const existing = await tx.accountsReceivable.findFirst({
+      where: {
+        contractId: input.contractId,
+        competenceDate: input.competenceDate,
+        status: { not: AccountsReceivableStatus.CANCELED },
+      },
+      select: { id: true, status: true },
+    });
+
+    const receivableData = {
+      clientId: input.clientId,
+      contractId: input.contractId,
+      costCenterId: input.costCenterId,
+      description: `Mensalidade contrato ${input.contractCode}`,
+      competenceDate: input.competenceDate,
+      dueDate: input.dueDate,
+      grossAmount: amount,
+      discountAmount: 0,
+      netAmount: amount,
+      status: AccountsReceivableStatus.OPEN,
+    };
+
+    if (existing) {
+      if (
+        existing.status === AccountsReceivableStatus.OPEN ||
+        existing.status === AccountsReceivableStatus.OVERDUE
+      ) {
+        await tx.accountsReceivable.update({
+          where: { id: existing.id },
+          data: receivableData,
+        });
+
+        await tx.costCenterEntry.updateMany({
+          where: {
+            sourceType: 'ACCOUNTS_RECEIVABLE',
+            sourceId: existing.id,
+          },
+          data: {
+            ...(input.costCenterId ? { costCenterId: input.costCenterId } : {}),
+            amount,
+            competenceDate: input.competenceDate,
+          },
+        });
+
+        return 'updated';
+      }
+
+      return 'skipped';
+    }
+
+    const receivable = await tx.accountsReceivable.create({
+      data: receivableData,
+    });
+
+    if (input.costCenterId) {
+      await tx.costCenterEntry.create({
+        data: {
+          costCenterId: input.costCenterId,
+          entryType: CostCenterEntryType.REVENUE,
+          sourceType: 'ACCOUNTS_RECEIVABLE',
+          sourceId: receivable.id,
+          amount,
+          competenceDate: input.competenceDate,
+        },
+      });
+    }
+
+    await this.auditLogsService.record(
+      {
+        domain: AuditDomain.FINANCE,
+        entityType: 'ACCOUNTS_RECEIVABLE',
+        entityId: receivable.id,
+        action: 'CREATE_FROM_CONTRACT',
+        actorUserId: input.actorUserId,
+        afterPayload: {
+          contractId: input.contractId,
+          clientId: input.clientId,
+          competenceDate: input.competenceDate.toISOString(),
+          dueDate: input.dueDate.toISOString(),
+          amount,
+        },
+      },
+      tx,
+    );
+
+    return 'created';
   }
 }

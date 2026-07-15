@@ -24,7 +24,7 @@ import { AccessPolicyGuard } from '../auth/access-policy.guard';
 
 @Controller('crm')
 @UseGuards(AuthGuard, AccessPolicyGuard)
-@RequireAccessPolicy('pages.proposals')
+@RequireAccessPolicy('proposals.view')
 export class CrmController {
   constructor(private readonly crmService: CrmService) {}
 
@@ -44,11 +44,13 @@ export class CrmController {
   }
 
   @Post('opportunities')
+  @RequireAccessPolicy('proposals.create')
   createOpportunity(@Body() dto: CreateOpportunityDto) {
     return this.crmService.createOpportunity(dto);
   }
 
   @Patch('opportunities/:id')
+  @RequireAccessPolicy('proposals.update')
   updateOpportunity(
     @Param('id') id: string,
     @Body() dto: UpdateOpportunityDto,
@@ -57,6 +59,7 @@ export class CrmController {
   }
 
   @Patch('opportunities/:id/stage')
+  @RequireAccessPolicy('proposals.update')
   setOpportunityStage(
     @Param('id') id: string,
     @Body() dto: SetOpportunityStageDto,
@@ -65,6 +68,7 @@ export class CrmController {
   }
 
   @Delete('opportunities/:id')
+  @RequireAccessPolicy('proposals.cancel')
   removeOpportunity(@Param('id') id: string) {
     return this.crmService.removeOpportunity(id);
   }
@@ -75,16 +79,19 @@ export class CrmController {
   }
 
   @Post('inspections')
+  @RequireAccessPolicy('proposals.create')
   createInspection(@Body() dto: CreateInspectionDto) {
     return this.crmService.createInspection(dto);
   }
 
   @Patch('inspections/:id')
+  @RequireAccessPolicy('proposals.update')
   updateInspection(@Param('id') id: string, @Body() dto: UpdateInspectionDto) {
     return this.crmService.updateInspection(id, dto);
   }
 
   @Post('inspections/:id/media')
+  @RequireAccessPolicy('proposals.update')
   addInspectionMedia(
     @Param('id') id: string,
     @Body() dto: AddInspectionMediaDto,
@@ -93,6 +100,7 @@ export class CrmController {
   }
 
   @Delete('inspections/:id')
+  @RequireAccessPolicy('proposals.cancel')
   removeInspection(@Param('id') id: string) {
     return this.crmService.removeInspection(id);
   }

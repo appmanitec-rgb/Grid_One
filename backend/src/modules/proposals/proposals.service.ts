@@ -1,14 +1,17 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import {
+  AccountsReceivableStatus,
   ApprovalType,
   AuditDomain,
   BillingAdjustmentIndex,
   ContractInvoiceStatus,
   ContractStatus,
+  CostCenterEntryType,
   PartsCoverageType,
   PreventiveRecurrence,
   Prisma,
@@ -67,7 +70,7 @@ export class ProposalsService {
         linkedOpportunity &&
         linkedOpportunity.clientId !== createProposalDto.clientId
       ) {
-        throw new Error(
+        throw new BadRequestException(
           'Cliente da proposta difere do cliente da oportunidade vinculada.',
         );
       }
@@ -472,6 +475,11 @@ export class ProposalsService {
           'A proposta precisa ter equipamento vinculado para gerar contrato.',
         );
       }
+      if (Number(proposal.totalValue || 0) <= 0) {
+        throw new BadRequestException(
+          'A proposta precisa ter valor maior que zero para gerar contrato.',
+        );
+      }
       if (proposal.generatedContract) {
         return {
           message: 'Contrato ja havia sido gerado para esta proposta.',
@@ -480,9 +488,15 @@ export class ProposalsService {
       }
 
       const contractCode = await this.generateNextContractCode(tx);
-      const startDate = new Date();
+      const now = new Date();
+      const fallbackStartDate = new Date(now);
+      fallbackStartDate.setDate(now.getDate() + 7);
+      const startDate =
+        proposal.firstDueDate && proposal.firstDueDate > now
+          ? new Date(proposal.firstDueDate)
+          : fallbackStartDate;
       const endDate = this.addMonths(startDate, 12);
-      const dueDay = 10;
+      const dueDay = startDate.getDate();
 
       const createdContract = await tx.serviceContract.create({
         data: {
@@ -515,7 +529,7 @@ export class ProposalsService {
         },
       });
 
-      await this.seedContractAutomation(tx, createdContract.id);
+      await this.seedContractAutomation(tx, createdContract.id, actorUserId);
 
       await this.createMovement(
         tx,
@@ -1043,6 +1057,7 @@ export class ProposalsService {
   private async seedContractAutomation(
     tx: Prisma.TransactionClient,
     contractId: string,
+    actorUserId?: string,
   ) {
     const contract = await tx.serviceContract.findUnique({
       where: { id: contractId },
@@ -1059,17 +1074,33 @@ export class ProposalsService {
     }
 
     if (competenceDates.length > 0) {
+      const invoiceData = competenceDates.map((competenceDate) => ({
+        contractId,
+        competenceDate,
+        dueDate: this.buildDueDate(competenceDate, contract.dueDay),
+        amount: contract.recurringAmount,
+        variableAmount: 0,
+        status: ContractInvoiceStatus.PENDING,
+        description: `Mensalidade contrato ${contract.code}`,
+      }));
+
       await tx.contractInvoice.createMany({
-        data: competenceDates.map((competenceDate) => ({
-          contractId,
-          competenceDate,
-          dueDate: this.buildDueDate(competenceDate, contract.dueDay),
-          amount: contract.recurringAmount,
-          variableAmount: 0,
-          status: ContractInvoiceStatus.PENDING,
-          description: `Mensalidade contrato ${contract.code}`,
-        })),
+        data: invoiceData,
+        skipDuplicates: true,
       });
+
+      for (const invoice of invoiceData) {
+        await this.syncReceivableFromContractInvoice(tx, {
+          contractId,
+          clientId: contract.clientId,
+          costCenterId: contract.costCenterId,
+          contractCode: contract.code,
+          competenceDate: invoice.competenceDate,
+          dueDate: invoice.dueDate,
+          amount: invoice.amount,
+          actorUserId,
+        });
+      }
     }
 
     const scheduleData = contract.equipments.flatMap((equipment) =>
@@ -1082,7 +1113,10 @@ export class ProposalsService {
     );
 
     if (scheduleData.length > 0) {
-      await tx.contractPreventiveSchedule.createMany({ data: scheduleData });
+      await tx.contractPreventiveSchedule.createMany({
+        data: scheduleData,
+        skipDuplicates: true,
+      });
     }
 
     await tx.generator.updateMany({
@@ -1091,5 +1125,101 @@ export class ProposalsService {
       },
       data: { hasMaintenanceContract: true },
     });
+  }
+
+  private async syncReceivableFromContractInvoice(
+    tx: Prisma.TransactionClient,
+    input: {
+      contractId: string;
+      clientId: string;
+      costCenterId: string | null;
+      contractCode: string;
+      competenceDate: Date;
+      dueDate: Date;
+      amount: number;
+      actorUserId?: string;
+    },
+  ) {
+    const amount = Number(input.amount || 0);
+    if (amount <= 0) return;
+
+    const existing = await tx.accountsReceivable.findFirst({
+      where: {
+        contractId: input.contractId,
+        competenceDate: input.competenceDate,
+        status: { not: AccountsReceivableStatus.CANCELED },
+      },
+      select: { id: true, status: true },
+    });
+
+    if (existing) {
+      if (
+        existing.status === AccountsReceivableStatus.OPEN ||
+        existing.status === AccountsReceivableStatus.OVERDUE
+      ) {
+        await tx.accountsReceivable.update({
+          where: { id: existing.id },
+          data: {
+            clientId: input.clientId,
+            contractId: input.contractId,
+            costCenterId: input.costCenterId,
+            description: `Mensalidade contrato ${input.contractCode}`,
+            competenceDate: input.competenceDate,
+            dueDate: input.dueDate,
+            grossAmount: amount,
+            discountAmount: 0,
+            netAmount: amount,
+            status: AccountsReceivableStatus.OPEN,
+          },
+        });
+      }
+      return;
+    }
+
+    const receivable = await tx.accountsReceivable.create({
+      data: {
+        clientId: input.clientId,
+        contractId: input.contractId,
+        costCenterId: input.costCenterId,
+        description: `Mensalidade contrato ${input.contractCode}`,
+        competenceDate: input.competenceDate,
+        dueDate: input.dueDate,
+        grossAmount: amount,
+        discountAmount: 0,
+        netAmount: amount,
+        status: AccountsReceivableStatus.OPEN,
+      },
+    });
+
+    if (input.costCenterId) {
+      await tx.costCenterEntry.create({
+        data: {
+          costCenterId: input.costCenterId,
+          entryType: CostCenterEntryType.REVENUE,
+          sourceType: 'ACCOUNTS_RECEIVABLE',
+          sourceId: receivable.id,
+          amount,
+          competenceDate: input.competenceDate,
+        },
+      });
+    }
+
+    await this.auditLogsService.record(
+      {
+        domain: AuditDomain.FINANCE,
+        entityType: 'ACCOUNTS_RECEIVABLE',
+        entityId: receivable.id,
+        action: 'CREATE_FROM_CONTRACT',
+        actorUserId: input.actorUserId,
+        afterPayload: {
+          contractId: input.contractId,
+          clientId: input.clientId,
+          competenceDate: input.competenceDate.toISOString(),
+          dueDate: input.dueDate.toISOString(),
+          amount,
+        },
+      },
+      tx,
+    );
   }
 }
