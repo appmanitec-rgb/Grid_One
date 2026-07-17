@@ -21,6 +21,7 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "seed": "npm run prisma:ensure:local && ts-node prisma/seed.ts",
     "seed:flow": "npm run prisma:ensure:local && ts-node prisma/seed-flow.ts",
+    "env:check": "node scripts/env-check.js",
     "db:preflight": "npm run prisma:ensure:local && node scripts/db-preflight.js",
     "db:status": "prisma migrate status",
     "db:migrate": "npm run prisma:ensure:local && prisma migrate deploy && npm run db:preflight",

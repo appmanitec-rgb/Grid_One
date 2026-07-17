@@ -9,4 +9,14 @@ export class HealthController {
   check() {
     return this.healthService.status();
   }
+
+  @Get('db')
+  db() {
+    return this.healthService.databaseStatus();
+  }
+
+  @Get('storage')
+  storage() {
+    return this.healthService.storageStatus();
+  }
 }
