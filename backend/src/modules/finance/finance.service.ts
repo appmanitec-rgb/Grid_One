@@ -25,6 +25,7 @@ import {
   FinancialPaymentStatus,
   FinancialPeriodStatus,
   Prisma,
+  UserRole,
 } from '@prisma/client';
 import { DatabaseService } from 'src/database/database.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
@@ -2323,6 +2324,7 @@ export class FinanceService {
     bankAccountId: string,
     dto: CloseBankReconciliationDto,
     actorUserId?: string,
+    actorRole?: string,
   ) {
     return this.prisma.$transaction(async (tx) => {
       this.validatePeriodInput(dto.year, dto.month, dto.reason);
@@ -2365,6 +2367,9 @@ export class FinanceService {
         throw new BadRequestException(
           'Fechamento bancario bloqueado por pendencias, divergencias ou saldo divergente.',
         );
+      }
+      if (hasOperationalPending && dto.allowOpenIssues) {
+        this.assertCanCloseBankReconciliationWithOpenIssues(actorRole);
       }
 
       const data = {
@@ -4368,6 +4373,15 @@ export class FinanceService {
         'Informe um motivo claro para a operacao do periodo.',
       );
     }
+  }
+
+  private assertCanCloseBankReconciliationWithOpenIssues(actorRole?: string) {
+    if (actorRole === UserRole.ADMIN || actorRole === UserRole.MANAGER) {
+      return;
+    }
+    throw new BadRequestException(
+      'Fechamento com ressalva exige perfil Gestor ou Admin.',
+    );
   }
 
   private getPeriodKey(date: Date) {

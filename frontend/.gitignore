@@ -37,6 +37,7 @@ debug.log
 .env*
 !.env.example
 !.env.production.example
+!.env.staging.example
 
 # vercel
 .vercel

@@ -783,8 +783,18 @@ test.describe.serial("financeiro operacional, caixa, DRE e comissao", () => {
     );
     expect(auditorClosing.status).toBe(403);
 
-    const bankClosing = await apiRequest<BankReconciliationClosing>(
+    const financeClosingWithCaveat = await apiRequestRaw(
       financeToken,
+      `/finance/bank-accounts/${bankAccount.id}/reconciliation-closings/close`,
+      {
+        method: "POST",
+        body: { ...closePayload, allowOpenIssues: true },
+      },
+    );
+    expect(financeClosingWithCaveat.status).toBeGreaterThanOrEqual(400);
+
+    const bankClosing = await apiRequest<BankReconciliationClosing>(
+      adminToken,
       `/finance/bank-accounts/${bankAccount.id}/reconciliation-closings/close`,
       {
         method: "POST",

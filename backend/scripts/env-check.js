@@ -28,11 +28,13 @@ function main() {
   loadEnvFile();
 
   const isProduction = process.env.NODE_ENV === 'production';
+  const isStaging = process.env.NODE_ENV === 'staging';
+  const isDeployedEnvironment = isProduction || isStaging;
   const missing = ['DATABASE_URL', 'JWT_SECRET']
     .map(required)
     .filter(Boolean);
 
-  if (isProduction) {
+  if (isDeployedEnvironment) {
     for (const name of ['CORS_ORIGINS', 'APP_BASE_URL', 'FRONTEND_BASE_URL']) {
       const miss = required(name);
       if (miss) missing.push(miss);
@@ -43,14 +45,24 @@ function main() {
     throw new Error(`Variaveis obrigatorias ausentes: ${missing.join(', ')}`);
   }
 
-  if (
-    isProduction &&
-    ['change_me', 'change_me_local_only'].includes(process.env.JWT_SECRET)
-  ) {
-    throw new Error('JWT_SECRET precisa ser trocado em producao.');
+  if (isDeployedEnvironment) {
+    const weakJwtSecrets = [
+      'change_me',
+      'change_me_local_only',
+      'REPLACE_WITH_64_PLUS_RANDOM_CHARS',
+    ];
+    if (
+      weakJwtSecrets.includes(process.env.JWT_SECRET) ||
+      process.env.JWT_SECRET.length < 32
+    ) {
+      throw new Error('JWT_SECRET precisa ser forte em staging/producao.');
+    }
   }
 
   const storageDriver = (process.env.FILE_STORAGE_DRIVER || 'local').toLowerCase();
+  if (isStaging && !['s3', 'minio', 'supabase'].includes(storageDriver)) {
+    throw new Error('Staging deve usar storage externo s3|minio|supabase.');
+  }
   if (['s3', 'minio', 'supabase'].includes(storageDriver)) {
     const storageMissing = [
       'S3_ENDPOINT',

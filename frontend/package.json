@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "e2e": "node scripts/run-e2e.mjs",
+    "e2e:staging": "node scripts/run-e2e.mjs e2e/staging-smoke.spec.ts --project=chromium",
     "e2e:headed": "node scripts/run-e2e.mjs --headed",
     "e2e:ui": "node scripts/run-e2e.mjs --ui",
     "e2e:report": "playwright show-report"

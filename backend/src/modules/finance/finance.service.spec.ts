@@ -15,6 +15,7 @@ import {
   FinancialPaymentStatus,
   FinancialPeriodStatus,
   PaymentMethod,
+  UserRole,
 } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
@@ -1186,6 +1187,89 @@ describe('FinanceService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
 
     expect(db.bankReconciliationClosing.create).not.toHaveBeenCalled();
+  });
+
+  it('allows only manager or admin to close bank reconciliation with open issues', async () => {
+    db.bankAccount.findUnique.mockResolvedValue({
+      id: 'bank-1',
+      name: 'Conta teste',
+      initialBalance: 100,
+      currentBalance: 200,
+    });
+    db.bankMovement.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 'movement-1',
+          type: BankMovementType.CREDIT,
+          amount: 100,
+          reconciledAt: null,
+        },
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 'movement-1',
+          type: BankMovementType.CREDIT,
+          amount: 100,
+          reconciledAt: null,
+        },
+      ]);
+    db.bankStatementEntry.findMany.mockResolvedValue([
+      {
+        id: 'entry-1',
+        type: BankMovementType.CREDIT,
+        amount: 100,
+        matchStatus: BankStatementEntryMatchStatus.UNMATCHED,
+      },
+    ]);
+    db.bankReconciliationIssue.count.mockResolvedValue(1);
+    db.bankReconciliationClosing.findUnique.mockResolvedValue(null);
+    db.bankReconciliationClosing.create.mockResolvedValue({
+      id: 'closing-1',
+      bankAccountId: 'bank-1',
+      year: 2026,
+      month: 2,
+      status: BankReconciliationClosingStatus.CLOSED,
+    });
+
+    await expect(
+      service.closeBankReconciliation(
+        'bank-1',
+        {
+          year: 2026,
+          month: 2,
+          reason: 'Fechamento mensal com ressalva',
+          allowOpenIssues: true,
+        },
+        'finance-user',
+        UserRole.FINANCE,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(db.bankReconciliationClosing.create).not.toHaveBeenCalled();
+
+    const closing = await service.closeBankReconciliation(
+      'bank-1',
+      {
+        year: 2026,
+        month: 2,
+        reason: 'Fechamento mensal com ressalva',
+        allowOpenIssues: true,
+      },
+      'manager-user',
+      UserRole.MANAGER,
+    );
+
+    expect(closing.id).toBe('closing-1');
+    expect(db.bankReconciliationClosing.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          bankAccountId: 'bank-1',
+          openIssuesCount: 1,
+          closeReason: 'Fechamento mensal com ressalva',
+        }),
+      }),
+    );
   });
 
   it('closes and reopens bank reconciliation period with audit trail', async () => {

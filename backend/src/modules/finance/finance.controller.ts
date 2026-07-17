@@ -50,7 +50,9 @@ import {
   UpdateCostCenterDto,
 } from './dto/finance.dto';
 
-type AuthenticatedRequest = Request & { user?: { sub?: string } };
+type AuthenticatedRequest = Request & {
+  user?: { sub?: string; role?: string };
+};
 
 @Controller('finance')
 @UseGuards(AuthGuard, AccessPolicyGuard)
@@ -60,6 +62,10 @@ export class FinanceController {
 
   private getActorUserId(req: Request): string | undefined {
     return (req as AuthenticatedRequest).user?.sub;
+  }
+
+  private getActorRole(req: Request): string | undefined {
+    return (req as AuthenticatedRequest).user?.role;
   }
 
   @UseGuards(AuthGuard)
@@ -302,6 +308,7 @@ export class FinanceController {
       id,
       dto,
       this.getActorUserId(req),
+      this.getActorRole(req),
     );
   }
 

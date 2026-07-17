@@ -10,6 +10,11 @@ const isWindows = process.platform === "win32";
 const apiBaseUrl = process.env.E2E_API_URL || "http://127.0.0.1:3000";
 const appBaseUrl = process.env.E2E_BASE_URL || "http://127.0.0.1:3001";
 const verboseServerLogs = process.env.E2E_VERBOSE_SERVER === "1";
+const invokedAsStagingScript = process.env.npm_lifecycle_event === "e2e:staging";
+const useExistingServer =
+  process.env.E2E_USE_EXISTING_SERVER === "true" || invokedAsStagingScript;
+const targetEnvironment =
+  process.env.E2E_TARGET_ENV || (invokedAsStagingScript ? "staging" : "local");
 const runnerTimeoutMs = Number.parseInt(
   process.env.E2E_RUNNER_TIMEOUT_MS || String(45 * 60 * 1000),
   10,
@@ -147,6 +152,45 @@ function sleep(ms) {
   return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
 }
 
+function hostFromUrl(value, label) {
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    throw new Error(`${label} invalida: ${value}`);
+  }
+}
+
+function ensureStagingSafety() {
+  if (!useExistingServer) return;
+  if (targetEnvironment !== "staging") {
+    throw new Error(
+      "E2E remoto exige E2E_TARGET_ENV=staging para evitar execucao acidental.",
+    );
+  }
+  if (process.env.E2E_CONFIRM_STAGING !== "true") {
+    throw new Error(
+      "E2E remoto exige E2E_CONFIRM_STAGING=true apos validar que o alvo nao e producao.",
+    );
+  }
+
+  const appHost = hostFromUrl(appBaseUrl, "E2E_BASE_URL");
+  const apiHost = hostFromUrl(apiBaseUrl, "E2E_API_URL");
+  const allowlist = (process.env.E2E_STAGING_HOST_ALLOWLIST || "")
+    .split(",")
+    .map((host) => host.trim().toLowerCase())
+    .filter(Boolean);
+  const builtinSafeHints = ["staging", "homolog", "hml", "pilot", "piloto"];
+  const isAllowedHost = (host) =>
+    allowlist.includes(host) ||
+    builtinSafeHints.some((hint) => host.includes(hint));
+
+  if (!isAllowedHost(appHost) || !isAllowedHost(apiHost)) {
+    throw new Error(
+      "Hosts de E2E remoto nao parecem staging. Configure E2E_STAGING_HOST_ALLOWLIST para os hosts homologados.",
+    );
+  }
+}
+
 async function waitForUrl(url, label, timeoutMs = serverStartupTimeoutMs) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -185,6 +229,8 @@ async function runPlaywright(args) {
 }
 
 async function main() {
+  ensureStagingSafety();
+
   const timeout = setTimeout(() => {
     timedOut = true;
     console.error(
@@ -193,6 +239,16 @@ async function main() {
     cleanup();
     process.exit(124);
   }, runnerTimeoutMs);
+
+  if (useExistingServer) {
+    console.log("[e2e] modo staging remoto: usando servidores existentes");
+    await waitForUrl(`${apiBaseUrl}/health`, "Backend remoto");
+    await waitForUrl(appBaseUrl, "Frontend remoto");
+    const code = await runPlaywright(process.argv.slice(2));
+    clearTimeout(timeout);
+    process.exitCode = timedOut ? 124 : code;
+    return;
+  }
 
   runShellCommand("npm run db:preflight", backendDir, "banco de dados");
 
