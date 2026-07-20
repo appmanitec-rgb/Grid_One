@@ -987,24 +987,61 @@ model GeneratorModel {
 }
 
 model Generator {
-  id                     String                     @id @default(uuid())
-  name                   String
-  brand                  String
-  serialNumber           String?                    @unique
-  power                  Float
-  hourMeter              Int?
-  condition              String?                    @default("BOM")
-  assetTag               String?
-  qrCode                 String?
-  installationSite       String?
-  operationalStatus      GeneratorOperationalStatus @default(OPERATING)
-  lifecycleStatus        GeneratorLifecycleStatus   @default(AVAILABLE)
-  criticality            GeneratorCriticality       @default(B)
-  manufactureYear        Int?
-  installationDate       DateTime?
-  warrantyEndDate        DateTime?
-  hasMaintenanceContract Boolean                    @default(false)
-  createdByUserId        String?
+  id                           String                     @id @default(uuid())
+  name                         String
+  brand                        String
+  serialNumber                 String?                    @unique
+  power                        Float
+  hourMeter                    Int?
+  condition                    String?                    @default("BOM")
+  assetTag                     String?
+  qrCode                       String?
+  installationSite             String?
+  operationalStatus            GeneratorOperationalStatus @default(OPERATING)
+  lifecycleStatus              GeneratorLifecycleStatus   @default(AVAILABLE)
+  criticality                  GeneratorCriticality       @default(B)
+  manufactureYear              Int?
+  installationDate             DateTime?
+  warrantyEndDate              DateTime?
+  hasMaintenanceContract       Boolean                    @default(false)
+  application                  String?
+  notes                        String?
+  voltage                      String?
+  ratedCurrent                 String?
+  powerFactor                  Float?
+  frequencyHz                  Float?
+  operationMode                String?
+  engineBrand                  String?
+  engineModelName              String?
+  engineSerialNumber           String?
+  enginePower                  String?
+  fuelType                     String?
+  engineCylinders              Int?
+  oilRecommendation            String?
+  oilCapacityLiters            Float?
+  lastOilChangeAt              DateTime?
+  alternatorBrand              String?
+  alternatorModelName          String?
+  alternatorSerialNumber       String?
+  alternatorVoltage            String?
+  alternatorFrequencyHz        Float?
+  alternatorInsulationClass    String?
+  alternatorProtectionDegree   String?
+  hasTransferSwitch            Boolean?
+  transferSwitchBrand          String?
+  transferSwitchModel          String?
+  transferSwitchSerialNumber   String?
+  transferSwitchRatedCurrent   String?
+  transferSwitchCommandVoltage String?
+  transferSwitchType           String?
+  transferSwitchNotes          String?
+  batteryQuantity              Int?
+  batteryVoltage               String?
+  batteryCapacityAh            Float?
+  batteryInstallationDate      DateTime?
+  batteryChargerModel          String?
+  batteryLastReplacementDate   DateTime?
+  createdByUserId              String?
 
   modelId       String?
   model         GeneratorModel? @relation(fields: [modelId], references: [id])
@@ -2057,12 +2094,12 @@ model BankAccount {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
-  receivablePayments   AccountsReceivablePayment[]
-  payablePayments      AccountsPayablePayment[]
-  bankMovements        BankMovement[]
-  statementImports     BankStatementImport[]
-  statementEntries     BankStatementEntry[]
-  reconciliationIssues BankReconciliationIssue[]
+  receivablePayments     AccountsReceivablePayment[]
+  payablePayments        AccountsPayablePayment[]
+  bankMovements          BankMovement[]
+  statementImports       BankStatementImport[]
+  statementEntries       BankStatementEntry[]
+  reconciliationIssues   BankReconciliationIssue[]
   reconciliationClosings BankReconciliationClosing[]
 
   @@map("bank_accounts")
@@ -2237,18 +2274,18 @@ model BankStatementImport {
 }
 
 model BankImportProfile {
-  id              String                @id @default(uuid())
-  name            String
-  bankCode        String?
-  fileType        BankStatementFileType
-  dateFormat      String?
+  id               String                @id @default(uuid())
+  name             String
+  bankCode         String?
+  fileType         BankStatementFileType
+  dateFormat       String?
   decimalSeparator String?
-  amountMode      String                @default("SIGNED")
-  columnMapping   Json?
-  matchingConfig  Json?
-  active          Boolean               @default(true)
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
+  amountMode       String                @default("SIGNED")
+  columnMapping    Json?
+  matchingConfig   Json?
+  active           Boolean               @default(true)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
 
   imports BankStatementImport[]
 

@@ -420,6 +420,14 @@ export default function OrderDetailPage() {
                   Abrir equipamento
                 </Link>
               ) : null}
+              {order.generator?.client?.id ? (
+                <Link
+                  href={`/dashboard/clients/${order.generator.client.id}`}
+                  className="inline-flex text-sm font-semibold text-sky-700 transition hover:text-sky-800 hover:underline"
+                >
+                  Abrir cliente
+                </Link>
+              ) : null}
               {order.contract ? (
                 <Link
                   href={`/dashboard/contracts/${order.contract.id}`}

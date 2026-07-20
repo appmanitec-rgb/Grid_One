@@ -45,6 +45,8 @@ export type PortalEquipment = {
   power: number;
   hourMeter?: number | null;
   condition?: string | null;
+  application?: string | null;
+  voltage?: string | null;
   operationalStatus: string;
   lifecycleStatus: string;
   criticality: string;

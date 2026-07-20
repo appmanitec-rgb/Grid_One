@@ -271,6 +271,15 @@ const CLIENT_ITEMS = [
 ] as const satisfies ReadonlyArray<
   PermissionItem<keyof AccessPolicy["clients"]>
 >;
+const EQUIPMENT_ITEMS = [
+  { key: "view", label: "Visualizar equipamentos" },
+  { key: "create", label: "Criar equipamentos" },
+  { key: "update", label: "Editar ficha tecnica" },
+  { key: "delete", label: "Excluir equipamentos" },
+  { key: "manageModels", label: "Gerenciar modelos" },
+] as const satisfies ReadonlyArray<
+  PermissionItem<keyof AccessPolicy["equipments"]>
+>;
 const CATALOG_ITEMS = [
   { key: "view", label: "Visualizar catalogo" },
   { key: "create", label: "Criar itens" },
@@ -2544,6 +2553,16 @@ function UserEditorCard({
           disabled={isSelectedMaster}
         />
         <PermissionBlock
+          title="Equipamentos"
+          description="Cadastro tecnico, modelos e ficha operacional."
+          items={EQUIPMENT_ITEMS}
+          values={policy.equipments}
+          onToggle={(key, value) =>
+            onSetSectionPermission("equipments", key, value)
+          }
+          disabled={isSelectedMaster}
+        />
+        <PermissionBlock
           title="Catalogo"
           description="Custos, margem e manutencao de itens."
           items={CATALOG_ITEMS}
@@ -2779,6 +2798,10 @@ function normalizeEditableAccessPolicy(access: AccessPolicy): AccessPolicy {
     clients: {
       ...base.clients,
       ...access.clients,
+    },
+    equipments: {
+      ...base.equipments,
+      ...access.equipments,
     },
     catalog: {
       ...base.catalog,

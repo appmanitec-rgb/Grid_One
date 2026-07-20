@@ -67,6 +67,10 @@ export default function PortalEquipmentDetailPage() {
         <Info label="Modelo" value={equipment.model?.name || "-"} />
         <Info label="Local" value={equipment.currentSite?.name || "-"} />
         <Info label="Criticidade" value={equipment.criticality || "-"} />
+        <Info label="Aplicação" value={equipment.application || "-"} />
+        <Info label="Tensão" value={equipment.voltage || "-"} />
+        <Info label="Horímetro" value={equipment.hourMeter ? `${equipment.hourMeter} h` : "-"} />
+        <Info label="Condição" value={equipment.condition || "-"} />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">

@@ -4,7 +4,7 @@
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, ServiceGroup } from '@prisma/client';
+import { Prisma, ServiceGroup, TicketStatus } from '@prisma/client';
 import { DatabaseService } from 'src/database/database.service';
 import { CreateGeneratorDto } from './dto/create-generator.dto';
 import { UpdateGeneratorDto } from './dto/update-generator.dto';
@@ -13,6 +13,52 @@ import {
   UpdateGeneratorModelDto,
 } from './dto/generator-model.dto';
 import { UpsertGeneratorBaseItemsDto } from './dto/generator-base-items.dto';
+
+const generatorTechnicalFields = [
+  'application',
+  'notes',
+  'voltage',
+  'ratedCurrent',
+  'powerFactor',
+  'frequencyHz',
+  'operationMode',
+  'engineBrand',
+  'engineModelName',
+  'engineSerialNumber',
+  'enginePower',
+  'fuelType',
+  'engineCylinders',
+  'oilRecommendation',
+  'oilCapacityLiters',
+  'lastOilChangeAt',
+  'alternatorBrand',
+  'alternatorModelName',
+  'alternatorSerialNumber',
+  'alternatorVoltage',
+  'alternatorFrequencyHz',
+  'alternatorInsulationClass',
+  'alternatorProtectionDegree',
+  'hasTransferSwitch',
+  'transferSwitchBrand',
+  'transferSwitchModel',
+  'transferSwitchSerialNumber',
+  'transferSwitchRatedCurrent',
+  'transferSwitchCommandVoltage',
+  'transferSwitchType',
+  'transferSwitchNotes',
+  'batteryQuantity',
+  'batteryVoltage',
+  'batteryCapacityAh',
+  'batteryInstallationDate',
+  'batteryChargerModel',
+  'batteryLastReplacementDate',
+] as const;
+
+const generatorTechnicalDateFields = new Set<string>([
+  'lastOilChangeAt',
+  'batteryInstallationDate',
+  'batteryLastReplacementDate',
+]);
 
 @Injectable()
 export class GeneratorsService {
@@ -70,6 +116,7 @@ export class GeneratorsService {
         assetTag: (data as any).assetTag,
         qrCode: (data as any).qrCode,
         installationSite: (data as any).installationSite,
+        ...this.pickGeneratorTechnicalFields(data),
         operationalStatus: (data as any).operationalStatus,
         lifecycleStatus: (data as any).lifecycleStatus,
         criticality: (data as any).criticality,
@@ -94,8 +141,73 @@ export class GeneratorsService {
   }
 
   findAll() {
+    const today = new Date();
     return this.database.generator.findMany({
-      include: { client: true, model: true, currentSite: true },
+      orderBy: [{ criticality: 'asc' }, { name: 'asc' }],
+      include: {
+        client: { select: { id: true, companyName: true } },
+        model: { select: { id: true, name: true, brand: true } },
+        currentSite: { select: { id: true, name: true, code: true } },
+        orders: {
+          orderBy: { updatedAt: 'desc' },
+          take: 1,
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            type: true,
+            openedAt: true,
+            finishedAt: true,
+            updatedAt: true,
+          },
+        },
+        contractSchedules: {
+          where: {
+            scheduledDate: { gte: today },
+            status: 'PLANNED',
+          },
+          orderBy: { scheduledDate: 'asc' },
+          take: 1,
+          select: {
+            id: true,
+            scheduledDate: true,
+            status: true,
+            contract: { select: { id: true, code: true, status: true } },
+          },
+        },
+        contractLinks: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            id: true,
+            contract: { select: { id: true, code: true, status: true } },
+          },
+        },
+        serviceTickets: {
+          where: {
+            status: {
+              in: [
+                TicketStatus.OPEN,
+                TicketStatus.TRIAGE,
+                TicketStatus.WAITING_CUSTOMER,
+                TicketStatus.WAITING_INTERNAL,
+                TicketStatus.SCHEDULED,
+                TicketStatus.IN_PROGRESS,
+                TicketStatus.CONVERTING_TO_ORDER,
+              ],
+            },
+          },
+          orderBy: { updatedAt: 'desc' },
+          take: 3,
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            status: true,
+            priority: true,
+          },
+        },
+      },
     });
   }
 
@@ -119,6 +231,7 @@ export class GeneratorsService {
         proposals: {
           include: { client: true },
           orderBy: { createdAt: 'desc' },
+          take: 5,
         },
         orders: {
           include: {
@@ -138,13 +251,9 @@ export class GeneratorsService {
               select: {
                 id: true,
                 code: true,
+                status: true,
               },
             },
-          },
-          orderBy: { openedAt: 'desc' },
-        },
-        contractLinks: {
-          include: {
             contract: {
               select: {
                 id: true,
@@ -152,8 +261,65 @@ export class GeneratorsService {
                 status: true,
               },
             },
+            materials: {
+              where: { appliedAt: { not: null } },
+              take: 8,
+              orderBy: { appliedAt: 'desc' },
+              select: {
+                id: true,
+                quantity: true,
+                appliedAt: true,
+                catalogItem: {
+                  select: {
+                    id: true,
+                    name: true,
+                    sku: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: { openedAt: 'desc' },
+          take: 8,
+        },
+        contractLinks: {
+          include: {
+            contract: {
+              select: {
+                id: true,
+                code: true,
+                title: true,
+                status: true,
+                startDate: true,
+                endDate: true,
+              },
+            },
           },
           orderBy: { createdAt: 'desc' },
+          take: 5,
+        },
+        contractSchedules: {
+          orderBy: { scheduledDate: 'asc' },
+          take: 8,
+          select: {
+            id: true,
+            scheduledDate: true,
+            status: true,
+            contract: {
+              select: {
+                id: true,
+                code: true,
+                status: true,
+              },
+            },
+            generatedOrder: {
+              select: {
+                id: true,
+                title: true,
+                status: true,
+              },
+            },
+          },
         },
         serviceTickets: {
           select: {
@@ -161,8 +327,18 @@ export class GeneratorsService {
             code: true,
             title: true,
             status: true,
+            priority: true,
+            createdAt: true,
+            maintenanceOrder: {
+              select: {
+                id: true,
+                title: true,
+                status: true,
+              },
+            },
           },
           orderBy: { createdAt: 'desc' },
+          take: 8,
         },
         serviceReports: {
           select: {
@@ -170,8 +346,11 @@ export class GeneratorsService {
             code: true,
             title: true,
             status: true,
+            createdAt: true,
+            documentHash: true,
           },
           orderBy: { createdAt: 'desc' },
+          take: 8,
         },
       },
     });
@@ -251,6 +430,10 @@ export class GeneratorsService {
       updateData.installationSite = (
         updateGeneratorDto as any
       ).installationSite;
+    Object.assign(
+      updateData,
+      this.pickGeneratorTechnicalFields(updateGeneratorDto),
+    );
     if ((updateGeneratorDto as any).operationalStatus !== undefined)
       updateData.operationalStatus = (
         updateGeneratorDto as any
@@ -472,6 +655,29 @@ export class GeneratorsService {
         'Um ou mais itens de catalogo nao existem.',
       );
     }
+  }
+
+  private pickGeneratorTechnicalFields(
+    data: CreateGeneratorDto | UpdateGeneratorDto,
+  ): Partial<Prisma.GeneratorUncheckedCreateInput> {
+    const source = data as Record<string, unknown>;
+    const picked: Record<string, unknown> = {};
+
+    for (const field of generatorTechnicalFields) {
+      if (source[field] === undefined) continue;
+      const value = source[field];
+      if (
+        value &&
+        generatorTechnicalDateFields.has(field) &&
+        (typeof value === 'string' || value instanceof Date)
+      ) {
+        picked[field] = new Date(value);
+        continue;
+      }
+      picked[field] = value;
+    }
+
+    return picked as Partial<Prisma.GeneratorUncheckedCreateInput>;
   }
 
   private async copyModelBaseItemsToGenerator(

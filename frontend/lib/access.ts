@@ -23,6 +23,13 @@ export type AccessPolicy = {
     update: boolean;
     delete: boolean;
   };
+  equipments: {
+    view: boolean;
+    create: boolean;
+    update: boolean;
+    delete: boolean;
+    manageModels: boolean;
+  };
   catalog: {
     viewCosts: boolean;
     manageItems: boolean;
@@ -212,6 +219,13 @@ const EMPTY_ACCESS_POLICY: AccessPolicy = {
     technicianPortal: false,
   },
   clients: { view: false, create: false, update: false, delete: false },
+  equipments: {
+    view: false,
+    create: false,
+    update: false,
+    delete: false,
+    manageModels: false,
+  },
   catalog: {
     viewCosts: false,
     manageItems: false,
@@ -344,6 +358,13 @@ export function defaultAccessByRole(role: string): AccessPolicy {
         technicianPortal: true,
       },
       clients: { view: true, create: true, update: true, delete: true },
+      equipments: {
+        view: true,
+        create: true,
+        update: true,
+        delete: true,
+        manageModels: true,
+      },
       catalog: {
         viewCosts: true,
         manageItems: true,
@@ -450,6 +471,7 @@ export function defaultAccessByRole(role: string): AccessPolicy {
         serviceReports: true,
       },
       clients: { view: true, create: true, update: true },
+      equipments: { view: true },
       catalog: { view: true },
       proposals: {
         view: true,
@@ -474,6 +496,7 @@ export function defaultAccessByRole(role: string): AccessPolicy {
         technicianPortal: true,
       },
       clients: { view: true },
+      equipments: { view: true },
       catalog: { view: true },
       orders: { view: true, update: true, finish: true },
       maintenanceOrders: { submitVisitReport: true },
@@ -508,6 +531,12 @@ export function defaultAccessByRole(role: string): AccessPolicy {
         technicianPortal: true,
       },
       clients: { view: true },
+      equipments: {
+        view: true,
+        create: true,
+        update: true,
+        manageModels: true,
+      },
       catalog: { viewCosts: true, view: true },
       proposals: {
         view: true,
@@ -561,6 +590,7 @@ export function defaultAccessByRole(role: string): AccessPolicy {
         technicianPortal: role === "LOGISTICS",
       },
       clients: { view: true },
+      equipments: { view: true },
       catalog: {
         view: true,
         viewCosts: role === "SUPPLIES",
@@ -671,6 +701,7 @@ export function defaultAccessByRole(role: string): AccessPolicy {
         serviceReports: true,
       },
       clients: { view: true },
+      equipments: { view: true },
       catalog: { view: true, viewCosts: true },
       proposals: { view: true },
       contracts: { view: true },
@@ -706,6 +737,7 @@ export function defaultAccessByRole(role: string): AccessPolicy {
       serviceReports: true,
     },
     clients: { view: true },
+    equipments: { view: true },
     catalog: { view: true },
     proposals: { view: true, create: true, update: true },
     contracts: { view: true },
@@ -776,6 +808,7 @@ function mergeAccessPolicy(
   return {
     pages: mergeSection(base.pages, overrides.pages),
     clients: mergeSection(base.clients, overrides.clients),
+    equipments: mergeSection(base.equipments, overrides.equipments),
     catalog: mergeSection(base.catalog, overrides.catalog),
     users: mergeSection(base.users, overrides.users),
     proposals: mergeSection(base.proposals, overrides.proposals),
@@ -820,6 +853,7 @@ function mapAccessPolicy(
   return {
     pages: mapSection(input.pages, mapper),
     clients: mapSection(input.clients, mapper),
+    equipments: mapSection(input.equipments, mapper),
     catalog: mapSection(input.catalog, mapper),
     users: mapSection(input.users, mapper),
     proposals: mapSection(input.proposals, mapper),

@@ -66,4 +66,27 @@ describe('defaultAccessPolicyByRole', () => {
     expect(hr.people.viewSensitive).toBe(true);
     expect(hr.people.manageSensitive).toBe(true);
   });
+
+  it('separates equipment view from equipment editing permissions', () => {
+    const manager = defaultAccessPolicyByRole(UserRole.MANAGER);
+    const auditor = defaultAccessPolicyByRole(UserRole.AUDITOR);
+    const technician = defaultAccessPolicyByRole(UserRole.TECHNICIAN);
+    const client = defaultAccessPolicyByRole(UserRole.CLIENT);
+
+    expect(manager.equipments.view).toBe(true);
+    expect(manager.equipments.create).toBe(true);
+    expect(manager.equipments.update).toBe(true);
+    expect(manager.equipments.manageModels).toBe(true);
+
+    expect(auditor.pages.equipments).toBe(true);
+    expect(auditor.equipments.view).toBe(true);
+    expect(auditor.equipments.update).toBe(false);
+    expect(auditor.equipments.delete).toBe(false);
+
+    expect(technician.equipments.view).toBe(true);
+    expect(technician.equipments.update).toBe(false);
+
+    expect(client.pages.equipments).toBe(false);
+    expect(client.equipments.view).toBe(false);
+  });
 });

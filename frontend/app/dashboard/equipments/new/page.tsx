@@ -1,61 +1,188 @@
-﻿"use client";
+"use client";
 
+import Link from "next/link";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
 
 type ClientRow = { id: string; companyName: string; cnpj?: string | null };
-type ModelBaseItem = { id: string; serviceGroup: string; defaultQuantity: number; catalogItem: { id: string; name: string } };
-type GeneratorModelRow = { id: string; name: string; brand?: string | null; baseItems?: ModelBaseItem[] };
+type SiteRow = { id: string; name: string; code?: string | null; clientId: string };
+type ModelBaseItem = {
+  id: string;
+  serviceGroup: string;
+  defaultQuantity: number;
+  catalogItem: { id: string; name: string };
+};
+type GeneratorModelRow = {
+  id: string;
+  name: string;
+  brand?: string | null;
+  baseItems?: ModelBaseItem[];
+};
+
+type FormState = Record<string, string>;
+
+const EMPTY_FORM: FormState = {
+  clientId: "",
+  currentSiteId: "",
+  modelId: "",
+  name: "",
+  brand: "",
+  serialNumber: "",
+  assetTag: "",
+  installationSite: "",
+  power: "",
+  hourMeter: "",
+  condition: "BOM",
+  operationalStatus: "OPERATING",
+  lifecycleStatus: "AVAILABLE",
+  criticality: "B",
+  manufactureYear: "",
+  installationDate: "",
+  warrantyEndDate: "",
+  hasMaintenanceContract: "false",
+  application: "",
+  notes: "",
+  voltage: "",
+  ratedCurrent: "",
+  powerFactor: "",
+  frequencyHz: "60",
+  operationMode: "",
+  engineBrand: "",
+  engineModelName: "",
+  engineSerialNumber: "",
+  enginePower: "",
+  fuelType: "",
+  engineCylinders: "",
+  oilRecommendation: "",
+  oilCapacityLiters: "",
+  lastOilChangeAt: "",
+  alternatorBrand: "",
+  alternatorModelName: "",
+  alternatorSerialNumber: "",
+  alternatorVoltage: "",
+  alternatorFrequencyHz: "60",
+  alternatorInsulationClass: "",
+  alternatorProtectionDegree: "",
+  hasTransferSwitch: "",
+  transferSwitchBrand: "",
+  transferSwitchModel: "",
+  transferSwitchSerialNumber: "",
+  transferSwitchRatedCurrent: "",
+  transferSwitchCommandVoltage: "",
+  transferSwitchType: "",
+  transferSwitchNotes: "",
+  batteryQuantity: "",
+  batteryVoltage: "",
+  batteryCapacityAh: "",
+  batteryInstallationDate: "",
+  batteryChargerModel: "",
+  batteryLastReplacementDate: "",
+};
+
+const TEXT_FIELDS = [
+  "serialNumber",
+  "assetTag",
+  "installationSite",
+  "condition",
+  "application",
+  "notes",
+  "voltage",
+  "ratedCurrent",
+  "operationMode",
+  "engineBrand",
+  "engineModelName",
+  "engineSerialNumber",
+  "enginePower",
+  "fuelType",
+  "oilRecommendation",
+  "alternatorBrand",
+  "alternatorModelName",
+  "alternatorSerialNumber",
+  "alternatorVoltage",
+  "alternatorInsulationClass",
+  "alternatorProtectionDegree",
+  "transferSwitchBrand",
+  "transferSwitchModel",
+  "transferSwitchSerialNumber",
+  "transferSwitchRatedCurrent",
+  "transferSwitchCommandVoltage",
+  "transferSwitchType",
+  "transferSwitchNotes",
+  "batteryVoltage",
+  "batteryChargerModel",
+] as const;
+
+const NUMBER_FIELDS = [
+  "power",
+  "hourMeter",
+  "manufactureYear",
+  "powerFactor",
+  "frequencyHz",
+  "engineCylinders",
+  "oilCapacityLiters",
+  "alternatorFrequencyHz",
+  "batteryQuantity",
+  "batteryCapacityAh",
+] as const;
+
+const DATE_FIELDS = [
+  "installationDate",
+  "warrantyEndDate",
+  "lastOilChangeAt",
+  "batteryInstallationDate",
+  "batteryLastReplacementDate",
+] as const;
 
 export default function NewEquipmentPage() {
   const router = useRouter();
-
   const [clients, setClients] = useState<ClientRow[]>([]);
+  const [sites, setSites] = useState<SiteRow[]>([]);
   const [models, setModels] = useState<GeneratorModelRow[]>([]);
-
-  const [clientId, setClientId] = useState("");
-  const [name, setName] = useState("");
-  const [brand, setBrand] = useState("");
-  const [modelId, setModelId] = useState("");
-  const [serialNumber, setSerialNumber] = useState("");
-  const [assetTag, setAssetTag] = useState("");
-  const [installationSite, setInstallationSite] = useState("");
-  const [power, setPower] = useState("");
-  const [hourMeter, setHourMeter] = useState("");
-  const [condition, setCondition] = useState("BOM");
-  const [operationalStatus, setOperationalStatus] = useState("OPERATING");
-  const [lifecycleStatus, setLifecycleStatus] = useState("AVAILABLE");
-  const [criticality, setCriticality] = useState("B");
-  const [manufactureYear, setManufactureYear] = useState("");
-  const [installationDate, setInstallationDate] = useState("");
-  const [warrantyEndDate, setWarrantyEndDate] = useState("");
-  const [hasMaintenanceContract, setHasMaintenanceContract] = useState(false);
+  const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [applyModelBaseItems, setApplyModelBaseItems] = useState(true);
-
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     const clientIdFromUrl = new URLSearchParams(window.location.search).get("clientId");
-    if (clientIdFromUrl) setClientId(clientIdFromUrl);
+    if (clientIdFromUrl) {
+      setForm((prev) => ({ ...prev, clientId: clientIdFromUrl }));
+    }
 
-    (async () => {
-      try {
-        const [clientsRes, modelsRes] = await Promise.all([
-          apiFetch("/clients"),
-          apiFetch("/generators/models"),
-        ]);
-
-        if (clientsRes.ok) setClients((await clientsRes.json()) as ClientRow[]);
-        if (modelsRes.ok) setModels((await modelsRes.json()) as GeneratorModelRow[]);
-      } catch {
-        setError("Nao foi possivel carregar clientes/modelos.");
-      }
-    })();
+    void loadOptions();
   }, []);
 
-  const selectedModel = useMemo(() => models.find((m) => m.id === modelId) ?? null, [models, modelId]);
+  async function loadOptions() {
+    setLoading(true);
+    setError("");
+    try {
+      const [clientsRes, sitesRes, modelsRes] = await Promise.all([
+        apiFetch("/clients", { cache: "no-store" }),
+        apiFetch("/sites", { cache: "no-store" }),
+        apiFetch("/generators/models", { cache: "no-store" }),
+      ]);
+
+      if (clientsRes.ok) setClients((await clientsRes.json()) as ClientRow[]);
+      if (sitesRes.ok) setSites((await sitesRes.json()) as SiteRow[]);
+      if (modelsRes.ok) setModels((await modelsRes.json()) as GeneratorModelRow[]);
+    } catch {
+      setError("Nao foi possivel carregar clientes, locais ou modelos.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const selectedModel = useMemo(
+    () => models.find((model) => model.id === form.modelId) ?? null,
+    [form.modelId, models],
+  );
+  const filteredSites = useMemo(
+    () => sites.filter((site) => !form.clientId || site.clientId === form.clientId),
+    [form.clientId, sites],
+  );
   const groupedModelBase = useMemo(() => {
     const map = new Map<string, number>();
     for (const item of selectedModel?.baseItems ?? []) {
@@ -65,47 +192,29 @@ export default function NewEquipmentPage() {
   }, [selectedModel]);
 
   useEffect(() => {
-    if (selectedModel?.brand) {
-      setBrand(selectedModel.brand);
+    if (selectedModel?.brand && !form.brand) {
+      setForm((prev) => ({ ...prev, brand: selectedModel.brand || "" }));
     }
-  }, [selectedModel]);
+  }, [form.brand, selectedModel]);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
     setError("");
 
-    if (!clientId) return setError("Selecione um cliente.");
-    if (!name.trim()) return setError("Informe o nome do equipamento.");
-    if (!brand.trim()) return setError("Informe a marca.");
-    if (!power || Number(power) <= 0) return setError("Informe uma potencia valida.");
+    if (!form.clientId) return setError("Selecione um cliente.");
+    if (!form.name.trim()) return setError("Informe o nome do equipamento.");
+    if (!form.brand.trim()) return setError("Informe o fabricante.");
+    if (!form.power || Number(form.power) <= 0) {
+      return setError("Informe uma potencia kVA valida.");
+    }
 
     setIsSubmitting(true);
     try {
+      const payload = buildPayload(form, applyModelBaseItems);
       const res = await apiFetch("/generators", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          clientId,
-          name,
-          brand,
-          modelId: modelId || undefined,
-          serialNumber: serialNumber || undefined,
-          assetTag: assetTag || undefined,
-          installationSite: installationSite || undefined,
-          power: Number(power),
-          hourMeter: hourMeter ? Number(hourMeter) : undefined,
-          condition,
-          operationalStatus,
-          lifecycleStatus,
-          criticality,
-          manufactureYear: manufactureYear ? Number(manufactureYear) : undefined,
-          installationDate: installationDate || undefined,
-          warrantyEndDate: warrantyEndDate || undefined,
-          hasMaintenanceContract,
-          applyModelBaseItems,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -114,170 +223,405 @@ export default function NewEquipmentPage() {
         );
       }
 
-      router.push("/dashboard/equipments");
+      const created = (await res.json()) as { id: string };
+      router.push(`/dashboard/equipments/${created.id}`);
       router.refresh();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Erro ao cadastrar equipamento.");
+    } catch (submitError: unknown) {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Erro ao cadastrar equipamento.",
+      );
     } finally {
       setIsSubmitting(false);
     }
   }
 
   return (
-    <div className="mx-auto max-w-5xl p-4 pb-24 sm:p-6 lg:p-8">
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-zinc-800">Novo Equipamento</h1>
-          <p className="mt-1 text-zinc-500">Cadastro com modelo e automacao da base tecnica.</p>
+    <div className="mx-auto max-w-6xl space-y-6 p-4 pb-24 sm:p-6 lg:p-8">
+      <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+              Cadastro mestre tecnico
+            </p>
+            <h1 className="mt-2 text-3xl font-black text-slate-950">
+              Novo equipamento
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Organize identificacao, dados do gerador, motor, alternador, QTA
+              e bateria sem depender de planilhas paralelas.
+            </p>
+          </div>
+          <Link href="/dashboard/equipments" className={SECONDARY_BUTTON}>
+            Voltar
+          </Link>
         </div>
-        <button type="button" onClick={() => router.push("/dashboard/equipments")} className="rounded-lg px-4 py-2 font-medium text-zinc-500 transition-colors hover:bg-zinc-200 hover:text-zinc-800">
-          Voltar
-        </button>
-      </div>
+      </header>
 
-      {error ? <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
+      {loading ? <State text="Carregando dados de apoio..." /> : null}
+      {error ? <State text={error} tone="error" /> : null}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 border-b pb-2 text-lg font-bold text-zinc-800">1. Vinculo e Identificacao</h2>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Cliente *</label>
-              <select value={clientId} onChange={(e) => setClientId(e.target.value)} className="w-full rounded-lg border border-zinc-300 bg-white p-3">
-                <option value="">Selecione</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>{c.companyName} {c.cnpj ? `(${c.cnpj})` : ""}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Nome do equipamento *</label>
-              <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-lg border border-zinc-300 p-3" placeholder="Ex: GMG Principal" required />
-            </div>
-          </div>
-        </div>
+        <EditSection title="1. Identificacao e vinculos">
+          <Field label="Cliente">
+            <select
+              value={form.clientId}
+              onChange={(event) =>
+                setForm((prev) => ({
+                  ...prev,
+                  clientId: event.target.value,
+                  currentSiteId: "",
+                }))
+              }
+              className={INPUT_CLASS}
+              required
+            >
+              <option value="">Selecione</option>
+              {clients.map((client) => (
+                <option key={client.id} value={client.id}>
+                  {client.companyName} {client.cnpj ? `(${client.cnpj})` : ""}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Local/site">
+            <select
+              value={form.currentSiteId}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, currentSiteId: event.target.value }))
+              }
+              className={INPUT_CLASS}
+            >
+              <option value="">Sem local estruturado</option>
+              {filteredSites.map((site) => (
+                <option key={site.id} value={site.id}>
+                  {site.name} {site.code ? `(${site.code})` : ""}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <TextField label="Nome/apelido" field="name" form={form} setForm={setForm} required />
+          <TextField label="Fabricante" field="brand" form={form} setForm={setForm} required />
+          <Field label="Modelo">
+            <select
+              value={form.modelId}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, modelId: event.target.value }))
+              }
+              className={INPUT_CLASS}
+            >
+              <option value="">Sem modelo cadastrado</option>
+              {models.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.brand ? `${model.brand} - ` : ""}
+                  {model.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <TextField label="Numero de serie" field="serialNumber" form={form} setForm={setForm} />
+          <TextField label="Tag patrimonial" field="assetTag" form={form} setForm={setForm} />
+          <NumberField label="Potencia kVA" field="power" form={form} setForm={setForm} required />
+          <NumberField label="Horimetro atual" field="hourMeter" form={form} setForm={setForm} />
+          <SelectField label="Status operacional" field="operationalStatus" form={form} setForm={setForm} options={OPERATIONAL_STATUS_OPTIONS} />
+          <SelectField label="Ciclo de vida" field="lifecycleStatus" form={form} setForm={setForm} options={LIFECYCLE_STATUS_OPTIONS} />
+          <SelectField label="Criticidade" field="criticality" form={form} setForm={setForm} options={CRITICALITY_OPTIONS} />
+          <TextField label="Aplicacao" field="application" form={form} setForm={setForm} />
+        </EditSection>
 
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 border-b pb-2 text-lg font-bold text-zinc-800">2. Modelo e Base Tecnica</h2>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Modelo (opcional)</label>
-              <select value={modelId} onChange={(e) => setModelId(e.target.value)} className="w-full rounded-lg border border-zinc-300 bg-white p-3">
-                <option value="">Sem modelo</option>
-                {models.map((m) => (
-                  <option key={m.id} value={m.id}>{m.brand ? `${m.brand} - ` : ""}{m.name}</option>
-                ))}
-              </select>
-              <p className="mt-1 text-xs text-zinc-500">Se precisar, cadastre modelos em breve no modulo de modelos.</p>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Marca *</label>
-              <input value={brand} onChange={(e) => setBrand(e.target.value)} className="w-full rounded-lg border border-zinc-300 p-3" placeholder="Ex: Cummins" required />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Potencia (kVA) *</label>
-              <input type="number" min="0" value={power} onChange={(e) => setPower(e.target.value)} className="w-full rounded-lg border border-zinc-300 p-3" placeholder="Ex: 500" required />
-            </div>
-          </div>
-
-          {selectedModel ? (
-            <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-              <p className="font-semibold">Base tecnica do modelo: {selectedModel.name}</p>
-              {groupedModelBase.length === 0 ? (
-                <p className="mt-1 text-blue-800">Este modelo ainda nao possui itens base cadastrados.</p>
-              ) : (
-                <p className="mt-1 text-blue-800">Itens por grupo: {groupedModelBase.map(([g, q]) => `${g}: ${q}`).join(" | ")}</p>
-              )}
-              <label className="mt-2 inline-flex items-center gap-2 font-medium">
-                <input type="checkbox" checked={applyModelBaseItems} onChange={(e) => setApplyModelBaseItems(e.target.checked)} />
-                Ao salvar a maquina, copiar itens base do modelo
-              </label>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 border-b pb-2 text-lg font-bold text-zinc-800">3. Dados Operacionais</h2>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Numero de serie</label>
-              <input value={serialNumber} onChange={(e) => setSerialNumber(e.target.value)} className="w-full rounded-lg border border-zinc-300 p-3" placeholder="Ex: SN-123" />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Tag patrimonial</label>
-              <input value={assetTag} onChange={(e) => setAssetTag(e.target.value)} className="w-full rounded-lg border border-zinc-300 p-3" placeholder="Ex: GMG-001" />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Local de instalacao</label>
-              <input value={installationSite} onChange={(e) => setInstallationSite(e.target.value)} className="w-full rounded-lg border border-zinc-300 p-3" placeholder="Ex: Casa de maquinas" />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Horimetro</label>
-              <input type="number" min="0" value={hourMeter} onChange={(e) => setHourMeter(e.target.value)} className="w-full rounded-lg border border-zinc-300 p-3" placeholder="Ex: 1250" />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Condicao</label>
-              <select value={condition} onChange={(e) => setCondition(e.target.value)} className="w-full rounded-lg border border-zinc-300 bg-white p-3">
-                <option value="NOVO">NOVO</option>
-                <option value="BOM">BOM</option>
-                <option value="REGULAR">REGULAR</option>
-                <option value="REPARO_NECESSARIO">REPARO_NECESSARIO</option>
-                <option value="INOPERANTE">INOPERANTE</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Status operacional</label>
-              <select value={operationalStatus} onChange={(e) => setOperationalStatus(e.target.value)} className="w-full rounded-lg border border-zinc-300 bg-white p-3">
-                <option value="OPERATING">OPERANDO</option>
-                <option value="STOPPED_BY_FAILURE">PARADO POR FALHA</option>
-                <option value="IN_MAINTENANCE">EM MANUTENCAO</option>
-                <option value="DEACTIVATED">DESATIVADO</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Ciclo de vida</label>
-              <select value={lifecycleStatus} onChange={(e) => setLifecycleStatus(e.target.value)} className="w-full rounded-lg border border-zinc-300 bg-white p-3">
-                <option value="AVAILABLE">DISPONIVEL</option>
-                <option value="LEASED">LOCADO</option>
-                <option value="IN_MAINTENANCE">EM MANUTENCAO</option>
-                <option value="SCRAP">SUCATA</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Criticidade</label>
-              <select value={criticality} onChange={(e) => setCriticality(e.target.value)} className="w-full rounded-lg border border-zinc-300 bg-white p-3">
-                <option value="A">A - Critico</option>
-                <option value="B">B - Relevante</option>
-                <option value="C">C - Baixo impacto</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Ano de fabricacao</label>
-              <input type="number" min="1950" max="2100" value={manufactureYear} onChange={(e) => setManufactureYear(e.target.value)} className="w-full rounded-lg border border-zinc-300 p-3" placeholder="Ex: 2022" />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Data de instalacao</label>
-              <input type="date" value={installationDate} onChange={(e) => setInstallationDate(e.target.value)} className="w-full rounded-lg border border-zinc-300 p-3" />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Garantia ate</label>
-              <input type="date" value={warrantyEndDate} onChange={(e) => setWarrantyEndDate(e.target.value)} className="w-full rounded-lg border border-zinc-300 p-3" />
-            </div>
-            <label className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm font-medium text-zinc-700">
-              <input type="checkbox" checked={hasMaintenanceContract} onChange={(e) => setHasMaintenanceContract(e.target.checked)} />
-              Possui contrato de manutencao
+        {selectedModel ? (
+          <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+            <p className="font-bold">Base tecnica do modelo: {selectedModel.name}</p>
+            <p className="mt-1">
+              {groupedModelBase.length
+                ? `Itens por grupo: ${groupedModelBase
+                    .map(([group, count]) => `${group}: ${count}`)
+                    .join(" | ")}`
+                : "Este modelo ainda nao possui itens base."}
+            </p>
+            <label className="mt-3 inline-flex items-center gap-2 font-semibold">
+              <input
+                type="checkbox"
+                checked={applyModelBaseItems}
+                onChange={(event) => setApplyModelBaseItems(event.target.checked)}
+              />
+              Copiar itens base do modelo ao salvar
             </label>
-          </div>
-        </div>
+          </section>
+        ) : null}
 
-        <div className="fixed bottom-0 left-0 right-0 z-20 flex justify-end border-t border-zinc-200 bg-white p-4 px-10 shadow-[0_-10px_30px_rgba(0,0,0,0.05)]">
-          <button type="submit" disabled={isSubmitting} className="rounded-lg bg-blue-600 px-8 py-3 font-bold text-white transition hover:bg-blue-500 disabled:opacity-50">
+        <EditSection title="2. Dados do gerador">
+          <TextField label="Local de instalacao livre" field="installationSite" form={form} setForm={setForm} />
+          <TextField label="Tensao" field="voltage" form={form} setForm={setForm} />
+          <TextField label="Corrente" field="ratedCurrent" form={form} setForm={setForm} />
+          <NumberField label="Fator de potencia" field="powerFactor" form={form} setForm={setForm} step="0.01" />
+          <NumberField label="Frequencia Hz" field="frequencyHz" form={form} setForm={setForm} />
+          <NumberField label="Ano de fabricacao" field="manufactureYear" form={form} setForm={setForm} />
+          <DateField label="Data de instalacao" field="installationDate" form={form} setForm={setForm} />
+          <DateField label="Garantia ate" field="warrantyEndDate" form={form} setForm={setForm} />
+          <TextField label="Regime de operacao" field="operationMode" form={form} setForm={setForm} />
+        </EditSection>
+
+        <EditSection title="3. Motor">
+          <TextField label="Fabricante" field="engineBrand" form={form} setForm={setForm} />
+          <TextField label="Modelo" field="engineModelName" form={form} setForm={setForm} />
+          <TextField label="Numero de serie" field="engineSerialNumber" form={form} setForm={setForm} />
+          <TextField label="Potencia" field="enginePower" form={form} setForm={setForm} />
+          <TextField label="Combustivel" field="fuelType" form={form} setForm={setForm} />
+          <NumberField label="Cilindros" field="engineCylinders" form={form} setForm={setForm} />
+          <TextField label="Oleo recomendado" field="oilRecommendation" form={form} setForm={setForm} />
+          <NumberField label="Capacidade de oleo (L)" field="oilCapacityLiters" form={form} setForm={setForm} step="0.1" />
+          <DateField label="Ultima troca de oleo" field="lastOilChangeAt" form={form} setForm={setForm} />
+        </EditSection>
+
+        <EditSection title="4. Alternador">
+          <TextField label="Fabricante" field="alternatorBrand" form={form} setForm={setForm} />
+          <TextField label="Modelo" field="alternatorModelName" form={form} setForm={setForm} />
+          <TextField label="Numero de serie" field="alternatorSerialNumber" form={form} setForm={setForm} />
+          <TextField label="Tensao" field="alternatorVoltage" form={form} setForm={setForm} />
+          <NumberField label="Frequencia Hz" field="alternatorFrequencyHz" form={form} setForm={setForm} />
+          <TextField label="Classe de isolacao" field="alternatorInsulationClass" form={form} setForm={setForm} />
+          <TextField label="Grau de protecao" field="alternatorProtectionDegree" form={form} setForm={setForm} />
+        </EditSection>
+
+        <EditSection title="5. QTA, bateria e observacoes">
+          <SelectField label="Possui QTA" field="hasTransferSwitch" form={form} setForm={setForm} options={BOOLEAN_OPTIONS} />
+          <TextField label="QTA fabricante" field="transferSwitchBrand" form={form} setForm={setForm} />
+          <TextField label="QTA modelo" field="transferSwitchModel" form={form} setForm={setForm} />
+          <TextField label="QTA serie" field="transferSwitchSerialNumber" form={form} setForm={setForm} />
+          <TextField label="Corrente nominal" field="transferSwitchRatedCurrent" form={form} setForm={setForm} />
+          <TextField label="Tensao comando" field="transferSwitchCommandVoltage" form={form} setForm={setForm} />
+          <TextField label="Tipo transferencia" field="transferSwitchType" form={form} setForm={setForm} />
+          <NumberField label="Quantidade baterias" field="batteryQuantity" form={form} setForm={setForm} />
+          <TextField label="Tensao bateria" field="batteryVoltage" form={form} setForm={setForm} />
+          <NumberField label="Capacidade Ah" field="batteryCapacityAh" form={form} setForm={setForm} step="0.1" />
+          <DateField label="Instalacao bateria" field="batteryInstallationDate" form={form} setForm={setForm} />
+          <TextField label="Carregador" field="batteryChargerModel" form={form} setForm={setForm} />
+          <DateField label="Ultima substituicao" field="batteryLastReplacementDate" form={form} setForm={setForm} />
+          <TextAreaField label="Observacoes gerais" field="notes" form={form} setForm={setForm} />
+        </EditSection>
+
+        <div className="fixed bottom-0 left-0 right-0 z-20 flex justify-end gap-2 border-t border-slate-200 bg-white/95 p-4 shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur">
+          <Link href="/dashboard/equipments" className={SECONDARY_BUTTON}>
+            Cancelar
+          </Link>
+          <button type="submit" disabled={isSubmitting} className={PRIMARY_BUTTON}>
             {isSubmitting ? "Salvando..." : "Cadastrar equipamento"}
           </button>
         </div>
       </form>
     </div>
   );
+}
+
+const PRIMARY_BUTTON =
+  "inline-flex min-h-10 items-center justify-center rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
+const SECONDARY_BUTTON =
+  "inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50";
+const INPUT_CLASS =
+  "min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100";
+
+const OPERATIONAL_STATUS_OPTIONS = [
+  ["OPERATING", "Operando"],
+  ["STOPPED_BY_FAILURE", "Parado por falha"],
+  ["IN_MAINTENANCE", "Em manutencao"],
+  ["DEACTIVATED", "Desativado"],
+] as const;
+const LIFECYCLE_STATUS_OPTIONS = [
+  ["AVAILABLE", "Disponivel"],
+  ["LEASED", "Locado"],
+  ["IN_MAINTENANCE", "Em manutencao"],
+  ["SCRAP", "Sucata"],
+] as const;
+const CRITICALITY_OPTIONS = [
+  ["A", "A - Critico"],
+  ["B", "B - Relevante"],
+  ["C", "C - Baixo impacto"],
+] as const;
+const BOOLEAN_OPTIONS = [
+  ["", "Nao informado"],
+  ["true", "Sim"],
+  ["false", "Nao"],
+] as const;
+
+function EditSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="mb-4 text-lg font-bold text-slate-950">{title}</h2>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{children}</div>
+    </section>
+  );
+}
+
+function TextField({
+  label,
+  field,
+  form,
+  setForm,
+  required,
+}: FieldProps & { required?: boolean }) {
+  return (
+    <Field label={label}>
+      <input
+        data-testid={`equipment-field-${field}`}
+        value={form[field] || ""}
+        onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
+        required={required}
+        className={INPUT_CLASS}
+      />
+    </Field>
+  );
+}
+
+function NumberField({
+  label,
+  field,
+  form,
+  setForm,
+  step = "1",
+  required,
+}: FieldProps & { step?: string; required?: boolean }) {
+  return (
+    <Field label={label}>
+      <input
+        data-testid={`equipment-field-${field}`}
+        type="number"
+        min="0"
+        step={step}
+        value={form[field] || ""}
+        onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
+        required={required}
+        className={INPUT_CLASS}
+      />
+    </Field>
+  );
+}
+
+function DateField({ label, field, form, setForm }: FieldProps) {
+  return (
+    <Field label={label}>
+      <input
+        data-testid={`equipment-field-${field}`}
+        type="date"
+        value={form[field] || ""}
+        onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
+        className={INPUT_CLASS}
+      />
+    </Field>
+  );
+}
+
+function SelectField({
+  label,
+  field,
+  form,
+  setForm,
+  options,
+}: FieldProps & { options: ReadonlyArray<readonly [string, string]> }) {
+  return (
+    <Field label={label}>
+      <select
+        data-testid={`equipment-field-${field}`}
+        value={form[field] || ""}
+        onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
+        className={INPUT_CLASS}
+      >
+        {options.map(([value, optionLabel]) => (
+          <option key={value || "empty"} value={value}>
+            {optionLabel}
+          </option>
+        ))}
+      </select>
+    </Field>
+  );
+}
+
+function TextAreaField({ label, field, form, setForm }: FieldProps) {
+  return (
+    <Field label={label}>
+      <textarea
+        data-testid={`equipment-field-${field}`}
+        value={form[field] || ""}
+        onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
+        className={`${INPUT_CLASS} min-h-28 resize-y`}
+      />
+    </Field>
+  );
+}
+
+type FieldProps = {
+  label: string;
+  field: string;
+  form: FormState;
+  setForm: Dispatch<SetStateAction<FormState>>;
+};
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-bold uppercase text-slate-500">
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function State({ text, tone }: { text: string; tone?: "error" }) {
+  return (
+    <div
+      className={`rounded-2xl border p-4 text-sm font-semibold ${
+        tone === "error"
+          ? "border-rose-200 bg-rose-50 text-rose-700"
+          : "border-slate-200 bg-white text-slate-600"
+      }`}
+    >
+      {text}
+    </div>
+  );
+}
+
+function buildPayload(form: FormState, applyModelBaseItems: boolean) {
+  const payload: Record<string, unknown> = {
+    clientId: form.clientId,
+    currentSiteId: form.currentSiteId || undefined,
+    modelId: form.modelId || undefined,
+    name: form.name.trim(),
+    brand: form.brand.trim(),
+    operationalStatus: form.operationalStatus || "OPERATING",
+    lifecycleStatus: form.lifecycleStatus || "AVAILABLE",
+    criticality: form.criticality || "B",
+    hasMaintenanceContract: form.hasMaintenanceContract === "true",
+    hasTransferSwitch:
+      form.hasTransferSwitch === "" ? undefined : form.hasTransferSwitch === "true",
+    applyModelBaseItems,
+  };
+
+  for (const field of TEXT_FIELDS) {
+    const value = emptyToUndefined(form[field]);
+    if (value !== undefined) payload[field] = value;
+  }
+  for (const field of NUMBER_FIELDS) {
+    const value = numberOrUndefined(form[field]);
+    if (value !== undefined) payload[field] = value;
+  }
+  for (const field of DATE_FIELDS) {
+    const value = emptyToUndefined(form[field]);
+    if (value !== undefined) payload[field] = value;
+  }
+
+  return payload;
+}
+
+function emptyToUndefined(value?: string) {
+  const trimmed = (value || "").trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function numberOrUndefined(value?: string) {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return undefined;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }

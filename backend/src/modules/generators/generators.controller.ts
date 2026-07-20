@@ -33,35 +33,41 @@ export class GeneratorsController {
   constructor(private readonly generatorsService: GeneratorsService) {}
 
   @UseGuards(AuthGuard)
+  @RequireAccessPolicy('pages.equipments', 'equipments.create')
   @Post()
   create(@Body() createGeneratorDto: CreateGeneratorDto, @Req() req: Request) {
     const userId = (req as any).user?.sub as string | undefined;
     return this.generatorsService.create(createGeneratorDto, userId);
   }
 
+  @RequireAccessPolicy('pages.equipments', 'equipments.view')
   @Get()
   findAll() {
     return this.generatorsService.findAll();
   }
 
+  @RequireAccessPolicy('pages.equipments', 'equipments.view')
   @Get('models')
   findAllModels() {
     return this.generatorsService.findAllModels();
   }
 
   @UseGuards(AuthGuard)
+  @RequireAccessPolicy('pages.equipments', 'equipments.manageModels')
   @Post('models')
   createModel(@Body() body: CreateGeneratorModelDto) {
     return this.generatorsService.createModel(body);
   }
 
   @UseGuards(AuthGuard)
+  @RequireAccessPolicy('pages.equipments', 'equipments.manageModels')
   @Patch('models/:id')
   updateModel(@Param('id') id: string, @Body() body: UpdateGeneratorModelDto) {
     return this.generatorsService.updateModel(id, body);
   }
 
   @UseGuards(AuthGuard)
+  @RequireAccessPolicy('pages.equipments', 'equipments.manageModels')
   @Put('models/:id/base-items')
   upsertModelBaseItems(
     @Param('id') id: string,
@@ -70,17 +76,20 @@ export class GeneratorsController {
     return this.generatorsService.upsertModelBaseItems(id, body.items);
   }
 
+  @RequireAccessPolicy('pages.equipments', 'equipments.view')
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.generatorsService.findOne(id);
   }
 
+  @RequireAccessPolicy('pages.equipments', 'equipments.view')
   @Get(':id/base-items')
   getBaseItems(@Param('id') id: string, @Query('group') group?: ServiceGroup) {
     return this.generatorsService.getGeneratorBaseItems(id, group);
   }
 
   @UseGuards(AuthGuard)
+  @RequireAccessPolicy('pages.equipments', 'equipments.update')
   @Post(':id/apply-model-base-items')
   applyModelBaseItems(
     @Param('id') id: string,
@@ -93,6 +102,7 @@ export class GeneratorsController {
   }
 
   @UseGuards(AuthGuard)
+  @RequireAccessPolicy('pages.equipments', 'equipments.update')
   @Put(':id/base-items')
   upsertGeneratorBaseItems(
     @Param('id') id: string,
@@ -102,6 +112,7 @@ export class GeneratorsController {
   }
 
   @UseGuards(AuthGuard)
+  @RequireAccessPolicy('pages.equipments', 'equipments.update')
   @Patch(':id')
   update(
     @Param('id') id: string,
@@ -111,6 +122,7 @@ export class GeneratorsController {
   }
 
   @UseGuards(AuthGuard)
+  @RequireAccessPolicy('pages.equipments', 'equipments.delete')
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.generatorsService.remove(id);

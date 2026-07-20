@@ -233,6 +233,22 @@ export default function InternalTicketDetailPage() {
             <Link href="/dashboard/atendimento" className={SECONDARY_BUTTON}>
               Voltar
             </Link>
+            {ticket.client?.id ? (
+              <Link
+                href={`/dashboard/clients/${ticket.client.id}`}
+                className={SECONDARY_BUTTON}
+              >
+                Abrir cliente
+              </Link>
+            ) : null}
+            {ticket.generator?.id ? (
+              <Link
+                href={`/dashboard/equipments/${ticket.generator.id}`}
+                className={SECONDARY_BUTTON}
+              >
+                Abrir equipamento
+              </Link>
+            ) : null}
             {ticket.maintenanceOrder ? (
               <Link
                 href={`/dashboard/orders/${ticket.maintenanceOrder.id}`}

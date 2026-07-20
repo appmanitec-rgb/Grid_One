@@ -14,7 +14,7 @@ type Proposal = {
   code: string;
 };
 
-test.describe("ciclo 19 ux operacional", () => {
+test.describe("ciclo 20c ux operacional", () => {
   test("perfil, agentes, ficha de equipamento, estoque e PDF de proposta ficam navegaveis", async ({
     page,
   }) => {
@@ -45,16 +45,38 @@ test.describe("ciclo 19 ux operacional", () => {
     await expect(page.getByRole("button", { name: /Clientes/i })).toBeVisible();
     await expect(page.locator("body")).toContainText(/Custo HH/i);
 
+    await page.goto("/dashboard/equipments", {
+      waitUntil: "domcontentloaded",
+      timeout: 45_000,
+    });
+    await expectLoaded(page, /Equipamentos/i);
+    await expect(page.locator("body")).toContainText(/Cadastro mestre tecnico/i);
+    await expect(page.getByRole("link", { name: /Abrir ficha/i }).first()).toBeVisible();
+
     await page.goto(`/dashboard/equipments/${data.clientAEquipmentId}`, {
       waitUntil: "domcontentloaded",
       timeout: 45_000,
     });
     await expectLoaded(page, /Prontuario tecnico|Prontuário técnico/i);
+    await expect(page.locator("body")).toContainText(/Dados do gerador/i);
+    await expect(page.locator("body")).toContainText(/Motor/i);
+    await expect(page.locator("body")).toContainText(/Alternador/i);
+    await expect(page.locator("body")).toContainText(/QTA/i);
     await expect(
       page.getByRole("link", { name: "Cliente", exact: true }),
     ).toBeVisible();
-    await expect(page.locator("body")).toContainText(/Ordens de servico|Ordens de serviço/i);
+    await page.getByRole("button", { name: /Historico e links|Histórico e links/i }).click();
+    await expect(page.locator("body")).toContainText(/Ordens de servico recentes|Ordens de serviço recentes/i);
     await expect(page.locator("body")).toContainText(/Laudos tecnicos|Laudos técnicos/i);
+    await page.getByRole("button", { name: /Editar ficha/i }).click();
+    await page.getByTestId("equipment-field-voltage").fill("380/220 V");
+    await page.getByTestId("equipment-field-engineModelName").fill("QSB6.7 E2E");
+    await page.getByTestId("equipment-field-hasTransferSwitch").selectOption("true");
+    await page.getByTestId("equipment-field-batteryQuantity").fill("2");
+    await page.getByRole("button", { name: /Salvar ficha tecnica/i }).click();
+    await expect(page.locator("body")).toContainText(/Ficha tecnica atualizada/i);
+    await expect(page.locator("body")).toContainText(/380\/220 V/i);
+    await expect(page.locator("body")).toContainText(/QSB6.7 E2E/i);
 
     await page.goto("/dashboard/inventory", {
       waitUntil: "domcontentloaded",
@@ -94,7 +116,8 @@ test.describe("ciclo 19 ux operacional", () => {
   test("dados sensiveis de agentes respeitam permissao granular", async ({
     page,
   }) => {
-    const [auditorSession, clientSession] = await Promise.all([
+    const [data, auditorSession, clientSession] = await Promise.all([
+      getE2eEntityData(),
       apiLogin(accounts.auditor),
       apiLogin(accounts.clientA),
     ]);
@@ -137,6 +160,22 @@ test.describe("ciclo 19 ux operacional", () => {
     );
     expect(clientAgentsResponse.status).toBe(403);
 
+    const clientInternalEquipment = await apiRequestRaw(
+      clientSession.access_token,
+      `/generators/${data.clientAEquipmentId}`,
+    );
+    expect(clientInternalEquipment.status).toBe(403);
+
+    const auditorEquipmentPatch = await apiRequestRaw(
+      auditorSession.access_token,
+      `/generators/${data.clientAEquipmentId}`,
+      {
+        method: "PATCH",
+        body: { voltage: "999 V" },
+      },
+    );
+    expect(auditorEquipmentPatch.status).toBe(403);
+
     await loginByApi(page, accounts.auditor);
     await page.goto("/dashboard/hr/collaborators", {
       waitUntil: "domcontentloaded",
@@ -145,5 +184,12 @@ test.describe("ciclo 19 ux operacional", () => {
     await expectLoaded(page, /Agentes/i);
     await expect(page.locator("body")).not.toContainText(/Custo HH|hourCost/i);
     await expect(page.locator("body")).toContainText(/dados administrativos sens/i);
+
+    await page.goto(`/dashboard/equipments/${data.clientAEquipmentId}`, {
+      waitUntil: "domcontentloaded",
+      timeout: 45_000,
+    });
+    await expectLoaded(page, /Prontuario tecnico|Prontuário técnico/i);
+    await expect(page.getByRole("button", { name: /Editar ficha/i })).toHaveCount(0);
   });
 });
