@@ -3,7 +3,12 @@
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { InventoryMovementType, Prisma, WarehouseType } from '@prisma/client';
+import {
+  InventoryMovementType,
+  Prisma,
+  UserRole,
+  WarehouseType,
+} from '@prisma/client';
 import { DatabaseService } from 'src/database/database.service';
 import {
   StockAdjustmentDto,
@@ -23,7 +28,8 @@ export class InventoryService {
     });
   }
 
-  async summary(warehouseId?: string) {
+  async summary(warehouseId?: string, actor?: any) {
+    const canViewCosts = this.canViewCostData(actor);
     const where = warehouseId ? { warehouseId } : {};
     const balances = await this.prisma.inventoryBalance.findMany({
       where,
@@ -38,6 +44,8 @@ export class InventoryService {
             stockMin: true,
             stockMax: true,
             averageCost: true,
+            brand: true,
+            storageLocation: true,
           },
         },
       },
@@ -60,11 +68,15 @@ export class InventoryService {
       availableQty: Number(b.physicalQty) - Number(b.reservedQty),
       minQty: b.minQty,
       maxQty: b.maxQty,
-      avgCost: b.catalogItem.averageCost,
+      reorderPoint: b.reorderPoint,
+      brand: b.catalogItem.brand,
+      storageLocation: b.catalogItem.storageLocation,
+      avgCost: canViewCosts ? b.catalogItem.averageCost : null,
     }));
   }
 
-  async replenishmentDrafts(warehouseId?: string) {
+  async replenishmentDrafts(warehouseId?: string, actor?: any) {
+    const canViewCosts = this.canViewCostData(actor);
     const where = warehouseId ? { warehouseId } : {};
     const balances = await this.prisma.inventoryBalance.findMany({
       where,
@@ -107,7 +119,7 @@ export class InventoryService {
                 supplierId: best.supplierId,
                 supplierName: best.supplier.companyName,
                 leadTimeDays: best.leadTimeDays,
-                supplierPrice: best.supplierPrice,
+                supplierPrice: canViewCosts ? best.supplierPrice : null,
               }
             : null,
         };
@@ -380,5 +392,11 @@ export class InventoryService {
         data: { stockCurrent: Number(agg._sum.physicalQty || 0) },
       });
     }
+  }
+
+  private canViewCostData(actor?: any) {
+    if (!actor) return false;
+    if (actor.isSystemMaster || actor.role === UserRole.ADMIN) return true;
+    return actor?.accessPolicy?.catalog?.viewCosts === true;
   }
 }

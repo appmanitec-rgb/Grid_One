@@ -14,10 +14,27 @@ type Proposal = {
   code: string;
 };
 
-test.describe("ciclo 20c ux operacional", () => {
-  test("perfil, agentes, ficha de equipamento, estoque e PDF de proposta ficam navegaveis", async ({
+type CatalogItem = {
+  id: string;
+  name: string;
+  type: "PART" | "SERVICE";
+};
+
+type CatalogDetail = CatalogItem & {
+  maintenanceOrderMaterials?: Array<{
+    order: { id: string; title: string };
+  }>;
+  supplierItems?: Array<{
+    supplier: { id: string; companyName: string };
+  }>;
+};
+
+test.describe("ciclo 20d ux operacional", () => {
+  test("perfil, agentes, equipamento, estoque operacional e PDF de proposta ficam navegaveis", async ({
     page,
   }) => {
+    test.setTimeout(180_000);
+
     const [data, adminSession] = await Promise.all([
       getE2eEntityData(),
       apiLogin(accounts.admin),
@@ -83,7 +100,75 @@ test.describe("ciclo 20c ux operacional", () => {
       timeout: 45_000,
     });
     await expectLoaded(page, /Fisico x Reservado x Disponivel|Físico x Reservado x Disponível/i);
-    await expect(page.getByRole("link", { name: /Abrir ficha/i }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: /^Abrir$/i }).first()).toBeVisible();
+
+    const catalogItems = await apiRequest<CatalogItem[]>(adminToken, "/catalogs");
+    let stockItem: CatalogItem | undefined;
+    let stockDetail: CatalogDetail | undefined;
+    for (const candidate of catalogItems.filter((entry) => entry.type === "PART")) {
+      const detail = await apiRequest<CatalogDetail>(
+        adminToken,
+        `/catalogs/${candidate.id}`,
+      );
+      if (
+        detail.supplierItems?.length &&
+        detail.maintenanceOrderMaterials?.length
+      ) {
+        stockItem = candidate;
+        stockDetail = detail;
+        break;
+      }
+    }
+    expect(stockItem?.id).toBeTruthy();
+    expect(stockDetail?.id).toBeTruthy();
+    await page.goto(`/dashboard/catalog/${stockItem!.id}`, {
+      waitUntil: "domcontentloaded",
+      timeout: 45_000,
+    });
+    await expectLoaded(page, /Ficha operacional do item/i);
+    await expect(page.locator("body")).toContainText(/Saldo por almoxarifado/i);
+    await expect(page.locator("body")).toContainText(/Fornecedor principal/i);
+    await page.getByRole("button", { name: /Rastreabilidade/i }).click();
+    await expect(page.locator("body")).toContainText(/Movimentos recentes/i);
+    await expect(page.locator("body")).toContainText(/Compras relacionadas/i);
+    await expect(page.locator("body")).toContainText(/OS relacionadas/i);
+
+    await page.getByRole("link", { name: /Editar cadastro/i }).click();
+    await expectLoaded(page, /Editar Item de Catalogo/i);
+    await page.getByRole("button", { name: /^Estoque$/i }).click();
+    await expect(page.locator("body")).toContainText(/Alterado apenas por movimento/i);
+    await expect(page.getByLabel(/Estoque atual/i)).toHaveCount(0);
+    await page.locator('input[name="storageLocation"]').fill("A1-E2E");
+    await page.locator('input[name="reorderPoint"]').fill("7");
+    await page.getByRole("button", { name: /Salvar alteracoes/i }).click();
+    await page.goto(`/dashboard/catalog/${stockItem!.id}`, {
+      waitUntil: "domcontentloaded",
+      timeout: 45_000,
+    });
+    await expectLoaded(page, /Ficha operacional do item/i);
+    await expect(page.locator("body")).toContainText(/A1-E2E/i);
+
+    const supplierId = stockDetail!.supplierItems?.[0]?.supplier.id;
+    expect(supplierId).toBeTruthy();
+    await page.goto(`/dashboard/suppliers/${supplierId}`, {
+      waitUntil: "domcontentloaded",
+      timeout: 45_000,
+    });
+    await expectLoaded(page, /Perfil do Fornecedor/i);
+    await expect(
+      page.locator(`a[href="/dashboard/catalog/${stockItem!.id}"]`).first(),
+    ).toBeVisible();
+
+    const relatedOrderId = stockDetail!.maintenanceOrderMaterials?.[0]?.order.id;
+    expect(relatedOrderId).toBeTruthy();
+    await page.goto(`/dashboard/orders/${relatedOrderId}`, {
+      waitUntil: "domcontentloaded",
+      timeout: 45_000,
+    });
+    await expectLoaded(page, /Ordem de Servico|Ordem de ServiÃ§o/i);
+    await expect(
+      page.locator(`a[href="/dashboard/catalog/${stockItem!.id}"]`).first(),
+    ).toBeVisible();
 
     const proposals = await apiRequest<Proposal[]>(adminToken, "/proposals");
     const proposal = proposals.find((item) => item.id);
@@ -116,11 +201,18 @@ test.describe("ciclo 20c ux operacional", () => {
   test("dados sensiveis de agentes respeitam permissao granular", async ({
     page,
   }) => {
-    const [data, auditorSession, clientSession] = await Promise.all([
+    const [data, adminSession, auditorSession, clientSession] = await Promise.all([
       getE2eEntityData(),
+      apiLogin(accounts.admin),
       apiLogin(accounts.auditor),
       apiLogin(accounts.clientA),
     ]);
+    const catalogItems = await apiRequest<CatalogItem[]>(
+      adminSession.access_token,
+      "/catalogs",
+    );
+    const stockItem = catalogItems.find((entry) => entry.type === "PART" && entry.id);
+    expect(stockItem?.id).toBeTruthy();
 
     const auditorAgents = await apiRequest<{
       internalUsers: Array<Record<string, unknown>>;
@@ -176,6 +268,32 @@ test.describe("ciclo 20c ux operacional", () => {
     );
     expect(auditorEquipmentPatch.status).toBe(403);
 
+    const clientInternalStock = await apiRequestRaw(
+      clientSession.access_token,
+      `/catalogs/${stockItem!.id}`,
+    );
+    expect(clientInternalStock.status).toBe(403);
+
+    const auditorCatalogPatch = await apiRequestRaw(
+      auditorSession.access_token,
+      `/catalogs/${stockItem!.id}`,
+      {
+        method: "PATCH",
+        body: { storageLocation: "AUDITOR-BLOCKED" },
+      },
+    );
+    expect(auditorCatalogPatch.status).toBe(403);
+
+    const directStockMutation = await apiRequestRaw(
+      adminSession.access_token,
+      `/catalogs/${stockItem!.id}`,
+      {
+        method: "PATCH",
+        body: { stockCurrent: 999 },
+      },
+    );
+    expect(directStockMutation.status).toBe(400);
+
     await loginByApi(page, accounts.auditor);
     await page.goto("/dashboard/hr/collaborators", {
       waitUntil: "domcontentloaded",
@@ -191,5 +309,12 @@ test.describe("ciclo 20c ux operacional", () => {
     });
     await expectLoaded(page, /Prontuario tecnico|Prontuário técnico/i);
     await expect(page.getByRole("button", { name: /Editar ficha/i })).toHaveCount(0);
+
+    await page.goto(`/dashboard/catalog/${stockItem!.id}`, {
+      waitUntil: "domcontentloaded",
+      timeout: 45_000,
+    });
+    await expectLoaded(page, /Ficha operacional do item/i);
+    await expect(page.getByRole("link", { name: /Editar cadastro/i })).toHaveCount(0);
   });
 });

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { getAccessFromToken } from "@/lib/access";
 import { apiFetch } from "@/lib/api";
 
 type Warehouse = {
@@ -54,6 +55,7 @@ export default function InventoryPage() {
   const [adjustWarehouseId, setAdjustWarehouseId] = useState("");
   const [adjustDelta, setAdjustDelta] = useState("");
   const [message, setMessage] = useState("");
+  const [canAdjust, setCanAdjust] = useState(false);
 
   async function fetchAll(selectedWarehouseId?: string) {
     const warehouseQuery = selectedWarehouseId ? `?warehouseId=${selectedWarehouseId}` : "";
@@ -84,6 +86,8 @@ export default function InventoryPage() {
   }
 
   useEffect(() => {
+    const access = getAccessFromToken();
+    setCanAdjust(access.inventory.adjust);
     void fetchAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -166,25 +170,31 @@ export default function InventoryPage() {
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
-          <select value={adjustWarehouseId} onChange={(event) => setAdjustWarehouseId(event.target.value)} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm">
-            <option value="">Almoxarifado do ajuste</option>
-            {warehouses.map((wh) => (
-              <option key={wh.id} value={wh.id}>{wh.code} - {wh.name}</option>
-            ))}
-          </select>
+        {canAdjust ? (
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+            <select value={adjustWarehouseId} onChange={(event) => setAdjustWarehouseId(event.target.value)} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm">
+              <option value="">Almoxarifado do ajuste</option>
+              {warehouses.map((wh) => (
+                <option key={wh.id} value={wh.id}>{wh.code} - {wh.name}</option>
+              ))}
+            </select>
 
-          <select value={adjustItemId} onChange={(event) => setAdjustItemId(event.target.value)} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm">
-            <option value="">Item</option>
-            {rows.map((row) => (
-              <option key={`${row.warehouseId}-${row.catalogItemId}`} value={row.catalogItemId}>{row.item}</option>
-            ))}
-          </select>
+            <select value={adjustItemId} onChange={(event) => setAdjustItemId(event.target.value)} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm">
+              <option value="">Item</option>
+              {rows.map((row) => (
+                <option key={`${row.warehouseId}-${row.catalogItemId}`} value={row.catalogItemId}>{row.item}</option>
+              ))}
+            </select>
 
-          <input value={adjustDelta} onChange={(event) => setAdjustDelta(event.target.value)} placeholder="+10 ou -2" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
+            <input value={adjustDelta} onChange={(event) => setAdjustDelta(event.target.value)} placeholder="+10 ou -2" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
 
-          <button type="button" onClick={() => void applyAdjustment()} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500">Aplicar ajuste</button>
-        </div>
+            <button type="button" onClick={() => void applyAdjustment()} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500">Aplicar ajuste</button>
+          </div>
+        ) : (
+          <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
+            Seu perfil permite consulta de estoque, mas ajustes de saldo exigem permissao especifica.
+          </p>
+        )}
 
         {message ? <p className="text-sm text-zinc-600">{message}</p> : null}
       </section>
@@ -222,7 +232,7 @@ export default function InventoryPage() {
                         href={`/dashboard/catalog/${row.catalogItemId}`}
                         className="text-xs font-semibold text-blue-700 hover:underline"
                       >
-                        Abrir ficha
+                        Abrir
                       </Link>
                     </td>
                   </tr>

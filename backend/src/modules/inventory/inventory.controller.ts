@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import type { Request } from 'express';
 import { RequireAccessPolicy } from '../auth/access-policy.decorator';
 import { AccessPolicyGuard } from '../auth/access-policy.guard';
 import { AuthGuard } from '../auth/auth.guard';
@@ -23,14 +32,22 @@ export class InventoryController {
 
   @RequireAccessPolicy('inventory.view')
   @Get('summary')
-  summary(@Query('warehouseId') warehouseId?: string) {
-    return this.inventoryService.summary(warehouseId);
+  summary(
+    @Query('warehouseId') warehouseId: string | undefined,
+    @Req() req: Request,
+  ) {
+    const actor = req['user'] as any;
+    return this.inventoryService.summary(warehouseId, actor);
   }
 
   @RequireAccessPolicy('inventory.view')
   @Get('replenishment-drafts')
-  replenishmentDrafts(@Query('warehouseId') warehouseId?: string) {
-    return this.inventoryService.replenishmentDrafts(warehouseId);
+  replenishmentDrafts(
+    @Query('warehouseId') warehouseId: string | undefined,
+    @Req() req: Request,
+  ) {
+    const actor = req['user'] as any;
+    return this.inventoryService.replenishmentDrafts(warehouseId, actor);
   }
 
   @RequireAccessPolicy('inventory.adjust')

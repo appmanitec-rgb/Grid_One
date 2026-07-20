@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 
@@ -244,7 +245,12 @@ export default function PurchaseOrdersPage() {
               <article key={order.id} className="rounded-lg border border-zinc-200 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="text-sm font-bold text-zinc-800">{order.code} - {order.supplier.companyName}</p>
+                    <p className="text-sm font-bold text-zinc-800">
+                      {order.code} -{" "}
+                      <Link href={`/dashboard/suppliers/${order.supplier.id}`} className="text-blue-700 hover:underline">
+                        {order.supplier.companyName}
+                      </Link>
+                    </p>
                     <p className="text-xs text-zinc-500">Status: {order.status} | Total: R$ {Number(order.totalAmount || 0).toFixed(2)}</p>
                   </div>
 
@@ -264,7 +270,13 @@ export default function PurchaseOrdersPage() {
 
                 <ul className="mt-2 list-disc pl-5 text-sm text-zinc-700">
                   {order.items.map((item) => (
-                    <li key={item.id}>{item.catalogItem.name} - {item.receivedQty}/{item.quantity} (R$ {Number(item.unitPrice).toFixed(2)})</li>
+                    <li key={item.id}>
+                      <Link href={`/dashboard/catalog/${item.catalogItem.id}`} className="font-semibold text-blue-700 hover:underline">
+                        {item.catalogItem.name}
+                      </Link>
+                      {" - "}
+                      {item.receivedQty}/{item.quantity} (R$ {Number(item.unitPrice).toFixed(2)})
+                    </li>
                   ))}
                 </ul>
               </article>

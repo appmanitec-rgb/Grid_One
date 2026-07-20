@@ -1,4 +1,5 @@
 ﻿import {
+  IsBoolean,
   IsEnum,
   IsNotEmpty,
   IsNumber,
@@ -20,6 +21,10 @@ export class CreateCatalogDto {
   @IsEnum(ItemType, { message: 'O tipo deve ser PART ou SERVICE validos' })
   @IsNotEmpty()
   type!: ItemType;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
 
   @IsString()
   @IsOptional()
@@ -105,6 +110,10 @@ export class CreateCatalogDto {
   @IsOptional()
   stockMax?: number;
 
+  @IsNumber()
+  @IsOptional()
+  reorderPoint?: number;
+
   @IsString()
   @IsOptional()
   storageLocation?: string;
@@ -120,4 +129,8 @@ export class CreateCatalogDto {
   @IsObject()
   @IsOptional()
   taxProfile?: Record<string, any>;
+
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
 }

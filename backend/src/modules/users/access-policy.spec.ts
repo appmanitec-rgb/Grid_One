@@ -89,4 +89,34 @@ describe('defaultAccessPolicyByRole', () => {
     expect(client.pages.equipments).toBe(false);
     expect(client.equipments.view).toBe(false);
   });
+
+  it('keeps inventory editing restricted while allowing read-only audit', () => {
+    const supplies = defaultAccessPolicyByRole(UserRole.SUPPLIES);
+    const auditor = defaultAccessPolicyByRole(UserRole.AUDITOR);
+    const technician = defaultAccessPolicyByRole(UserRole.TECHNICIAN);
+    const sales = defaultAccessPolicyByRole(UserRole.SALES);
+    const client = defaultAccessPolicyByRole(UserRole.CLIENT);
+
+    expect(supplies.pages.inventory).toBe(true);
+    expect(supplies.inventory.view).toBe(true);
+    expect(supplies.inventory.update).toBe(true);
+    expect(supplies.inventory.adjust).toBe(true);
+    expect(supplies.purchaseOrders.view).toBe(true);
+
+    expect(auditor.pages.inventory).toBe(true);
+    expect(auditor.inventory.view).toBe(true);
+    expect(auditor.inventory.update).toBe(false);
+    expect(auditor.inventory.adjust).toBe(false);
+    expect(auditor.catalog.update).toBe(false);
+
+    expect(technician.inventory.view).toBe(true);
+    expect(technician.inventory.adjust).toBe(false);
+
+    expect(sales.pages.inventory).toBe(false);
+    expect(sales.inventory.view).toBe(false);
+
+    expect(client.pages.inventory).toBe(false);
+    expect(client.inventory.view).toBe(false);
+    expect(client.catalog.view).toBe(false);
+  });
 });

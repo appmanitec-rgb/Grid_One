@@ -119,7 +119,9 @@ export default function SupplierDetailPage() {
               {(supplier.items || []).map((item) => (
                 <tr key={item.id}>
                   <td className="p-4">
-                    <p className="font-medium text-zinc-800">{item.catalogItem.name}</p>
+                    <Link href={`/dashboard/catalog/${item.catalogItem.id}`} className="font-medium text-blue-700 hover:underline">
+                      {item.catalogItem.name}
+                    </Link>
                     <p className="text-xs text-zinc-500">{item.catalogItem.sku || "-"}</p>
                   </td>
                   <td className="p-4 text-sm text-zinc-600">{item.supplierSku || "-"}</td>

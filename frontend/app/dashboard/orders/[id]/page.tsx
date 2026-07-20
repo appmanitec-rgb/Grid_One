@@ -502,9 +502,18 @@ export default function OrderDetailPage() {
                   >
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <p className="text-sm font-semibold text-slate-900">
-                          {material.catalogItem?.name || "Material"}
-                        </p>
+                        {material.catalogItem?.id ? (
+                          <Link
+                            href={`/dashboard/catalog/${material.catalogItem.id}`}
+                            className="text-sm font-semibold text-sky-700 transition hover:text-sky-800 hover:underline"
+                          >
+                            {material.catalogItem?.name || "Material"}
+                          </Link>
+                        ) : (
+                          <p className="text-sm font-semibold text-slate-900">
+                            {material.catalogItem?.name || "Material"}
+                          </p>
+                        )}
                         <p className="mt-1 text-xs text-slate-500">
                           SKU: {material.catalogItem?.sku || "-"} · Almoxarifado{" "}
                           {material.warehouse?.code || material.warehouse?.name || "-"}

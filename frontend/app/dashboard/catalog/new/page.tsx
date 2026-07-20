@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { getAccessFromToken } from "@/lib/access";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
 
 type ItemType = "PART" | "SERVICE";
@@ -22,11 +23,13 @@ export default function CatalogFormPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingItem, setIsLoadingItem] = useState(false);
   const [error, setError] = useState("");
+  const [canViewCosts, setCanViewCosts] = useState(false);
 
   const [formData, setFormData] = useState({
     sku: "",
     name: "",
     type: "PART" as ItemType,
+    description: "",
     commercialDescription: "",
     category: "",
     subcategory: "",
@@ -49,7 +52,9 @@ export default function CatalogFormPage() {
     stockCurrent: "",
     stockMin: "",
     stockMax: "",
+    reorderPoint: "",
     storageLocation: "",
+    isActive: "true",
 
     ncm: "",
     cest: "",
@@ -79,11 +84,14 @@ export default function CatalogFormPage() {
   }, [formData]);
 
   useEffect(() => {
+    const access = getAccessFromToken();
+    setCanViewCosts(access.catalog.viewCosts);
     const id = new URLSearchParams(window.location.search).get("editItemId");
     if (id) setEditItemId(id);
   }, []);
 
   useEffect(() => {
+    if (!canViewCosts) return;
     const cost = parseFloat(formData.costPrice) || 0;
     const margin = parseFloat(formData.profitMargin) || 0;
 
@@ -94,7 +102,7 @@ export default function CatalogFormPage() {
 
     const finalPrice = cost * (1 + totalTaxPercentage / 100) * (1 + margin / 100);
     setFormData((prev) => ({ ...prev, basePrice: finalPrice.toFixed(2) }));
-  }, [formData.costPrice, formData.profitMargin, totalTaxPercentage]);
+  }, [canViewCosts, formData.costPrice, formData.profitMargin, totalTaxPercentage]);
 
   useEffect(() => {
     if (!isEditing) return;
@@ -117,11 +125,15 @@ export default function CatalogFormPage() {
         const item = await res.json();
         const taxProfile = (item.taxProfile && typeof item.taxProfile === "object") ? item.taxProfile : {};
         const technicalSpecs = (item.technicalSpecs && typeof item.technicalSpecs === "object") ? item.technicalSpecs : {};
+        const reorderPoint =
+          item.operationalSummary?.reorderPoint ??
+          item.inventoryBalances?.find((balance: { reorderPoint?: number | null }) => balance.reorderPoint != null)?.reorderPoint;
 
         setFormData({
           sku: item.sku || "",
           name: item.name || "",
           type: item.type || "PART",
+          description: item.description || "",
           commercialDescription: item.commercialDescription || "",
           category: item.category || "",
           subcategory: item.subcategory || "",
@@ -144,7 +156,9 @@ export default function CatalogFormPage() {
           stockCurrent: item.stockCurrent != null ? String(item.stockCurrent) : "",
           stockMin: item.stockMin != null ? String(item.stockMin) : "",
           stockMax: item.stockMax != null ? String(item.stockMax) : "",
+          reorderPoint: reorderPoint != null ? String(reorderPoint) : "",
           storageLocation: item.storageLocation || "",
+          isActive: item.isActive === false ? "false" : "true",
 
           ncm: item.ncm || "",
           cest: item.cest || "",
@@ -201,6 +215,7 @@ export default function CatalogFormPage() {
       sku: formData.sku,
       name: formData.name,
       type: formData.type,
+      description: formData.description || undefined,
       commercialDescription: formData.commercialDescription || undefined,
       category: formData.category || undefined,
       subcategory: formData.subcategory || undefined,
@@ -211,17 +226,22 @@ export default function CatalogFormPage() {
       applicationNotes: formData.applicationNotes || undefined,
       technicalSpecs,
 
-      costPrice: toNumberOrUndefined(formData.costPrice),
-      averageCost: toNumberOrUndefined(formData.averageCost),
-      lastCost: toNumberOrUndefined(formData.lastCost),
-      taxPercentage: totalTaxPercentage,
-      profitMargin: toNumberOrUndefined(formData.profitMargin),
+      ...(canViewCosts
+        ? {
+            costPrice: toNumberOrUndefined(formData.costPrice),
+            averageCost: toNumberOrUndefined(formData.averageCost),
+            lastCost: toNumberOrUndefined(formData.lastCost),
+            taxPercentage: totalTaxPercentage,
+            profitMargin: toNumberOrUndefined(formData.profitMargin),
+          }
+        : {}),
       basePrice: Number(formData.basePrice || 0),
 
-      stockCurrent: toNumberOrUndefined(formData.stockCurrent),
       stockMin: toNumberOrUndefined(formData.stockMin),
       stockMax: toNumberOrUndefined(formData.stockMax),
+      reorderPoint: toNumberOrUndefined(formData.reorderPoint),
       storageLocation: formData.storageLocation || undefined,
+      isActive: formData.isActive === "true",
 
       ncm: formData.ncm || undefined,
       cest: formData.cest || undefined,
@@ -296,10 +316,18 @@ export default function CatalogFormPage() {
                   <option value="SERVICE">Servico / Mao de Obra</option>
                 </select>
               </div>
+              <div>
+                <label className="mb-1 block text-sm font-bold text-zinc-700">Status</label>
+                <select name="isActive" value={formData.isActive} onChange={handleChange} className="w-full rounded-lg border border-zinc-300 p-3">
+                  <option value="true">Ativo</option>
+                  <option value="false">Inativo</option>
+                </select>
+              </div>
               <Input label="Categoria" name="category" value={formData.category} onChange={handleChange} />
               <Input label="Subcategoria" name="subcategory" value={formData.subcategory} onChange={handleChange} />
               <Input label="Nome do Item *" name="name" value={formData.name} onChange={handleChange} className="md:col-span-2" required />
               <Input label="Descricao Comercial" name="commercialDescription" value={formData.commercialDescription} onChange={handleChange} className="md:col-span-2" />
+              <TextArea label="Descricao interna" name="description" value={formData.description} onChange={handleChange} className="md:col-span-4" />
               <Input label="Unidade" name="unit" value={formData.unit} onChange={handleChange} />
               <Input label="Marca" name="brand" value={formData.brand} onChange={handleChange} />
               <Input label="Part Number" name="manufacturerPartNumber" value={formData.manufacturerPartNumber} onChange={handleChange} />
@@ -325,19 +353,35 @@ export default function CatalogFormPage() {
           <section className="rounded-xl border border-zinc-200 bg-white p-6">
             <h2 className="mb-4 text-lg font-bold text-zinc-800">Dados Comerciais e Precificacao</h2>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-              <Input label="Custo de aquisicao (R$)" type="number" step="0.01" name="costPrice" value={formData.costPrice} onChange={handleChange} />
-              <Input label="Custo medio (R$)" type="number" step="0.01" name="averageCost" value={formData.averageCost} onChange={handleChange} />
-              <Input label="Ultimo custo (R$)" type="number" step="0.01" name="lastCost" value={formData.lastCost} onChange={handleChange} />
-              <Input label="Margem padrao (%)" type="number" step="0.01" name="profitMargin" value={formData.profitMargin} onChange={handleChange} />
+              {canViewCosts ? (
+                <>
+                  <Input label="Custo de aquisicao (R$)" type="number" step="0.01" name="costPrice" value={formData.costPrice} onChange={handleChange} />
+                  <Input label="Custo medio (R$)" type="number" step="0.01" name="averageCost" value={formData.averageCost} onChange={handleChange} />
+                  <Input label="Ultimo custo (R$)" type="number" step="0.01" name="lastCost" value={formData.lastCost} onChange={handleChange} />
+                  <Input label="Margem padrao (%)" type="number" step="0.01" name="profitMargin" value={formData.profitMargin} onChange={handleChange} />
 
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 md:col-span-2">
-                <p className="text-xs font-bold uppercase text-zinc-500">Carga tributaria total</p>
-                <p className="text-xl font-bold text-zinc-800">{totalTaxPercentage.toFixed(2)}%</p>
-              </div>
+                  <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 md:col-span-2">
+                    <p className="text-xs font-bold uppercase text-zinc-500">Carga tributaria total</p>
+                    <p className="text-xl font-bold text-zinc-800">{totalTaxPercentage.toFixed(2)}%</p>
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 md:col-span-2">
+                  <p className="text-xs font-bold uppercase text-amber-700">Custos restritos</p>
+                  <p className="mt-1 text-sm text-amber-800">Seu perfil pode alterar cadastro operacional, mas nao visualiza custo, margem ou impostos.</p>
+                </div>
+              )}
 
               <div className="rounded-lg border-2 border-blue-500 bg-blue-50 p-3 md:col-span-2">
                 <p className="text-xs font-bold uppercase text-blue-700">Preco de venda base</p>
-                <p className="text-2xl font-bold text-blue-700">R$ {Number(formData.basePrice || 0).toFixed(2)}</p>
+                <input
+                  name="basePrice"
+                  type="number"
+                  step="0.01"
+                  value={formData.basePrice}
+                  onChange={handleChange}
+                  className="mt-2 w-full rounded-lg border border-blue-200 bg-white p-2 text-2xl font-bold text-blue-700"
+                />
               </div>
             </div>
           </section>
@@ -347,9 +391,14 @@ export default function CatalogFormPage() {
           <section className="rounded-xl border border-zinc-200 bg-white p-6">
             <h2 className="mb-4 text-lg font-bold text-zinc-800">Estoque e Logistica</h2>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-              <Input label="Estoque atual" type="number" step="0.01" name="stockCurrent" value={formData.stockCurrent} onChange={handleChange} />
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+                <p className="text-xs font-bold uppercase text-zinc-500">Saldo atual</p>
+                <p className="mt-1 text-xl font-bold text-zinc-800">{formData.stockCurrent || "0"}</p>
+                <p className="mt-1 text-xs text-zinc-500">Alterado apenas por movimento, compra, consumo, reserva ou ajuste auditado.</p>
+              </div>
               <Input label="Estoque minimo" type="number" step="0.01" name="stockMin" value={formData.stockMin} onChange={handleChange} />
               <Input label="Estoque maximo" type="number" step="0.01" name="stockMax" value={formData.stockMax} onChange={handleChange} />
+              <Input label="Ponto de reposicao" type="number" step="0.01" name="reorderPoint" value={formData.reorderPoint} onChange={handleChange} />
               <Input label="Localizacao fisica" name="storageLocation" value={formData.storageLocation} onChange={handleChange} />
               <Input label="Peso bruto (kg)" type="number" step="0.01" name="grossWeight" value={formData.grossWeight} onChange={handleChange} />
               <Input label="Peso liquido (kg)" type="number" step="0.01" name="netWeight" value={formData.netWeight} onChange={handleChange} />
