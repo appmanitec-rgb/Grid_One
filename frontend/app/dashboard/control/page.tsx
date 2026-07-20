@@ -394,6 +394,8 @@ const PEOPLE_ITEMS = [
   { key: "create", label: "Criar registros de pessoas" },
   { key: "update", label: "Editar pessoas/RH" },
   { key: "delete", label: "Excluir registros de pessoas" },
+  { key: "viewSensitive", label: "Ver dados sensiveis" },
+  { key: "manageSensitive", label: "Editar dados sensiveis" },
 ] as const satisfies ReadonlyArray<
   PermissionItem<keyof AccessPolicy["people"]>
 >;
@@ -432,6 +434,7 @@ const SECONDARY_BUTTON =
 export default function AccessControlPage() {
   const router = useRouter();
   const viewerAccess = useMemo(() => getAccessFromToken(), []);
+  const canManageSensitivePeople = viewerAccess.people.manageSensitive;
   const [users, setUsers] = useState<UserRow[]>([]);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
@@ -695,10 +698,14 @@ export default function AccessControlPage() {
             : undefined,
         department: newUser.department.trim() || undefined,
         branch: newUser.branch.trim() || undefined,
-        approvalDiscountLimit: toNumberOrUndefined(
-          newUser.approvalDiscountLimit,
-        ),
-        hourCost: toNumberOrUndefined(newUser.hourCost),
+        ...(canManageSensitivePeople
+          ? {
+              approvalDiscountLimit: toNumberOrUndefined(
+                newUser.approvalDiscountLimit,
+              ),
+              hourCost: toNumberOrUndefined(newUser.hourCost),
+            }
+          : {}),
         accessPolicy: defaultAccessByRole(newUser.role),
       };
 
@@ -769,19 +776,23 @@ export default function AccessControlPage() {
             : null,
         department: (selectedUser.department || "").trim() || undefined,
         branch: (selectedUser.branch || "").trim() || undefined,
-        approvalDiscountLimit: toNumberOrUndefined(
-          selectedUser.approvalDiscountLimit,
-        ),
-        hourCost: toNumberOrUndefined(selectedUser.hourCost),
+        ...(canManageSensitivePeople
+          ? {
+              approvalDiscountLimit: toNumberOrUndefined(
+                selectedUser.approvalDiscountLimit,
+              ),
+              hourCost: toNumberOrUndefined(selectedUser.hourCost),
+              salesTargetMonthly: toNumberOrUndefined(
+                selectedUser.salesTargetMonthly,
+              ),
+            }
+          : {}),
         functionalId: (selectedUser.functionalId || "").trim() || undefined,
         documentId: (selectedUser.documentId || "").trim() || undefined,
         managerId: selectedUser.managerId || undefined,
         availabilityStatus: selectedUser.availabilityStatus || undefined,
         skillLevel: selectedUser.skillLevel || undefined,
         regionTags: splitTags(selectedUser.regionTags || []),
-        salesTargetMonthly: toNumberOrUndefined(
-          selectedUser.salesTargetMonthly,
-        ),
         mfaEnabled: Boolean(selectedUser.mfaEnabled),
         accessPolicy: policy,
       };
@@ -1069,6 +1080,7 @@ export default function AccessControlPage() {
           newUser={newUser}
           clients={clients}
           saving={saving}
+          canManageSensitivePeople={canManageSensitivePeople}
           onChange={setNewUser}
           onSubmit={handleCreateUser}
         />
@@ -1106,6 +1118,7 @@ export default function AccessControlPage() {
         isLoading={isLoading}
         saving={saving}
         isSelectedMaster={isSelectedMaster}
+        canManageSensitivePeople={canManageSensitivePeople}
         onQueryChange={setQuery}
         onRoleFilterChange={setRoleFilter}
         onStatusFilterChange={setStatusFilter}
@@ -1232,12 +1245,14 @@ function ProvisioningCard({
   newUser,
   clients,
   saving,
+  canManageSensitivePeople,
   onChange,
   onSubmit,
 }: {
   newUser: NewUserForm;
   clients: ClientOption[];
   saving: boolean;
+  canManageSensitivePeople: boolean;
   onChange: Dispatch<SetStateAction<NewUserForm>>;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 }) {
@@ -1343,33 +1358,40 @@ function ProvisioningCard({
               placeholder="Matriz, Campinas..."
             />
           </FormField>
-          <FormField label="Limite de desconto (%)">
-            <TextInput
-              type="number"
-              min="0"
-              step="0.1"
-              value={newUser.approvalDiscountLimit}
-              onChange={(event) =>
-                onChange((prev) => ({
-                  ...prev,
-                  approvalDiscountLimit: event.target.value,
-                }))
-              }
-              placeholder="7"
-            />
-          </FormField>
-          <FormField label="Custo/hora">
-            <TextInput
-              type="number"
-              min="0"
-              step="0.01"
-              value={newUser.hourCost}
-              onChange={(event) =>
-                onChange((prev) => ({ ...prev, hourCost: event.target.value }))
-              }
-              placeholder="0,00"
-            />
-          </FormField>
+          {canManageSensitivePeople ? (
+            <>
+              <FormField label="Limite de desconto (%)">
+                <TextInput
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={newUser.approvalDiscountLimit}
+                  onChange={(event) =>
+                    onChange((prev) => ({
+                      ...prev,
+                      approvalDiscountLimit: event.target.value,
+                    }))
+                  }
+                  placeholder="7"
+                />
+              </FormField>
+              <FormField label="Custo/hora">
+                <TextInput
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={newUser.hourCost}
+                  onChange={(event) =>
+                    onChange((prev) => ({
+                      ...prev,
+                      hourCost: event.target.value,
+                    }))
+                  }
+                  placeholder="0,00"
+                />
+              </FormField>
+            </>
+          ) : null}
         </div>
 
         <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-700">
@@ -1679,6 +1701,7 @@ function ManagementSection({
   isLoading,
   saving,
   isSelectedMaster,
+  canManageSensitivePeople,
   onQueryChange,
   onRoleFilterChange,
   onStatusFilterChange,
@@ -1722,6 +1745,7 @@ function ManagementSection({
   isLoading: boolean;
   saving: boolean;
   isSelectedMaster: boolean;
+  canManageSensitivePeople: boolean;
   onQueryChange: Dispatch<SetStateAction<string>>;
   onRoleFilterChange: Dispatch<SetStateAction<"ALL" | UserRole>>;
   onStatusFilterChange: Dispatch<SetStateAction<"ALL" | "ACTIVE" | "INACTIVE">>;
@@ -1937,6 +1961,7 @@ function ManagementSection({
             policy={policy}
             saving={saving}
             isSelectedMaster={isSelectedMaster}
+            canManageSensitivePeople={canManageSensitivePeople}
             onUpdateSelectedUser={onUpdateSelectedUser}
             onResetSelectedUser={onResetSelectedUser}
             onSaveSelectedUser={onSaveSelectedUser}
@@ -2082,6 +2107,7 @@ function UserEditorCard({
   policy,
   saving,
   isSelectedMaster,
+  canManageSensitivePeople,
   onUpdateSelectedUser,
   onResetSelectedUser,
   onSaveSelectedUser,
@@ -2100,6 +2126,7 @@ function UserEditorCard({
   policy: AccessPolicy;
   saving: boolean;
   isSelectedMaster: boolean;
+  canManageSensitivePeople: boolean;
   onUpdateSelectedUser: (changes: Partial<UserRow>) => void;
   onResetSelectedUser: () => void;
   onSaveSelectedUser: () => Promise<void>;
@@ -2394,57 +2421,61 @@ function UserEditorCard({
               ))}
             </SelectInput>
           </FormField>
-          <FormField label="Limite de desconto (%)">
-            <TextInput
-              type="number"
-              min="0"
-              step="0.1"
-              value={selectedUser.approvalDiscountLimit ?? ""}
-              onChange={(event) =>
-                onUpdateSelectedUser({
-                  approvalDiscountLimit:
-                    event.target.value === ""
-                      ? null
-                      : Number(event.target.value),
-                })
-              }
-              disabled={isSelectedMaster}
-            />
-          </FormField>
-          <FormField label="Custo/hora">
-            <TextInput
-              type="number"
-              min="0"
-              step="0.01"
-              value={selectedUser.hourCost ?? ""}
-              onChange={(event) =>
-                onUpdateSelectedUser({
-                  hourCost:
-                    event.target.value === ""
-                      ? null
-                      : Number(event.target.value),
-                })
-              }
-              disabled={isSelectedMaster}
-            />
-          </FormField>
-          <FormField label="Meta comercial mensal">
-            <TextInput
-              type="number"
-              min="0"
-              step="0.01"
-              value={selectedUser.salesTargetMonthly ?? ""}
-              onChange={(event) =>
-                onUpdateSelectedUser({
-                  salesTargetMonthly:
-                    event.target.value === ""
-                      ? null
-                      : Number(event.target.value),
-                })
-              }
-              disabled={isSelectedMaster}
-            />
-          </FormField>
+          {canManageSensitivePeople ? (
+            <>
+              <FormField label="Limite de desconto (%)">
+                <TextInput
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={selectedUser.approvalDiscountLimit ?? ""}
+                  onChange={(event) =>
+                    onUpdateSelectedUser({
+                      approvalDiscountLimit:
+                        event.target.value === ""
+                          ? null
+                          : Number(event.target.value),
+                    })
+                  }
+                  disabled={isSelectedMaster}
+                />
+              </FormField>
+              <FormField label="Custo/hora">
+                <TextInput
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={selectedUser.hourCost ?? ""}
+                  onChange={(event) =>
+                    onUpdateSelectedUser({
+                      hourCost:
+                        event.target.value === ""
+                          ? null
+                          : Number(event.target.value),
+                    })
+                  }
+                  disabled={isSelectedMaster}
+                />
+              </FormField>
+              <FormField label="Meta comercial mensal">
+                <TextInput
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={selectedUser.salesTargetMonthly ?? ""}
+                  onChange={(event) =>
+                    onUpdateSelectedUser({
+                      salesTargetMonthly:
+                        event.target.value === ""
+                          ? null
+                          : Number(event.target.value),
+                    })
+                  }
+                  disabled={isSelectedMaster}
+                />
+              </FormField>
+            </>
+          ) : null}
           <FormField label="ID funcional">
             <TextInput
               value={selectedUser.functionalId || ""}

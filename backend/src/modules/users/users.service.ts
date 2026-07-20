@@ -63,6 +63,13 @@ const userPublicSelect = {
   },
 } as const;
 
+const sensitiveUserFields = [
+  'approvalDiscountLimit',
+  'hourCost',
+  'salesTargetMonthly',
+  'kpiTargetJson',
+] as const;
+
 @Injectable()
 export class UsersService {
   constructor(
@@ -79,6 +86,7 @@ export class UsersService {
       throw new BadRequestException('Este e-mail ja esta cadastrado.');
     }
 
+    await this.assertCanManageSensitiveUserFields(createUserDto, actorUserId);
     await this.validateManager(createUserDto.managerId, undefined);
     const linkedClientId = await this.validateLinkedClientAccess(
       createUserDto.role,
@@ -186,6 +194,7 @@ export class UsersService {
       throw new ForbiddenException('Usuario master nao pode ser editado.');
     }
 
+    await this.assertCanManageSensitiveUserFields(updateUserDto, actorUserId);
     await this.validateManager(updateUserDto.managerId, id);
     const targetRole = role ?? currentUser.role;
     const targetLinkedClientId = await this.validateLinkedClientAccess(
@@ -861,6 +870,47 @@ export class UsersService {
     if (!manager || !manager.isActive) {
       throw new BadRequestException('Gestor direto invalido.');
     }
+  }
+
+  private async assertCanManageSensitiveUserFields(
+    dto: Partial<CreateUserDto>,
+    actorUserId?: string,
+  ) {
+    if (!this.hasSensitiveUserFields(dto)) return;
+    if (!actorUserId) return;
+
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: {
+        role: true,
+        isSystemMaster: true,
+        accessPolicy: true,
+      },
+    });
+
+    if (actor && this.canManageSensitivePeople(actor)) return;
+
+    throw new ForbiddenException(
+      'Seu perfil nao possui permissao para alterar dados sensiveis de pessoas.',
+    );
+  }
+
+  private hasSensitiveUserFields(dto: Partial<CreateUserDto>) {
+    return sensitiveUserFields.some(
+      (field) =>
+        Object.prototype.hasOwnProperty.call(dto, field) &&
+        dto[field] !== undefined,
+    );
+  }
+
+  private canManageSensitivePeople(actor: {
+    role: UserRole;
+    isSystemMaster: boolean;
+    accessPolicy: unknown;
+  }) {
+    if (actor.isSystemMaster || actor.role === UserRole.ADMIN) return true;
+    const access = effectiveAccessPolicy(actor.role, actor.accessPolicy);
+    return access.people.manageSensitive === true;
   }
 
   private async validateLinkedClientAccess(

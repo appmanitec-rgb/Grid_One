@@ -43,6 +43,7 @@ test.describe("ciclo 19 ux operacional", () => {
     await expectLoaded(page, /Agentes/i);
     await expect(page.getByRole("button", { name: /Colaboradores/i })).toBeVisible();
     await expect(page.getByRole("button", { name: /Clientes/i })).toBeVisible();
+    await expect(page.locator("body")).toContainText(/Custo HH/i);
 
     await page.goto(`/dashboard/equipments/${data.clientAEquipmentId}`, {
       waitUntil: "domcontentloaded",
@@ -88,5 +89,61 @@ test.describe("ciclo 19 ux operacional", () => {
     await expect(
       page.getByRole("button", { name: /Baixar PDF profissional/i }),
     ).toBeVisible();
+  });
+
+  test("dados sensiveis de agentes respeitam permissao granular", async ({
+    page,
+  }) => {
+    const [auditorSession, clientSession] = await Promise.all([
+      apiLogin(accounts.auditor),
+      apiLogin(accounts.clientA),
+    ]);
+
+    const auditorAgents = await apiRequest<{
+      internalUsers: Array<Record<string, unknown>>;
+      access?: { canViewSensitivePeople?: boolean };
+    }>(auditorSession.access_token, "/hr-admin/agents");
+    expect(auditorAgents.access?.canViewSensitivePeople).toBe(false);
+    expect(
+      auditorAgents.internalUsers.some((row) =>
+        Object.prototype.hasOwnProperty.call(row, "hourCost"),
+      ),
+    ).toBe(false);
+
+    const [auditorOrders, auditorTechnicians] = await Promise.all([
+      apiRequest<Array<{ technician?: { user?: Record<string, unknown> } | null }>>(
+        auditorSession.access_token,
+        "/maintenance-orders",
+      ),
+      apiRequest<Array<{ user?: Record<string, unknown> }>>(
+        auditorSession.access_token,
+        "/technicians",
+      ),
+    ]);
+    expect(
+      auditorOrders.some((row) =>
+        Object.prototype.hasOwnProperty.call(row.technician?.user || {}, "hourCost"),
+      ),
+    ).toBe(false);
+    expect(
+      auditorTechnicians.some((row) =>
+        Object.prototype.hasOwnProperty.call(row.user || {}, "hourCost"),
+      ),
+    ).toBe(false);
+
+    const clientAgentsResponse = await apiRequestRaw(
+      clientSession.access_token,
+      "/hr-admin/agents",
+    );
+    expect(clientAgentsResponse.status).toBe(403);
+
+    await loginByApi(page, accounts.auditor);
+    await page.goto("/dashboard/hr/collaborators", {
+      waitUntil: "domcontentloaded",
+      timeout: 45_000,
+    });
+    await expectLoaded(page, /Agentes/i);
+    await expect(page.locator("body")).not.toContainText(/Custo HH|hourCost/i);
+    await expect(page.locator("body")).toContainText(/dados administrativos sens/i);
   });
 });

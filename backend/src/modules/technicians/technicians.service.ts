@@ -103,7 +103,6 @@ export class TechniciansService {
           isActive: true,
           department: true,
           branch: true,
-          hourCost: true,
         },
       },
       orders: {

@@ -9,7 +9,7 @@ type Order = {
   status: string;
   openedAt?: string | null;
   closedAt?: string | null;
-  technician?: { user?: { name?: string | null; hourCost?: number | null; department?: string | null } | null } | null;
+  technician?: { user?: { name?: string | null; department?: string | null } | null } | null;
 };
 
 type CatalogItem = {
@@ -49,10 +49,9 @@ export default function CostsPage() {
   }, []);
 
   const kpi = useMemo(() => {
-    const estimatedLabor = orders.reduce((acc, order) => acc + Number(order.technician?.user?.hourCost || 0), 0);
     const stockValue = catalog.reduce((acc, item) => acc + Number(item.stockCurrent || 0) * Number(item.costPrice || 0), 0);
-    const withHourCost = orders.filter((order) => Number(order.technician?.user?.hourCost || 0) > 0).length;
-    return { estimatedLabor, stockValue, withHourCost };
+    const ordersWithTechnician = orders.filter((order) => order.technician?.user?.name).length;
+    return { stockValue, ordersWithTechnician };
   }, [orders, catalog]);
 
   return (
@@ -60,9 +59,9 @@ export default function CostsPage() {
       <h1 className="text-3xl font-bold text-zinc-900">Custos de Operacao</h1>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Metric title="Custo tecnico estimado" value={`R$ ${kpi.estimatedLabor.toFixed(2)}`} />
         <Metric title="Valor do estoque" value={`R$ ${kpi.stockValue.toFixed(2)}`} />
-        <Metric title="OS com HH definido" value={String(kpi.withHourCost)} />
+        <Metric title="OS listadas" value={String(orders.length)} />
+        <Metric title="OS com tecnico" value={String(kpi.ordersWithTechnician)} />
       </section>
 
       {message ? (
@@ -70,7 +69,10 @@ export default function CostsPage() {
       ) : null}
 
       <section className="rounded-xl border border-zinc-200 bg-white p-4">
-        <h2 className="mb-3 text-lg font-bold text-zinc-800">Ordem x Custo Tecnico</h2>
+        <h2 className="mb-3 text-lg font-bold text-zinc-800">Ordens e alocacao tecnica</h2>
+        <p className="mb-3 text-sm text-zinc-500">
+          Custos sensiveis de HH ficam restritos ao modulo de Pessoas com permissao especifica.
+        </p>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
@@ -79,7 +81,6 @@ export default function CostsPage() {
                 <th className="px-2 py-2">Tecnico</th>
                 <th className="px-2 py-2">Departamento</th>
                 <th className="px-2 py-2">Status</th>
-                <th className="px-2 py-2">Custo HH</th>
               </tr>
             </thead>
             <tbody>
@@ -89,12 +90,11 @@ export default function CostsPage() {
                   <td className="px-2 py-2 text-zinc-700">{order.technician?.user?.name || "Nao definido"}</td>
                   <td className="px-2 py-2 text-zinc-700">{order.technician?.user?.department || "-"}</td>
                   <td className="px-2 py-2 text-zinc-700">{order.status}</td>
-                  <td className="px-2 py-2 text-zinc-700">R$ {Number(order.technician?.user?.hourCost || 0).toFixed(2)}</td>
                 </tr>
               ))}
               {orders.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-2 py-3 text-sm text-zinc-500">
+                  <td colSpan={4} className="px-2 py-3 text-sm text-zinc-500">
                     Nenhuma OS encontrada.
                   </td>
                 </tr>

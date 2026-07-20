@@ -23,6 +23,17 @@ import {
   UpdateCommissionRuleDto,
 } from './dto/hr-admin.dto';
 
+export type AccessActor = {
+  role?: UserRole;
+  isSystemMaster?: boolean;
+  accessPolicy?: {
+    people?: {
+      viewSensitive?: boolean;
+      manageSensitive?: boolean;
+    };
+  };
+};
+
 @Injectable()
 export class HrAdminService {
   constructor(
@@ -30,19 +41,30 @@ export class HrAdminService {
     private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  listCollaborators() {
+  listCollaborators(actor?: AccessActor) {
+    const canViewSensitive = this.canViewSensitivePeople(actor);
+
     return this.prisma.user.findMany({
       where: {
         role: { not: UserRole.CLIENT },
       },
-      include: {
-        technicianProfile: true,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        department: true,
+        branch: true,
+        isActive: true,
+        ...(canViewSensitive ? { hourCost: true } : {}),
+        technicianProfile: { select: { id: true } },
       },
       orderBy: { name: 'asc' },
     });
   }
 
-  async listAgentsOverview() {
+  async listAgentsOverview(actor?: AccessActor) {
+    const canViewSensitive = this.canViewSensitivePeople(actor);
     const [internalUsers, portalUsers, clients, auditors] = await Promise.all([
       this.prisma.user.findMany({
         where: { role: { notIn: [UserRole.CLIENT, UserRole.AUDITOR] } },
@@ -53,7 +75,7 @@ export class HrAdminService {
           role: true,
           department: true,
           branch: true,
-          hourCost: true,
+          ...(canViewSensitive ? { hourCost: true } : {}),
           isActive: true,
           technicianProfile: { select: { id: true } },
         },
@@ -107,6 +129,9 @@ export class HrAdminService {
       portalUsers,
       clients,
       auditors,
+      access: {
+        canViewSensitivePeople: canViewSensitive,
+      },
       summary: {
         internalUsers: internalUsers.length,
         systemUsers:
@@ -118,7 +143,8 @@ export class HrAdminService {
     };
   }
 
-  listTimeEntries(userId?: string, month?: string) {
+  listTimeEntries(userId?: string, month?: string, actor?: AccessActor) {
+    const canViewSensitive = this.canViewSensitivePeople(actor);
     const where: Prisma.TimeEntryWhereInput = {};
     if (userId) where.userId = userId;
     if (month && /^\d{4}-\d{2}$/.test(month)) {
@@ -132,7 +158,12 @@ export class HrAdminService {
       where,
       include: {
         user: {
-          select: { id: true, name: true, department: true, hourCost: true },
+          select: {
+            id: true,
+            name: true,
+            department: true,
+            ...(canViewSensitive ? { hourCost: true } : {}),
+          },
         },
         maintenanceOrder: {
           select: { id: true, title: true, costCenterId: true },
@@ -188,7 +219,12 @@ export class HrAdminService {
   }
 
   async payrollExport(month?: string) {
-    const rows = await this.listTimeEntries(undefined, month);
+    const rows = await this.listTimeEntries(undefined, month, {
+      role: UserRole.HR,
+      accessPolicy: {
+        people: { viewSensitive: true },
+      },
+    });
     const grouped = new Map<
       string,
       {
@@ -492,6 +528,13 @@ export class HrAdminService {
         'Comissao precisa ter origem rastreavel: recebivel, contrato ou OS.',
       );
     }
+  }
+
+  private canViewSensitivePeople(actor?: AccessActor) {
+    if (!actor) return false;
+    if (actor.isSystemMaster || actor.role === UserRole.ADMIN) return true;
+    const people = actor.accessPolicy?.people;
+    return people?.viewSensitive === true || people?.manageSensitive === true;
   }
 
   listHrAssets() {

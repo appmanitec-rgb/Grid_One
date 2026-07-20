@@ -1469,7 +1469,6 @@ export class MaintenanceOrdersService {
               name: true,
               email: true,
               role: true,
-              hourCost: true,
               department: true,
               skillLevel: true,
             },

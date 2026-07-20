@@ -9,12 +9,12 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { CommissionStatus } from '@prisma/client';
+import { CommissionStatus, UserRole } from '@prisma/client';
 import type { Request } from 'express';
 import { RequireAccessPolicy } from '../auth/access-policy.decorator';
 import { AccessPolicyGuard } from '../auth/access-policy.guard';
 import { AuthGuard } from '../auth/auth.guard';
-import { HrAdminService } from './hr-admin.service';
+import { AccessActor, HrAdminService } from './hr-admin.service';
 import {
   AllocateFleetDto,
   AssignHrAssetDto,
@@ -37,25 +37,30 @@ export class HrAdminController {
   @UseGuards(AuthGuard)
   @RequireAccessPolicy('people.view')
   @Get('agents')
-  agents() {
-    return this.hrAdminService.listAgentsOverview();
+  agents(@Req() req: Request) {
+    return this.hrAdminService.listAgentsOverview(this.extractActor(req));
   }
 
   @UseGuards(AuthGuard)
   @RequireAccessPolicy('people.view')
   @Get('collaborators')
-  collaborators() {
-    return this.hrAdminService.listCollaborators();
+  collaborators(@Req() req: Request) {
+    return this.hrAdminService.listCollaborators(this.extractActor(req));
   }
 
   @UseGuards(AuthGuard)
   @RequireAccessPolicy('people.view')
   @Get('time-entries')
   timeEntries(
+    @Req() req: Request,
     @Query('userId') userId?: string,
     @Query('month') month?: string,
   ) {
-    return this.hrAdminService.listTimeEntries(userId, month);
+    return this.hrAdminService.listTimeEntries(
+      userId,
+      month,
+      this.extractActor(req),
+    );
   }
 
   @UseGuards(AuthGuard)
@@ -203,5 +208,21 @@ export class HrAdminController {
   private extractUserId(req: Request) {
     const authUser = req.user as { sub?: string } | undefined;
     return authUser?.sub;
+  }
+
+  private extractActor(req: Request): AccessActor {
+    const authUser = req.user as
+      | {
+          role?: UserRole;
+          isSystemMaster?: boolean;
+          accessPolicy?: AccessActor['accessPolicy'];
+        }
+      | undefined;
+
+    return {
+      role: authUser?.role,
+      isSystemMaster: authUser?.isSystemMaster,
+      accessPolicy: authUser?.accessPolicy,
+    };
   }
 }

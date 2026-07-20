@@ -123,6 +123,8 @@ export type AccessPolicy = {
     create: boolean;
     update: boolean;
     delete: boolean;
+    viewSensitive: boolean;
+    manageSensitive: boolean;
   };
   technicians: {
     view: boolean;
@@ -274,6 +276,8 @@ const emptyAccessPolicy: AccessPolicy = {
     create: false,
     update: false,
     delete: false,
+    viewSensitive: false,
+    manageSensitive: false,
   },
   technicians: {
     view: false,
@@ -398,6 +402,8 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         view: true,
         create: true,
         update: true,
+        viewSensitive: true,
+        manageSensitive: true,
       },
       technicians: {
         view: true,
@@ -700,6 +706,8 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         create: true,
         update: true,
         delete: true,
+        viewSensitive: true,
+        manageSensitive: true,
       },
       technicians: {
         view: true,

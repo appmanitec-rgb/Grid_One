@@ -123,6 +123,8 @@ export type AccessPolicy = {
     create: boolean;
     update: boolean;
     delete: boolean;
+    viewSensitive: boolean;
+    manageSensitive: boolean;
   };
   technicians: {
     view: boolean;
@@ -305,7 +307,14 @@ const EMPTY_ACCESS_POLICY: AccessPolicy = {
     cancel: false,
     reconcile: false,
   },
-  people: { view: false, create: false, update: false, delete: false },
+  people: {
+    view: false,
+    create: false,
+    update: false,
+    delete: false,
+    viewSensitive: false,
+    manageSensitive: false,
+  },
   technicians: { view: false, dispatch: false, schedule: false },
   technicianWork: { view: false, checkInOut: false },
   reports: { view: false, export: false },
@@ -414,7 +423,13 @@ export function defaultAccessByRole(role: string): AccessPolicy {
         cancel: true,
         reconcile: true,
       },
-      people: { view: true, create: true, update: true },
+      people: {
+        view: true,
+        create: true,
+        update: true,
+        viewSensitive: true,
+        manageSensitive: true,
+      },
       technicians: { view: true, dispatch: true, schedule: true },
       technicianWork: { view: true, checkInOut: true },
       reports: { view: true, export: true },
@@ -623,7 +638,14 @@ export function defaultAccessByRole(role: string): AccessPolicy {
     return policy({
       pages: { dashboard: true, orders: true, people: true, tickets: true },
       orders: { view: true },
-      people: { view: true, create: true, update: true, delete: true },
+      people: {
+        view: true,
+        create: true,
+        update: true,
+        delete: true,
+        viewSensitive: true,
+        manageSensitive: true,
+      },
       technicians: { view: true, schedule: true },
       tickets: { view: true },
       users: { manageCertifications: true, manageSpecialties: true },

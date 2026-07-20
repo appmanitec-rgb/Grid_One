@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { getAccessFromToken } from "@/lib/access";
 
 type InternalUser = {
   id: string;
@@ -43,6 +44,9 @@ type AgentsPayload = {
   portalUsers: PortalUser[];
   clients: ClientAgent[];
   auditors: InternalUser[];
+  access?: {
+    canViewSensitivePeople: boolean;
+  };
   summary: {
     internalUsers: number;
     systemUsers: number;
@@ -58,12 +62,27 @@ export default function CollaboratorsPage() {
   const [payload, setPayload] = useState<AgentsPayload | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("internal");
   const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const access = useMemo(() => getAccessFromToken(), []);
+  const canViewSensitivePeople =
+    payload?.access?.canViewSensitivePeople === true &&
+    access.people.viewSensitive === true;
 
   useEffect(() => {
     async function load() {
-      const res = await apiFetch("/hr-admin/agents", { cache: "no-store" });
-      if (!res.ok) return;
-      setPayload((await res.json()) as AgentsPayload);
+      setLoading(true);
+      setError("");
+      try {
+        const res = await apiFetch("/hr-admin/agents", { cache: "no-store" });
+        if (!res.ok) {
+          setError("Nao foi possivel carregar os agentes.");
+          return;
+        }
+        setPayload((await res.json()) as AgentsPayload);
+      } finally {
+        setLoading(false);
+      }
     }
 
     void load();
@@ -130,10 +149,30 @@ export default function CollaboratorsPage() {
         <TabButton active={activeTab === "auditors"} onClick={() => setActiveTab("auditors")}>Auditores</TabButton>
       </div>
 
-      {activeTab === "internal" ? <InternalTable rows={internalUsers} showHourCost /> : null}
-      {activeTab === "users" ? <SystemUsersTable rows={systemUsers} /> : null}
-      {activeTab === "clients" ? <ClientsTable rows={clients} /> : null}
-      {activeTab === "auditors" ? <InternalTable rows={auditors} /> : null}
+      {loading ? (
+        <p className="rounded-xl border border-zinc-200 bg-white p-6 text-sm text-zinc-500">
+          Carregando agentes...
+        </p>
+      ) : null}
+
+      {error ? (
+        <p className="rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
+          {error}
+        </p>
+      ) : null}
+
+      {!loading && !error && !canViewSensitivePeople ? (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          Custos, alçadas e dados administrativos sensíveis ficam ocultos para esta permissão.
+        </p>
+      ) : null}
+
+      {!loading && !error && activeTab === "internal" ? (
+        <InternalTable rows={internalUsers} showHourCost={canViewSensitivePeople} />
+      ) : null}
+      {!loading && !error && activeTab === "users" ? <SystemUsersTable rows={systemUsers} /> : null}
+      {!loading && !error && activeTab === "clients" ? <ClientsTable rows={clients} /> : null}
+      {!loading && !error && activeTab === "auditors" ? <InternalTable rows={auditors} /> : null}
     </div>
   );
 }

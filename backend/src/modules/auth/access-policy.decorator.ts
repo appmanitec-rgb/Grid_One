@@ -76,6 +76,8 @@ export const accessPolicyKeys = [
   'people.create',
   'people.update',
   'people.delete',
+  'people.viewSensitive',
+  'people.manageSensitive',
   'technicians.view',
   'technicians.dispatch',
   'technicians.schedule',

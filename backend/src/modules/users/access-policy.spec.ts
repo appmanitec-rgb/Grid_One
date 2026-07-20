@@ -21,6 +21,8 @@ describe('defaultAccessPolicyByRole', () => {
     expect(access.technicianWork.checkInOut).toBe(true);
     expect(access.tickets.view).toBe(true);
     expect(access.tickets.viewOwn).toBe(true);
+    expect(access.people.viewSensitive).toBe(true);
+    expect(access.people.manageSensitive).toBe(true);
   });
 
   it('keeps client restricted away from internal ERP modules', () => {
@@ -35,6 +37,8 @@ describe('defaultAccessPolicyByRole', () => {
     expect(access.pages.inventory).toBe(false);
     expect(access.pages.technicianPortal).toBe(false);
     expect(access.serviceReports.view).toBe(false);
+    expect(access.people.viewSensitive).toBe(false);
+    expect(access.people.manageSensitive).toBe(false);
   });
 
   it('allows operation profile to handle tickets, dispatch and service reports without finance access', () => {
@@ -47,5 +51,19 @@ describe('defaultAccessPolicyByRole', () => {
     expect(access.tickets.convertToOrder).toBe(true);
     expect(access.serviceReports.approve).toBe(true);
     expect(access.finance.view).toBe(false);
+  });
+
+  it('keeps sensitive people fields restricted to explicit people permission', () => {
+    const technician = defaultAccessPolicyByRole(UserRole.TECHNICIAN);
+    const sales = defaultAccessPolicyByRole(UserRole.SALES);
+    const auditor = defaultAccessPolicyByRole(UserRole.AUDITOR);
+    const hr = defaultAccessPolicyByRole(UserRole.HR);
+
+    expect(technician.people.viewSensitive).toBe(false);
+    expect(sales.people.viewSensitive).toBe(false);
+    expect(auditor.people.viewSensitive).toBe(false);
+    expect(auditor.people.manageSensitive).toBe(false);
+    expect(hr.people.viewSensitive).toBe(true);
+    expect(hr.people.manageSensitive).toBe(true);
   });
 });

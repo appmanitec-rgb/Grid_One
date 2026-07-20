@@ -29,6 +29,7 @@ describe('HrAdminService', () => {
     expect(prisma.user.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { role: { not: UserRole.CLIENT } },
+        select: expect.not.objectContaining({ hourCost: true }),
       }),
     );
   });
@@ -44,12 +45,18 @@ describe('HrAdminService', () => {
       .mockResolvedValueOnce(auditors);
     prisma.client.findMany.mockResolvedValueOnce(clients);
 
-    const overview = await service.listAgentsOverview();
+    const overview = await service.listAgentsOverview({
+      role: UserRole.HR,
+      accessPolicy: {
+        people: { view: true },
+      },
+    });
 
     expect(overview.internalUsers).toEqual(internalUsers);
     expect(overview.portalUsers).toEqual(portalUsers);
     expect(overview.clients).toEqual(clients);
     expect(overview.auditors).toEqual(auditors);
+    expect(overview.access).toEqual({ canViewSensitivePeople: false });
     expect(overview.summary).toEqual({
       internalUsers: 1,
       systemUsers: 3,
@@ -57,5 +64,48 @@ describe('HrAdminService', () => {
       clients: 1,
       auditors: 1,
     });
+  });
+
+  it('does not select hourCost for agents without sensitive permission', async () => {
+    prisma.user.findMany
+      .mockResolvedValueOnce([{ id: 'u-1', role: UserRole.TECHNICIAN }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    prisma.client.findMany.mockResolvedValueOnce([]);
+
+    await service.listAgentsOverview({
+      role: UserRole.HR,
+      accessPolicy: {
+        people: { view: true, viewSensitive: false },
+      },
+    });
+
+    expect(prisma.user.findMany.mock.calls[0][0].select).not.toHaveProperty(
+      'hourCost',
+    );
+  });
+
+  it('selects hourCost for agents with sensitive permission', async () => {
+    prisma.user.findMany
+      .mockResolvedValueOnce([
+        { id: 'u-1', role: UserRole.TECHNICIAN, hourCost: 120 },
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    prisma.client.findMany.mockResolvedValueOnce([]);
+
+    const overview = await service.listAgentsOverview({
+      role: UserRole.HR,
+      accessPolicy: {
+        people: { view: true, viewSensitive: true },
+      },
+    });
+
+    expect(prisma.user.findMany.mock.calls[0][0].select).toHaveProperty(
+      'hourCost',
+      true,
+    );
+    expect(overview.internalUsers[0]).toHaveProperty('hourCost', 120);
+    expect(overview.access).toEqual({ canViewSensitivePeople: true });
   });
 });
