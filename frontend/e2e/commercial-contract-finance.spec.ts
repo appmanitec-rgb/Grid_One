@@ -66,9 +66,10 @@ test.describe.serial("fluxo comercial -> contrato -> financeiro -> preventiva", 
   test("cliente aprova proposta no portal e contrato gera AR/preventiva/OS sem duplicidade", async ({
     page,
   }) => {
-    const [data, adminSession, clientBSession] = await Promise.all([
+    const [data, adminSession, clientASession, clientBSession] = await Promise.all([
       getE2eEntityData(),
       apiLogin(accounts.admin),
+      apiLogin(accounts.clientA),
       apiLogin(accounts.clientB),
     ]);
     const adminToken = adminSession.access_token;
@@ -97,6 +98,31 @@ test.describe.serial("fluxo comercial -> contrato -> financeiro -> preventiva", 
       `/customer-portal/proposals/${proposal.id}`,
     );
     expect(forbiddenProposal.status).toBe(404);
+    const forbiddenProposalPdf = await apiRequestRaw(
+      clientBSession.access_token,
+      `/customer-portal/proposals/${proposal.id}/download-pdf`,
+    );
+    expect([403, 404]).toContain(forbiddenProposalPdf.status);
+
+    const customerPdf = await apiRequestRaw(
+      clientASession.access_token,
+      `/customer-portal/proposals/${proposal.id}/download-pdf`,
+    );
+    if (!customerPdf.ok) {
+      throw new Error(
+        `Download PDF do cliente falhou: ${customerPdf.status} ${await customerPdf.text()}`,
+      );
+    }
+    expect(customerPdf.headers.get("content-type") || "").toContain(
+      "application/pdf",
+    );
+    const customerPdfContent = Buffer.from(
+      await customerPdf.arrayBuffer(),
+    ).toString("latin1");
+    expect(customerPdfContent.startsWith("%PDF-1.4")).toBe(true);
+    expect(customerPdfContent).toContain(`Proposta Comercial ${proposal.code}`);
+    expect(customerPdfContent).not.toContain("sidebar");
+    expect(customerPdfContent).not.toContain("button");
 
     await loginByApi(page, accounts.clientA);
     await page.goto(`/portal/propostas/${proposal.id}`, {

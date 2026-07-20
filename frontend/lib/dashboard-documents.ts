@@ -307,6 +307,28 @@ export function fetchProposalDocument(id: string) {
   return readJsonOrThrow<ProposalDocumentPayload>(`/documents/proposals/${id}`);
 }
 
+export async function fetchProposalDocumentPdf(id: string) {
+  const response = await apiFetch(
+    apiUrl(`/documents/proposals/${id}/download-pdf`),
+    {
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    const error = new Error(
+      await readApiErrorMessage(
+        response,
+        "Nao foi possivel baixar o PDF da proposta.",
+      ),
+    ) as DashboardDocumentsApiError;
+    error.status = response.status;
+    throw error;
+  }
+
+  return response.blob();
+}
+
 export function fetchContractDocument(id: string) {
   return readJsonOrThrow<ContractDocumentPayload>(`/documents/contracts/${id}`);
 }
@@ -333,4 +355,15 @@ export function labelDocumentState(state: DashboardDocumentState) {
   };
 
   return labels[state];
+}
+
+export function downloadDashboardDocumentBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

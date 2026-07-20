@@ -88,6 +88,26 @@ export class FileStorageService {
     fileName: string,
     buffer: Buffer,
   ): Promise<StoredFile> {
+    return this.savePdfInFolder('service-report-pdfs', fileName, buffer);
+  }
+
+  async saveDocumentPdf(
+    folder: string,
+    fileName: string,
+    buffer: Buffer,
+  ): Promise<StoredFile> {
+    return this.savePdfInFolder(
+      ['documents', folder].join('/'),
+      fileName,
+      buffer,
+    );
+  }
+
+  private async savePdfInFolder(
+    folder: string,
+    fileName: string,
+    buffer: Buffer,
+  ): Promise<StoredFile> {
     const file: UploadFile = {
       originalname: fileName,
       mimetype: 'application/pdf',
@@ -99,9 +119,7 @@ export class FileStorageService {
     const year = String(now.getUTCFullYear());
     const month = String(now.getUTCMonth() + 1).padStart(2, '0');
     const randomName = `${randomBytes(16).toString('hex')}.pdf`;
-    const storageKey = ['service-report-pdfs', year, month, randomName].join(
-      '/',
-    );
+    const storageKey = [folder, year, month, randomName].join('/');
     await this.adapter.save({ storageKey, buffer });
     return {
       storageKey,

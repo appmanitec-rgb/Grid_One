@@ -23,6 +23,8 @@ export function PrintDocumentShell({
   backLabel = "Voltar para documentos",
   sourceHref,
   sourceLabel,
+  showPrintAction = true,
+  actions,
   children,
 }: {
   company: DashboardDocumentCompany;
@@ -33,24 +35,29 @@ export function PrintDocumentShell({
   backLabel?: string;
   sourceHref?: string;
   sourceLabel?: string;
+  showPrintAction?: boolean;
+  actions?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <div className="space-y-5">
       <div className="document-print-toolbar flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={() => window.print()}
-          className={PRIMARY_BUTTON}
-        >
-          Imprimir / salvar PDF
-        </button>
+        {showPrintAction ? (
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className={PRIMARY_BUTTON}
+          >
+            Imprimir / salvar PDF
+          </button>
+        ) : null}
         {backHref ? <Link href={backHref} className={SECONDARY_BUTTON}>{backLabel}</Link> : null}
         {sourceHref && sourceLabel ? (
           <Link href={sourceHref} className={SECONDARY_BUTTON}>
             {sourceLabel}
           </Link>
         ) : null}
+        {actions}
       </div>
 
       <article className="document-print-page overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_30px_70px_-50px_rgba(15,23,42,0.34)]">

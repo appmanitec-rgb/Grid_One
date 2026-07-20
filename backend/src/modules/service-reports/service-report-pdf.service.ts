@@ -203,7 +203,7 @@ export class ServiceReportPdfService {
   }
 }
 
-class SimplePdfDocument {
+export class SimplePdfDocument {
   private readonly pages: PdfPage[] = [{ commands: [] }];
   private y = PAGE_HEIGHT - MARGIN_TOP;
   private titleText = 'MANITEC';

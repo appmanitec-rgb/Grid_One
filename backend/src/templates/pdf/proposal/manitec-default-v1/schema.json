@@ -1,0 +1,29 @@
+{
+  "kind": "proposal",
+  "version": "manitec-default-v1",
+  "required": [
+    "proposal.number",
+    "proposal.createdAt",
+    "proposal.total",
+    "client.name",
+    "items"
+  ],
+  "fields": {
+    "proposal.number": "Numero da proposta",
+    "proposal.title": "Titulo do documento",
+    "proposal.createdAt": "Data de emissao",
+    "proposal.validUntil": "Validade",
+    "proposal.total": "Total formatado",
+    "proposal.paymentTerms": "Condicoes de pagamento",
+    "proposal.deliveryTerms": "Prazo de entrega",
+    "proposal.warranty": "Garantia",
+    "proposal.exclusions": "Exclusoes comerciais",
+    "client.name": "Nome do cliente",
+    "client.document": "CNPJ ou documento",
+    "salesperson.name": "Responsavel comercial",
+    "items[].description": "Descricao do item",
+    "items[].quantity": "Quantidade formatada",
+    "items[].unitPrice": "Preco unitario",
+    "items[].total": "Total do item"
+  }
+}

@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 
@@ -139,7 +140,7 @@ export default function InventoryPage() {
   }, [rows]);
 
   return (
-    <div className="space-y-6 p-8">
+    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       <h1 className="text-3xl font-bold text-zinc-900">Controle de Estoque (Multilocal)</h1>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -201,6 +202,7 @@ export default function InventoryPage() {
                 <th className="px-2 py-2">Reservado</th>
                 <th className="px-2 py-2">Disponivel</th>
                 <th className="px-2 py-2">Min / Max</th>
+                <th className="px-2 py-2 text-right">Acao</th>
               </tr>
             </thead>
             <tbody>
@@ -215,6 +217,14 @@ export default function InventoryPage() {
                     <td className="px-2 py-2 text-zinc-700">{row.reservedQty}</td>
                     <td className={`px-2 py-2 font-semibold ${low ? "text-red-600" : "text-zinc-800"}`}>{row.availableQty}</td>
                     <td className="px-2 py-2 text-zinc-700">{row.minQty} / {row.maxQty}</td>
+                    <td className="px-2 py-2 text-right">
+                      <Link
+                        href={`/dashboard/catalog/${row.catalogItemId}`}
+                        className="text-xs font-semibold text-blue-700 hover:underline"
+                      >
+                        Abrir ficha
+                      </Link>
+                    </td>
                   </tr>
                 );
               })}

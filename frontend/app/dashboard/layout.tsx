@@ -292,8 +292,8 @@ export default function DashboardLayout({
       },
       {
         href: "/dashboard/hr/collaborators",
-        label: "RH",
-        mobileLabel: "Pessoas",
+        label: "Agentes",
+        mobileLabel: "Agentes",
         icon: "RH",
         enabled: visiblePages.people,
       },

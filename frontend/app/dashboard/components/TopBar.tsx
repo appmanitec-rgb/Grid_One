@@ -42,7 +42,7 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/dashboard/finance/cash-flow": { title: "Fluxo de Caixa", subtitle: "Previsão de saldo, entradas e saídas do dia." },
   "/dashboard/finance/bank-accounts": { title: "Contas Bancárias & Caixas", subtitle: "Consolidação de saldos por banco e caixa interno." },
   "/dashboard/finance/cost-centers": { title: "Centros de Custo (DRE)", subtitle: "Margem por contrato, ativo e cliente." },
-  "/dashboard/hr/collaborators": { title: "Colaboradores", subtitle: "Cadastro geral da equipe tecnica e administrativa." },
+  "/dashboard/hr/collaborators": { title: "Agentes", subtitle: "Colaboradores, usuarios, clientes de portal e auditores separados." },
   "/dashboard/hr/epis-tools": { title: "EPIs e Ferramentas", subtitle: "Controle de entrega, responsabilidade e rastreabilidade." },
   "/dashboard/hr/time-tracking": { title: "Apontamento e Banco de Horas", subtitle: "Horas de campo, extras e sobreaviso." },
   "/dashboard/hr/commissions": { title: "Comissões e Premiação", subtitle: "Consolidado de variáveis do comercial e operação." },
@@ -67,7 +67,7 @@ function getRouteFamily(pathname: string) {
   if (pathname.startsWith("/dashboard/deliveries")) return "Painel";
   if (pathname.startsWith("/dashboard/notifications")) return "Painel";
   if (pathname.startsWith("/dashboard/finance")) return "Financeiro";
-  if (pathname.startsWith("/dashboard/hr")) return "Pessoas";
+  if (pathname.startsWith("/dashboard/hr")) return "Agentes";
   if (pathname.startsWith("/dashboard/catalog") || pathname.startsWith("/dashboard/suppliers") || pathname.startsWith("/dashboard/inventory") || pathname.startsWith("/dashboard/purchase-orders")) {
     return "Suprimentos";
   }

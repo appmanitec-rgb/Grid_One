@@ -36,6 +36,13 @@ export class HrAdminController {
 
   @UseGuards(AuthGuard)
   @RequireAccessPolicy('people.view')
+  @Get('agents')
+  agents() {
+    return this.hrAdminService.listAgentsOverview();
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('people.view')
   @Get('collaborators')
   collaborators() {
     return this.hrAdminService.listCollaborators();

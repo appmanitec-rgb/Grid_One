@@ -1,0 +1,113 @@
+@page {
+  size: A4;
+  margin: 18mm 16mm;
+}
+
+body {
+  color: #172033;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11px;
+}
+
+.cover {
+  border-bottom: 3px solid #16324f;
+  margin-bottom: 22px;
+  padding-bottom: 18px;
+}
+
+.brand {
+  color: #16324f;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+.eyebrow {
+  color: #69758a;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+}
+
+h1 {
+  font-size: 26px;
+  margin: 10px 0 8px;
+}
+
+h2 {
+  border-bottom: 1px solid #d8dee8;
+  color: #16324f;
+  font-size: 14px;
+  margin: 18px 0 10px;
+  padding-bottom: 6px;
+}
+
+.subtitle {
+  color: #4d5b70;
+  font-size: 13px;
+}
+
+.cover-grid {
+  display: grid;
+  gap: 5px 14px;
+  grid-template-columns: 110px 1fr;
+  margin-top: 18px;
+}
+
+dt {
+  color: #69758a;
+  font-weight: 700;
+}
+
+dd {
+  margin: 0;
+}
+
+.section,
+.acceptance {
+  break-inside: avoid;
+  margin-bottom: 12px;
+}
+
+table {
+  border-collapse: collapse;
+  margin-top: 8px;
+  width: 100%;
+}
+
+th {
+  background: #eef3f8;
+  color: #16324f;
+  font-size: 10px;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+th,
+td {
+  border: 1px solid #d8dee8;
+  padding: 7px;
+}
+
+.total {
+  font-size: 13px;
+  text-align: right;
+}
+
+.signature-line {
+  border-top: 1px solid #172033;
+  margin-top: 36px;
+  padding-top: 8px;
+  text-align: center;
+}
+
+footer {
+  border-top: 1px solid #d8dee8;
+  color: #69758a;
+  display: flex;
+  font-size: 9px;
+  justify-content: space-between;
+  margin-top: 22px;
+  padding-top: 10px;
+}

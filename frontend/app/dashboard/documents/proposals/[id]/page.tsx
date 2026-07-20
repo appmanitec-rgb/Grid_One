@@ -4,7 +4,9 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { clearAuthSession } from "@/lib/auth-session";
 import {
+  downloadDashboardDocumentBlob,
   fetchProposalDocument,
+  fetchProposalDocumentPdf,
   type DashboardDocumentsApiError,
   type ProposalDocumentPayload,
 } from "@/lib/dashboard-documents";
@@ -24,6 +26,7 @@ export default function ProposalDocumentPage() {
   const [data, setData] = useState<ProposalDocumentPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -55,6 +58,31 @@ export default function ProposalDocumentPage() {
     void load();
   }, [load]);
 
+  async function handleDownloadPdf() {
+    if (!id || !data) return;
+    setPdfBusy(true);
+    setError("");
+
+    try {
+      const blob = await fetchProposalDocumentPdf(id);
+      downloadDashboardDocumentBlob(blob, `proposta-${data.document.code}.pdf`);
+    } catch (downloadError: unknown) {
+      const apiError = downloadError as DashboardDocumentsApiError;
+      if (apiError?.status === 401) {
+        clearAuthSession();
+        router.replace("/");
+        return;
+      }
+      setError(
+        downloadError instanceof Error
+          ? downloadError.message
+          : "Erro ao baixar PDF da proposta.",
+      );
+    } finally {
+      setPdfBusy(false);
+    }
+  }
+
   if (!data) {
     return (
       <div className="space-y-4">
@@ -76,6 +104,17 @@ export default function ProposalDocumentPage() {
         code={data.document.code}
         sourceHref={data.sourceHref}
         sourceLabel="Abrir proposta"
+        showPrintAction={false}
+        actions={
+          <button
+            type="button"
+            disabled={pdfBusy}
+            onClick={() => void handleDownloadPdf()}
+            className="inline-flex items-center justify-center rounded-2xl border border-slate-900 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {pdfBusy ? "Gerando PDF..." : "Baixar PDF profissional"}
+          </button>
+        }
       >
         <div className="flex flex-wrap gap-2">
           <ToolbarPill>{data.document.statusLabel}</ToolbarPill>

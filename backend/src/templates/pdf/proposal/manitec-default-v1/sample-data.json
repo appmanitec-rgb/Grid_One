@@ -1,0 +1,40 @@
+{
+  "template": {
+    "key": "proposal/manitec-default-v1"
+  },
+  "proposal": {
+    "number": "PROP-000123",
+    "title": "Fornecimento e manutencao de grupo gerador",
+    "createdAt": "17/07/2026",
+    "validUntil": "16/08/2026",
+    "total": "R$ 25.000,00",
+    "paymentTerms": "30 dias",
+    "deliveryTerms": "15 dias",
+    "warranty": "Garantia conforme fabricante",
+    "exclusions": "Obras civis e infraestrutura eletrica externa"
+  },
+  "client": {
+    "name": "Cliente Exemplo",
+    "document": "00.000.000/0001-00",
+    "contactName": "Responsavel Cliente",
+    "email": "cliente@example.test",
+    "address": "Sao Paulo - SP"
+  },
+  "salesperson": {
+    "name": "Comercial MANITEC",
+    "email": "vendas@manitec.test"
+  },
+  "equipment": {
+    "name": "GMG Principal",
+    "serialNumber": "SN-001",
+    "site": "Casa de maquinas"
+  },
+  "items": [
+    {
+      "description": "Plano de manutencao preventiva",
+      "quantity": "1",
+      "unitPrice": "R$ 25.000,00",
+      "total": "R$ 25.000,00"
+    }
+  ]
+}

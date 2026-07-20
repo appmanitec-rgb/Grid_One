@@ -134,8 +134,44 @@ export class GeneratorsService {
                 },
               },
             },
+            serviceReport: {
+              select: {
+                id: true,
+                code: true,
+              },
+            },
           },
           orderBy: { openedAt: 'desc' },
+        },
+        contractLinks: {
+          include: {
+            contract: {
+              select: {
+                id: true,
+                code: true,
+                status: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        serviceTickets: {
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            status: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        serviceReports: {
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            status: true,
+          },
+          orderBy: { createdAt: 'desc' },
         },
       },
     });

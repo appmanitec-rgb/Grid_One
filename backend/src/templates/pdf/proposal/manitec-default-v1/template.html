@@ -1,0 +1,86 @@
+<main class="document proposal">
+  <section class="cover">
+    <div class="brand">MANITEC</div>
+    <p class="eyebrow">Proposta Comercial</p>
+    <h1>Proposta Comercial Nº {{proposal.number}}</h1>
+    <p class="subtitle">{{proposal.title}}</p>
+    <dl class="cover-grid">
+      <dt>Cliente</dt>
+      <dd>{{client.name}}</dd>
+      <dt>Data</dt>
+      <dd>{{proposal.createdAt}}</dd>
+      <dt>Validade</dt>
+      <dd>{{proposal.validUntil}}</dd>
+      <dt>Responsável</dt>
+      <dd>{{salesperson.name}}</dd>
+    </dl>
+  </section>
+
+  <section class="section">
+    <h2>Resumo executivo</h2>
+    <p>Esta proposta apresenta o escopo, itens, condições comerciais e prazo para atendimento MANITEC.</p>
+  </section>
+
+  <section class="section">
+    <h2>Dados do cliente</h2>
+    <p><strong>Cliente:</strong> {{client.name}}</p>
+    <p><strong>CNPJ/Documento:</strong> {{client.document}}</p>
+    <p><strong>Contato:</strong> {{client.contactName}} {{client.email}}</p>
+    <p><strong>Endereço:</strong> {{client.address}}</p>
+  </section>
+
+  <section class="section">
+    <h2>Equipamento e escopo</h2>
+    <p><strong>Equipamento:</strong> {{equipment.name}}</p>
+    <p><strong>Série:</strong> {{equipment.serialNumber}}</p>
+    <p><strong>Local:</strong> {{equipment.site}}</p>
+    <p>{{proposal.scope}}</p>
+  </section>
+
+  <section class="section">
+    <h2>Itens e serviços</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Descrição</th>
+          <th>Qtd.</th>
+          <th>Unitário</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each items}}
+        <tr>
+          <td>{{description}}</td>
+          <td>{{quantity}}</td>
+          <td>{{unitPrice}}</td>
+          <td>{{total}}</td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+    <p class="total"><strong>Total:</strong> {{proposal.total}}</p>
+  </section>
+
+  <section class="section">
+    <h2>Condições comerciais</h2>
+    <p><strong>Pagamento:</strong> {{proposal.paymentTerms}}</p>
+    <p><strong>Frete:</strong> {{proposal.freight}}</p>
+    <p><strong>Prazo:</strong> {{proposal.deliveryTerms}}</p>
+    <p><strong>Garantia:</strong> {{proposal.warranty}}</p>
+    <p><strong>Exclusões:</strong> {{proposal.exclusions}}</p>
+    <p>{{proposal.notes}}</p>
+  </section>
+
+  <section class="acceptance">
+    <h2>Aceite</h2>
+    <p>Ao aprovar esta proposta, o cliente declara ciência do escopo, valores, prazos e condições comerciais descritas neste documento.</p>
+    <div class="signature-line">Assinatura / aceite do cliente</div>
+  </section>
+
+  <footer>
+    <span>MANITEC Operação Integrada</span>
+    <span>Template {{template.key}}</span>
+    <span>Hash gerado no armazenamento documental</span>
+  </footer>
+</main>

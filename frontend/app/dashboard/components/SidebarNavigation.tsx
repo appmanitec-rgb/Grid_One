@@ -306,12 +306,12 @@ const MAIN_SECTIONS: NavSection[] = [
   },
   {
     id: "hr",
-    title: "Pessoas",
+    title: "Agentes",
     icon: "people",
     items: [
       {
         key: "hr_collaborators",
-        label: "Colaboradores",
+        label: "Agentes",
         href: "/dashboard/hr/collaborators",
         enabled: true,
       },

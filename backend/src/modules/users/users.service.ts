@@ -284,7 +284,26 @@ export class UsersService {
   }
 
   async getMyProfile(userId: string) {
-    const user = await this.findOne(userId);
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        department: true,
+        branch: true,
+        profilePhotoUrl: true,
+        isActive: true,
+        mfaEnabled: true,
+        availabilityStatus: true,
+        availabilityUpdatedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    if (!user) throw new BadRequestException('Usuario nao encontrado.');
+
     return user;
   }
 
@@ -301,6 +320,17 @@ export class UsersService {
     delete (allowed as Partial<UpdateUserDto>).accessPolicy;
     delete (allowed as Partial<UpdateUserDto>).mfaEnabled;
     delete (allowed as Partial<UpdateUserDto>).linkedClientId;
+    delete (allowed as Partial<UpdateUserDto>).approvalDiscountLimit;
+    delete (allowed as Partial<UpdateUserDto>).hourCost;
+    delete (allowed as Partial<UpdateUserDto>).functionalId;
+    delete (allowed as Partial<UpdateUserDto>).documentId;
+    delete (allowed as Partial<UpdateUserDto>).managerId;
+    delete (allowed as Partial<UpdateUserDto>).availabilityStatus;
+    delete (allowed as Partial<UpdateUserDto>).skillLevel;
+    delete (allowed as Partial<UpdateUserDto>).regionTags;
+    delete (allowed as Partial<UpdateUserDto>).digitalSignatureUrl;
+    delete (allowed as Partial<UpdateUserDto>).salesTargetMonthly;
+    delete (allowed as Partial<UpdateUserDto>).kpiTargetJson;
 
     if (allowed.email && allowed.email !== currentUser.email) {
       const exists = await this.prisma.user.findUnique({
@@ -322,7 +352,21 @@ export class UsersService {
     const updated = await this.prisma.user.update({
       where: { id: userId },
       data: dataToUpdate,
-      select: userPublicSelect,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        department: true,
+        branch: true,
+        profilePhotoUrl: true,
+        isActive: true,
+        mfaEnabled: true,
+        availabilityStatus: true,
+        availabilityUpdatedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
 
     await this.auditLogsService.record({
@@ -334,7 +378,7 @@ export class UsersService {
       afterPayload: updated as unknown as Prisma.InputJsonValue,
     });
 
-    return this.withManager(updated);
+    return updated;
   }
 
   async listCertifications(userId: string) {

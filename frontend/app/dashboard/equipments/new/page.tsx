@@ -19,9 +19,18 @@ export default function NewEquipmentPage() {
   const [brand, setBrand] = useState("");
   const [modelId, setModelId] = useState("");
   const [serialNumber, setSerialNumber] = useState("");
+  const [assetTag, setAssetTag] = useState("");
+  const [installationSite, setInstallationSite] = useState("");
   const [power, setPower] = useState("");
   const [hourMeter, setHourMeter] = useState("");
   const [condition, setCondition] = useState("BOM");
+  const [operationalStatus, setOperationalStatus] = useState("OPERATING");
+  const [lifecycleStatus, setLifecycleStatus] = useState("AVAILABLE");
+  const [criticality, setCriticality] = useState("B");
+  const [manufactureYear, setManufactureYear] = useState("");
+  const [installationDate, setInstallationDate] = useState("");
+  const [warrantyEndDate, setWarrantyEndDate] = useState("");
+  const [hasMaintenanceContract, setHasMaintenanceContract] = useState(false);
   const [applyModelBaseItems, setApplyModelBaseItems] = useState(true);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -83,9 +92,18 @@ export default function NewEquipmentPage() {
           brand,
           modelId: modelId || undefined,
           serialNumber: serialNumber || undefined,
+          assetTag: assetTag || undefined,
+          installationSite: installationSite || undefined,
           power: Number(power),
           hourMeter: hourMeter ? Number(hourMeter) : undefined,
           condition,
+          operationalStatus,
+          lifecycleStatus,
+          criticality,
+          manufactureYear: manufactureYear ? Number(manufactureYear) : undefined,
+          installationDate: installationDate || undefined,
+          warrantyEndDate: warrantyEndDate || undefined,
+          hasMaintenanceContract,
           applyModelBaseItems,
         }),
       });
@@ -106,7 +124,7 @@ export default function NewEquipmentPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl p-8 pb-24">
+    <div className="mx-auto max-w-5xl p-4 pb-24 sm:p-6 lg:p-8">
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-zinc-800">Novo Equipamento</h1>
@@ -188,6 +206,14 @@ export default function NewEquipmentPage() {
               <input value={serialNumber} onChange={(e) => setSerialNumber(e.target.value)} className="w-full rounded-lg border border-zinc-300 p-3" placeholder="Ex: SN-123" />
             </div>
             <div>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">Tag patrimonial</label>
+              <input value={assetTag} onChange={(e) => setAssetTag(e.target.value)} className="w-full rounded-lg border border-zinc-300 p-3" placeholder="Ex: GMG-001" />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">Local de instalacao</label>
+              <input value={installationSite} onChange={(e) => setInstallationSite(e.target.value)} className="w-full rounded-lg border border-zinc-300 p-3" placeholder="Ex: Casa de maquinas" />
+            </div>
+            <div>
               <label className="mb-1 block text-sm font-medium text-zinc-700">Horimetro</label>
               <input type="number" min="0" value={hourMeter} onChange={(e) => setHourMeter(e.target.value)} className="w-full rounded-lg border border-zinc-300 p-3" placeholder="Ex: 1250" />
             </div>
@@ -201,6 +227,48 @@ export default function NewEquipmentPage() {
                 <option value="INOPERANTE">INOPERANTE</option>
               </select>
             </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">Status operacional</label>
+              <select value={operationalStatus} onChange={(e) => setOperationalStatus(e.target.value)} className="w-full rounded-lg border border-zinc-300 bg-white p-3">
+                <option value="OPERATING">OPERANDO</option>
+                <option value="STOPPED_BY_FAILURE">PARADO POR FALHA</option>
+                <option value="IN_MAINTENANCE">EM MANUTENCAO</option>
+                <option value="DEACTIVATED">DESATIVADO</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">Ciclo de vida</label>
+              <select value={lifecycleStatus} onChange={(e) => setLifecycleStatus(e.target.value)} className="w-full rounded-lg border border-zinc-300 bg-white p-3">
+                <option value="AVAILABLE">DISPONIVEL</option>
+                <option value="LEASED">LOCADO</option>
+                <option value="IN_MAINTENANCE">EM MANUTENCAO</option>
+                <option value="SCRAP">SUCATA</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">Criticidade</label>
+              <select value={criticality} onChange={(e) => setCriticality(e.target.value)} className="w-full rounded-lg border border-zinc-300 bg-white p-3">
+                <option value="A">A - Critico</option>
+                <option value="B">B - Relevante</option>
+                <option value="C">C - Baixo impacto</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">Ano de fabricacao</label>
+              <input type="number" min="1950" max="2100" value={manufactureYear} onChange={(e) => setManufactureYear(e.target.value)} className="w-full rounded-lg border border-zinc-300 p-3" placeholder="Ex: 2022" />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">Data de instalacao</label>
+              <input type="date" value={installationDate} onChange={(e) => setInstallationDate(e.target.value)} className="w-full rounded-lg border border-zinc-300 p-3" />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">Garantia ate</label>
+              <input type="date" value={warrantyEndDate} onChange={(e) => setWarrantyEndDate(e.target.value)} className="w-full rounded-lg border border-zinc-300 p-3" />
+            </div>
+            <label className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm font-medium text-zinc-700">
+              <input type="checkbox" checked={hasMaintenanceContract} onChange={(e) => setHasMaintenanceContract(e.target.checked)} />
+              Possui contrato de manutencao
+            </label>
           </div>
         </div>
 

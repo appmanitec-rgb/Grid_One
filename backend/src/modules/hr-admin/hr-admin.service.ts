@@ -9,6 +9,7 @@ import {
   FleetVehicleStatus,
   HrAssetStatus,
   Prisma,
+  UserRole,
 } from '@prisma/client';
 import { DatabaseService } from 'src/database/database.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
@@ -31,11 +32,90 @@ export class HrAdminService {
 
   listCollaborators() {
     return this.prisma.user.findMany({
+      where: {
+        role: { not: UserRole.CLIENT },
+      },
       include: {
         technicianProfile: true,
       },
       orderBy: { name: 'asc' },
     });
+  }
+
+  async listAgentsOverview() {
+    const [internalUsers, portalUsers, clients, auditors] = await Promise.all([
+      this.prisma.user.findMany({
+        where: { role: { notIn: [UserRole.CLIENT, UserRole.AUDITOR] } },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          department: true,
+          branch: true,
+          hourCost: true,
+          isActive: true,
+          technicianProfile: { select: { id: true } },
+        },
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.user.findMany({
+        where: { role: UserRole.CLIENT },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          isActive: true,
+          linkedClient: {
+            select: { id: true, companyName: true, tradeName: true },
+          },
+        },
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.client.findMany({
+        select: {
+          id: true,
+          companyName: true,
+          tradeName: true,
+          cnpj: true,
+          contactName: true,
+          email: true,
+          phone: true,
+          portalUsers: { select: { id: true, name: true, email: true } },
+        },
+        orderBy: { companyName: 'asc' },
+      }),
+      this.prisma.user.findMany({
+        where: { role: UserRole.AUDITOR },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          department: true,
+          branch: true,
+          isActive: true,
+        },
+        orderBy: { name: 'asc' },
+      }),
+    ]);
+
+    return {
+      internalUsers,
+      systemUsers: [...internalUsers, ...auditors, ...portalUsers],
+      portalUsers,
+      clients,
+      auditors,
+      summary: {
+        internalUsers: internalUsers.length,
+        systemUsers:
+          internalUsers.length + auditors.length + portalUsers.length,
+        portalUsers: portalUsers.length,
+        clients: clients.length,
+        auditors: auditors.length,
+      },
+    };
   }
 
   listTimeEntries(userId?: string, month?: string) {

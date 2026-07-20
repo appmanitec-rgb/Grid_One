@@ -6,12 +6,26 @@ import {
 import {
   ContractInvoiceStatus,
   ContractStatus,
+  DeliveryChannel,
+  DeliveryDocumentType,
+  DeliveryStatus,
+  DocumentAccessChannel,
+  DocumentAccessResult,
+  DocumentAccessType,
   OrderStatus,
+  Prisma,
   ProposalStatus,
   UserRole,
 } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
+import {
+  FileStorageService,
+  LoadedFile,
+  StoredFile,
+} from '../file-storage/file-storage.service';
 import { allAccessPolicy, effectiveAccessPolicy } from '../users/access-policy';
+import { GeneratedProposalPdf } from './proposal-pdf.service';
+import { ProposalPdfService } from './proposal-pdf.service';
 
 type DocumentState = 'ready' | 'attention' | 'pending';
 type DocumentKind = 'proposal' | 'contract' | 'order';
@@ -40,9 +54,18 @@ type HubItem = {
   issues: string[];
 };
 
+type RequestMetadata = {
+  ip?: string;
+  userAgent?: string | string[];
+};
+
 @Injectable()
 export class DocumentsService {
-  constructor(private readonly prisma: DatabaseService) {}
+  constructor(
+    private readonly prisma: DatabaseService,
+    private readonly proposalPdfService: ProposalPdfService,
+    private readonly fileStorage: FileStorageService,
+  ) {}
 
   async getHub(userId: string) {
     const actor = await this.getActorScope(userId);
@@ -232,6 +255,28 @@ export class DocumentsService {
         catalogItem: item.catalogItem,
       })),
     };
+  }
+
+  async downloadProposalPdf(id: string, userId: string) {
+    return this.generateAndStoreProposalPdf(id, userId, {
+      channel: DocumentAccessChannel.INTERNAL,
+    });
+  }
+
+  async downloadCustomerProposalPdf(
+    id: string,
+    userId: string,
+    metadata?: RequestMetadata,
+  ) {
+    return this.generateAndStoreProposalPdf(id, userId, {
+      channel: DocumentAccessChannel.CUSTOMER_PORTAL,
+      metadata,
+    });
+  }
+
+  async previewProposalPdfHtml(id: string, userId: string) {
+    const payload = await this.getProposalDocument(id, userId);
+    return this.proposalPdfService.renderHtml(payload);
   }
 
   async getContractDocument(id: string, userId: string) {
@@ -767,6 +812,119 @@ export class DocumentsService {
         issues,
       } satisfies HubItem;
     });
+  }
+
+  private async generateAndStoreProposalPdf(
+    id: string,
+    userId: string,
+    options: {
+      channel: DocumentAccessChannel;
+      metadata?: RequestMetadata;
+    },
+  ): Promise<LoadedFile & { documentDeliveryId: string; templateKey: string }> {
+    const actor = await this.getActorScope(userId);
+    const payload = await this.getProposalDocument(id, userId);
+    const generated = this.proposalPdfService.generate(payload);
+    const stored = await this.fileStorage.saveDocumentPdf(
+      'proposal-pdfs',
+      generated.fileName,
+      generated.buffer,
+    );
+    const now = new Date();
+    const document = await this.prisma.documentDelivery.create({
+      data: this.buildProposalDeliveryData(
+        payload,
+        generated,
+        stored,
+        actor.id,
+        now,
+      ),
+    });
+
+    await this.prisma.documentAccessLog.create({
+      data: {
+        documentType: DeliveryDocumentType.PROPOSAL,
+        documentId: payload.document.id,
+        documentDeliveryId: document.id,
+        userId: actor.id,
+        clientId: payload.client.id,
+        accessType: DocumentAccessType.PDF_DOWNLOAD,
+        channel: options.channel,
+        result: DocumentAccessResult.SUCCESS,
+        ipAddress: options.metadata?.ip,
+        userAgent: Array.isArray(options.metadata?.userAgent)
+          ? options.metadata?.userAgent.join(' ')
+          : options.metadata?.userAgent,
+      },
+    });
+
+    return {
+      ...stored,
+      buffer: generated.buffer,
+      documentDeliveryId: document.id,
+      templateKey: generated.templateKey,
+    };
+  }
+
+  private buildProposalDeliveryData(
+    payload: Awaited<ReturnType<DocumentsService['getProposalDocument']>>,
+    generated: GeneratedProposalPdf,
+    stored: StoredFile,
+    actorUserId: string,
+    now: Date,
+  ): Prisma.DocumentDeliveryUncheckedCreateInput {
+    return {
+      documentType: DeliveryDocumentType.PROPOSAL,
+      documentId: payload.document.id,
+      documentCode: payload.document.code,
+      documentTitle: `Proposta ${payload.document.code}`,
+      clientId: payload.client.id,
+      counterpartName: payload.client.tradeName || payload.client.companyName,
+      channel: DeliveryChannel.WEBHOOK,
+      status: DeliveryStatus.DELIVERED,
+      recipientName:
+        payload.client.contactName ||
+        payload.client.tradeName ||
+        payload.client.companyName,
+      recipientTarget: payload.client.email || `portal:${payload.client.id}`,
+      subject: `PDF Proposta Comercial ${payload.document.code}`,
+      message: 'PDF profissional da proposta comercial gerado por template.',
+      provider: 'manitec-template-pdf',
+      payloadSnapshot: {
+        template: {
+          key: generated.templateKey,
+          version: generated.templateVersion,
+        },
+        generatedAt: now.toISOString(),
+        document: {
+          id: payload.document.id,
+          code: payload.document.code,
+          status: payload.document.status,
+          issuedAt: payload.document.issuedAt,
+          totalValue: payload.document.totalValue,
+        },
+        client: {
+          id: payload.client.id,
+          companyName: payload.client.companyName,
+          tradeName: payload.client.tradeName,
+        },
+        items: payload.items.map((item) => ({
+          id: item.id,
+          quantity: item.quantity,
+          totalPrice: item.totalPrice,
+          catalogItemId: item.catalogItem?.id ?? null,
+        })),
+      } satisfies Prisma.InputJsonValue,
+      fileStorageKey: stored.storageKey,
+      fileName: stored.fileName,
+      mimeType: stored.mimeType,
+      sizeBytes: stored.sizeBytes,
+      checksumSha256: stored.checksumSha256,
+      storedAt: now,
+      sentAt: now,
+      deliveredAt: now,
+      createdByUserId: actorUserId,
+    };
   }
 
   private async getActorScope(userId: string): Promise<ActorScope> {

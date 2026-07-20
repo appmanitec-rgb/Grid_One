@@ -5,7 +5,9 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   customerPortalGet,
+  customerPortalGetBlob,
   customerPortalPost,
+  downloadPortalBlob,
   formatPortalCurrency,
   formatPortalDate,
   PortalProposal,
@@ -19,6 +21,7 @@ export default function PortalProposalDetailPage() {
   const [proposal, setProposal] = useState<PortalProposal | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [decisionMode, setDecisionMode] = useState<DecisionMode>(null);
@@ -70,6 +73,22 @@ export default function PortalProposalDetailPage() {
     }
   }
 
+  async function downloadPdf() {
+    if (!proposal) return;
+    setDownloadingPdf(true);
+    setError("");
+    try {
+      const blob = await customerPortalGetBlob(
+        `/proposals/${params.id}/download-pdf`,
+      );
+      downloadPortalBlob(blob, `proposta-${proposal.code}.pdf`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao baixar PDF.");
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
+
   if (loading) return <State text="Carregando proposta..." />;
   if (error && !proposal) return <State text={error} tone="error" />;
   if (!proposal) return <State text="Proposta não encontrada." />;
@@ -94,6 +113,14 @@ export default function PortalProposalDetailPage() {
               {statusLabel(proposal.status)}
             </span>
             <strong className="mt-2 block text-2xl text-slate-950">{formatPortalCurrency(proposal.totalValue)}</strong>
+            <button
+              type="button"
+              disabled={downloadingPdf}
+              onClick={() => void downloadPdf()}
+              className="mt-3 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            >
+              {downloadingPdf ? "Baixando PDF..." : "Baixar PDF profissional"}
+            </button>
           </div>
         </div>
       </header>

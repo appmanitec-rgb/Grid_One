@@ -211,6 +211,27 @@ export async function customerPortalPost<T>(path: string, body: unknown) {
   return (await response.json()) as T;
 }
 
+export async function customerPortalGetBlob(path: string) {
+  const response = await apiFetch(`/customer-portal${path}`);
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(response, "Falha ao baixar arquivo."),
+    );
+  }
+  return response.blob();
+}
+
+export function downloadPortalBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 export function formatPortalCurrency(value?: number | null) {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",

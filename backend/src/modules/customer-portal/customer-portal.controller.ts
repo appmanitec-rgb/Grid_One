@@ -12,6 +12,7 @@ import {
 import type { Request } from 'express';
 import type { Response } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
+import { DocumentsService } from '../documents/documents.service';
 import { LoadedFile } from '../file-storage/file-storage.service';
 import { TicketsService } from '../tickets/tickets.service';
 import { ServiceReportsService } from '../service-reports/service-reports.service';
@@ -44,6 +45,7 @@ export class CustomerPortalController {
     private readonly customerPortalService: CustomerPortalService,
     private readonly ticketsService: TicketsService,
     private readonly serviceReportsService: ServiceReportsService,
+    private readonly documentsService: DocumentsService,
   ) {}
 
   @Get('me')
@@ -69,6 +71,21 @@ export class CustomerPortalController {
   @Get('proposals')
   proposals(@Req() req: AuthenticatedRequest) {
     return this.customerPortalService.listProposals(this.extractUserId(req));
+  }
+
+  @Get('proposals/:id/download-pdf')
+  proposalPdfDownload(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    return this.documentsService
+      .downloadCustomerProposalPdf(
+        id,
+        this.extractUserId(req) || '',
+        this.extractMetadata(req),
+      )
+      .then((file) => this.sendFile(res, file));
   }
 
   @Get('proposals/:id')

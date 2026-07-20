@@ -1,0 +1,6 @@
+{
+  "kind": "service-report",
+  "version": "manitec-default-v1",
+  "status": "prepared",
+  "note": "Estrutura reservada para migrar laudos para template HTML/CSS versionado."
+}
