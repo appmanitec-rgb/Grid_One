@@ -1,0 +1,22 @@
+{
+  "client": {
+    "name": "Cliente Exemplo"
+  },
+  "equipment": {
+    "name": "GMG Principal",
+    "serialNumber": "SN-001"
+  },
+  "serviceReport": {
+    "number": "LDT-0001",
+    "diagnosis": "Sistema operando dentro dos parametros.",
+    "performedServices": "Inspecao e testes funcionais.",
+    "recommendations": "Manter plano preventivo."
+  },
+  "items": [
+    {
+      "title": "Foto do painel",
+      "type": "PHOTO",
+      "fileName": "painel.jpg"
+    }
+  ]
+}

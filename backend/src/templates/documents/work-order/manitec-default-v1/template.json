@@ -1,0 +1,56 @@
+{
+  "title": "Ordem de Servico {{workOrder.number}}",
+  "subtitle": "{{client.name}} | {{equipment.name}} | {{workOrder.status}}",
+  "sections": [
+    {
+      "heading": "Identificacao",
+      "paragraphs": [
+        "O.S.: {{workOrder.number}} | Tipo: {{workOrder.type}} | Prioridade: {{workOrder.priority}}",
+        "Titulo: {{workOrder.title}}",
+        "Cliente: {{client.name}} | Documento: {{client.document}}",
+        "Equipamento: {{equipment.name}} | Serie: {{equipment.serialNumber}} | Local: {{equipment.site}}"
+      ]
+    },
+    {
+      "heading": "Execucao",
+      "paragraphs": [
+        "Tecnico: {{workOrder.technician}}",
+        "Contrato: {{workOrder.contract}}",
+        "Abertura: {{workOrder.openedAt}} | Agendamento: {{workOrder.scheduledTo}}",
+        "Inicio: {{workOrder.startedAt}} | Conclusao: {{workOrder.finishedAt}}"
+      ]
+    },
+    {
+      "heading": "Escopo e relatorio",
+      "paragraphs": [
+        "Descricao: {{technicalScope.description}}",
+        "Relatorio ao cliente: {{workOrder.report}}"
+      ]
+    },
+    {
+      "heading": "Materiais aplicados",
+      "table": {
+        "rowsPath": "items",
+        "emptyText": "Nenhum material aplicado.",
+        "columns": [
+          { "header": "Item", "path": "description" },
+          { "header": "SKU", "path": "sku" },
+          { "header": "Qtd.", "path": "quantity", "align": "right" },
+          { "header": "Unitario", "path": "unitPrice", "align": "right" },
+          { "header": "Total", "path": "total", "align": "right" }
+        ]
+      }
+    },
+    {
+      "heading": "Assinaturas",
+      "paragraphs": [
+        "Tecnico: {{signatures.technician}}",
+        "Cliente: {{signatures.customer}}"
+      ]
+    }
+  ],
+  "footer": [
+    "Template: {{metadata.templateKey}}",
+    "Gerado no servidor em {{metadata.generatedAt}}"
+  ]
+}

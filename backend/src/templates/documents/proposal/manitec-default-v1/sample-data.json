@@ -1,0 +1,35 @@
+{
+  "company": {
+    "name": "MANITEC Grupos Geradores",
+    "document": "00.000.000/0001-00",
+    "address": "Endereco institucional",
+    "phone": "(00) 0000-0000",
+    "email": "contato@manitec.local"
+  },
+  "client": {
+    "name": "Cliente Exemplo",
+    "document": "11.111.111/0001-11",
+    "contactName": "Contato Cliente"
+  },
+  "proposal": {
+    "number": "PROP-0001",
+    "date": "22/07/2026",
+    "validUntil": "22/08/2026",
+    "total": "R$ 10.000,00"
+  },
+  "equipment": {
+    "name": "GMG Principal",
+    "generator": {
+      "model": "Cummins",
+      "power": "500 kVA"
+    }
+  },
+  "items": [
+    {
+      "description": "Manutencao preventiva",
+      "quantity": "1 UN",
+      "unitPrice": "R$ 10.000,00",
+      "total": "R$ 10.000,00"
+    }
+  ]
+}

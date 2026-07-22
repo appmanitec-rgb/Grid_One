@@ -4,7 +4,9 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { clearAuthSession } from "@/lib/auth-session";
 import {
+  downloadDashboardDocumentBlob,
   fetchContractDocument,
+  fetchContractDocumentDocx,
   type ContractDocumentPayload,
   type DashboardDocumentsApiError,
 } from "@/lib/dashboard-documents";
@@ -24,6 +26,7 @@ export default function ContractDocumentPage() {
   const [data, setData] = useState<ContractDocumentPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [documentBusy, setDocumentBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -55,6 +58,32 @@ export default function ContractDocumentPage() {
     void load();
   }, [load]);
 
+  async function handleDownloadDocument() {
+    if (!id || !data) return;
+    setDocumentBusy(true);
+    setError("");
+
+    try {
+      const blob = await fetchContractDocumentDocx(id);
+      downloadDashboardDocumentBlob(blob, `contrato-${data.document.code}.docx`);
+    } catch (downloadError: unknown) {
+      const apiError = downloadError as DashboardDocumentsApiError;
+      if (apiError?.status === 401) {
+        clearAuthSession();
+        router.replace("/");
+        return;
+      }
+
+      setError(
+        downloadError instanceof Error
+          ? downloadError.message
+          : "Erro ao baixar documento do contrato.",
+      );
+    } finally {
+      setDocumentBusy(false);
+    }
+  }
+
   if (!data) {
     return (
       <div className="space-y-4">
@@ -77,6 +106,21 @@ export default function ContractDocumentPage() {
         sourceHref={data.sourceHref}
         sourceLabel={
           data.viewerRole === "CLIENT" ? "Voltar ao portal" : "Abrir contrato"
+        }
+        showPrintAction={false}
+        actions={
+          <button
+            type="button"
+            disabled={documentBusy}
+            onClick={() => void handleDownloadDocument()}
+            className="inline-flex items-center justify-center rounded-2xl border border-slate-900 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {documentBusy
+              ? "Gerando documento..."
+              : data.latestDocument
+                ? "Baixar documento"
+                : "Gerar documento"}
+          </button>
         }
       >
         <div className="flex flex-wrap gap-2">
@@ -198,6 +242,10 @@ export default function ContractDocumentPage() {
                 .join(" | ") || "-"
             }
           />
+          <ValueCard
+            label="Documento institucional"
+            value={formatLatestDocument(data.latestDocument)}
+          />
         </PrintSection>
       </PrintDocumentShell>
 
@@ -242,4 +290,20 @@ function formatCurrency(value: number) {
     style: "currency",
     currency: "BRL",
   }).format(value || 0);
+}
+
+function formatLatestDocument(
+  latestDocument: ContractDocumentPayload["latestDocument"],
+) {
+  if (!latestDocument) return "Nenhum documento institucional gerado.";
+  return [
+    latestDocument.templateKey,
+    latestDocument.templateVersion ? `v: ${latestDocument.templateVersion}` : null,
+    latestDocument.createdAt ? `gerado em ${formatDateTime(latestDocument.createdAt)}` : null,
+    latestDocument.checksumSha256
+      ? `hash ${latestDocument.checksumSha256.slice(0, 16)}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" | ");
 }

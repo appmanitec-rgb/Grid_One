@@ -1,0 +1,73 @@
+{
+  "title": "Proposta Comercial {{proposal.number}}",
+  "subtitle": "{{company.name}} | {{client.name}} | Emissao {{proposal.date}}",
+  "sections": [
+    {
+      "heading": "Dados institucionais",
+      "paragraphs": [
+        "Empresa: {{company.name}} | Documento: {{company.document}}",
+        "Endereco: {{company.address}} | Contato: {{company.email}} {{company.phone}}"
+      ]
+    },
+    {
+      "heading": "Cliente",
+      "paragraphs": [
+        "Cliente: {{client.name}} | Documento: {{client.document}}",
+        "Contato: {{contact.name}} | {{contact.email}} | {{contact.phone}}",
+        "Endereco: {{client.address}}"
+      ]
+    },
+    {
+      "heading": "Resumo da proposta",
+      "paragraphs": [
+        "Numero: {{proposal.number}} | Status: {{proposal.status}}",
+        "Validade: {{proposal.validUntil}} | Total: {{proposal.total}}",
+        "Escopo: {{proposal.scope}}"
+      ]
+    },
+    {
+      "heading": "Equipamento",
+      "paragraphs": [
+        "Equipamento: {{equipment.name}} | Serie: {{equipment.serialNumber}}",
+        "Modelo/Fabricante: {{equipment.generator.model}} | Potencia: {{equipment.generator.power}}",
+        "Local: {{equipment.site}}"
+      ]
+    },
+    {
+      "heading": "Itens e servicos",
+      "table": {
+        "rowsPath": "items",
+        "emptyText": "Nenhum item comercial informado.",
+        "columns": [
+          { "header": "Descricao", "path": "description" },
+          { "header": "SKU", "path": "sku" },
+          { "header": "Qtd.", "path": "quantity", "align": "right" },
+          { "header": "Unitario", "path": "unitPrice", "align": "right" },
+          { "header": "Total", "path": "total", "align": "right" }
+        ]
+      }
+    },
+    {
+      "heading": "Condicoes comerciais",
+      "paragraphs": [
+        "Pagamento: {{commercialTerms.payment}}",
+        "Frete: {{commercialTerms.freight}} | Prazo: {{commercialTerms.delivery}}",
+        "Garantia: {{technicalScope.warranty}}",
+        "Exclusoes: {{technicalScope.exclusions}}",
+        "Observacoes: {{proposal.notes}}"
+      ]
+    },
+    {
+      "heading": "Aceite",
+      "paragraphs": [
+        "Ao aprovar esta proposta, o cliente declara ciencia do escopo, valores, prazos e condicoes comerciais descritas neste documento.",
+        "{{signatures.client}}"
+      ]
+    }
+  ],
+  "footer": [
+    "Template: {{metadata.templateKey}}",
+    "Gerado no servidor em {{metadata.generatedAt}}",
+    "Documento institucional gerado fora do layout operacional do ERP."
+  ]
+}

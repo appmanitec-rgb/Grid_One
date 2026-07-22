@@ -1,0 +1,56 @@
+{
+  "title": "Contrato {{contract.number}}",
+  "subtitle": "{{company.name}} | {{client.name}} | Vigencia {{contract.startDate}} ate {{contract.endDate}}",
+  "sections": [
+    {
+      "heading": "Partes",
+      "paragraphs": [
+        "Contratada: {{company.name}} | Documento: {{company.document}}",
+        "Contratante: {{client.name}} | Documento: {{client.document}}",
+        "Contato do cliente: {{contact.name}} | {{contact.email}} | {{contact.phone}}"
+      ]
+    },
+    {
+      "heading": "Resumo contratual",
+      "paragraphs": [
+        "Contrato: {{contract.number}} | Status: {{contract.status}}",
+        "Titulo: {{contract.title}}",
+        "Vigencia: {{contract.startDate}} ate {{contract.endDate}}",
+        "Valor recorrente: {{contract.recurringAmount}} | Vencimento: dia {{contract.dueDay}}"
+      ]
+    },
+    {
+      "heading": "Escopo tecnico e SLA",
+      "paragraphs": [
+        "Recorrencia preventiva: {{technicalScope.preventiveRecurrence}}",
+        "Tempo de resposta: {{technicalScope.responseTime}}",
+        "Cobertura de pecas: {{technicalScope.partsCoverage}}",
+        "Observacoes: {{technicalScope.notes}}"
+      ]
+    },
+    {
+      "heading": "Equipamentos cobertos",
+      "table": {
+        "rowsPath": "items",
+        "emptyText": "Nenhum equipamento vinculado ao contrato.",
+        "columns": [
+          { "header": "Equipamento", "path": "description" },
+          { "header": "Serie", "path": "serialNumber" },
+          { "header": "Local", "path": "site" },
+          { "header": "Cobertura", "path": "coverage", "align": "right" }
+        ]
+      }
+    },
+    {
+      "heading": "Assinaturas",
+      "paragraphs": [
+        "{{signatures.company}}",
+        "{{signatures.client}}"
+      ]
+    }
+  ],
+  "footer": [
+    "Template: {{metadata.templateKey}}",
+    "Gerado no servidor em {{metadata.generatedAt}}"
+  ]
+}

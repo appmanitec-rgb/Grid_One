@@ -24,12 +24,20 @@ import {
   StoredFile,
 } from '../file-storage/file-storage.service';
 import { allAccessPolicy, effectiveAccessPolicy } from '../users/access-policy';
+import {
+  DocumentGenerationService,
+  GeneratedInstitutionalDocument,
+} from './document-generation.service';
 import { GeneratedProposalPdf } from './proposal-pdf.service';
 import { ProposalPdfService } from './proposal-pdf.service';
 
 type DocumentState = 'ready' | 'attention' | 'pending';
 type DocumentKind = 'proposal' | 'contract' | 'order';
 type DocumentAudience = 'shared' | 'client' | 'internal';
+type InstitutionalKind = 'proposal' | 'contract' | 'work-order';
+
+const DOCX_MIME =
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document' as const;
 
 type ActorScope = {
   id: string;
@@ -64,6 +72,7 @@ export class DocumentsService {
   constructor(
     private readonly prisma: DatabaseService,
     private readonly proposalPdfService: ProposalPdfService,
+    private readonly documentGenerationService: DocumentGenerationService,
     private readonly fileStorage: FileStorageService,
   ) {}
 
@@ -206,12 +215,17 @@ export class DocumentsService {
     }
 
     this.assertProposalAccess(actor, proposal.clientId);
+    const latestDocument = await this.getLatestInstitutionalDelivery(
+      DeliveryDocumentType.PROPOSAL,
+      proposal.id,
+    );
 
     return {
       kind: 'proposal' as const,
       company,
       viewerRole: actor.role,
       sourceHref: `/dashboard/proposals/${proposal.id}`,
+      latestDocument,
       document: {
         id: proposal.id,
         code: proposal.code,
@@ -269,6 +283,33 @@ export class DocumentsService {
     metadata?: RequestMetadata,
   ) {
     return this.generateAndStoreProposalPdf(id, userId, {
+      channel: DocumentAccessChannel.CUSTOMER_PORTAL,
+      metadata,
+    });
+  }
+
+  async generateProposalDocument(id: string, userId: string) {
+    const generated = await this.generateAndStoreInstitutionalDocument(
+      'proposal',
+      id,
+      userId,
+      { channel: DocumentAccessChannel.INTERNAL },
+    );
+    return this.toGeneratedDocumentResponse(generated);
+  }
+
+  async downloadProposalDocx(id: string, userId: string) {
+    return this.generateAndStoreInstitutionalDocument('proposal', id, userId, {
+      channel: DocumentAccessChannel.INTERNAL,
+    });
+  }
+
+  async downloadCustomerProposalDocx(
+    id: string,
+    userId: string,
+    metadata?: RequestMetadata,
+  ) {
+    return this.generateAndStoreInstitutionalDocument('proposal', id, userId, {
       channel: DocumentAccessChannel.CUSTOMER_PORTAL,
       metadata,
     });
@@ -348,6 +389,10 @@ export class DocumentsService {
     const overdueInvoices = contract.invoices.filter(
       (invoice) => invoice.status === ContractInvoiceStatus.OVERDUE,
     );
+    const latestDocument = await this.getLatestInstitutionalDelivery(
+      DeliveryDocumentType.CONTRACT,
+      contract.id,
+    );
 
     return {
       kind: 'contract' as const,
@@ -357,6 +402,7 @@ export class DocumentsService {
         actor.role === UserRole.CLIENT
           ? '/dashboard/client-portal'
           : `/dashboard/contracts/${contract.id}`,
+      latestDocument,
       document: {
         id: contract.id,
         code: contract.code,
@@ -403,6 +449,22 @@ export class DocumentsService {
         paidAt: invoice.paidAt?.toISOString() || null,
       })),
     };
+  }
+
+  async generateContractDocument(id: string, userId: string) {
+    const generated = await this.generateAndStoreInstitutionalDocument(
+      'contract',
+      id,
+      userId,
+      { channel: DocumentAccessChannel.INTERNAL },
+    );
+    return this.toGeneratedDocumentResponse(generated);
+  }
+
+  async downloadContractDocx(id: string, userId: string) {
+    return this.generateAndStoreInstitutionalDocument('contract', id, userId, {
+      channel: DocumentAccessChannel.INTERNAL,
+    });
   }
 
   async getOrderDocument(id: string, userId: string) {
@@ -497,6 +559,10 @@ export class DocumentsService {
     }
 
     this.assertOrderAccess(actor, order.generator.client.id);
+    const latestDocument = await this.getLatestInstitutionalDelivery(
+      DeliveryDocumentType.ORDER,
+      order.id,
+    );
 
     return {
       kind: 'order' as const,
@@ -506,6 +572,7 @@ export class DocumentsService {
         actor.role === UserRole.CLIENT
           ? '/dashboard/client-portal'
           : `/dashboard/orders/${order.id}`,
+      latestDocument,
       document: {
         id: order.id,
         title: order.title,
@@ -557,6 +624,27 @@ export class DocumentsService {
         catalogItem: item.catalogItem,
       })),
     };
+  }
+
+  async generateOrderDocument(id: string, userId: string) {
+    const generated = await this.generateAndStoreInstitutionalDocument(
+      'work-order',
+      id,
+      userId,
+      { channel: DocumentAccessChannel.INTERNAL },
+    );
+    return this.toGeneratedDocumentResponse(generated);
+  }
+
+  async downloadOrderDocx(id: string, userId: string) {
+    return this.generateAndStoreInstitutionalDocument(
+      'work-order',
+      id,
+      userId,
+      {
+        channel: DocumentAccessChannel.INTERNAL,
+      },
+    );
   }
 
   private async loadProposalHubItems(actor: ActorScope) {
@@ -812,6 +900,278 @@ export class DocumentsService {
         issues,
       } satisfies HubItem;
     });
+  }
+
+  private async generateAndStoreInstitutionalDocument(
+    kind: InstitutionalKind,
+    id: string,
+    userId: string,
+    options: {
+      channel: DocumentAccessChannel;
+      metadata?: RequestMetadata;
+    },
+  ): Promise<
+    LoadedFile & {
+      documentDeliveryId: string;
+      templateKey: string;
+      templateVersion: string;
+    }
+  > {
+    const actor = await this.getActorScope(userId);
+    const payload = await this.loadInstitutionalPayload(kind, id, userId);
+    const generated = this.documentGenerationService.generateDocx(
+      kind,
+      payload as Record<string, unknown>,
+    );
+    const stored = await this.fileStorage.saveDocumentFile(
+      this.documentStorageFolder(kind),
+      generated.fileName,
+      generated.buffer,
+      generated.mimeType,
+    );
+    const now = new Date();
+    const document = await this.prisma.documentDelivery.create({
+      data: this.buildInstitutionalDeliveryData(
+        kind,
+        payload,
+        generated,
+        stored,
+        actor.id,
+        now,
+      ),
+    });
+
+    await this.prisma.documentAccessLog.create({
+      data: {
+        documentType: this.deliveryDocumentType(kind),
+        documentId: this.payloadDocumentId(payload),
+        documentDeliveryId: document.id,
+        userId: actor.id,
+        clientId: this.payloadClientId(payload),
+        accessType: DocumentAccessType.PDF_DOWNLOAD,
+        channel: options.channel,
+        result: DocumentAccessResult.SUCCESS,
+        ipAddress: options.metadata?.ip,
+        userAgent: Array.isArray(options.metadata?.userAgent)
+          ? options.metadata?.userAgent.join(' ')
+          : options.metadata?.userAgent,
+      },
+    });
+
+    return {
+      ...stored,
+      buffer: generated.buffer,
+      documentDeliveryId: document.id,
+      templateKey: generated.templateKey,
+      templateVersion: generated.templateVersion,
+    };
+  }
+
+  private async loadInstitutionalPayload(
+    kind: InstitutionalKind,
+    id: string,
+    userId: string,
+  ) {
+    if (kind === 'proposal') return this.getProposalDocument(id, userId);
+    if (kind === 'contract') return this.getContractDocument(id, userId);
+    return this.getOrderDocument(id, userId);
+  }
+
+  private buildInstitutionalDeliveryData(
+    kind: InstitutionalKind,
+    payload: Awaited<ReturnType<DocumentsService['loadInstitutionalPayload']>>,
+    generated: GeneratedInstitutionalDocument,
+    stored: StoredFile,
+    actorUserId: string,
+    now: Date,
+  ): Prisma.DocumentDeliveryUncheckedCreateInput {
+    const documentCode = this.payloadDocumentCode(payload, kind);
+    const documentTitle = this.payloadDocumentTitle(payload, kind);
+
+    return {
+      documentType: this.deliveryDocumentType(kind),
+      documentId: this.payloadDocumentId(payload),
+      documentCode,
+      documentTitle,
+      clientId: this.payloadClientId(payload),
+      counterpartName:
+        payload.client.tradeName || payload.client.companyName || null,
+      channel: DeliveryChannel.WEBHOOK,
+      status: DeliveryStatus.DELIVERED,
+      recipientName:
+        payload.client.contactName ||
+        payload.client.tradeName ||
+        payload.client.companyName,
+      recipientTarget: payload.client.email || `portal:${payload.client.id}`,
+      subject: `${documentTitle} - documento institucional`,
+      message:
+        'Documento institucional DOCX gerado por template versionado no servidor.',
+      provider: 'manitec-institutional-docx',
+      payloadSnapshot: {
+        template: {
+          key: generated.templateKey,
+          version: generated.templateVersion,
+        },
+        format: 'DOCX',
+        generatedAt: now.toISOString(),
+        pdfFromDocx: this.documentGenerationService.pdfFromDocxStatus(),
+        document: {
+          id: this.payloadDocumentId(payload),
+          code: documentCode,
+          title: documentTitle,
+          status: payload.document.status,
+          statusLabel: payload.document.statusLabel,
+        },
+        client: {
+          id: payload.client.id,
+          companyName: payload.client.companyName,
+          tradeName: payload.client.tradeName,
+        },
+        file: {
+          fileName: stored.fileName,
+          mimeType: stored.mimeType,
+          sizeBytes: stored.sizeBytes,
+          checksumSha256: stored.checksumSha256,
+        },
+      } satisfies Prisma.InputJsonValue,
+      fileStorageKey: stored.storageKey,
+      fileName: stored.fileName,
+      mimeType: stored.mimeType,
+      sizeBytes: stored.sizeBytes,
+      checksumSha256: stored.checksumSha256,
+      storedAt: now,
+      sentAt: now,
+      deliveredAt: now,
+      createdByUserId: actorUserId,
+    };
+  }
+
+  private async getLatestInstitutionalDelivery(
+    documentType: DeliveryDocumentType,
+    documentId: string,
+  ) {
+    const delivery = await this.prisma.documentDelivery.findFirst({
+      where: {
+        documentType,
+        documentId,
+        mimeType: DOCX_MIME,
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        status: true,
+        fileName: true,
+        mimeType: true,
+        sizeBytes: true,
+        checksumSha256: true,
+        storedAt: true,
+        createdAt: true,
+        payloadSnapshot: true,
+      },
+    });
+
+    if (!delivery) return null;
+    const snapshot =
+      delivery.payloadSnapshot &&
+      typeof delivery.payloadSnapshot === 'object' &&
+      !Array.isArray(delivery.payloadSnapshot)
+        ? (delivery.payloadSnapshot as Record<string, unknown>)
+        : {};
+    const template =
+      snapshot.template &&
+      typeof snapshot.template === 'object' &&
+      !Array.isArray(snapshot.template)
+        ? (snapshot.template as Record<string, unknown>)
+        : {};
+
+    return {
+      id: delivery.id,
+      status: delivery.status,
+      fileName: delivery.fileName,
+      mimeType: delivery.mimeType,
+      sizeBytes: delivery.sizeBytes,
+      checksumSha256: delivery.checksumSha256,
+      storedAt: delivery.storedAt?.toISOString() || null,
+      createdAt: delivery.createdAt.toISOString(),
+      templateKey: typeof template.key === 'string' ? template.key : undefined,
+      templateVersion:
+        typeof template.version === 'string' ? template.version : undefined,
+    };
+  }
+
+  private toGeneratedDocumentResponse(file: {
+    documentDeliveryId: string;
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    checksumSha256: string;
+    templateKey: string;
+    templateVersion: string;
+  }) {
+    return {
+      documentDeliveryId: file.documentDeliveryId,
+      fileName: file.fileName,
+      mimeType: file.mimeType,
+      sizeBytes: file.sizeBytes,
+      checksumSha256: file.checksumSha256,
+      templateKey: file.templateKey,
+      templateVersion: file.templateVersion,
+      pdfFromDocx: this.documentGenerationService.pdfFromDocxStatus(),
+    };
+  }
+
+  private deliveryDocumentType(kind: InstitutionalKind) {
+    const map: Record<InstitutionalKind, DeliveryDocumentType> = {
+      proposal: DeliveryDocumentType.PROPOSAL,
+      contract: DeliveryDocumentType.CONTRACT,
+      'work-order': DeliveryDocumentType.ORDER,
+    };
+
+    return map[kind];
+  }
+
+  private documentStorageFolder(kind: InstitutionalKind) {
+    const map: Record<InstitutionalKind, string> = {
+      proposal: 'proposal-docx',
+      contract: 'contract-docx',
+      'work-order': 'work-order-docx',
+    };
+
+    return map[kind];
+  }
+
+  private payloadDocumentId(
+    payload: Awaited<ReturnType<DocumentsService['loadInstitutionalPayload']>>,
+  ) {
+    return payload.document.id;
+  }
+
+  private payloadClientId(
+    payload: Awaited<ReturnType<DocumentsService['loadInstitutionalPayload']>>,
+  ) {
+    return payload.client.id;
+  }
+
+  private payloadDocumentCode(
+    payload: Awaited<ReturnType<DocumentsService['loadInstitutionalPayload']>>,
+    kind: InstitutionalKind,
+  ) {
+    if (kind === 'work-order') {
+      return payload.document.id.slice(0, 8).toUpperCase();
+    }
+    return 'code' in payload.document ? String(payload.document.code) : null;
+  }
+
+  private payloadDocumentTitle(
+    payload: Awaited<ReturnType<DocumentsService['loadInstitutionalPayload']>>,
+    kind: InstitutionalKind,
+  ) {
+    if (kind === 'proposal')
+      return `Proposta ${this.payloadDocumentCode(payload, kind)}`;
+    if (kind === 'contract')
+      return `Contrato ${this.payloadDocumentCode(payload, kind)}`;
+    const document = payload.document as { title?: string };
+    return `Ordem de Servico ${document.title || payload.document.id}`;
   }
 
   private async generateAndStoreProposalPdf(

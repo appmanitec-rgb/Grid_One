@@ -1,0 +1,22 @@
+{
+  "client": {
+    "name": "Cliente Exemplo"
+  },
+  "equipment": {
+    "name": "GMG Principal",
+    "serialNumber": "SN-001"
+  },
+  "workOrder": {
+    "number": "OS-0001",
+    "title": "Preventiva mensal",
+    "status": "Concluida"
+  },
+  "items": [
+    {
+      "description": "Filtro de oleo",
+      "quantity": "1 UN",
+      "unitPrice": "R$ 100,00",
+      "total": "R$ 100,00"
+    }
+  ]
+}

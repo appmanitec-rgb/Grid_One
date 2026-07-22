@@ -16,11 +16,9 @@ import {
   ServiceReportShareLink,
   downloadBlob,
   formatServiceReportDate,
-  openHtmlInNewWindow,
   reportStatusTone,
   serviceReportsGetBlob,
   serviceReportsGet,
-  serviceReportsGetText,
   serviceReportsPatch,
   serviceReportsPost,
   serviceReportsPostForm,
@@ -353,14 +351,6 @@ export default function ServiceReportDetailPage() {
     });
   }
 
-  async function openPrintPreview() {
-    await runAction("print", async () => {
-      const html = await serviceReportsGetText(`/${reportId}/print`);
-      openHtmlInNewWindow(html);
-      setSuccess("Preview imprimível aberto.");
-    });
-  }
-
   async function downloadEvidence(
     evidenceId: string,
     fileName?: string | null,
@@ -533,14 +523,6 @@ export default function ServiceReportDetailPage() {
             >
               Voltar
             </Link>
-            <button
-              type="button"
-              className={SECONDARY_BUTTON}
-              disabled={busyKey === "print"}
-              onClick={() => void openPrintPreview()}
-            >
-              {busyKey === "print" ? "Abrindo..." : "Visualizar impressão"}
-            </button>
             {canGenerateDocument ? (
               <button
                 type="button"

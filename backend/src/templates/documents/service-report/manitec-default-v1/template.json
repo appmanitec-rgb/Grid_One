@@ -1,0 +1,58 @@
+{
+  "title": "Laudo Tecnico {{serviceReport.number}}",
+  "subtitle": "{{client.name}} | {{equipment.name}} | {{serviceReport.status}}",
+  "sections": [
+    {
+      "heading": "Identificacao",
+      "paragraphs": [
+        "Laudo: {{serviceReport.number}} | Status: {{serviceReport.status}}",
+        "Cliente: {{client.name}} | Documento: {{client.document}}",
+        "Equipamento: {{equipment.name}} | Serie: {{equipment.serialNumber}}",
+        "Inicio: {{serviceReport.startedAt}} | Fim: {{serviceReport.finishedAt}}"
+      ]
+    },
+    {
+      "heading": "Diagnostico",
+      "paragraphs": [
+        "{{serviceReport.diagnosis}}"
+      ]
+    },
+    {
+      "heading": "Servicos realizados",
+      "paragraphs": [
+        "{{serviceReport.performedServices}}"
+      ]
+    },
+    {
+      "heading": "Recomendacoes",
+      "paragraphs": [
+        "{{serviceReport.recommendations}}",
+        "Observacoes ao cliente: {{serviceReport.customerNotes}}"
+      ]
+    },
+    {
+      "heading": "Evidencias liberadas",
+      "table": {
+        "rowsPath": "items",
+        "emptyText": "Nenhuma evidencia liberada.",
+        "columns": [
+          { "header": "Titulo", "path": "title" },
+          { "header": "Tipo", "path": "type" },
+          { "header": "Arquivo", "path": "fileName" }
+        ]
+      }
+    },
+    {
+      "heading": "Assinaturas e autenticidade",
+      "paragraphs": [
+        "Tecnico: {{signatures.technician}}",
+        "Cliente: {{signatures.customer}}",
+        "Template: {{metadata.templateKey}}"
+      ]
+    }
+  ],
+  "footer": [
+    "Gerado no servidor em {{metadata.generatedAt}}",
+    "Nao incluir observacoes internas, notas internas de seguranca ou storageKey."
+  ]
+}

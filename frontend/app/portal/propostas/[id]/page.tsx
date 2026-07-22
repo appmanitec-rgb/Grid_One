@@ -21,7 +21,7 @@ export default function PortalProposalDetailPage() {
   const [proposal, setProposal] = useState<PortalProposal | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [downloadingDocument, setDownloadingDocument] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [decisionMode, setDecisionMode] = useState<DecisionMode>(null);
@@ -73,19 +73,19 @@ export default function PortalProposalDetailPage() {
     }
   }
 
-  async function downloadPdf() {
+  async function downloadDocument() {
     if (!proposal) return;
-    setDownloadingPdf(true);
+    setDownloadingDocument(true);
     setError("");
     try {
       const blob = await customerPortalGetBlob(
-        `/proposals/${params.id}/download-pdf`,
+        `/proposals/${params.id}/download-docx`,
       );
-      downloadPortalBlob(blob, `proposta-${proposal.code}.pdf`);
+      downloadPortalBlob(blob, `proposta-${proposal.code}.docx`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao baixar PDF.");
+      setError(err instanceof Error ? err.message : "Falha ao baixar documento.");
     } finally {
-      setDownloadingPdf(false);
+      setDownloadingDocument(false);
     }
   }
 
@@ -115,11 +115,11 @@ export default function PortalProposalDetailPage() {
             <strong className="mt-2 block text-2xl text-slate-950">{formatPortalCurrency(proposal.totalValue)}</strong>
             <button
               type="button"
-              disabled={downloadingPdf}
-              onClick={() => void downloadPdf()}
+              disabled={downloadingDocument}
+              onClick={() => void downloadDocument()}
               className="mt-3 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
             >
-              {downloadingPdf ? "Baixando PDF..." : "Baixar PDF profissional"}
+              {downloadingDocument ? "Gerando documento..." : "Baixar documento"}
             </button>
           </div>
         </div>

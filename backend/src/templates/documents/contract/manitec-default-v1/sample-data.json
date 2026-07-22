@@ -1,0 +1,22 @@
+{
+  "company": {
+    "name": "MANITEC Grupos Geradores"
+  },
+  "client": {
+    "name": "Cliente Exemplo"
+  },
+  "contract": {
+    "number": "CTR-0001",
+    "startDate": "01/07/2026",
+    "endDate": "30/06/2027",
+    "recurringAmount": "R$ 5.000,00"
+  },
+  "items": [
+    {
+      "description": "GMG Principal",
+      "serialNumber": "SN-001",
+      "site": "Matriz",
+      "coverage": "R$ 5.000,00"
+    }
+  ]
+}

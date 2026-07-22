@@ -5,7 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { clearAuthSession } from "@/lib/auth-session";
 import {
+  downloadDashboardDocumentBlob,
   fetchOrderDocument,
+  fetchOrderDocumentDocx,
   type DashboardDocumentsApiError,
   type OrderDocumentPayload,
 } from "@/lib/dashboard-documents";
@@ -25,6 +27,7 @@ export default function OrderDocumentPage() {
   const [data, setData] = useState<OrderDocumentPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [documentBusy, setDocumentBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -56,6 +59,35 @@ export default function OrderDocumentPage() {
     void load();
   }, [load]);
 
+  async function handleDownloadDocument() {
+    if (!id || !data) return;
+    setDocumentBusy(true);
+    setError("");
+
+    try {
+      const blob = await fetchOrderDocumentDocx(id);
+      downloadDashboardDocumentBlob(
+        blob,
+        `ordem-servico-${data.document.id.slice(0, 8).toUpperCase()}.docx`,
+      );
+    } catch (downloadError: unknown) {
+      const apiError = downloadError as DashboardDocumentsApiError;
+      if (apiError?.status === 401) {
+        clearAuthSession();
+        router.replace("/");
+        return;
+      }
+
+      setError(
+        downloadError instanceof Error
+          ? downloadError.message
+          : "Erro ao baixar documento da O.S.",
+      );
+    } finally {
+      setDocumentBusy(false);
+    }
+  }
+
   if (!data) {
     return (
       <div className="space-y-4">
@@ -77,6 +109,21 @@ export default function OrderDocumentPage() {
         code={data.document.id.slice(0, 8).toUpperCase()}
         sourceHref={data.sourceHref}
         sourceLabel={data.viewerRole === "CLIENT" ? "Voltar ao portal" : "Abrir O.S."}
+        showPrintAction={false}
+        actions={
+          <button
+            type="button"
+            disabled={documentBusy}
+            onClick={() => void handleDownloadDocument()}
+            className="inline-flex items-center justify-center rounded-2xl border border-slate-900 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {documentBusy
+              ? "Gerando documento..."
+              : data.latestDocument
+                ? "Baixar documento"
+                : "Gerar documento"}
+          </button>
+        }
       >
         <div className="flex flex-wrap gap-2">
           <ToolbarPill>{data.document.statusLabel}</ToolbarPill>
@@ -197,6 +244,13 @@ export default function OrderDocumentPage() {
             ))}
           </PrintTable>
         </PrintSection>
+
+        <PrintSection title="Documento institucional" columns={1}>
+          <ValueCard
+            label="Ultimo documento"
+            value={formatLatestDocument(data.latestDocument)}
+          />
+        </PrintSection>
       </PrintDocumentShell>
 
       {data.viewerRole !== "CLIENT" ? (
@@ -232,4 +286,20 @@ function formatCurrency(value: number) {
     style: "currency",
     currency: "BRL",
   }).format(value || 0);
+}
+
+function formatLatestDocument(
+  latestDocument: OrderDocumentPayload["latestDocument"],
+) {
+  if (!latestDocument) return "Nenhum documento institucional gerado.";
+  return [
+    latestDocument.templateKey,
+    latestDocument.templateVersion ? `v: ${latestDocument.templateVersion}` : null,
+    latestDocument.createdAt ? `gerado em ${formatDateTime(latestDocument.createdAt)}` : null,
+    latestDocument.checksumSha256
+      ? `hash ${latestDocument.checksumSha256.slice(0, 16)}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" | ");
 }

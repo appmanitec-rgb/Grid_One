@@ -1,0 +1,24 @@
+{
+  "kind": "work-order",
+  "version": "manitec-default-v1",
+  "format": "docx",
+  "required": [
+    "company.name",
+    "client.name",
+    "workOrder.number",
+    "equipment.name"
+  ],
+  "fields": {
+    "workOrder.number": "Numero curto da OS",
+    "workOrder.title": "Titulo da OS",
+    "workOrder.technician": "Tecnico responsavel",
+    "equipment.name": "Equipamento atendido",
+    "items[].description": "Material aplicado"
+  },
+  "sensitiveFieldsDenied": [
+    "hourCost",
+    "internalCost",
+    "margin",
+    "storageKey"
+  ]
+}

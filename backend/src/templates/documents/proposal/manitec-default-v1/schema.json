@@ -1,0 +1,36 @@
+{
+  "kind": "proposal",
+  "version": "manitec-default-v1",
+  "format": "docx",
+  "required": [
+    "company.name",
+    "client.name",
+    "proposal.number",
+    "proposal.date",
+    "proposal.total"
+  ],
+  "fields": {
+    "company.name": "Nome institucional da Manitec",
+    "company.document": "CNPJ da Manitec",
+    "client.name": "Nome do cliente",
+    "client.document": "CNPJ/documento do cliente",
+    "proposal.number": "Numero da proposta",
+    "proposal.date": "Data de emissao",
+    "proposal.validUntil": "Validade",
+    "proposal.total": "Total formatado",
+    "equipment.name": "Equipamento vinculado",
+    "equipment.generator.model": "Fabricante/modelo do gerador",
+    "items[].description": "Descricao do item",
+    "items[].quantity": "Quantidade formatada",
+    "items[].unitPrice": "Preco unitario",
+    "items[].total": "Total do item"
+  },
+  "sensitiveFieldsDenied": [
+    "hourCost",
+    "internalCost",
+    "margin",
+    "approvalDiscountLimit",
+    "internalNotes",
+    "storageKey"
+  ]
+}

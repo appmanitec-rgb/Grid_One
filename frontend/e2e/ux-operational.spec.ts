@@ -174,19 +174,22 @@ test.describe("ciclo 20d ux operacional", () => {
     const proposal = proposals.find((item) => item.id);
     expect(proposal?.id).toBeTruthy();
 
-    const pdfResponse = await apiRequestRaw(
+    const documentResponse = await apiRequestRaw(
       adminToken,
-      `/documents/proposals/${proposal!.id}/download-pdf`,
+      `/documents/proposals/${proposal!.id}/download-docx`,
     );
-    expect(pdfResponse.ok).toBeTruthy();
-    expect(pdfResponse.headers.get("content-type") || "").toContain(
-      "application/pdf",
+    expect(documentResponse.ok).toBeTruthy();
+    expect(documentResponse.headers.get("content-type") || "").toContain(
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     );
-    const pdfContent = Buffer.from(await pdfResponse.arrayBuffer()).toString(
-      "latin1",
-    );
-    expect(pdfContent.startsWith("%PDF-1.4")).toBe(true);
-    expect(pdfContent).toContain(`Proposta Comercial ${proposal!.code}`);
+    const documentContent = Buffer.from(
+      await documentResponse.arrayBuffer(),
+    ).toString("utf8");
+    expect(documentContent.startsWith("PK\u0003\u0004")).toBe(true);
+    expect(documentContent).toContain(`Proposta Comercial ${proposal!.code}`);
+    expect(documentContent).toContain("proposal/manitec-default-v1");
+    expect(documentContent).not.toContain("sidebar");
+    expect(documentContent).not.toContain("button");
 
     await page.goto(`/dashboard/documents/proposals/${proposal!.id}`, {
       waitUntil: "domcontentloaded",
@@ -194,7 +197,7 @@ test.describe("ciclo 20d ux operacional", () => {
     });
     await expectLoaded(page, new RegExp(`Proposta ${proposal!.code}`));
     await expect(
-      page.getByRole("button", { name: /Baixar PDF profissional/i }),
+      page.getByRole("button", { name: /Baixar documento|Gerar documento/i }),
     ).toBeVisible();
   });
 

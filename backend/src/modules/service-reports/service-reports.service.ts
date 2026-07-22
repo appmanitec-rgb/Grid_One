@@ -2674,7 +2674,6 @@ export class ServiceReportsService {
         : ''
     }
   </main>
-  <script>window.addEventListener('load',function(){if(location.search.includes('print=1')) window.print();});</script>
 </body>
 </html>`;
   }

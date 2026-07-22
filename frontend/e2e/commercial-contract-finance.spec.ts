@@ -103,6 +103,11 @@ test.describe.serial("fluxo comercial -> contrato -> financeiro -> preventiva", 
       `/customer-portal/proposals/${proposal.id}/download-pdf`,
     );
     expect([403, 404]).toContain(forbiddenProposalPdf.status);
+    const forbiddenProposalDocument = await apiRequestRaw(
+      clientBSession.access_token,
+      `/customer-portal/proposals/${proposal.id}/download-docx`,
+    );
+    expect([403, 404]).toContain(forbiddenProposalDocument.status);
 
     const customerPdf = await apiRequestRaw(
       clientASession.access_token,
@@ -123,6 +128,23 @@ test.describe.serial("fluxo comercial -> contrato -> financeiro -> preventiva", 
     expect(customerPdfContent).toContain(`Proposta Comercial ${proposal.code}`);
     expect(customerPdfContent).not.toContain("sidebar");
     expect(customerPdfContent).not.toContain("button");
+
+    const customerDocument = await apiRequestRaw(
+      clientASession.access_token,
+      `/customer-portal/proposals/${proposal.id}/download-docx`,
+    );
+    expect(customerDocument.ok).toBeTruthy();
+    expect(customerDocument.headers.get("content-type") || "").toContain(
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
+    const customerDocumentContent = Buffer.from(
+      await customerDocument.arrayBuffer(),
+    ).toString("utf8");
+    expect(customerDocumentContent.startsWith("PK\u0003\u0004")).toBe(true);
+    expect(customerDocumentContent).toContain(`Proposta Comercial ${proposal.code}`);
+    expect(customerDocumentContent).toContain("proposal/manitec-default-v1");
+    expect(customerDocumentContent).not.toContain("sidebar");
+    expect(customerDocumentContent).not.toContain("button");
 
     await loginByApi(page, accounts.clientA);
     await page.goto(`/portal/propostas/${proposal.id}`, {

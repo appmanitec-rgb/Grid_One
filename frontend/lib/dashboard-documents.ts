@@ -56,11 +56,25 @@ export type DashboardDocumentsHub = {
   };
 };
 
+export type DashboardDocumentDelivery = {
+  id: string;
+  status: string;
+  fileName?: string | null;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  checksumSha256?: string | null;
+  storedAt?: string | null;
+  createdAt: string;
+  templateKey?: string;
+  templateVersion?: string;
+};
+
 export type ProposalDocumentPayload = {
   kind: "proposal";
   company: DashboardDocumentCompany;
   viewerRole: string;
   sourceHref: string;
+  latestDocument?: DashboardDocumentDelivery | null;
   document: {
     id: string;
     code: string;
@@ -135,6 +149,7 @@ export type ContractDocumentPayload = {
   company: DashboardDocumentCompany;
   viewerRole: string;
   sourceHref: string;
+  latestDocument?: DashboardDocumentDelivery | null;
   document: {
     id: string;
     code: string;
@@ -202,6 +217,7 @@ export type OrderDocumentPayload = {
   company: DashboardDocumentCompany;
   viewerRole: string;
   sourceHref: string;
+  latestDocument?: DashboardDocumentDelivery | null;
   document: {
     id: string;
     title: string;
@@ -329,12 +345,49 @@ export async function fetchProposalDocumentPdf(id: string) {
   return response.blob();
 }
 
+async function fetchDocumentBlob(path: string, fallbackMessage: string) {
+  const response = await apiFetch(apiUrl(path), {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const error = new Error(
+      await readApiErrorMessage(response, fallbackMessage),
+    ) as DashboardDocumentsApiError;
+    error.status = response.status;
+    throw error;
+  }
+
+  return response.blob();
+}
+
+export function fetchProposalDocumentDocx(id: string) {
+  return fetchDocumentBlob(
+    `/documents/proposals/${id}/download-docx`,
+    "Nao foi possivel baixar o documento institucional da proposta.",
+  );
+}
+
 export function fetchContractDocument(id: string) {
   return readJsonOrThrow<ContractDocumentPayload>(`/documents/contracts/${id}`);
 }
 
+export function fetchContractDocumentDocx(id: string) {
+  return fetchDocumentBlob(
+    `/documents/contracts/${id}/download-docx`,
+    "Nao foi possivel baixar o documento institucional do contrato.",
+  );
+}
+
 export function fetchOrderDocument(id: string) {
   return readJsonOrThrow<OrderDocumentPayload>(`/documents/orders/${id}`);
+}
+
+export function fetchOrderDocumentDocx(id: string) {
+  return fetchDocumentBlob(
+    `/documents/orders/${id}/download-docx`,
+    "Nao foi possivel baixar o documento institucional da O.S.",
+  );
 }
 
 export function labelDocumentKind(kind: DashboardDocumentKind) {

@@ -39,6 +39,12 @@ const MIME_EXTENSIONS: Record<string, string> = {
   'application/pdf': '.pdf',
 };
 
+const DOCUMENT_MIME_EXTENSIONS: Record<string, string> = {
+  'application/pdf': '.pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+    '.docx',
+};
+
 @Injectable()
 export class FileStorageService {
   private readonly adapter: StorageAdapter;
@@ -103,6 +109,35 @@ export class FileStorageService {
     );
   }
 
+  async saveDocumentFile(
+    folder: string,
+    fileName: string,
+    buffer: Buffer,
+    mimeType: keyof typeof DOCUMENT_MIME_EXTENSIONS,
+  ): Promise<StoredFile> {
+    const file: UploadFile = {
+      originalname: fileName,
+      mimetype: mimeType,
+      size: buffer.length,
+      buffer,
+    };
+    this.validateFile(file, DOCUMENT_MIME_EXTENSIONS);
+    const now = new Date();
+    const year = String(now.getUTCFullYear());
+    const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+    const extension = DOCUMENT_MIME_EXTENSIONS[mimeType];
+    const randomName = `${randomBytes(16).toString('hex')}${extension}`;
+    const storageKey = ['documents', folder, year, month, randomName].join('/');
+    await this.adapter.save({ storageKey, buffer });
+    return {
+      storageKey,
+      fileName: this.sanitizeFileName(fileName || randomName),
+      mimeType,
+      sizeBytes: buffer.length,
+      checksumSha256: createHash('sha256').update(buffer).digest('hex'),
+    };
+  }
+
   private async savePdfInFolder(
     folder: string,
     fileName: string,
@@ -148,12 +183,15 @@ export class FileStorageService {
     return this.adapter.remove(storageKey);
   }
 
-  private validateFile(file: UploadFile) {
+  private validateFile(
+    file: UploadFile,
+    allowedMimeExtensions = MIME_EXTENSIONS,
+  ) {
     if (!file?.buffer || file.buffer.length === 0) {
       throw new BadRequestException('Arquivo obrigatorio.');
     }
     const mimeType = file.mimetype || '';
-    if (!MIME_EXTENSIONS[mimeType]) {
+    if (!allowedMimeExtensions[mimeType]) {
       throw new BadRequestException('Tipo de arquivo nao permitido.');
     }
     const size = file.size ?? file.buffer.length;
@@ -172,7 +210,7 @@ export class FileStorageService {
     const originalExtension = extname(file.originalname || '').toLowerCase();
     if (
       originalExtension &&
-      !Object.values(MIME_EXTENSIONS).includes(originalExtension)
+      !Object.values(allowedMimeExtensions).includes(originalExtension)
     ) {
       throw new BadRequestException('Extensao de arquivo nao permitida.');
     }
@@ -195,6 +233,12 @@ export class FileStorageService {
     }
     if (mimeType === 'application/pdf') {
       return buffer.subarray(0, 4).toString('ascii') === '%PDF';
+    }
+    if (
+      mimeType ===
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ) {
+      return buffer.subarray(0, 4).toString('binary') === 'PK\u0003\u0004';
     }
     return false;
   }

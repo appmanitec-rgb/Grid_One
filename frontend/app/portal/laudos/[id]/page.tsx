@@ -9,10 +9,8 @@ import {
   ServiceReport,
   downloadBlob,
   formatServiceReportDate,
-  openHtmlInNewWindow,
   portalServiceReportsGetBlob,
   portalServiceReportsGet,
-  portalServiceReportsGetText,
   portalServiceReportsPost,
 } from "@/lib/service-reports";
 
@@ -63,13 +61,6 @@ export default function PortalServiceReportDetailPage() {
     } finally {
       setBusyKey("");
     }
-  }
-
-  async function openPrintPreview() {
-    await runAction("print", async () => {
-      const html = await portalServiceReportsGetText(`/${params.id}/print`);
-      openHtmlInNewWindow(html);
-    });
   }
 
   async function downloadEvidence(
@@ -133,14 +124,6 @@ export default function PortalServiceReportDetailPage() {
           {report.maintenanceOrder?.title || "Ordem de serviço"}
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            type="button"
-            className="min-h-11 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
-            disabled={busyKey === "print"}
-            onClick={() => void openPrintPreview()}
-          >
-            {busyKey === "print" ? "Abrindo..." : "Visualizar laudo"}
-          </button>
           {report.validationUrl ? (
             <a
               href={report.validationUrl}

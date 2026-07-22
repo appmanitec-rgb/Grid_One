@@ -5,8 +5,6 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import type { DashboardDocumentCompany } from "@/lib/dashboard-documents";
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800";
 const SECONDARY_BUTTON =
   "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50";
 
@@ -23,7 +21,6 @@ export function PrintDocumentShell({
   backLabel = "Voltar para documentos",
   sourceHref,
   sourceLabel,
-  showPrintAction = true,
   actions,
   children,
 }: {
@@ -42,15 +39,6 @@ export function PrintDocumentShell({
   return (
     <div className="space-y-5">
       <div className="document-print-toolbar flex flex-wrap items-center gap-3">
-        {showPrintAction ? (
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className={PRIMARY_BUTTON}
-          >
-            Imprimir / salvar PDF
-          </button>
-        ) : null}
         {backHref ? <Link href={backHref} className={SECONDARY_BUTTON}>{backLabel}</Link> : null}
         {sourceHref && sourceLabel ? (
           <Link href={sourceHref} className={SECONDARY_BUTTON}>

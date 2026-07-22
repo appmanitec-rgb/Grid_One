@@ -88,6 +88,21 @@ export class CustomerPortalController {
       .then((file) => this.sendFile(res, file));
   }
 
+  @Get('proposals/:id/download-docx')
+  proposalDocumentDownload(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    return this.documentsService
+      .downloadCustomerProposalDocx(
+        id,
+        this.extractUserId(req) || '',
+        this.extractMetadata(req),
+      )
+      .then((file) => this.sendFile(res, file));
+  }
+
   @Get('proposals/:id')
   proposalDetail(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.customerPortalService.getProposal(this.extractUserId(req), id);

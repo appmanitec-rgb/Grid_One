@@ -1,0 +1,25 @@
+{
+  "kind": "contract",
+  "version": "manitec-default-v1",
+  "format": "docx",
+  "required": [
+    "company.name",
+    "client.name",
+    "contract.number",
+    "contract.startDate",
+    "contract.endDate"
+  ],
+  "fields": {
+    "contract.number": "Codigo do contrato",
+    "contract.startDate": "Inicio da vigencia",
+    "contract.endDate": "Fim da vigencia",
+    "contract.recurringAmount": "Valor recorrente",
+    "items[].description": "Equipamento coberto"
+  },
+  "sensitiveFieldsDenied": [
+    "internalCost",
+    "margin",
+    "hourCost",
+    "storageKey"
+  ]
+}

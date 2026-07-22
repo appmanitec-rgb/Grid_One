@@ -6,6 +6,7 @@ import {
 } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
 import { FileStorageService } from '../file-storage/file-storage.service';
+import { DocumentGenerationService } from './document-generation.service';
 import { DocumentsService } from './documents.service';
 import { ProposalPdfService } from './proposal-pdf.service';
 
@@ -15,30 +16,43 @@ describe('DocumentsService', () => {
     user: { findUnique: jest.Mock };
     companySettings: { findFirst: jest.Mock };
     proposal: { findUnique: jest.Mock };
-    documentDelivery: { create: jest.Mock };
+    documentDelivery: { create: jest.Mock; findFirst: jest.Mock };
     documentAccessLog: { create: jest.Mock };
   };
   let proposalPdfService: { generate: jest.Mock; renderHtml: jest.Mock };
-  let fileStorage: { saveDocumentPdf: jest.Mock };
+  let documentGenerationService: {
+    generateDocx: jest.Mock;
+    pdfFromDocxStatus: jest.Mock;
+  };
+  let fileStorage: { saveDocumentPdf: jest.Mock; saveDocumentFile: jest.Mock };
 
   beforeEach(() => {
     prisma = {
       user: { findUnique: jest.fn() },
       companySettings: { findFirst: jest.fn() },
       proposal: { findUnique: jest.fn() },
-      documentDelivery: { create: jest.fn() },
+      documentDelivery: { create: jest.fn(), findFirst: jest.fn() },
       documentAccessLog: { create: jest.fn() },
     };
     proposalPdfService = {
       generate: jest.fn(),
       renderHtml: jest.fn(),
     };
+    documentGenerationService = {
+      generateDocx: jest.fn(),
+      pdfFromDocxStatus: jest.fn().mockReturnValue({
+        available: false,
+        reason: 'Conversao DOCX para PDF indisponivel.',
+      }),
+    };
     fileStorage = {
       saveDocumentPdf: jest.fn(),
+      saveDocumentFile: jest.fn(),
     };
     service = new DocumentsService(
       prisma as unknown as DatabaseService,
       proposalPdfService as unknown as ProposalPdfService,
+      documentGenerationService as unknown as DocumentGenerationService,
       fileStorage as unknown as FileStorageService,
     );
 
@@ -68,6 +82,7 @@ describe('DocumentsService', () => {
       secondaryColor: null,
     });
     prisma.proposal.findUnique.mockResolvedValue(makeProposal());
+    prisma.documentDelivery.findFirst.mockResolvedValue(null);
     proposalPdfService.generate.mockReturnValue({
       buffer: Buffer.from('%PDF-1.4\nProposta Comercial PROP-1\n%%EOF'),
       html: '<main><h1>Proposta Comercial PROP-1</h1></main>',
@@ -85,6 +100,25 @@ describe('DocumentsService', () => {
     });
     prisma.documentDelivery.create.mockResolvedValue({ id: 'delivery-1' });
     prisma.documentAccessLog.create.mockResolvedValue({ id: 'access-1' });
+    documentGenerationService.generateDocx.mockReturnValue({
+      buffer: Buffer.from('PK\u0003\u0004Proposta Comercial PROP-1', 'utf8'),
+      fileName: 'proposal-PROP-1.docx',
+      mimeType:
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      checksumSha256: 'docx-hash-1',
+      templateKey: 'proposal/manitec-default-v1',
+      templateVersion: 'manitec-default-v1',
+      context: {},
+      template: {},
+    });
+    fileStorage.saveDocumentFile.mockResolvedValue({
+      storageKey: 'documents/proposal-docx/2026/07/file.docx',
+      fileName: 'proposal-PROP-1.docx',
+      mimeType:
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      sizeBytes: 64,
+      checksumSha256: 'docx-hash-1',
+    });
   });
 
   it('stores generated proposal PDF with template metadata and audit trail', async () => {
@@ -109,6 +143,52 @@ describe('DocumentsService', () => {
             key: 'proposal/manitec-default-v1',
             version: 'manitec-default-v1',
           },
+        }),
+      }),
+    });
+    expect(prisma.documentAccessLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        documentType: DeliveryDocumentType.PROPOSAL,
+        documentId: 'proposal-1',
+        documentDeliveryId: 'delivery-1',
+        accessType: DocumentAccessType.PDF_DOWNLOAD,
+        channel: DocumentAccessChannel.INTERNAL,
+      }),
+    });
+  });
+
+  it('stores generated proposal DOCX with institutional template metadata', async () => {
+    const file = await service.downloadProposalDocx('proposal-1', 'user-1');
+
+    expect(file.buffer.toString('utf8')).toContain('Proposta Comercial PROP-1');
+    expect(file.documentDeliveryId).toBe('delivery-1');
+    expect(file.templateKey).toBe('proposal/manitec-default-v1');
+    expect(documentGenerationService.generateDocx).toHaveBeenCalledWith(
+      'proposal',
+      expect.objectContaining({
+        kind: 'proposal',
+        document: expect.objectContaining({ id: 'proposal-1', code: 'PROP-1' }),
+      }),
+    );
+    expect(fileStorage.saveDocumentFile).toHaveBeenCalledWith(
+      'proposal-docx',
+      'proposal-PROP-1.docx',
+      expect.any(Buffer),
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    );
+    expect(prisma.documentDelivery.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        documentType: DeliveryDocumentType.PROPOSAL,
+        documentId: 'proposal-1',
+        fileStorageKey: 'documents/proposal-docx/2026/07/file.docx',
+        checksumSha256: 'docx-hash-1',
+        provider: 'manitec-institutional-docx',
+        payloadSnapshot: expect.objectContaining({
+          template: {
+            key: 'proposal/manitec-default-v1',
+            version: 'manitec-default-v1',
+          },
+          format: 'DOCX',
         }),
       }),
     });

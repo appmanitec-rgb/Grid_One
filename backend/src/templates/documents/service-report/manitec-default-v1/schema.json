@@ -1,0 +1,24 @@
+{
+  "kind": "service-report",
+  "version": "manitec-default-v1",
+  "format": "docx",
+  "required": [
+    "company.name",
+    "client.name",
+    "serviceReport.number"
+  ],
+  "fields": {
+    "serviceReport.number": "Codigo do laudo",
+    "serviceReport.diagnosis": "Diagnostico",
+    "serviceReport.performedServices": "Servicos realizados",
+    "serviceReport.recommendations": "Recomendacoes",
+    "items[].title": "Evidencia liberada"
+  },
+  "sensitiveFieldsDenied": [
+    "observations",
+    "safetyNotes",
+    "storageKey",
+    "internalCost",
+    "margin"
+  ]
+}
