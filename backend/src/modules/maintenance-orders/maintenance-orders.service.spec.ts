@@ -14,6 +14,9 @@ describe('MaintenanceOrdersService', () => {
   beforeEach(async () => {
     auditLogsService = { record: jest.fn() };
     db = {
+      user: {
+        findUnique: jest.fn(),
+      },
       maintenanceOrder: {
         findUnique: jest.fn(),
       },
@@ -66,6 +69,50 @@ describe('MaintenanceOrdersService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it('masks material unit cost for technician when reading an order', async () => {
+    const order = {
+      id: 'os-1',
+      technicianId: 'tech-1',
+      generator: { client: { id: 'client-1' } },
+      materials: [{ id: 'mat-1', unitCost: 120.5 }],
+    };
+    db.user.findUnique.mockResolvedValue({
+      id: 'user-tech',
+      role: UserRole.TECHNICIAN,
+      linkedClientId: null,
+      technicianProfile: { id: 'tech-1' },
+    });
+    db.maintenanceOrder.findUnique.mockResolvedValue(order);
+
+    const result = (await service.findOne('os-1', 'user-tech')) as typeof order;
+
+    expect(result.materials[0].unitCost).toBeNull();
+    expect(db.user.findUnique).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps material unit cost visible for admin when reading an order', async () => {
+    const order = {
+      id: 'os-1',
+      technicianId: null,
+      generator: { client: { id: 'client-1' } },
+      materials: [{ id: 'mat-1', unitCost: 120.5 }],
+    };
+    db.user.findUnique.mockResolvedValue({
+      id: 'user-admin',
+      role: UserRole.ADMIN,
+      linkedClientId: null,
+      technicianProfile: null,
+    });
+    db.maintenanceOrder.findUnique.mockResolvedValue(order);
+
+    const result = (await service.findOne(
+      'os-1',
+      'user-admin',
+    )) as typeof order;
+
+    expect(result.materials[0].unitCost).toBe(120.5);
   });
 
   it('consumes stock when finished order has unapplied material', async () => {
@@ -243,6 +290,9 @@ describe('MaintenanceOrdersService', () => {
 });
 
 type MaintenanceOrdersDbMock = {
+  user: {
+    findUnique: jest.Mock;
+  };
   maintenanceOrder: {
     findUnique: jest.Mock;
   };

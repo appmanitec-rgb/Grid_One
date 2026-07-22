@@ -34,6 +34,10 @@ import {
   TextAreaInput,
   TextInput,
 } from "../../components/DashboardPageKit";
+import {
+  OperationalBreadcrumb,
+  RelatedEntityGrid,
+} from "../../components/OperationalLinks";
 
 const PRIMARY_BUTTON =
   "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
@@ -508,6 +512,14 @@ export default function ServiceReportDetailPage() {
 
   return (
     <div className="space-y-6">
+      <OperationalBreadcrumb
+        items={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Laudos", href: "/dashboard/relatorios-tecnicos" },
+          { label: report.code },
+        ]}
+      />
+
       <PageHero
         compact
         eyebrow="Laudo técnico"
@@ -693,6 +705,66 @@ export default function ServiceReportDetailPage() {
 
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
       {success ? <StatusBanner tone="emerald">{success}</StatusBanner> : null}
+
+      <SectionCard
+        title="Relacionamentos do laudo"
+        description="Atalhos para OS, equipamento, cliente, contrato e documento gerado sem expor storage interno."
+      >
+        <RelatedEntityGrid
+          items={[
+            ...(report.maintenanceOrder
+              ? [{
+                  label: report.maintenanceOrder.title,
+                  description: `OS ${report.maintenanceOrder.status}.`,
+                  href: `/dashboard/orders/${report.maintenanceOrder.id}`,
+                  badge: "O.S.",
+                  tone: "amber" as const,
+                  permission: "orders.view",
+                }]
+              : []),
+            ...(report.generator
+              ? [{
+                  label: report.generator.name,
+                  description: `Serie ${report.generator.serialNumber || "-"} - ${report.generator.power || "-"} kVA.`,
+                  href: `/dashboard/equipments/${report.generator.id}`,
+                  badge: "Equipamento",
+                  tone: "blue" as const,
+                  permission: "equipments.view",
+                }]
+              : []),
+            ...(report.client
+              ? [{
+                  label: report.client.tradeName || report.client.companyName,
+                  description: "Cliente dono do laudo.",
+                  href: `/dashboard/clients/${report.client.id}`,
+                  badge: "Cliente",
+                  tone: "slate" as const,
+                  permission: "clients.view",
+                }]
+              : []),
+            ...(report.contract
+              ? [{
+                  label: report.contract.code,
+                  description: report.contract.title || `Contrato ${report.contract.status}.`,
+                  href: `/dashboard/contracts/${report.contract.id}`,
+                  badge: "Contrato",
+                  tone: "emerald" as const,
+                  permission: "contracts.view",
+                }]
+              : []),
+            ...(report.generatedDocument
+              ? [{
+                  label: report.generatedDocument.documentCode || "Documento gerado",
+                  description: report.generatedDocument.documentTitle || report.generatedDocument.fileName || "Documento vinculado ao laudo.",
+                  href: `/dashboard/relatorios-tecnicos/${report.id}`,
+                  badge: "Documento",
+                  tone: "rose" as const,
+                  permission: "serviceReports.view",
+                }]
+              : []),
+          ]}
+        />
+      </SectionCard>
 
       <SectionCard
         title="Documento e compartilhamento"

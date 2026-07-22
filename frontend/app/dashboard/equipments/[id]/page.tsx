@@ -1,11 +1,14 @@
 "use client";
 
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
 import { getAccessFromToken } from "@/lib/access";
+import {
+  OperationalBreadcrumb,
+  PermissionAwareLink,
+} from "../../components/OperationalLinks";
 
 type Equipment = {
   id: string;
@@ -292,6 +295,14 @@ export default function EquipmentDetailPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
+      <OperationalBreadcrumb
+        items={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Equipamentos", href: "/dashboard/equipments" },
+          { label: equipment.name },
+        ]}
+      />
+
       <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
@@ -310,15 +321,15 @@ export default function EquipmentDetailPage() {
 
           <div className="flex flex-wrap gap-2">
             {equipment.client?.id ? (
-              <ActionLink href={`/dashboard/clients/${equipment.client.id}`}>
+              <ActionLink href={`/dashboard/clients/${equipment.client.id}`} permission="clients.view">
                 Cliente
               </ActionLink>
             ) : null}
             {equipment.currentSite?.id ? (
-              <ActionLink href="/dashboard/sites">Local/site</ActionLink>
+              <ActionLink href="/dashboard/sites" permission="clients.view">Local/site</ActionLink>
             ) : null}
             {activeContract?.id ? (
-              <ActionLink href={`/dashboard/contracts/${activeContract.id}`}>
+              <ActionLink href={`/dashboard/contracts/${activeContract.id}`} permission="contracts.view">
                 Contrato
               </ActionLink>
             ) : null}
@@ -362,8 +373,8 @@ export default function EquipmentDetailPage() {
           <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
             <Panel title="Identificacao e localizacao">
               <InfoGrid>
-                <Info label="Cliente" value={equipment.client?.companyName || "-"} href={equipment.client?.id ? `/dashboard/clients/${equipment.client.id}` : undefined} />
-                <Info label="Local/site" value={equipment.currentSite?.name || equipment.installationSite || "-"} href={equipment.currentSite?.id ? "/dashboard/sites" : undefined} />
+                <Info label="Cliente" value={equipment.client?.companyName || "-"} href={equipment.client?.id ? `/dashboard/clients/${equipment.client.id}` : undefined} permission="clients.view" />
+                <Info label="Local/site" value={equipment.currentSite?.name || equipment.installationSite || "-"} href={equipment.currentSite?.id ? "/dashboard/sites" : undefined} permission="clients.view" />
                 <Info label="Modelo" value={equipment.model?.name || "-"} />
                 <Info label="Fabricante" value={equipment.brand} />
                 <Info label="Aplicacao" value={equipment.application || "-"} />
@@ -380,18 +391,21 @@ export default function EquipmentDetailPage() {
                   value={latestOrder?.title || "-"}
                   helper={latestOrder ? `${statusLabel(latestOrder.status)} | ${formatDate(latestOrder.finishedAt || latestOrder.openedAt)}` : "Sem OS recente"}
                   href={latestOrder?.id ? `/dashboard/orders/${latestOrder.id}` : undefined}
+                  permission="orders.view"
                 />
                 <LinkCard
                   title="Ultimo laudo"
                   value={latestReport?.code || "-"}
                   helper={latestReport ? statusLabel(latestReport.status) : "Sem laudo relacionado"}
                   href={latestReport?.id ? `/dashboard/relatorios-tecnicos/${latestReport.id}` : undefined}
+                  permission="serviceReports.view"
                 />
                 <LinkCard
                   title="Contrato"
                   value={activeContract?.code || "-"}
                   helper={activeContract ? statusLabel(activeContract.status) : "Nao vinculado"}
                   href={activeContract?.id ? `/dashboard/contracts/${activeContract.id}` : undefined}
+                  permission="contracts.view"
                 />
               </div>
             </Panel>
@@ -475,6 +489,7 @@ export default function EquipmentDetailPage() {
                     value={`${statusLabel(order.status)} | ${statusLabel(order.type)}`}
                     helper={`Prioridade ${order.priority || "-"} | ${formatDate(order.openedAt)}`}
                     href={`/dashboard/orders/${order.id}`}
+                    permission="orders.view"
                   />
                 ))}
               </RelatedList>
@@ -489,6 +504,7 @@ export default function EquipmentDetailPage() {
                     value={report.title || statusLabel(report.status)}
                     helper={report.documentHash ? "Documento validavel" : statusLabel(report.status)}
                     href={`/dashboard/relatorios-tecnicos/${report.id}`}
+                    permission="serviceReports.view"
                   />
                 ))}
               </RelatedList>
@@ -507,6 +523,7 @@ export default function EquipmentDetailPage() {
                         : ticket.title
                     }
                     href={`/dashboard/atendimento/${ticket.id}`}
+                    permission="tickets.view"
                   />
                 ))}
               </RelatedList>
@@ -522,6 +539,7 @@ export default function EquipmentDetailPage() {
                       value={link.contract.title || statusLabel(link.contract.status)}
                       helper={`${formatDate(link.contract.startDate)} ate ${formatDate(link.contract.endDate)}`}
                       href={`/dashboard/contracts/${link.contract.id}`}
+                      permission="contracts.view"
                     />
                   ) : null,
                 )}
@@ -542,6 +560,7 @@ export default function EquipmentDetailPage() {
                           ? `/dashboard/contracts/${schedule.contract.id}`
                           : undefined
                     }
+                    permission={schedule.generatedOrder?.id ? "orders.view" : "contracts.view"}
                   />
                 ))}
               </RelatedList>
@@ -562,6 +581,7 @@ export default function EquipmentDetailPage() {
                         ? `/dashboard/catalog/${part.catalogItem.id}`
                         : `/dashboard/orders/${part.orderId}`
                     }
+                    permission={part.catalogItem?.id ? "catalog.view" : "orders.view"}
                   />
                 ))}
               </RelatedList>
@@ -580,6 +600,7 @@ export default function EquipmentDetailPage() {
                         ? `/dashboard/catalog/${item.catalogItem.id}`
                         : undefined
                     }
+                    permission="catalog.view"
                   />
                 ))}
               </RelatedList>
@@ -714,7 +735,17 @@ function InfoGrid({ children }: { children: ReactNode }) {
   return <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{children}</dl>;
 }
 
-function Info({ label, value, href }: { label: string; value: string; href?: string }) {
+function Info({
+  label,
+  value,
+  href,
+  permission,
+}: {
+  label: string;
+  value: string;
+  href?: string;
+  permission?: string;
+}) {
   const content = (
     <>
       <dt className="text-[11px] font-bold uppercase text-slate-400">{label}</dt>
@@ -726,12 +757,14 @@ function Info({ label, value, href }: { label: string; value: string; href?: str
 
   if (href) {
     return (
-      <Link
+      <PermissionAwareLink
         href={href}
+        permission={permission}
         className="rounded-xl border border-slate-100 bg-slate-50 p-3 transition hover:border-sky-200 hover:bg-sky-50"
+        fallbackClassName="rounded-xl border border-slate-100 bg-slate-50 p-3"
       >
         {content}
-      </Link>
+      </PermissionAwareLink>
     );
   }
 
@@ -752,11 +785,13 @@ function LinkCard({
   value,
   helper,
   href,
+  permission,
 }: {
   title: string;
   value: string;
   helper: string;
   href?: string;
+  permission?: string;
 }) {
   const content = (
     <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 transition hover:border-sky-200 hover:bg-sky-50">
@@ -766,7 +801,18 @@ function LinkCard({
     </div>
   );
 
-  return href ? <Link href={href}>{content}</Link> : content;
+  return href ? (
+    <PermissionAwareLink
+      href={href}
+      permission={permission}
+      className="block"
+      fallbackClassName="block"
+    >
+      {content}
+    </PermissionAwareLink>
+  ) : (
+    content
+  );
 }
 
 function RelatedList({ empty, children }: { empty: string; children: ReactNode }) {
@@ -775,11 +821,19 @@ function RelatedList({ empty, children }: { empty: string; children: ReactNode }
   return hasItems ? <div className="space-y-2">{items}</div> : <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">{empty}</p>;
 }
 
-function ActionLink({ href, children }: { href: string; children: ReactNode }) {
+function ActionLink({
+  href,
+  children,
+  permission,
+}: {
+  href: string;
+  children: ReactNode;
+  permission?: string;
+}) {
   return (
-    <Link href={href} className={SECONDARY_BUTTON}>
+    <PermissionAwareLink href={href} permission={permission} className={SECONDARY_BUTTON}>
       {children}
-    </Link>
+    </PermissionAwareLink>
   );
 }
 

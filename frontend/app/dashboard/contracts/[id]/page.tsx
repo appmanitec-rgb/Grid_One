@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
@@ -13,6 +12,11 @@ import {
   SectionCard,
   StatusBanner,
 } from "../../components/DashboardPageKit";
+import {
+  OperationalBreadcrumb,
+  PermissionAwareLink,
+  RelatedEntityGrid,
+} from "../../components/OperationalLinks";
 
 type ContractStatus = "ACTIVE" | "SUSPENDED" | "CANCELED" | "RENEWAL";
 type Tone = "blue" | "emerald" | "amber" | "rose" | "slate";
@@ -227,6 +231,14 @@ export default function ContractDetailPage() {
 
   return (
     <div className="space-y-6">
+      <OperationalBreadcrumb
+        items={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Contratos", href: "/dashboard/contracts" },
+          { label: `Contrato ${contract.code}` },
+        ]}
+      />
+
       <PageHero
         eyebrow="Contrato de servico"
         title={`Contrato ${contract.code}`}
@@ -260,22 +272,24 @@ export default function ContractDetailPage() {
         actions={
           <>
             {contract.sourceProposal ? (
-              <Link
+              <PermissionAwareLink
                 href={`/dashboard/proposals/${contract.sourceProposal.id}`}
+                permission="proposals.view"
                 className={SECONDARY_BUTTON}
               >
                 Proposta {contract.sourceProposal.code}
-              </Link>
+              </PermissionAwareLink>
             ) : null}
-            <Link href="/dashboard/contracts" className={SECONDARY_BUTTON}>
+            <PermissionAwareLink href="/dashboard/contracts" permission="contracts.view" className={SECONDARY_BUTTON}>
               Voltar para carteira
-            </Link>
-            <Link
+            </PermissionAwareLink>
+            <PermissionAwareLink
               href={`/dashboard/documents/contracts/${contract.id}`}
+              permission="contracts.view"
               className={SECONDARY_BUTTON}
             >
               Documento
-            </Link>
+            </PermissionAwareLink>
             <button
               type="button"
               onClick={() => void generateOrders()}
@@ -369,6 +383,62 @@ export default function ContractDetailPage() {
         </StatusBanner>
       ) : null}
 
+      <SectionCard
+        eyebrow="Navegacao cruzada"
+        title="Relacionamentos do contrato"
+        description="Atalhos para cliente, proposta de origem, equipamentos cobertos, preventivas geradas e financeiro como referencia."
+      >
+        <RelatedEntityGrid
+          items={[
+            {
+              label: contract.client.companyName,
+              description: "Cliente contratante.",
+              href: `/dashboard/clients/${contract.client.id}`,
+              badge: "Cliente",
+              tone: "blue" as const,
+              permission: "clients.view",
+            },
+            ...(contract.sourceProposal
+              ? [{
+                  label: contract.sourceProposal.code,
+                  description: `Proposta ${contract.sourceProposal.status}.`,
+                  href: `/dashboard/proposals/${contract.sourceProposal.id}`,
+                  badge: "Proposta",
+                  tone: "amber" as const,
+                  permission: "proposals.view",
+                }]
+              : []),
+            ...contract.equipments.slice(0, 4).map((item) => ({
+              label: item.generator.name,
+              description: `Serie ${item.generator.serialNumber || "-"} - cobertura ${item.coverageAmount != null ? formatCurrency(Number(item.coverageAmount)) : "nao definida"}.`,
+              href: `/dashboard/equipments/${item.generator.id}`,
+              badge: "Equipamento",
+              tone: "slate" as const,
+              permission: "equipments.view",
+            })),
+            ...contract.schedules
+              .filter((schedule) => schedule.generatedOrderId)
+              .slice(0, 3)
+              .map((schedule) => ({
+                label: `Preventiva ${formatDate(schedule.scheduledDate)}`,
+                description: schedule.generator.name,
+                href: `/dashboard/orders/${schedule.generatedOrderId}`,
+                badge: "O.S.",
+                tone: "emerald" as const,
+                permission: "orders.view",
+              })),
+            {
+              label: "Contas a receber",
+              description: "Referencia financeira do contrato, sem refatorar o modulo financeiro.",
+              href: "/dashboard/finance/accounts-receivable",
+              badge: "Financeiro",
+              tone: "rose" as const,
+              permission: "finance.view",
+            },
+          ]}
+        />
+      </SectionCard>
+
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_360px]">
         <div className="space-y-6">
           <SectionCard
@@ -410,12 +480,14 @@ export default function ContractDetailPage() {
                         ? formatCurrency(Number(item.coverageAmount))
                         : "Nao definida"}
                     </p>
-                    <Link
+                    <PermissionAwareLink
                       href={`/dashboard/equipments/${item.generator.id}`}
+                      permission="equipments.view"
                       className="mt-3 inline-flex text-sm font-semibold text-sky-700 transition hover:text-sky-800 hover:underline"
+                      fallbackClassName="mt-3 inline-flex text-sm font-semibold text-slate-500"
                     >
                       Abrir equipamento
-                    </Link>
+                    </PermissionAwareLink>
                   </div>
                 ))}
               </div>
@@ -470,12 +542,13 @@ export default function ContractDetailPage() {
                         </td>
                         <td className="px-3 py-3">
                           {canOpenReceivable ? (
-                            <Link
+                            <PermissionAwareLink
                               href="/dashboard/finance/accounts-receivable"
+                              permission="finance.view"
                               className={SECONDARY_BUTTON}
                             >
                               Abrir baixa
-                            </Link>
+                            </PermissionAwareLink>
                           ) : (
                             <span className="text-xs text-slate-500">
                               {invoice.paidAt
@@ -539,12 +612,14 @@ export default function ContractDetailPage() {
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-3">
                       {schedule.generatedOrderId ? (
-                        <Link
+                        <PermissionAwareLink
                           href={`/dashboard/orders/${schedule.generatedOrderId}`}
+                          permission="orders.view"
                           className="inline-flex text-sm font-semibold text-sky-700 transition hover:text-sky-800 hover:underline"
+                          fallbackClassName="inline-flex text-sm font-semibold text-slate-500"
                         >
                           Abrir O.S. vinculada
-                        </Link>
+                        </PermissionAwareLink>
                       ) : (
                         <span className="text-sm text-slate-500">
                           Ainda sem O.S. gerada para esta preventiva.
@@ -648,12 +723,14 @@ export default function ContractDetailPage() {
                 tone={contract.sourceProposal ? "blue" : "slate"}
               />
               {contract.sourceProposal ? (
-                <Link
+                <PermissionAwareLink
                   href={`/dashboard/proposals/${contract.sourceProposal.id}`}
+                  permission="proposals.view"
                   className="inline-flex text-sm font-semibold text-sky-700 transition hover:text-sky-800 hover:underline"
+                  fallbackClassName="inline-flex text-sm font-semibold text-slate-500"
                 >
                   Abrir proposta de origem
-                </Link>
+                </PermissionAwareLink>
               ) : null}
               <Info
                 label="Cliente inadimplente"

@@ -6,6 +6,10 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { getAccessFromToken } from "@/lib/access";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
+import {
+  OperationalBreadcrumb,
+  PermissionAwareLink,
+} from "../../components/OperationalLinks";
 
 type SupplierItem = {
   id: string;
@@ -228,6 +232,14 @@ export default function CatalogItemDetailPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
+      <OperationalBreadcrumb
+        items={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Estoque", href: "/dashboard/inventory" },
+          { label: item.name },
+        ]}
+      />
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">
@@ -239,21 +251,21 @@ export default function CatalogItemDetailPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/dashboard/catalog" className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50">
+          <PermissionAwareLink href="/dashboard/catalog" permission="catalog.view" className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50">
             Catalogo
-          </Link>
-          <Link href="/dashboard/inventory" className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50">
+          </PermissionAwareLink>
+          <PermissionAwareLink href="/dashboard/inventory" permission="inventory.view" className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50">
             Estoque
-          </Link>
+          </PermissionAwareLink>
           {canAdjust ? (
-            <Link href="/dashboard/inventory" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100">
+            <PermissionAwareLink href="/dashboard/inventory" permission="inventory.adjust" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100">
               Ajustar saldo
-            </Link>
+            </PermissionAwareLink>
           ) : null}
           {canEdit ? (
-            <Link href={`/dashboard/catalog/new?editItemId=${item.id}`} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500">
+            <PermissionAwareLink href={`/dashboard/catalog/new?editItemId=${item.id}`} permission="catalog.update" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500">
               Editar cadastro
-            </Link>
+            </PermissionAwareLink>
           ) : null}
         </div>
       </div>

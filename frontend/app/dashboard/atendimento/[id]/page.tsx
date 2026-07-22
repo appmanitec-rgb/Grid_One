@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
@@ -26,6 +25,10 @@ import {
   TextAreaInput,
   TextInput,
 } from "../../components/DashboardPageKit";
+import {
+  OperationalBreadcrumb,
+  PermissionAwareLink,
+} from "../../components/OperationalLinks";
 
 type GeneratorOption = {
   id: string;
@@ -202,6 +205,14 @@ export default function InternalTicketDetailPage() {
 
   return (
     <div className="space-y-6">
+      <OperationalBreadcrumb
+        items={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Chamados", href: "/dashboard/atendimento" },
+          { label: ticket.code || ticket.title },
+        ]}
+      />
+
       <PageHero
         eyebrow="Atendimento"
         title={`${ticket.code} - ${ticket.title}`}
@@ -230,32 +241,44 @@ export default function InternalTicketDetailPage() {
         ]}
         actions={
           <>
-            <Link href="/dashboard/atendimento" className={SECONDARY_BUTTON}>
+            <PermissionAwareLink href="/dashboard/atendimento" permission="tickets.view" className={SECONDARY_BUTTON}>
               Voltar
-            </Link>
+            </PermissionAwareLink>
             {ticket.client?.id ? (
-              <Link
+              <PermissionAwareLink
                 href={`/dashboard/clients/${ticket.client.id}`}
+                permission="clients.view"
                 className={SECONDARY_BUTTON}
               >
                 Abrir cliente
-              </Link>
+              </PermissionAwareLink>
             ) : null}
             {ticket.generator?.id ? (
-              <Link
+              <PermissionAwareLink
                 href={`/dashboard/equipments/${ticket.generator.id}`}
+                permission="equipments.view"
                 className={SECONDARY_BUTTON}
               >
                 Abrir equipamento
-              </Link>
+              </PermissionAwareLink>
+            ) : null}
+            {ticket.contract?.id ? (
+              <PermissionAwareLink
+                href={`/dashboard/contracts/${ticket.contract.id}`}
+                permission="contracts.view"
+                className={SECONDARY_BUTTON}
+              >
+                Abrir contrato
+              </PermissionAwareLink>
             ) : null}
             {ticket.maintenanceOrder ? (
-              <Link
+              <PermissionAwareLink
                 href={`/dashboard/orders/${ticket.maintenanceOrder.id}`}
+                permission="orders.view"
                 className={PRIMARY_BUTTON}
               >
                 Abrir OS vinculada
-              </Link>
+              </PermissionAwareLink>
             ) : null}
           </>
         }

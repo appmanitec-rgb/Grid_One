@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
+import { getAccessFromToken } from "@/lib/access";
 import { clearAuthSession } from "@/lib/auth-session";
 import {
   DataPill,
@@ -16,6 +16,10 @@ import {
   StatusBanner,
   TextAreaInput,
 } from "../../components/DashboardPageKit";
+import {
+  OperationalBreadcrumb,
+  PermissionAwareLink,
+} from "../../components/OperationalLinks";
 
 type Tone = "blue" | "emerald" | "amber" | "rose" | "slate";
 type OrderStatus = "OPEN" | "IN_PROGRESS" | "COMPLETED" | "CANCELED";
@@ -57,6 +61,14 @@ type Order = {
     } | null;
   } | null;
   contract?: { id: string; code: string; status: string } | null;
+  serviceReport?: { id: string; code: string; status: string } | null;
+  sourceTickets?: Array<{
+    id: string;
+    code?: string | null;
+    title?: string | null;
+    status: string;
+    priority?: string | null;
+  }>;
   materials?: Array<{
     id: string;
     quantity: number;
@@ -81,6 +93,11 @@ export default function OrderDetailPage() {
   const [workingKey, setWorkingKey] = useState("");
   const [reportDraft, setReportDraft] = useState("");
   const [reportNote, setReportNote] = useState("");
+  const [access, setAccess] = useState(() => getAccessFromToken());
+
+  useEffect(() => {
+    setAccess(getAccessFromToken());
+  }, []);
 
   const handleUnauthorized = useCallback(
     async (res: Response) => {
@@ -231,9 +248,18 @@ export default function OrderDetailPage() {
   const siteName = order.site?.name || order.generator?.currentSite?.name || "-";
   const needsDispatch = !order.technician?.id;
   const reportPending = !order.customerReport && order.status !== "CANCELED";
+  const canViewCosts = access.catalog.viewCosts;
 
   return (
     <div className="space-y-6">
+      <OperationalBreadcrumb
+        items={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Ordens", href: "/dashboard/orders" },
+          { label: order.title },
+        ]}
+      />
+
       <PageHero
         eyebrow="Ordem de servico"
         title={order.title}
@@ -259,26 +285,38 @@ export default function OrderDetailPage() {
           },
           {
             label: "Custo reservado",
-            value: formatCurrency(materialCost),
-            helper: "Estimativa com base nos materiais vinculados.",
+            value: canViewCosts ? formatCurrency(materialCost) : "Restrito",
+            helper: canViewCosts
+              ? "Estimativa com base nos materiais vinculados."
+              : "Visivel apenas para perfis autorizados a ver custo.",
             tone: "emerald",
           },
         ]}
         actions={
           <>
-            <Link href="/dashboard/orders" className={SECONDARY_BUTTON}>
+            <PermissionAwareLink href="/dashboard/orders" permission="orders.view" className={SECONDARY_BUTTON}>
               Voltar para ordens
-            </Link>
-            <Link
+            </PermissionAwareLink>
+            <PermissionAwareLink
               href={`/dashboard/documents/orders/${order.id}`}
+              permission="orders.view"
               className={SECONDARY_BUTTON}
             >
               Documento
-            </Link>
+            </PermissionAwareLink>
             {order.contract ? (
-              <Link href={`/dashboard/contracts/${order.contract.id}`} className={SECONDARY_BUTTON}>
+              <PermissionAwareLink href={`/dashboard/contracts/${order.contract.id}`} permission="contracts.view" className={SECONDARY_BUTTON}>
                 Abrir contrato
-              </Link>
+              </PermissionAwareLink>
+            ) : null}
+            {order.serviceReport ? (
+              <PermissionAwareLink
+                href={`/dashboard/relatorios-tecnicos/${order.serviceReport.id}`}
+                permission="serviceReports.view"
+                className={SECONDARY_BUTTON}
+              >
+                Abrir laudo {order.serviceReport.code}
+              </PermissionAwareLink>
             ) : null}
             {order.status === "OPEN" ? (
               <button
@@ -413,29 +451,56 @@ export default function OrderDetailPage() {
 
             <div className="mt-4 flex flex-wrap gap-3">
               {order.generator?.id ? (
-                <Link
+                <PermissionAwareLink
                   href={`/dashboard/equipments/${order.generator.id}`}
+                  permission="equipments.view"
                   className="inline-flex text-sm font-semibold text-sky-700 transition hover:text-sky-800 hover:underline"
+                  fallbackClassName="inline-flex text-sm font-semibold text-slate-500"
                 >
                   Abrir equipamento
-                </Link>
+                </PermissionAwareLink>
               ) : null}
               {order.generator?.client?.id ? (
-                <Link
+                <PermissionAwareLink
                   href={`/dashboard/clients/${order.generator.client.id}`}
+                  permission="clients.view"
                   className="inline-flex text-sm font-semibold text-sky-700 transition hover:text-sky-800 hover:underline"
+                  fallbackClassName="inline-flex text-sm font-semibold text-slate-500"
                 >
                   Abrir cliente
-                </Link>
+                </PermissionAwareLink>
               ) : null}
               {order.contract ? (
-                <Link
+                <PermissionAwareLink
                   href={`/dashboard/contracts/${order.contract.id}`}
+                  permission="contracts.view"
                   className="inline-flex text-sm font-semibold text-sky-700 transition hover:text-sky-800 hover:underline"
+                  fallbackClassName="inline-flex text-sm font-semibold text-slate-500"
                 >
                   Abrir contrato vinculado
-                </Link>
+                </PermissionAwareLink>
               ) : null}
+              {order.serviceReport ? (
+                <PermissionAwareLink
+                  href={`/dashboard/relatorios-tecnicos/${order.serviceReport.id}`}
+                  permission="serviceReports.view"
+                  className="inline-flex text-sm font-semibold text-sky-700 transition hover:text-sky-800 hover:underline"
+                  fallbackClassName="inline-flex text-sm font-semibold text-slate-500"
+                >
+                  Abrir laudo tecnico
+                </PermissionAwareLink>
+              ) : null}
+              {order.sourceTickets?.map((ticket) => (
+                <PermissionAwareLink
+                  key={ticket.id}
+                  href={`/dashboard/atendimento/${ticket.id}`}
+                  permission="tickets.view"
+                  className="inline-flex text-sm font-semibold text-sky-700 transition hover:text-sky-800 hover:underline"
+                  fallbackClassName="inline-flex text-sm font-semibold text-slate-500"
+                >
+                  Abrir chamado {ticket.code || ""}
+                </PermissionAwareLink>
+              ))}
               {order.auvoLink ? (
                 <a
                   href={order.auvoLink}
@@ -503,12 +568,14 @@ export default function OrderDetailPage() {
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         {material.catalogItem?.id ? (
-                          <Link
+                          <PermissionAwareLink
                             href={`/dashboard/catalog/${material.catalogItem.id}`}
+                            permission="catalog.view"
                             className="text-sm font-semibold text-sky-700 transition hover:text-sky-800 hover:underline"
+                            fallbackClassName="text-sm font-semibold text-slate-700"
                           >
                             {material.catalogItem?.name || "Material"}
-                          </Link>
+                          </PermissionAwareLink>
                         ) : (
                           <p className="text-sm font-semibold text-slate-900">
                             {material.catalogItem?.name || "Material"}
@@ -521,9 +588,11 @@ export default function OrderDetailPage() {
                       </div>
                       <DataPill tone="blue">{material.quantity} un.</DataPill>
                     </div>
-                    <p className="mt-3 text-sm text-slate-600">
-                      Custo unitario: {formatCurrency(Number(material.unitCost || 0))}
-                    </p>
+                    {canViewCosts ? (
+                      <p className="mt-3 text-sm text-slate-600">
+                        Custo unitario: {formatCurrency(Number(material.unitCost || 0))}
+                      </p>
+                    ) : null}
                   </div>
                 ))}
               </div>

@@ -1,7 +1,15 @@
-import Link from "next/link";
-import { apiFetch, apiUrl } from "@/lib/api";
+"use client";
 
-type Params = { id: string };
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
+import {
+  OperationalBreadcrumb,
+  PermissionAwareLink,
+  QuickActions,
+  RelatedEntityGrid,
+} from "../../components/OperationalLinks";
 
 type ClientAddress = {
   id: string;
@@ -39,6 +47,7 @@ type ClientGenerator = {
   createdAt?: string;
   updatedAt?: string;
   createdByUser?: { id: string; name: string; email: string } | null;
+  orders?: ClientOrder[];
 };
 
 type ClientProposal = {
@@ -48,6 +57,8 @@ type ClientProposal = {
   totalValue: number;
   createdAt: string;
   user?: { id: string; name: string; email: string; role: string } | null;
+  generatedContract?: { id: string; code: string; status: string } | null;
+  salesOpportunity?: { id: string; title: string; stage: string } | null;
 };
 
 type ClientContract = {
@@ -67,6 +78,47 @@ type ClientAuditLog = {
   details?: string | null;
   createdAt: string;
   actorUser?: { id: string; name: string; email: string; role: string } | null;
+};
+
+type ClientOrder = {
+  id: string;
+  title: string;
+  status: string;
+  type?: string | null;
+  priority?: string | null;
+  openedAt?: string | null;
+  scheduledTo?: string | null;
+  finishedAt?: string | null;
+  contract?: { id: string; code: string; status: string } | null;
+  serviceReport?: { id: string; code: string; status: string } | null;
+};
+
+type ClientTicket = {
+  id: string;
+  code?: string | null;
+  title: string;
+  status: string;
+  priority?: string | null;
+  createdAt?: string | null;
+  generator?: { id: string; name?: string | null; serialNumber?: string | null } | null;
+  maintenanceOrder?: { id: string; title: string; status: string } | null;
+};
+
+type ClientReport = {
+  id: string;
+  code: string;
+  title?: string | null;
+  status: string;
+  createdAt?: string | null;
+  maintenanceOrder?: { id: string; title: string; status: string } | null;
+  generator?: { id: string; name?: string | null; serialNumber?: string | null } | null;
+  generatedDocument?: {
+    id: string;
+    documentCode?: string | null;
+    documentTitle?: string | null;
+    status?: string | null;
+    createdAt?: string | null;
+  } | null;
 };
 
 type ClientProfile = {
@@ -94,6 +146,8 @@ type ClientProfile = {
   generators: ClientGenerator[];
   contracts: ClientContract[];
   proposals: ClientProposal[];
+  serviceTickets?: ClientTicket[];
+  serviceReports?: ClientReport[];
   auditLogs?: ClientAuditLog[];
 };
 
@@ -124,27 +178,66 @@ function mapLogAction(action: string) {
   return action;
 }
 
-async function getClientProfile(id: string): Promise<ClientProfile | null> {
-  try {
-    const res = await apiFetch(apiUrl(`/clients/${id}`), { cache: "no-store" });
-    if (!res.ok) return null;
-    return res.json();
-  } catch (error) {
-    console.error("Erro ao buscar perfil do cliente:", error);
-    return null;
+async function getClientProfile(id: string): Promise<ClientProfile> {
+  const res = await apiFetch(apiUrl(`/clients/${id}`), { cache: "no-store" });
+  if (!res.ok) {
+    throw new Error(await readApiErrorMessage(res, "Cliente nao encontrado."));
   }
+  return res.json();
 }
 
-export default async function ClientProfilePage({ params }: { params: Promise<Params> }) {
-  const { id } = await params;
-  const client = await getClientProfile(id);
+export default function ClientProfilePage() {
+  const params = useParams<{ id?: string | string[] }>();
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
+  const [client, setClient] = useState<ClientProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const loadClient = useCallback(async () => {
+    if (!id) {
+      setError("Cliente nao informado.");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+      setClient(await getClientProfile(id));
+    } catch (loadError) {
+      setClient(null);
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Nao foi possivel carregar o cliente.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    void loadClient();
+  }, [loadClient]);
+
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="rounded-xl border border-zinc-200 bg-white p-8 text-center">
+          <p className="text-sm font-semibold text-zinc-500">
+            Carregando cliente...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!client) {
     return (
       <div className="p-8">
         <div className="bg-white border border-zinc-200 rounded-xl p-8 text-center">
           <h1 className="text-2xl font-bold text-zinc-800 mb-2">Cliente nao encontrado</h1>
-          <p className="text-zinc-500 mb-6">Verifique se o cliente existe ou se foi removido.</p>
+          <p className="text-zinc-500 mb-6">{error || "Verifique se o cliente existe ou se foi removido."}</p>
           <Link href="/dashboard/clients" className="inline-flex px-4 py-2 rounded-lg bg-zinc-900 text-white font-semibold">
             Voltar para clientes
           </Link>
@@ -158,6 +251,15 @@ export default async function ClientProfilePage({ params }: { params: Promise<Pa
   const generators = client.generators ?? [];
   const proposals = client.proposals ?? [];
   const contracts = client.contracts ?? [];
+  const orders = generators.flatMap((generator) =>
+    (generator.orders ?? []).map((order) => ({
+      ...order,
+      generatorId: generator.id,
+      generatorName: generator.name,
+    })),
+  );
+  const tickets = client.serviceTickets ?? [];
+  const serviceReports = client.serviceReports ?? [];
   const logItems = (client.auditLogs ?? [])
     .map((log) => ({
       id: log.id,
@@ -170,6 +272,14 @@ export default async function ClientProfilePage({ params }: { params: Promise<Pa
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-6">
+      <OperationalBreadcrumb
+        items={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Clientes", href: "/dashboard/clients" },
+          { label: client.tradeName || client.companyName },
+        ]}
+      />
+
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-3 mb-2">
@@ -184,32 +294,90 @@ export default async function ClientProfilePage({ params }: { params: Promise<Pa
 
       <section className="bg-white border border-zinc-200 rounded-xl p-6">
         <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">Acoes rapidas</h2>
-        <div className="flex flex-wrap gap-3">
-          <Link
-            href={`/dashboard/clients/new?editClientId=${client.id}`}
-            className="inline-flex px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 font-semibold hover:bg-zinc-50 transition-colors"
-          >
-            Editar cadastro
-          </Link>
-          <Link
-            href={`/dashboard/proposals/new?clientId=${client.id}`}
-            className="inline-flex px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-500 transition-colors"
-          >
-            Gerar proposta
-          </Link>
-          <Link
-            href={`/dashboard/equipments/new?clientId=${client.id}`}
-            className="inline-flex px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-500 transition-colors"
-          >
-            Cadastrar nova maquina
-          </Link>
-          <Link
-            href="/dashboard/orders"
-            className="inline-flex px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 font-semibold hover:bg-zinc-50 transition-colors"
-          >
-            Ver O.S.
-          </Link>
-        </div>
+        <QuickActions
+          items={[
+            {
+              label: "Editar cadastro",
+              href: `/dashboard/clients/new?editClientId=${client.id}`,
+              permission: "clients.update",
+            },
+            {
+              label: "Nova proposta",
+              href: `/dashboard/proposals/new?clientId=${client.id}`,
+              tone: "emerald",
+              permission: "proposals.create",
+            },
+            {
+              label: "Novo equipamento",
+              href: `/dashboard/equipments/new?clientId=${client.id}`,
+              permission: "equipments.create",
+            },
+            {
+              label: "Ver chamados",
+              href: "/dashboard/atendimento",
+              permission: "tickets.view",
+            },
+            {
+              label: "Ver O.S.",
+              href: "/dashboard/orders",
+              permission: "orders.view",
+            },
+            {
+              label: "Ver contratos",
+              href: "/dashboard/contracts",
+              permission: "contracts.view",
+            },
+          ]}
+        />
+      </section>
+
+      <section className="bg-white border border-zinc-200 rounded-xl p-6">
+        <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">Mapa de relacionamentos</h2>
+        <RelatedEntityGrid
+          items={[
+            ...generators.slice(0, 6).map((generator) => ({
+              label: generator.name,
+              description: `Equipamento ${generator.serialNumber || "sem serie"} - ${generator.power} kVA`,
+              href: `/dashboard/equipments/${generator.id}`,
+              badge: "Equipamento",
+              tone: "blue" as const,
+              permission: "equipments.view",
+            })),
+            ...contracts.slice(0, 4).map((contract) => ({
+              label: contract.code,
+              description: `${contract.status} - vigencia ate ${new Date(contract.endDate).toLocaleDateString("pt-BR")}`,
+              href: `/dashboard/contracts/${contract.id}`,
+              badge: "Contrato",
+              tone: "emerald" as const,
+              permission: "contracts.view",
+            })),
+            ...orders.slice(0, 5).map((order) => ({
+              label: order.title,
+              description: `${order.generatorName} - ${order.status}`,
+              href: `/dashboard/orders/${order.id}`,
+              badge: "O.S.",
+              tone: "amber" as const,
+              permission: "orders.view",
+            })),
+            ...tickets.slice(0, 4).map((ticket) => ({
+              label: ticket.code || ticket.title,
+              description: `${ticket.status} - ${ticket.generator?.name || "sem equipamento"}`,
+              href: `/dashboard/atendimento/${ticket.id}`,
+              badge: "Chamado",
+              tone: "rose" as const,
+              permission: "tickets.view",
+            })),
+            ...serviceReports.slice(0, 4).map((report) => ({
+              label: report.code,
+              description: `${report.title || "Laudo tecnico"} - ${report.status}`,
+              href: `/dashboard/relatorios-tecnicos/${report.id}`,
+              badge: "Laudo",
+              tone: "slate" as const,
+              permission: "serviceReports.view",
+            })),
+          ]}
+          empty="Nenhum relacionamento navegavel encontrado para este cliente."
+        />
       </section>
 
       <section className="bg-white border border-zinc-200 rounded-xl p-6">
@@ -297,7 +465,13 @@ export default async function ClientProfilePage({ params }: { params: Promise<Pa
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {generators.map((gen) => (
-              <Link key={gen.id} href={`/dashboard/equipments/${gen.id}`} className="border border-zinc-200 rounded-lg p-4 bg-zinc-50/50 hover:bg-zinc-100 transition-colors">
+              <PermissionAwareLink
+                key={gen.id}
+                href={`/dashboard/equipments/${gen.id}`}
+                permission="equipments.view"
+                className="block border border-zinc-200 rounded-lg p-4 bg-zinc-50/50 hover:bg-zinc-100 transition-colors"
+                fallbackClassName="block border border-zinc-200 rounded-lg p-4 bg-zinc-50/50 text-zinc-700"
+              >
                 <p className="font-semibold text-zinc-800">{gen.name}</p>
                 <p className="text-sm text-zinc-600">Marca: {gen.brand}</p>
                 <p className="text-sm text-zinc-600">Potencia: {gen.power} kVA</p>
@@ -306,7 +480,7 @@ export default async function ClientProfilePage({ params }: { params: Promise<Pa
                   Cadastrada por: {gen.createdByUser?.name || "Nao identificado"}
                 </p>
                 <p className="mt-2 text-xs font-semibold text-blue-700">Abrir dados gerais do equipamento</p>
-              </Link>
+              </PermissionAwareLink>
             ))}
           </div>
         )}
@@ -338,9 +512,14 @@ export default async function ClientProfilePage({ params }: { params: Promise<Pa
                     <td className="py-2">{contract.preventiveRecurrence}</td>
                     <td className="py-2">{contract.status}</td>
                     <td className="py-2">
-                      <Link href={`/dashboard/contracts/${contract.id}`} className="font-semibold text-blue-700 hover:underline">
+                      <PermissionAwareLink
+                        href={`/dashboard/contracts/${contract.id}`}
+                        permission="contracts.view"
+                        className="font-semibold text-blue-700 hover:underline"
+                        fallbackClassName="font-semibold text-zinc-500"
+                      >
                         Ver contrato
-                      </Link>
+                      </PermissionAwareLink>
                     </td>
                   </tr>
                 ))}
@@ -369,9 +548,14 @@ export default async function ClientProfilePage({ params }: { params: Promise<Pa
                 {proposals.map((proposal) => (
                   <tr key={proposal.id} className="border-b border-zinc-100">
                     <td className="py-2 font-medium text-zinc-800">
-                      <Link href={`/dashboard/proposals/${proposal.id}`} className="hover:underline text-blue-700">
+                      <PermissionAwareLink
+                        href={`/dashboard/proposals/${proposal.id}`}
+                        permission="proposals.view"
+                        className="hover:underline text-blue-700"
+                        fallbackClassName="text-zinc-700"
+                      >
                         {proposal.code}
-                      </Link>
+                      </PermissionAwareLink>
                     </td>
                     <td className="py-2">{proposal.status}</td>
                     <td className="py-2">R$ {Number(proposal.totalValue || 0).toFixed(2)}</td>

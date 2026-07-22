@@ -22,6 +22,11 @@ import {
   StatusBanner,
   TextInput,
 } from "../../components/DashboardPageKit";
+import {
+  OperationalBreadcrumb,
+  PermissionAwareLink,
+  RelatedEntityGrid,
+} from "../../components/OperationalLinks";
 
 type Proposal = {
   id: string;
@@ -333,6 +338,14 @@ export default function ProposalDetailPage() {
 
   return (
     <div className="space-y-6">
+      <OperationalBreadcrumb
+        items={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: isClient ? "Portal" : "Propostas", href: "/dashboard/proposals" },
+          { label: `Proposta ${proposal.code}` },
+        ]}
+      />
+
       <PageHero
         compact
         eyebrow="Proposta comercial"
@@ -384,19 +397,21 @@ export default function ProposalDetailPage() {
               </ActionButton>
             ) : null}
             {proposal.generatedContract && !isClient ? (
-              <Link
+              <PermissionAwareLink
                 href={`/dashboard/contracts/${proposal.generatedContract.id}`}
+                permission="contracts.view"
                 className={PRIMARY_BUTTON}
               >
                 Ver contrato {proposal.generatedContract.code}
-              </Link>
+              </PermissionAwareLink>
             ) : null}
-            <Link
+            <PermissionAwareLink
               href={`/dashboard/documents/proposals/${proposal.id}`}
+              permission="proposals.view"
               className={SECONDARY_BUTTON}
             >
               Documento
-            </Link>
+            </PermissionAwareLink>
             {!isClient ? (
               <ActionButton
                 busy={isBusy}
@@ -410,9 +425,9 @@ export default function ProposalDetailPage() {
                 Revisar proposta
               </ActionButton>
             ) : null}
-            <Link href="/dashboard/proposals" className={SECONDARY_BUTTON}>
+            <PermissionAwareLink href="/dashboard/proposals" permission="proposals.view" className={SECONDARY_BUTTON}>
               Voltar para carteira
-            </Link>
+            </PermissionAwareLink>
           </>
         }
         aside={
@@ -452,6 +467,65 @@ export default function ProposalDetailPage() {
       {notice ? <StatusBanner tone="emerald">{notice}</StatusBanner> : null}
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
 
+      <SectionCard
+        eyebrow="Navegacao cruzada"
+        title="Relacionamentos da proposta"
+        description="Atalhos seguros para a origem comercial, cliente, equipamento, documento e contrato gerado quando houver."
+      >
+        <RelatedEntityGrid
+          items={[
+            ...(proposal.client
+              ? [{
+                  label: proposal.client.companyName,
+                  description: "Cliente vinculado a proposta.",
+                  href: `/dashboard/clients/${proposal.client.id}`,
+                  badge: "Cliente",
+                  tone: "blue" as const,
+                  permission: "clients.view",
+                }]
+              : []),
+            ...(proposal.generator
+              ? [{
+                  label: proposal.generator.name,
+                  description: "Equipamento associado a proposta.",
+                  href: `/dashboard/equipments/${proposal.generator.id}`,
+                  badge: "Equipamento",
+                  tone: "slate" as const,
+                  permission: "equipments.view",
+                }]
+              : []),
+            ...(proposal.salesOpportunity && !isClient
+              ? [{
+                  label: proposal.salesOpportunity.title,
+                  description: `Etapa CRM: ${opportunityStageLabel(proposal.salesOpportunity.stage)}.`,
+                  href: `/dashboard/opportunities?opportunityId=${proposal.salesOpportunity.id}`,
+                  badge: "Oportunidade",
+                  tone: "amber" as const,
+                  permission: "proposals.view",
+                }]
+              : []),
+            ...(proposal.generatedContract && !isClient
+              ? [{
+                  label: proposal.generatedContract.code,
+                  description: `Contrato ${statusLabel(proposal.generatedContract.status)}.`,
+                  href: `/dashboard/contracts/${proposal.generatedContract.id}`,
+                  badge: "Contrato",
+                  tone: "emerald" as const,
+                  permission: "contracts.view",
+                }]
+              : []),
+            {
+              label: `Documento ${proposal.code}`,
+              description: "Visualizacao documental da proposta.",
+              href: `/dashboard/documents/proposals/${proposal.id}`,
+              badge: "Documento",
+              tone: "slate" as const,
+              permission: "proposals.view",
+            },
+          ]}
+        />
+      </SectionCard>
+
       {proposal.salesOpportunity && !isClient ? (
         <SectionCard
           eyebrow="Origem CRM"
@@ -460,20 +534,22 @@ export default function ProposalDetailPage() {
           actions={
             <>
               {!isClient ? (
-                <Link
+                <PermissionAwareLink
                   href={`/dashboard/opportunities?opportunityId=${proposal.salesOpportunity.id}`}
+                  permission="proposals.view"
                   className={SECONDARY_BUTTON}
                 >
                   Abrir oportunidade
-                </Link>
+                </PermissionAwareLink>
               ) : null}
               {!isClient ? (
-                <Link
+                <PermissionAwareLink
                   href={`/dashboard/proposals/new?opportunityId=${proposal.salesOpportunity.id}`}
+                  permission="proposals.create"
                   className={SECONDARY_BUTTON}
                 >
                   Nova proposta vinculada
-                </Link>
+                </PermissionAwareLink>
               ) : null}
             </>
           }

@@ -13,6 +13,7 @@ import {
   technicianPost,
 } from "@/lib/technician-work";
 import { StatusBanner } from "../../../components/DashboardPageKit";
+import { OperationalBreadcrumb } from "../../../components/OperationalLinks";
 
 const PRIMARY_BUTTON =
   "inline-flex min-h-12 items-center justify-center rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
@@ -101,6 +102,14 @@ export default function TechnicianOrderDetailPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-5 pb-8">
+      <OperationalBreadcrumb
+        items={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Area tecnica", href: "/dashboard/tecnico" },
+          { label: order.title },
+        ]}
+      />
+
       <Link href="/dashboard/tecnico" className="text-sm font-bold text-slate-600 hover:text-slate-950">
         Voltar para campo
       </Link>

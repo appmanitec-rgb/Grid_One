@@ -215,16 +215,19 @@ export class MaintenanceOrdersService {
         : undefined,
     };
 
-    return this.prisma.maintenanceOrder.findMany({
+    const rows = await this.prisma.maintenanceOrder.findMany({
       where,
       include: this.orderInclude(),
       orderBy: [{ scheduledTo: 'asc' }, { openedAt: 'desc' }],
       skip: (page - 1) * pageSize,
       take: pageSize,
     });
+
+    return rows.map((row) => this.withCostVisibility(row, scope?.role));
   }
 
   async findOne(id: string, actorUserId?: string) {
+    const scope = await this.getActorScope(actorUserId);
     const order = await this.prisma.maintenanceOrder.findUnique({
       where: { id },
       include: this.orderInclude(),
@@ -239,7 +242,7 @@ export class MaintenanceOrdersService {
       actorUserId,
       order.technicianId,
     );
-    return order;
+    return this.withCostVisibility(order, scope?.role);
   }
 
   async update(
@@ -409,9 +412,10 @@ export class MaintenanceOrdersService {
       );
 
       if (!fullOrder) return fullOrder;
-      if (assignmentValidation.warnings.length === 0) return fullOrder;
+      const visibleOrder = this.withCostVisibility(fullOrder, actor?.role);
+      if (assignmentValidation.warnings.length === 0) return visibleOrder;
       return {
-        ...fullOrder,
+        ...visibleOrder,
         dispatchWarnings: assignmentValidation.warnings,
       };
     });
@@ -539,6 +543,32 @@ export class MaintenanceOrdersService {
       );
     }
     return actor;
+  }
+
+  private withCostVisibility<
+    T extends { materials?: Array<{ unitCost?: unknown }> },
+  >(order: T, role?: UserRole | null): T {
+    if (this.canViewInventoryCosts(role)) {
+      return order;
+    }
+
+    return {
+      ...order,
+      materials: order.materials?.map((material) => ({
+        ...material,
+        unitCost: null,
+      })),
+    } as T;
+  }
+
+  private canViewInventoryCosts(role?: UserRole | null) {
+    return (
+      role === UserRole.ADMIN ||
+      role === UserRole.MANAGER ||
+      role === UserRole.ENGINEER_APPLICATION ||
+      role === UserRole.SUPPLIES ||
+      role === UserRole.AUDITOR
+    );
   }
 
   private async assertOrderScope(
@@ -1481,6 +1511,24 @@ export class MaintenanceOrdersService {
           code: true,
           status: true,
         },
+      },
+      serviceReport: {
+        select: {
+          id: true,
+          code: true,
+          status: true,
+        },
+      },
+      sourceTickets: {
+        select: {
+          id: true,
+          code: true,
+          title: true,
+          status: true,
+          priority: true,
+        },
+        orderBy: { createdAt: 'desc' as const },
+        take: 5,
       },
     };
   }

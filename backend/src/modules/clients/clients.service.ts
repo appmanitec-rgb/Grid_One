@@ -229,6 +229,26 @@ export class ClientsService {
             createdByUser: {
               select: { id: true, name: true, email: true },
             },
+            orders: {
+              select: {
+                id: true,
+                title: true,
+                status: true,
+                type: true,
+                priority: true,
+                openedAt: true,
+                scheduledTo: true,
+                finishedAt: true,
+                contract: {
+                  select: { id: true, code: true, status: true },
+                },
+                serviceReport: {
+                  select: { id: true, code: true, status: true },
+                },
+              },
+              orderBy: { openedAt: 'desc' },
+              take: 5,
+            },
           },
         },
         auditLogs: {
@@ -262,8 +282,58 @@ export class ClientsService {
             user: {
               select: { id: true, name: true, email: true, role: true },
             },
+            generatedContract: {
+              select: { id: true, code: true, status: true },
+            },
+            salesOpportunity: {
+              select: { id: true, title: true, stage: true },
+            },
           },
           orderBy: { createdAt: 'desc' },
+        },
+        serviceTickets: {
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            status: true,
+            priority: true,
+            createdAt: true,
+            generator: {
+              select: { id: true, name: true, serialNumber: true },
+            },
+            maintenanceOrder: {
+              select: { id: true, title: true, status: true },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 12,
+        },
+        serviceReports: {
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            status: true,
+            createdAt: true,
+            maintenanceOrder: {
+              select: { id: true, title: true, status: true },
+            },
+            generator: {
+              select: { id: true, name: true, serialNumber: true },
+            },
+            generatedDocument: {
+              select: {
+                id: true,
+                documentCode: true,
+                documentTitle: true,
+                status: true,
+                createdAt: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 12,
         },
       },
     });
