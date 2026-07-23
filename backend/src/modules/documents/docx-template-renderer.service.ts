@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { createHash } from 'crypto';
+import { existsSync, readFileSync } from 'fs';
+import { inflateRawSync } from 'zlib';
 import {
   InstitutionalTemplateDefinition,
   LoadedInstitutionalDocumentTemplate,
@@ -23,6 +25,7 @@ type DocxFile = {
 
 const DOCX_MIME =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document' as const;
+const WORD_TEXT_XML_PATTERN = /^word\/(?:document|header\d+|footer\d+)\.xml$/;
 
 @Injectable()
 export class DocxTemplateRendererService {
@@ -36,10 +39,20 @@ export class DocxTemplateRendererService {
       input.template.definition,
       input.context,
     );
-    const buffer = this.buildDocxArchive({
-      documentXml,
-      title: this.renderText(input.template.definition.title, input.context),
-    });
+    const buffer =
+      input.template.docxTemplatePath &&
+      existsSync(input.template.docxTemplatePath)
+        ? this.renderDocxTemplateFile(
+            input.template.docxTemplatePath,
+            input.context,
+          )
+        : this.buildDocxArchive({
+            documentXml,
+            title: this.renderText(
+              input.template.definition.title,
+              input.context,
+            ),
+          });
 
     return {
       buffer,
@@ -98,6 +111,35 @@ export class DocxTemplateRendererService {
     </w:sectPr>
   </w:body>
 </w:document>`;
+  }
+
+  private renderDocxTemplateFile(path: string, context: RenderContext) {
+    const files = this.unzip(readFileSync(path)).map((file) => {
+      if (!WORD_TEXT_XML_PATTERN.test(file.path)) return file;
+
+      const rendered = this.renderXmlTemplate(
+        file.content.toString('utf8'),
+        context,
+      );
+
+      return {
+        ...file,
+        content: Buffer.from(rendered, 'utf8'),
+      };
+    });
+    const unresolved = this.findUnresolvedTemplateMarkers(files);
+
+    if (unresolved.length) {
+      throw new BadRequestException(
+        [
+          'Template Word possui variaveis nao resolvidas:',
+          unresolved.slice(0, 12).join(', '),
+          'Confira o schema/sample-data ou reescreva o placeholder no Word sem quebrar o texto internamente.',
+        ].join(' '),
+      );
+    }
+
+    return this.zip(files);
   }
 
   private validateRequiredFields(
@@ -201,10 +243,26 @@ export class DocxTemplateRendererService {
   }
 
   private renderText(template: string, context: RenderContext) {
-    return this.renderVariables(this.renderLoops(template, context), context);
+    return this.renderVariables(
+      this.renderLoops(template, context, false),
+      context,
+      false,
+    );
   }
 
-  private renderLoops(template: string, context: RenderContext) {
+  private renderXmlTemplate(template: string, context: RenderContext) {
+    return this.renderVariables(
+      this.renderLoops(template, context, true),
+      context,
+      true,
+    );
+  }
+
+  private renderLoops(
+    template: string,
+    context: RenderContext,
+    escapeValues: boolean,
+  ) {
     return template.replace(
       /{{#\s*([\w.]+)\s*}}([\s\S]*?){{\/\s*\1\s*}}/g,
       (_match, path: string, block: string) => {
@@ -212,22 +270,33 @@ export class DocxTemplateRendererService {
         if (!Array.isArray(value)) return '';
         return value
           .map((item) =>
-            this.renderVariables(block, {
-              ...context,
-              ...(item && typeof item === 'object'
-                ? (item as Record<string, unknown>)
-                : { this: item }),
-            }),
+            this.renderVariables(
+              block,
+              {
+                ...context,
+                ...(item && typeof item === 'object'
+                  ? (item as Record<string, unknown>)
+                  : { this: item }),
+              },
+              escapeValues,
+            ),
           )
           .join('');
       },
     );
   }
 
-  private renderVariables(template: string, context: RenderContext) {
+  private renderVariables(
+    template: string,
+    context: RenderContext,
+    escapeValues: boolean,
+  ) {
     return template.replace(
       /{{\s*([\w.[\]]+(?:\.[\w.[\]]+)*)\s*}}/g,
-      (_match, path: string) => this.stringify(this.resolvePath(path, context)),
+      (_match, path: string) => {
+        const value = this.stringify(this.resolvePath(path, context));
+        return escapeValues ? this.escapeXml(value) : value;
+      },
     );
   }
 
@@ -293,6 +362,89 @@ export class DocxTemplateRendererService {
     ];
 
     return this.zip(files);
+  }
+
+  private unzip(buffer: Buffer): DocxFile[] {
+    const endOffset = this.findEndOfCentralDirectory(buffer);
+    const totalEntries = buffer.readUInt16LE(endOffset + 10);
+    let offset = buffer.readUInt32LE(endOffset + 16);
+    const files: DocxFile[] = [];
+
+    for (let index = 0; index < totalEntries; index += 1) {
+      if (buffer.readUInt32LE(offset) !== 0x02014b50) {
+        throw new BadRequestException(
+          'DOCX invalido: diretorio ZIP corrompido.',
+        );
+      }
+
+      const method = buffer.readUInt16LE(offset + 10);
+      const compressedSize = buffer.readUInt32LE(offset + 20);
+      const localHeaderOffset = buffer.readUInt32LE(offset + 42);
+      const fileNameLength = buffer.readUInt16LE(offset + 28);
+      const extraLength = buffer.readUInt16LE(offset + 30);
+      const commentLength = buffer.readUInt16LE(offset + 32);
+      const fileName = buffer
+        .subarray(offset + 46, offset + 46 + fileNameLength)
+        .toString('utf8');
+
+      offset += 46 + fileNameLength + extraLength + commentLength;
+      if (fileName.endsWith('/')) continue;
+
+      if (buffer.readUInt32LE(localHeaderOffset) !== 0x04034b50) {
+        throw new BadRequestException('DOCX invalido: arquivo ZIP corrompido.');
+      }
+
+      const localFileNameLength = buffer.readUInt16LE(localHeaderOffset + 26);
+      const localExtraLength = buffer.readUInt16LE(localHeaderOffset + 28);
+      const dataStart =
+        localHeaderOffset + 30 + localFileNameLength + localExtraLength;
+      const compressed = buffer.subarray(dataStart, dataStart + compressedSize);
+
+      files.push({
+        path: fileName,
+        content: this.inflateZipEntry(method, compressed),
+      });
+    }
+
+    return files;
+  }
+
+  private findEndOfCentralDirectory(buffer: Buffer) {
+    const minimumOffset = Math.max(0, buffer.length - 65_557);
+
+    for (
+      let offset = buffer.length - 22;
+      offset >= minimumOffset;
+      offset -= 1
+    ) {
+      if (buffer.readUInt32LE(offset) === 0x06054b50) return offset;
+    }
+
+    throw new BadRequestException('DOCX invalido: fim do ZIP nao encontrado.');
+  }
+
+  private inflateZipEntry(method: number, compressed: Buffer) {
+    if (method === 0) return compressed;
+    if (method === 8) return inflateRawSync(compressed);
+
+    throw new BadRequestException(
+      `DOCX usa metodo ZIP nao suportado: ${method}.`,
+    );
+  }
+
+  private findUnresolvedTemplateMarkers(files: DocxFile[]) {
+    const markers = new Set<string>();
+
+    for (const file of files) {
+      if (!WORD_TEXT_XML_PATTERN.test(file.path)) continue;
+      const matches =
+        file.content
+          .toString('utf8')
+          .match(/{{[#/]?\s*[\w.[\]]+(?:\.[\w.[\]]+)*\s*}}/g) || [];
+      for (const match of matches) markers.add(match);
+    }
+
+    return [...markers];
   }
 
   private zip(files: DocxFile[]) {

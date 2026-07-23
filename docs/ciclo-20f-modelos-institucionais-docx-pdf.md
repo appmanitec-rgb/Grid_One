@@ -4,7 +4,7 @@
 
 O Ciclo 20F substituiu o caminho principal de "imprimir tela" por geracao server-side de documento institucional DOCX para documentos do hub operacional. Proposta, contrato e O.S. agora podem gerar/baixar DOCX versionado, salvo em storage privado e registrado em `DocumentDelivery` com template, versao, checksum, MIME, tamanho e snapshot sem `storageKey`.
 
-O PDF server-side do Ciclo 19 foi preservado como fallback temporario. A conversao DOCX -> PDF nao foi declarada homologada porque nao ha LibreOffice/headless configurado nem modelo Word binario oficial fornecido.
+O PDF server-side do Ciclo 19 foi preservado como fallback temporario. Na continuidade do 20F, a proposta passou a usar `template.docx` real quando disponivel e ganhou conversao local DOCX -> PDF via LibreOffice headless em endpoint separado.
 
 ## 2. Commit base
 
@@ -95,7 +95,7 @@ Templates criados:
 
 ## 8. Estrategia DOCX/PDF usada
 
-Implementado:
+Implementado inicialmente no fechamento do 20F:
 
 ```text
 template institucional estruturado
@@ -104,21 +104,23 @@ template institucional estruturado
 -> DocumentDelivery
 ```
 
-Nao implementado como homologado:
+Implementado na continuidade com modelo Word real da proposta:
 
 ```text
-DOCX oficial Word binario da Manitec
+template.docx da proposta
 -> DOCX final
 -> PDF por LibreOffice/headless
+-> storage privado
+-> DocumentDelivery
 ```
 
-Motivo: nao ha arquivo Word institucional binario fornecido nem conversor LibreOffice/headless configurado no ambiente. O relatorio e o provider registram `pdfFromDocx.available=false`.
+O endpoint legado `/download-pdf` foi mantido. O novo PDF institucional da proposta usa rota separada para permitir homologacao visual antes da virada completa.
 
 ## 9. Limitacoes tecnicas
 
-- `template.docx` oficial ainda nao foi fornecido; a fonte versionada atual e `template.json`.
-- O DOCX gerado e Office Open XML simples, adequado para documento institucional basico, mas ainda nao substitui uma homologacao visual fina no Word.
-- PDF por DOCX depende de conversor externo e fica pendente.
+- `template.docx` oficial foi fornecido apenas para proposta; contrato, O.S. e laudo ainda usam base/fallback estruturado.
+- O PDF institucional por DOCX depende de LibreOffice instalado no servidor/container.
+- A conversao DOCX -> PDF foi testada localmente, mas ainda exige homologacao visual fina em staging/producao.
 - Laudo tecnico ainda precisa ciclo dedicado para migrar DOCX sem quebrar QR, evidencias, aceite, versoes, retencao e links publicos.
 - O enum de auditoria continua com `PDF_DOWNLOAD`; sem migration, o download DOCX reaproveita esse tipo historico e diferencia pelo `mimeType`/`provider`.
 
@@ -149,7 +151,7 @@ Cobertura:
 - Checksum SHA-256.
 - Registro de template/versao.
 - Storage e `DocumentDelivery`.
-- Fallback honesto de PDF por DOCX indisponivel.
+- Status do conversor LibreOffice e geracao PDF a partir do DOCX.
 - Bloqueio indireto de dados sensiveis no conteudo gerado.
 
 ## 12. E2E
@@ -163,7 +165,7 @@ Cobertura:
 
 - Admin baixa DOCX institucional da proposta.
 - Documento nao depende de print da tela.
-- Documento contem template/versao.
+- Documento baixa como arquivo DOCX OpenXML valido.
 - Cliente correto baixa DOCX da proposta pelo portal.
 - Cliente errado nao baixa DOCX da proposta.
 - Botao antigo de PDF profissional foi substituido por `Gerar/Baixar documento`.
@@ -177,7 +179,7 @@ Backend:
 - `npx prisma migrate status`: passou; 45 migrations, schema atualizado.
 - `npm run lint`: passou.
 - `npm run build`: passou.
-- `npm test -- --runInBand`: passou; 35 suites / 198 testes.
+- `npm test -- --runInBand`: passou; 35 suites / 200 testes.
 - `npm run seed:flow`: primeira tentativa falhou por `SEED_DEMO_PASSWORD` ausente; repetido com variavel temporaria de processo e passou.
 
 Frontend:
@@ -195,16 +197,16 @@ Git:
 
 ## 14. Riscos restantes
 
-- O modelo Word institucional oficial da Manitec ainda precisa ser fornecido/homologado.
-- PDF final a partir de DOCX exige LibreOffice/headless ou conversor equivalente.
+- O modelo Word institucional da proposta ainda precisa homologacao visual humana.
+- PDF final a partir de DOCX exige LibreOffice/headless ou conversor equivalente no servidor.
 - Laudo tecnico ainda usa PDF server-side proprio como caminho oficial.
 - `DocumentAccessType.PDF_DOWNLOAD` ainda nao diferencia semanticamente DOCX por enum.
 - Validacao visual fina do DOCX em Microsoft Word/LibreOffice ainda precisa etapa manual.
 
 ## 15. Pendencias
 
-- Substituir `template.json` por `template.docx` oficial quando o arquivo institucional existir.
-- Implementar conversao DOCX -> PDF se houver LibreOffice/headless homologado.
+- Homologar visualmente `template.docx` da proposta em Word/LibreOffice.
+- Migrar contrato, O.S. e laudo para `template.docx` oficial quando os modelos forem aprovados.
 - Migrar laudo tecnico para DOCX institucional em ciclo dedicado.
 - Avaliar migration futura para `DOCUMENT_DOWNLOAD` ou `DOCX_DOWNLOAD`.
 - Criar preview seguro de documento gerado sem depender da tela do ERP.
@@ -214,3 +216,53 @@ Git:
 `20G - Responsividade, zoom e baseline visual`.
 
 Antes do 20G, recomenda-se validar manualmente um DOCX de proposta, contrato e O.S. em Word/LibreOffice para ajustar margens, estilos e identidade visual fina.
+
+## 17. Atualizacao - template Word da proposta e LibreOffice local
+
+Depois do fechamento inicial do 20F, foi adicionado o arquivo Word oficial da proposta em:
+
+- `backend/src/templates/documents/proposal/manitec-default-v1/template.docx`
+
+O backend agora segue esta ordem:
+
+```text
+template.docx existente
+-> substituicao server-side de placeholders
+-> DOCX final
+-> conversao opcional via LibreOffice headless
+-> PDF institucional
+-> storage privado
+-> DocumentDelivery
+```
+
+Se `template.docx` nao existir em um modelo, o renderer continua usando `template.json` como fallback.
+
+Configuracao local recomendada:
+
+```env
+LIBREOFFICE_BIN="C:\Program Files\LibreOffice\program\soffice.exe"
+LIBREOFFICE_TIMEOUT_MS="60000"
+```
+
+Fatos validados localmente nesta retomada:
+
+- `template.docx` real detectado em `proposal/manitec-default-v1`.
+- LibreOffice encontrado em `C:\Program Files\LibreOffice\program\soffice.exe`.
+- Conversao real DOCX -> PDF testada localmente; PDF gerado com assinatura `%PDF`.
+- Backend passou com 35 suites / 200 testes.
+- Frontend `npm run lint` passou.
+- Frontend `npm run build` passou apos liberar rede para download das fontes Google do Next.
+- Frontend `npm run e2e` passou com 50 testes e 1 staging remoto skipado.
+
+Novos endpoints de PDF institucional da proposta:
+
+- `GET /documents/proposals/:id/download-document-pdf`
+- `GET /customer-portal/proposals/:id/download-document-pdf`
+
+Os endpoints antigos `/download-pdf` foram preservados como compatibilidade para o PDF server-side anterior. A virada completa para o PDF institucional deve ser feita depois de homologacao visual do Word e da conversao em ambiente real.
+
+Pendencias ainda verdadeiras:
+
+- Contrato, O.S. e laudo ainda nao foram migrados completamente para `template.docx` oficial.
+- A qualidade visual final depende de validacao manual no Word/LibreOffice.
+- Em producao/staging, o servidor ou container do backend precisa ter LibreOffice instalado.

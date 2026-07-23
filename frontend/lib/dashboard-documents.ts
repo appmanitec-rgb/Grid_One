@@ -8,6 +8,10 @@ export type DashboardDocumentCompany = {
   companyName: string;
   tradeName: string;
   cnpj?: string | null;
+  stateRegistration?: string | null;
+  municipalRegistration?: string | null;
+  contactName?: string | null;
+  contactRole?: string | null;
   phone?: string | null;
   email?: string | null;
   billingEmail?: string | null;
@@ -365,6 +369,13 @@ export function fetchProposalDocumentDocx(id: string) {
   return fetchDocumentBlob(
     `/documents/proposals/${id}/download-docx`,
     "Nao foi possivel baixar o documento institucional da proposta.",
+  );
+}
+
+export function fetchProposalDocumentInstitutionalPdf(id: string) {
+  return fetchDocumentBlob(
+    `/documents/proposals/${id}/download-document-pdf`,
+    "Nao foi possivel baixar o PDF institucional da proposta.",
   );
 }
 

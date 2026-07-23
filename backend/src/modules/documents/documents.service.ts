@@ -27,6 +27,7 @@ import { allAccessPolicy, effectiveAccessPolicy } from '../users/access-policy';
 import {
   DocumentGenerationService,
   GeneratedInstitutionalDocument,
+  GeneratedInstitutionalPdf,
 } from './document-generation.service';
 import { GeneratedProposalPdf } from './proposal-pdf.service';
 import { ProposalPdfService } from './proposal-pdf.service';
@@ -135,6 +136,8 @@ export class DocumentsService {
             companyName: true,
             tradeName: true,
             cnpj: true,
+            stateRegistration: true,
+            municipalRegistration: true,
             contactName: true,
             phone: true,
             email: true,
@@ -150,6 +153,22 @@ export class DocumentsService {
             brand: true,
             serialNumber: true,
             power: true,
+            hourMeter: true,
+            application: true,
+            voltage: true,
+            alternatorVoltage: true,
+            engineBrand: true,
+            engineModelName: true,
+            alternatorBrand: true,
+            alternatorModelName: true,
+            model: {
+              select: {
+                id: true,
+                name: true,
+                brand: true,
+                category: true,
+              },
+            },
             currentSite: {
               select: {
                 id: true,
@@ -164,6 +183,15 @@ export class DocumentsService {
             id: true,
             name: true,
             email: true,
+            department: true,
+            manager: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                department: true,
+              },
+            },
           },
         },
         salesOpportunity: {
@@ -283,6 +311,23 @@ export class DocumentsService {
     metadata?: RequestMetadata,
   ) {
     return this.generateAndStoreProposalPdf(id, userId, {
+      channel: DocumentAccessChannel.CUSTOMER_PORTAL,
+      metadata,
+    });
+  }
+
+  async downloadProposalInstitutionalPdf(id: string, userId: string) {
+    return this.generateAndStoreInstitutionalPdf('proposal', id, userId, {
+      channel: DocumentAccessChannel.INTERNAL,
+    });
+  }
+
+  async downloadCustomerProposalInstitutionalPdf(
+    id: string,
+    userId: string,
+    metadata?: RequestMetadata,
+  ) {
+    return this.generateAndStoreInstitutionalPdf('proposal', id, userId, {
       channel: DocumentAccessChannel.CUSTOMER_PORTAL,
       metadata,
     });
@@ -967,6 +1012,70 @@ export class DocumentsService {
     };
   }
 
+  private async generateAndStoreInstitutionalPdf(
+    kind: InstitutionalKind,
+    id: string,
+    userId: string,
+    options: {
+      channel: DocumentAccessChannel;
+      metadata?: RequestMetadata;
+    },
+  ): Promise<
+    LoadedFile & {
+      documentDeliveryId: string;
+      templateKey: string;
+      templateVersion: string;
+    }
+  > {
+    const actor = await this.getActorScope(userId);
+    const payload = await this.loadInstitutionalPayload(kind, id, userId);
+    const generated = await this.documentGenerationService.generatePdfFromDocx(
+      kind,
+      payload as Record<string, unknown>,
+    );
+    const stored = await this.fileStorage.saveDocumentPdf(
+      this.documentPdfStorageFolder(kind),
+      generated.fileName,
+      generated.buffer,
+    );
+    const now = new Date();
+    const document = await this.prisma.documentDelivery.create({
+      data: this.buildInstitutionalPdfDeliveryData(
+        kind,
+        payload,
+        generated,
+        stored,
+        actor.id,
+        now,
+      ),
+    });
+
+    await this.prisma.documentAccessLog.create({
+      data: {
+        documentType: this.deliveryDocumentType(kind),
+        documentId: this.payloadDocumentId(payload),
+        documentDeliveryId: document.id,
+        userId: actor.id,
+        clientId: this.payloadClientId(payload),
+        accessType: DocumentAccessType.PDF_DOWNLOAD,
+        channel: options.channel,
+        result: DocumentAccessResult.SUCCESS,
+        ipAddress: options.metadata?.ip,
+        userAgent: Array.isArray(options.metadata?.userAgent)
+          ? options.metadata?.userAgent.join(' ')
+          : options.metadata?.userAgent,
+      },
+    });
+
+    return {
+      ...stored,
+      buffer: generated.buffer,
+      documentDeliveryId: document.id,
+      templateKey: generated.templateKey,
+      templateVersion: generated.templateVersion,
+    };
+  }
+
   private async loadInstitutionalPayload(
     kind: InstitutionalKind,
     id: string,
@@ -1015,6 +1124,76 @@ export class DocumentsService {
         format: 'DOCX',
         generatedAt: now.toISOString(),
         pdfFromDocx: this.documentGenerationService.pdfFromDocxStatus(),
+        document: {
+          id: this.payloadDocumentId(payload),
+          code: documentCode,
+          title: documentTitle,
+          status: payload.document.status,
+          statusLabel: payload.document.statusLabel,
+        },
+        client: {
+          id: payload.client.id,
+          companyName: payload.client.companyName,
+          tradeName: payload.client.tradeName,
+        },
+        file: {
+          fileName: stored.fileName,
+          mimeType: stored.mimeType,
+          sizeBytes: stored.sizeBytes,
+          checksumSha256: stored.checksumSha256,
+        },
+      } satisfies Prisma.InputJsonValue,
+      fileStorageKey: stored.storageKey,
+      fileName: stored.fileName,
+      mimeType: stored.mimeType,
+      sizeBytes: stored.sizeBytes,
+      checksumSha256: stored.checksumSha256,
+      storedAt: now,
+      sentAt: now,
+      deliveredAt: now,
+      createdByUserId: actorUserId,
+    };
+  }
+
+  private buildInstitutionalPdfDeliveryData(
+    kind: InstitutionalKind,
+    payload: Awaited<ReturnType<DocumentsService['loadInstitutionalPayload']>>,
+    generated: GeneratedInstitutionalPdf,
+    stored: StoredFile,
+    actorUserId: string,
+    now: Date,
+  ): Prisma.DocumentDeliveryUncheckedCreateInput {
+    const documentCode = this.payloadDocumentCode(payload, kind);
+    const documentTitle = this.payloadDocumentTitle(payload, kind);
+
+    return {
+      documentType: this.deliveryDocumentType(kind),
+      documentId: this.payloadDocumentId(payload),
+      documentCode,
+      documentTitle,
+      clientId: this.payloadClientId(payload),
+      counterpartName:
+        payload.client.tradeName || payload.client.companyName || null,
+      channel: DeliveryChannel.WEBHOOK,
+      status: DeliveryStatus.DELIVERED,
+      recipientName:
+        payload.client.contactName ||
+        payload.client.tradeName ||
+        payload.client.companyName,
+      recipientTarget: payload.client.email || `portal:${payload.client.id}`,
+      subject: `${documentTitle} - PDF institucional`,
+      message:
+        'PDF institucional gerado a partir de template DOCX versionado no servidor.',
+      provider: 'manitec-institutional-docx-pdf',
+      payloadSnapshot: {
+        template: {
+          key: generated.templateKey,
+          version: generated.templateVersion,
+        },
+        format: 'PDF',
+        generatedFrom: 'DOCX',
+        generatedAt: now.toISOString(),
+        sourceDocxChecksumSha256: generated.sourceDocxChecksumSha256,
         document: {
           id: this.payloadDocumentId(payload),
           code: documentCode,
@@ -1135,6 +1314,16 @@ export class DocumentsService {
       proposal: 'proposal-docx',
       contract: 'contract-docx',
       'work-order': 'work-order-docx',
+    };
+
+    return map[kind];
+  }
+
+  private documentPdfStorageFolder(kind: InstitutionalKind) {
+    const map: Record<InstitutionalKind, string> = {
+      proposal: 'proposal-institutional-pdfs',
+      contract: 'contract-institutional-pdfs',
+      'work-order': 'work-order-institutional-pdfs',
     };
 
     return map[kind];
@@ -1385,6 +1574,10 @@ export class DocumentsService {
           companyName: true,
           tradeName: true,
           cnpj: true,
+          stateRegistration: true,
+          municipalRegistration: true,
+          contactName: true,
+          contactRole: true,
           phone: true,
           email: true,
           billingEmail: true,
@@ -1405,6 +1598,10 @@ export class DocumentsService {
           companyName: true,
           tradeName: true,
           cnpj: true,
+          stateRegistration: true,
+          municipalRegistration: true,
+          contactName: true,
+          contactRole: true,
           phone: true,
           email: true,
           billingEmail: true,
@@ -1425,6 +1622,10 @@ export class DocumentsService {
       companyName: company?.companyName || 'MANITEC',
       tradeName: company?.tradeName || company?.companyName || 'MANITEC',
       cnpj: company?.cnpj || null,
+      stateRegistration: company?.stateRegistration || null,
+      municipalRegistration: company?.municipalRegistration || null,
+      contactName: company?.contactName || null,
+      contactRole: company?.contactRole || null,
       phone: company?.phone || null,
       email: company?.email || null,
       billingEmail: company?.billingEmail || null,

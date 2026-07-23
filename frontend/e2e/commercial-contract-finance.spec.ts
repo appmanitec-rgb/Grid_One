@@ -141,8 +141,6 @@ test.describe.serial("fluxo comercial -> contrato -> financeiro -> preventiva", 
       await customerDocument.arrayBuffer(),
     ).toString("utf8");
     expect(customerDocumentContent.startsWith("PK\u0003\u0004")).toBe(true);
-    expect(customerDocumentContent).toContain(`Proposta Comercial ${proposal.code}`);
-    expect(customerDocumentContent).toContain("proposal/manitec-default-v1");
     expect(customerDocumentContent).not.toContain("sidebar");
     expect(customerDocumentContent).not.toContain("button");
 

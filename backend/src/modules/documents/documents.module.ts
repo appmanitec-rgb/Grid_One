@@ -5,6 +5,7 @@ import { DocumentTemplateService } from './document-template.service';
 import { DocumentGenerationService } from './document-generation.service';
 import { DocumentsController } from './documents.controller';
 import { DocumentsService } from './documents.service';
+import { DocxToPdfService } from './docx-to-pdf.service';
 import { DocxTemplateRendererService } from './docx-template-renderer.service';
 import { InstitutionalDocumentService } from './institutional-document.service';
 import { PdfRenderService } from './pdf-render.service';
@@ -18,6 +19,7 @@ import { TemplateRendererService } from './template-renderer.service';
     DocumentsService,
     DocumentGenerationService,
     DocumentTemplateService,
+    DocxToPdfService,
     DocxTemplateRendererService,
     InstitutionalDocumentService,
     TemplateRendererService,

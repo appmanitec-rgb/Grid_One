@@ -7,6 +7,7 @@ import {
   downloadDashboardDocumentBlob,
   fetchProposalDocument,
   fetchProposalDocumentDocx,
+  fetchProposalDocumentInstitutionalPdf,
   type DashboardDocumentsApiError,
   type ProposalDocumentPayload,
 } from "@/lib/dashboard-documents";
@@ -27,6 +28,7 @@ export default function ProposalDocumentPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [documentBusy, setDocumentBusy] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -83,6 +85,31 @@ export default function ProposalDocumentPage() {
     }
   }
 
+  async function handleDownloadPdf() {
+    if (!id || !data) return;
+    setPdfBusy(true);
+    setError("");
+
+    try {
+      const blob = await fetchProposalDocumentInstitutionalPdf(id);
+      downloadDashboardDocumentBlob(blob, `proposta-${data.document.code}.pdf`);
+    } catch (downloadError: unknown) {
+      const apiError = downloadError as DashboardDocumentsApiError;
+      if (apiError?.status === 401) {
+        clearAuthSession();
+        router.replace("/");
+        return;
+      }
+      setError(
+        downloadError instanceof Error
+          ? downloadError.message
+          : "Erro ao baixar PDF institucional da proposta.",
+      );
+    } finally {
+      setPdfBusy(false);
+    }
+  }
+
   if (!data) {
     return (
       <div className="space-y-4">
@@ -106,18 +133,28 @@ export default function ProposalDocumentPage() {
         sourceLabel="Abrir proposta"
         showPrintAction={false}
         actions={
-          <button
-            type="button"
-            disabled={documentBusy}
-            onClick={() => void handleDownloadDocument()}
-            className="inline-flex items-center justify-center rounded-2xl border border-slate-900 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {documentBusy
-              ? "Gerando documento..."
-              : data.latestDocument
-                ? "Baixar documento"
-                : "Gerar documento"}
-          </button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              disabled={pdfBusy}
+              onClick={() => void handleDownloadPdf()}
+              className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {pdfBusy ? "Gerando PDF..." : "Baixar PDF"}
+            </button>
+            <button
+              type="button"
+              disabled={documentBusy}
+              onClick={() => void handleDownloadDocument()}
+              className="inline-flex items-center justify-center rounded-2xl border border-slate-900 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {documentBusy
+                ? "Gerando documento..."
+                : data.latestDocument
+                  ? "Baixar DOCX"
+                  : "Gerar DOCX"}
+            </button>
+          </div>
         }
       >
         <div className="flex flex-wrap gap-2">

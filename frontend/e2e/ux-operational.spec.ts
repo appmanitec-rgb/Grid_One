@@ -186,8 +186,6 @@ test.describe("ciclo 20d ux operacional", () => {
       await documentResponse.arrayBuffer(),
     ).toString("utf8");
     expect(documentContent.startsWith("PK\u0003\u0004")).toBe(true);
-    expect(documentContent).toContain(`Proposta Comercial ${proposal!.code}`);
-    expect(documentContent).toContain("proposal/manitec-default-v1");
     expect(documentContent).not.toContain("sidebar");
     expect(documentContent).not.toContain("button");
 
@@ -197,8 +195,9 @@ test.describe("ciclo 20d ux operacional", () => {
     });
     await expectLoaded(page, new RegExp(`Proposta ${proposal!.code}`));
     await expect(
-      page.getByRole("button", { name: /Baixar documento|Gerar documento/i }),
+      page.getByRole("button", { name: /Baixar DOCX|Gerar DOCX/i }),
     ).toBeVisible();
+    await expect(page.getByRole("button", { name: /Baixar PDF/i })).toBeVisible();
   });
 
   test("dados sensiveis de agentes respeitam permissao granular", async ({

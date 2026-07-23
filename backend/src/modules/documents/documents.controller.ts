@@ -72,6 +72,20 @@ export class DocumentsController {
     return this.sendFile(res, file);
   }
 
+  @Get('proposals/:id/download-document-pdf')
+  async downloadProposalInstitutionalPdf(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const userId = (req['user'] as any)?.sub as string | undefined;
+    const file = await this.documentsService.downloadProposalInstitutionalPdf(
+      id,
+      userId || '',
+    );
+    return this.sendFile(res, file);
+  }
+
   @Get('proposals/:id/preview-html')
   async previewProposalPdfHtml(
     @Req() req: Request,

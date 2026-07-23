@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { createHash } from 'crypto';
+import { DocxToPdfService } from './docx-to-pdf.service';
 import { DocxTemplateRendererService } from './docx-template-renderer.service';
 import {
   DocumentTemplateKind,
@@ -21,12 +23,25 @@ export type GeneratedInstitutionalDocument = {
   template: LoadedInstitutionalDocumentTemplate;
 };
 
+export type GeneratedInstitutionalPdf = {
+  buffer: Buffer;
+  fileName: string;
+  mimeType: 'application/pdf';
+  checksumSha256: string;
+  templateKey: string;
+  templateVersion: string;
+  sourceDocxChecksumSha256: string;
+  context: InstitutionalDocumentContext;
+  template: LoadedInstitutionalDocumentTemplate;
+};
+
 @Injectable()
 export class DocumentGenerationService {
   constructor(
     private readonly templates: DocumentTemplateService,
     private readonly institutionalDocuments: InstitutionalDocumentService,
     private readonly docxRenderer: DocxTemplateRendererService,
+    private readonly docxToPdf: DocxToPdfService,
   ) {}
 
   generateDocx(
@@ -59,10 +74,29 @@ export class DocumentGenerationService {
   }
 
   pdfFromDocxStatus() {
+    return this.docxToPdf.status();
+  }
+
+  async generatePdfFromDocx(
+    kind: DocumentTemplateKind,
+    payload: Record<string, unknown>,
+  ): Promise<GeneratedInstitutionalPdf> {
+    const docx = this.generateDocx(kind, payload);
+    const pdfBuffer = await this.docxToPdf.convertDocxToPdf({
+      buffer: docx.buffer,
+      fileName: docx.fileName,
+    });
+
     return {
-      available: false,
-      reason:
-        'Conversao DOCX para PDF por LibreOffice/headless nao esta configurada neste ambiente. O PDF atual do Ciclo 19 permanece como fallback server-side temporario.',
+      buffer: pdfBuffer,
+      fileName: docx.fileName.replace(/\.docx$/i, '.pdf'),
+      mimeType: 'application/pdf',
+      checksumSha256: createHash('sha256').update(pdfBuffer).digest('hex'),
+      templateKey: docx.templateKey,
+      templateVersion: docx.templateVersion,
+      sourceDocxChecksumSha256: docx.checksumSha256,
+      context: docx.context,
+      template: docx.template,
     };
   }
 

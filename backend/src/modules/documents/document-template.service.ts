@@ -52,6 +52,7 @@ export type LoadedInstitutionalDocumentTemplate = {
   schema: Record<string, unknown>;
   sampleData: Record<string, unknown>;
   rootDir: string;
+  docxTemplatePath?: string;
 };
 
 const DEFAULT_TEMPLATE_VERSION = 'manitec-default-v1';
@@ -91,6 +92,7 @@ export class DocumentTemplateService {
     ) as InstitutionalTemplateDefinition;
     const schema = this.readJson(rootDir, 'schema.json');
     const sampleData = this.readJson(rootDir, 'sample-data.json');
+    const docxTemplatePath = this.optionalPath(rootDir, 'template.docx');
 
     return {
       kind,
@@ -100,6 +102,7 @@ export class DocumentTemplateService {
       schema,
       sampleData,
       rootDir,
+      docxTemplatePath,
     };
   }
 
@@ -157,6 +160,11 @@ export class DocumentTemplateService {
   private readOptional(rootDir: string, fileName: string) {
     const path = resolve(rootDir, fileName);
     return existsSync(path) ? readFileSync(path, 'utf8') : '';
+  }
+
+  private optionalPath(rootDir: string, fileName: string) {
+    const path = resolve(rootDir, fileName);
+    return existsSync(path) ? path : undefined;
   }
 
   private readJson(rootDir: string, fileName: string) {
