@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -28,6 +29,12 @@ export class ClientsController {
   create(@Body() createClientDto: CreateClientDto, @Req() req: Request) {
     const userId = (req as any).user?.sub as string | undefined;
     return this.clientsService.create(createClientDto, userId);
+  }
+
+  @RequireAccessPolicy('clients.view')
+  @Get('lookup')
+  lookup(@Query('q') query?: string, @Query('take') take?: string) {
+    return this.clientsService.lookup(query, take);
   }
 
   @RequireAccessPolicy('clients.view')

@@ -28,14 +28,27 @@ import { AccessPolicyGuard } from '../auth/access-policy.guard';
 export class CrmController {
   constructor(private readonly crmService: CrmService) {}
 
+  @Get('sellers')
+  sellers(
+    @Query('q') query?: string,
+    @Query('take') take?: string,
+    @Query('pipeline') pipeline?: string,
+  ) {
+    return this.crmService.listSellers(query, take, pipeline);
+  }
+
   @Get('opportunities')
-  opportunities(@Query('stage') stage?: string) {
-    return this.crmService.listOpportunities(stage);
+  opportunities(
+    @Query('stage') stage?: string,
+    @Query('pipeline') pipeline?: string,
+    @Query('opportunityType') opportunityType?: string,
+  ) {
+    return this.crmService.listOpportunities(stage, pipeline, opportunityType);
   }
 
   @Get('opportunities/pipeline')
-  pipeline() {
-    return this.crmService.opportunityPipeline();
+  pipeline(@Query('pipeline') pipeline?: string) {
+    return this.crmService.opportunityPipeline(pipeline);
   }
 
   @Get('opportunities/:id')

@@ -6,6 +6,7 @@ describe('ClientsService', () => {
   let service: ClientsService;
   let database: {
     client: {
+      findMany: jest.Mock;
       findUnique: jest.Mock;
     };
   };
@@ -13,6 +14,7 @@ describe('ClientsService', () => {
   beforeEach(async () => {
     database = {
       client: {
+        findMany: jest.fn(),
         findUnique: jest.fn(),
       },
     };
@@ -75,6 +77,41 @@ describe('ClientsService', () => {
             }),
           }),
         }),
+      }),
+    );
+  });
+
+  it('busca clientes para lookup com limite e campos minimos', async () => {
+    database.client.findMany.mockResolvedValue([]);
+
+    await service.lookup('energia 12.345', '100');
+
+    expect(database.client.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: expect.arrayContaining([
+            expect.objectContaining({
+              companyName: expect.objectContaining({
+                contains: 'energia 12.345',
+                mode: 'insensitive',
+              }),
+            }),
+            expect.objectContaining({
+              cnpj: expect.objectContaining({ contains: '12345' }),
+            }),
+          ]),
+        }),
+        select: {
+          id: true,
+          companyName: true,
+          tradeName: true,
+          cnpj: true,
+          contactName: true,
+          city: true,
+          state: true,
+        },
+        orderBy: { companyName: 'asc' },
+        take: 20,
       }),
     );
   });

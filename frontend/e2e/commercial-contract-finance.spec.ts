@@ -66,14 +66,21 @@ test.describe.serial("fluxo comercial -> contrato -> financeiro -> preventiva", 
   test("cliente aprova proposta no portal e contrato gera AR/preventiva/OS sem duplicidade", async ({
     page,
   }) => {
-    const [data, adminSession, clientASession, clientBSession] = await Promise.all([
+    const [
+      data,
+      adminSession,
+      salesSession,
+      clientASession,
+      clientBSession,
+    ] = await Promise.all([
       getE2eEntityData(),
       apiLogin(accounts.admin),
+      apiLogin(accounts.sales),
       apiLogin(accounts.clientA),
       apiLogin(accounts.clientB),
     ]);
     const adminToken = adminSession.access_token;
-    const adminUserId = requireUserId(adminSession.user);
+    const salesUserId = requireUserId(salesSession.user);
     const generator = await apiRequest<GeneratorDetail>(
       adminToken,
       `/generators/${data.clientAEquipmentId}`,
@@ -84,7 +91,7 @@ test.describe.serial("fluxo comercial -> contrato -> financeiro -> preventiva", 
 
     const proposal = await createProposalReadyForCustomerReview({
       token: adminToken,
-      userId: adminUserId,
+      userId: salesUserId,
       clientId: clientId!,
       generatorId: generator.id,
       siteId: generator.currentSite?.id,
@@ -244,13 +251,15 @@ test.describe.serial("fluxo comercial -> contrato -> financeiro -> preventiva", 
   });
 
   test("cliente rejeita proposta propria e proposta nao aprovada nao converte", async () => {
-    const [data, adminSession, clientSession] = await Promise.all([
-      getE2eEntityData(),
-      apiLogin(accounts.admin),
-      apiLogin(accounts.clientA),
-    ]);
+    const [data, adminSession, salesSession, clientSession] =
+      await Promise.all([
+        getE2eEntityData(),
+        apiLogin(accounts.admin),
+        apiLogin(accounts.sales),
+        apiLogin(accounts.clientA),
+      ]);
     const adminToken = adminSession.access_token;
-    const adminUserId = requireUserId(adminSession.user);
+    const salesUserId = requireUserId(salesSession.user);
     const generator = await apiRequest<GeneratorDetail>(
       adminToken,
       `/generators/${data.clientAEquipmentId}`,
@@ -261,7 +270,7 @@ test.describe.serial("fluxo comercial -> contrato -> financeiro -> preventiva", 
 
     const rejectedProposal = await createProposalReadyForCustomerReview({
       token: adminToken,
-      userId: adminUserId,
+      userId: salesUserId,
       clientId: clientId!,
       generatorId: generator.id,
       siteId: generator.currentSite?.id,
@@ -287,7 +296,7 @@ test.describe.serial("fluxo comercial -> contrato -> financeiro -> preventiva", 
 
     const draftProposal = await createDraftProposal({
       token: adminToken,
-      userId: adminUserId,
+      userId: salesUserId,
       clientId: clientId!,
       generatorId: generator.id,
       siteId: generator.currentSite?.id,

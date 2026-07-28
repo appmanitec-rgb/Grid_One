@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
 
 const STAGE_ORDER = [
@@ -62,10 +62,63 @@ const PROPOSAL_STATUS_LABEL: Record<string, string> = {
   LOST: "Perdida",
 };
 
+const PIPELINE_ORDER = [
+  "COMMERCIAL_01_GENERATORS",
+  "COMMERCIAL_02_CONTRACTS",
+  "COMMERCIAL_03_PARTS_SERVICES",
+] as const;
+
+type CommercialPipeline = (typeof PIPELINE_ORDER)[number];
+type PipelineFilter = CommercialPipeline | "ALL";
+
+const PIPELINE_LABEL: Record<CommercialPipeline, string> = {
+  COMMERCIAL_01_GENERATORS: "Comercial 01 - Geradores",
+  COMMERCIAL_02_CONTRACTS: "Comercial 02 - Contratos",
+  COMMERCIAL_03_PARTS_SERVICES: "Comercial 03 - Pecas e Servicos",
+};
+
+const OPPORTUNITY_TYPE_LABEL = {
+  GENERATOR_SALE: "Venda de gerador",
+  GENERATOR_RENTAL: "Locacao de gerador",
+  INSTALLATION_RETROFIT: "Instalacao / retrofit",
+  MAINTENANCE_CONTRACT: "Contrato de manutencao",
+  CONTRACT_RENEWAL: "Renovacao de contrato",
+  CONTRACT_EXPANSION: "Expansao de contrato",
+  PARTS_SALE: "Venda de pecas",
+  FIELD_SERVICE: "Servico avulso",
+  EMERGENCY_CORRECTIVE: "Corretiva emergencial",
+  OTHER: "Outro",
+} as const;
+
+type OpportunityType = keyof typeof OPPORTUNITY_TYPE_LABEL;
+
+const TYPES_BY_PIPELINE: Record<CommercialPipeline, OpportunityType[]> = {
+  COMMERCIAL_01_GENERATORS: [
+    "GENERATOR_SALE",
+    "GENERATOR_RENTAL",
+    "INSTALLATION_RETROFIT",
+    "OTHER",
+  ],
+  COMMERCIAL_02_CONTRACTS: [
+    "MAINTENANCE_CONTRACT",
+    "CONTRACT_RENEWAL",
+    "CONTRACT_EXPANSION",
+    "OTHER",
+  ],
+  COMMERCIAL_03_PARTS_SERVICES: [
+    "PARTS_SALE",
+    "FIELD_SERVICE",
+    "EMERGENCY_CORRECTIVE",
+    "OTHER",
+  ],
+};
+
 type Opportunity = {
   id: string;
   title: string;
   stage: Stage;
+  pipeline: CommercialPipeline;
+  opportunityType: OpportunityType;
   temperature: Temperature;
   estimatedValue: number;
   expectedCloseDate?: string | null;
@@ -93,11 +146,16 @@ type ClientOption = {
   id: string;
   companyName: string;
   tradeName?: string | null;
+  cnpj?: string | null;
+  city?: string | null;
+  state?: string | null;
 };
 
 type Collaborator = {
   id: string;
   name: string;
+  email?: string | null;
+  department?: string | null;
 };
 
 export default function OpportunitiesPage() {
@@ -110,10 +168,35 @@ export default function OpportunitiesPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [changingStageId, setChangingStageId] = useState("");
+  const [activePipeline, setActivePipeline] = useState<PipelineFilter>("ALL");
 
   const [title, setTitle] = useState("");
   const [clientId, setClientId] = useState("");
   const [assignedSellerId, setAssignedSellerId] = useState("");
+  const [formPipeline, setFormPipeline] = useState<CommercialPipeline>(
+    "COMMERCIAL_03_PARTS_SERVICES",
+  );
+  const [opportunityType, setOpportunityType] =
+    useState<OpportunityType>("FIELD_SERVICE");
+  const [clientSearch, setClientSearch] = useState("");
+  const [sellerSearch, setSellerSearch] = useState("");
+  const [clientLookupOpen, setClientLookupOpen] = useState(false);
+  const [sellerLookupOpen, setSellerLookupOpen] = useState(false);
+  const [clientLookupLoading, setClientLookupLoading] = useState(false);
+  const [sellerLookupLoading, setSellerLookupLoading] = useState(false);
+  const [quickClientOpen, setQuickClientOpen] = useState(false);
+  const [quickClientSaving, setQuickClientSaving] = useState(false);
+  const [quickClient, setQuickClient] = useState({
+    companyName: "",
+    tradeName: "",
+    cnpj: "",
+    phone: "",
+    email: "",
+    contactName: "",
+    address: "",
+    city: "",
+    state: "",
+  });
   const [temperature, setTemperature] = useState<Temperature>("WARM");
   const [estimatedValue, setEstimatedValue] = useState("");
   const [expectedCloseDate, setExpectedCloseDate] = useState("");
@@ -125,36 +208,34 @@ export default function OpportunitiesPage() {
     return map;
   }, [pipeline]);
 
-  async function loadAll() {
+  const availableOpportunityTypes = useMemo(
+    () => TYPES_BY_PIPELINE[formPipeline],
+    [formPipeline],
+  );
+
+  const loadAll = useCallback(async () => {
     setLoading(true);
     setError("");
     setMessage("");
     try {
-      const [opportunitiesRes, pipelineRes, clientsRes, sellersRes] =
-        await Promise.all([
-          apiFetch("/crm/opportunities", {
-            cache: "no-store",
-          }),
-          apiFetch("/crm/opportunities/pipeline", {
-            cache: "no-store",
-          }),
-          apiFetch("/clients", {
-            cache: "no-store",
-          }),
-          apiFetch("/hr-admin/collaborators", {
-            cache: "no-store",
-          }),
-        ]);
+      const params = new URLSearchParams();
+      if (activePipeline !== "ALL") params.set("pipeline", activePipeline);
+      const suffix = params.toString() ? `?${params.toString()}` : "";
+      const [opportunitiesRes, pipelineRes] = await Promise.all([
+        apiFetch(`/crm/opportunities${suffix}`, {
+          cache: "no-store",
+        }),
+        apiFetch(`/crm/opportunities/pipeline${suffix}`, {
+          cache: "no-store",
+        }),
+      ]);
 
-      if (!opportunitiesRes.ok || !pipelineRes.ok || !clientsRes.ok || !sellersRes.ok) {
+      if (!opportunitiesRes.ok || !pipelineRes.ok) {
         throw new Error("Falha ao carregar dados do funil.");
       }
 
       setOpportunities((await opportunitiesRes.json()) as Opportunity[]);
       setPipeline((await pipelineRes.json()) as PipelineRow[]);
-      setClients((await clientsRes.json()) as ClientOption[]);
-      const collaborators = (await sellersRes.json()) as Collaborator[];
-      setSellers(collaborators);
     } catch (loadError: unknown) {
       setError(
         loadError instanceof Error
@@ -164,11 +245,54 @@ export default function OpportunitiesPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [activePipeline]);
 
   useEffect(() => {
     void loadAll();
-  }, []);
+  }, [loadAll]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      const params = new URLSearchParams({ take: "10" });
+      if (clientSearch.trim()) params.set("q", clientSearch.trim());
+
+      setClientLookupLoading(true);
+      apiFetch(`/clients/lookup?${params.toString()}`, { cache: "no-store" })
+        .then(async (res) => {
+          if (!res.ok) throw new Error("Falha ao buscar clientes.");
+          setClients((await res.json()) as ClientOption[]);
+        })
+        .catch(() => {
+          setClients([]);
+        })
+        .finally(() => setClientLookupLoading(false));
+    }, 250);
+
+    return () => window.clearTimeout(timeout);
+  }, [clientSearch]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      const params = new URLSearchParams({
+        take: "20",
+        pipeline: formPipeline,
+      });
+      if (sellerSearch.trim()) params.set("q", sellerSearch.trim());
+
+      setSellerLookupLoading(true);
+      apiFetch(`/crm/sellers?${params.toString()}`, { cache: "no-store" })
+        .then(async (res) => {
+          if (!res.ok) throw new Error("Falha ao buscar vendedores.");
+          setSellers((await res.json()) as Collaborator[]);
+        })
+        .catch(() => {
+          setSellers([]);
+        })
+        .finally(() => setSellerLookupLoading(false));
+    }, 250);
+
+    return () => window.clearTimeout(timeout);
+  }, [formPipeline, sellerSearch]);
 
   useEffect(() => {
     const opportunityIdFromUrl = new URLSearchParams(window.location.search).get("opportunityId");
@@ -198,6 +322,8 @@ export default function OpportunitiesPage() {
           title: title.trim(),
           clientId,
           assignedSellerId: assignedSellerId || undefined,
+          pipeline: formPipeline,
+          opportunityType,
           temperature,
           estimatedValue: estimatedValue ? Number(estimatedValue) : 0,
           expectedCloseDate: expectedCloseDate || undefined,
@@ -213,6 +339,10 @@ export default function OpportunitiesPage() {
       setTitle("");
       setClientId("");
       setAssignedSellerId("");
+      setClientSearch("");
+      setSellerSearch("");
+      setFormPipeline("COMMERCIAL_03_PARTS_SERVICES");
+      setOpportunityType("FIELD_SERVICE");
       setTemperature("WARM");
       setEstimatedValue("");
       setExpectedCloseDate("");
@@ -226,6 +356,101 @@ export default function OpportunitiesPage() {
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleCreateQuickClient() {
+    const state = quickClient.state.trim().toUpperCase();
+    if (
+      !quickClient.companyName.trim() ||
+      onlyDigits(quickClient.cnpj).length < 11 ||
+      !quickClient.phone.trim() ||
+      !quickClient.address.trim() ||
+      !quickClient.city.trim() ||
+      state.length !== 2
+    ) {
+      setError(
+        "Informe nome, CPF/CNPJ, telefone, endereco, cidade e UF para cadastrar o cliente.",
+      );
+      return;
+    }
+
+    setQuickClientSaving(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const payload = {
+        companyName: quickClient.companyName.trim(),
+        tradeName: quickClient.tradeName.trim() || undefined,
+        cnpj: onlyDigits(quickClient.cnpj),
+        email: quickClient.email.trim() || undefined,
+        phone: quickClient.phone.trim(),
+        address: quickClient.address.trim(),
+        city: quickClient.city.trim(),
+        state,
+        clientType: "NO_CONTRACT",
+        addresses: [
+          {
+            type: "INSTALLATION",
+            street: quickClient.address.trim(),
+            city: quickClient.city.trim(),
+            state,
+            country: "Brasil",
+          },
+        ],
+        contacts: quickClient.contactName.trim()
+          ? [
+              {
+                name: quickClient.contactName.trim(),
+                status: "ACTIVE",
+                role: "Contato comercial",
+                phone: quickClient.phone.trim(),
+                email: quickClient.email.trim() || undefined,
+              },
+            ]
+          : undefined,
+      };
+
+      const res = await apiFetch("/clients", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        throw new Error(
+          await readApiErrorMessage(res, "Falha ao cadastrar cliente."),
+        );
+      }
+
+      const created = (await res.json()) as ClientOption;
+      setClientId(created.id);
+      setClientSearch(formatClientOption(created));
+      setClients((current) => [created, ...current]);
+      setQuickClient({
+        companyName: "",
+        tradeName: "",
+        cnpj: "",
+        phone: "",
+        email: "",
+        contactName: "",
+        address: "",
+        city: "",
+        state: "",
+      });
+      setQuickClientOpen(false);
+      setMessage("Cliente cadastrado e selecionado na oportunidade.");
+    } catch (createError: unknown) {
+      setError(
+        createError instanceof Error
+          ? createError.message
+          : "Falha ao cadastrar cliente.",
+      );
+    } finally {
+      setQuickClientSaving(false);
     }
   }
 
@@ -335,6 +560,24 @@ export default function OpportunitiesPage() {
         </p>
       ) : null}
 
+      <section className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
+        <div className="flex flex-wrap gap-2">
+          <PipelineFilterButton
+            active={activePipeline === "ALL"}
+            label="Todos"
+            onClick={() => setActivePipeline("ALL")}
+          />
+          {PIPELINE_ORDER.map((pipelineOption) => (
+            <PipelineFilterButton
+              key={pipelineOption}
+              active={activePipeline === pipelineOption}
+              label={PIPELINE_LABEL[pipelineOption]}
+              onClick={() => setActivePipeline(pipelineOption)}
+            />
+          ))}
+        </div>
+      </section>
+
       <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
         <h2 className="text-lg font-bold text-zinc-900">Nova Oportunidade</h2>
         <form
@@ -349,31 +592,233 @@ export default function OpportunitiesPage() {
             required
           />
           <select
-            value={clientId}
-            onChange={(event) => setClientId(event.target.value)}
+            value={formPipeline}
+            onChange={(event) => {
+              const nextPipeline = event.target.value as CommercialPipeline;
+              setFormPipeline(nextPipeline);
+              setOpportunityType(TYPES_BY_PIPELINE[nextPipeline][0]);
+              setAssignedSellerId("");
+              setSellerSearch("");
+            }}
             className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
-            required
           >
-            <option value="">Cliente</option>
-            {clients.map((client) => (
-              <option key={client.id} value={client.id}>
-                {client.companyName}
-                {client.tradeName ? ` (${client.tradeName})` : ""}
+            {PIPELINE_ORDER.map((pipelineOption) => (
+              <option key={pipelineOption} value={pipelineOption}>
+                {PIPELINE_LABEL[pipelineOption]}
               </option>
             ))}
           </select>
           <select
-            value={assignedSellerId}
-            onChange={(event) => setAssignedSellerId(event.target.value)}
+            value={opportunityType}
+            onChange={(event) =>
+              setOpportunityType(event.target.value as OpportunityType)
+            }
             className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
           >
-            <option value="">Vendedor responsável</option>
-            {sellers.map((seller) => (
-              <option key={seller.id} value={seller.id}>
-                {seller.name}
+            {availableOpportunityTypes.map((typeOption) => (
+              <option key={typeOption} value={typeOption}>
+                {OPPORTUNITY_TYPE_LABEL[typeOption]}
               </option>
             ))}
           </select>
+          <div className="relative">
+            <input
+              value={clientSearch}
+              onChange={(event) => {
+                setClientSearch(event.target.value);
+                setClientId("");
+                setClientLookupOpen(true);
+              }}
+              onFocus={() => setClientLookupOpen(true)}
+              onBlur={() =>
+                window.setTimeout(() => setClientLookupOpen(false), 120)
+              }
+              placeholder="Buscar cliente"
+              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+              aria-label="Buscar cliente da oportunidade"
+              required
+            />
+            {clientLookupOpen && !clientId ? (
+              <LookupPanel
+                loading={clientLookupLoading}
+                emptyLabel="Nenhum cliente encontrado."
+              >
+                {clients.map((client) => (
+                  <button
+                    key={client.id}
+                    type="button"
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      setClientId(client.id);
+                      setClientSearch(formatClientOption(client));
+                      setClientLookupOpen(false);
+                    }}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-sky-50"
+                  >
+                    <span className="block font-semibold text-zinc-900">
+                      {client.companyName}
+                    </span>
+                    <span className="block text-xs text-zinc-500">
+                      {[
+                        client.tradeName,
+                        client.cnpj,
+                        client.city && client.state
+                          ? `${client.city}/${client.state}`
+                          : client.city || client.state,
+                      ]
+                        .filter(Boolean)
+                        .join(" | ")}
+                    </span>
+                  </button>
+                ))}
+              </LookupPanel>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => setQuickClientOpen((current) => !current)}
+            className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-100"
+          >
+            {quickClientOpen ? "Fechar cliente" : "Cliente rapido"}
+          </button>
+          {quickClientOpen ? (
+            <div className="grid gap-3 rounded-xl border border-sky-100 bg-sky-50/70 p-3 md:col-span-6 md:grid-cols-6">
+              <QuickInput
+                value={quickClient.companyName}
+                onChange={(value) =>
+                  setQuickClient((current) => ({
+                    ...current,
+                    companyName: value,
+                  }))
+                }
+                placeholder="Razao social / Nome"
+                className="md:col-span-2"
+                required
+              />
+              <QuickInput
+                value={quickClient.tradeName}
+                onChange={(value) =>
+                  setQuickClient((current) => ({ ...current, tradeName: value }))
+                }
+                placeholder="Nome fantasia"
+              />
+              <QuickInput
+                value={quickClient.cnpj}
+                onChange={(value) =>
+                  setQuickClient((current) => ({ ...current, cnpj: value }))
+                }
+                placeholder="CPF/CNPJ"
+                required
+              />
+              <QuickInput
+                value={quickClient.phone}
+                onChange={(value) =>
+                  setQuickClient((current) => ({ ...current, phone: value }))
+                }
+                placeholder="Telefone"
+                required
+              />
+              <QuickInput
+                value={quickClient.email}
+                onChange={(value) =>
+                  setQuickClient((current) => ({ ...current, email: value }))
+                }
+                placeholder="Email"
+              />
+              <QuickInput
+                value={quickClient.contactName}
+                onChange={(value) =>
+                  setQuickClient((current) => ({
+                    ...current,
+                    contactName: value,
+                  }))
+                }
+                placeholder="Contato"
+              />
+              <QuickInput
+                value={quickClient.address}
+                onChange={(value) =>
+                  setQuickClient((current) => ({ ...current, address: value }))
+                }
+                placeholder="Endereco principal"
+                className="md:col-span-2"
+                required
+              />
+              <QuickInput
+                value={quickClient.city}
+                onChange={(value) =>
+                  setQuickClient((current) => ({ ...current, city: value }))
+                }
+                placeholder="Cidade"
+                required
+              />
+              <QuickInput
+                value={quickClient.state}
+                onChange={(value) =>
+                  setQuickClient((current) => ({
+                    ...current,
+                    state: value.toUpperCase().slice(0, 2),
+                  }))
+                }
+                placeholder="UF"
+                required
+              />
+              <button
+                type="button"
+                disabled={quickClientSaving}
+                onClick={() => void handleCreateQuickClient()}
+                className="rounded-lg bg-sky-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {quickClientSaving ? "Cadastrando..." : "Salvar cliente"}
+              </button>
+            </div>
+          ) : null}
+          <div className="relative">
+            <input
+              value={sellerSearch}
+              onChange={(event) => {
+                setSellerSearch(event.target.value);
+                setAssignedSellerId("");
+                setSellerLookupOpen(true);
+              }}
+              onFocus={() => setSellerLookupOpen(true)}
+              onBlur={() =>
+                window.setTimeout(() => setSellerLookupOpen(false), 120)
+              }
+              placeholder="Buscar vendedor comercial"
+              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+              aria-label="Buscar vendedor responsavel"
+            />
+            {sellerLookupOpen && !assignedSellerId ? (
+              <LookupPanel
+                loading={sellerLookupLoading}
+                emptyLabel="Nenhum vendedor comercial encontrado."
+              >
+                {sellers.map((seller) => (
+                  <button
+                    key={seller.id}
+                    type="button"
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      setAssignedSellerId(seller.id);
+                      setSellerSearch(formatSellerOption(seller));
+                      setSellerLookupOpen(false);
+                    }}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-sky-50"
+                  >
+                    <span className="block font-semibold text-zinc-900">
+                      {seller.name}
+                    </span>
+                    <span className="block text-xs text-zinc-500">
+                      {[seller.department, seller.email]
+                        .filter(Boolean)
+                        .join(" | ")}
+                    </span>
+                  </button>
+                ))}
+              </LookupPanel>
+            ) : null}
+          </div>
           <select
             value={temperature}
             onChange={(event) => setTemperature(event.target.value as Temperature)}
@@ -453,6 +898,14 @@ export default function OpportunitiesPage() {
                       }`}
                     >
                       <p className="text-sm font-bold text-zinc-900">{item.title}</p>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        <span className="rounded-full bg-indigo-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-indigo-700">
+                          {PIPELINE_LABEL[item.pipeline]}
+                        </span>
+                        <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-700">
+                          {OPPORTUNITY_TYPE_LABEL[item.opportunityType]}
+                        </span>
+                      </div>
                       <p className="mt-1 text-xs text-zinc-700">
                         {item.client?.tradeName || item.client?.companyName}
                       </p>
@@ -539,4 +992,93 @@ function MiniMetric({ label, value }: { label: string; value: string }) {
       <p className="mt-1 text-sm font-black text-slate-950">{value}</p>
     </div>
   );
+}
+
+function PipelineFilterButton({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${
+        active
+          ? "border-sky-300 bg-sky-100 text-sky-800"
+          : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function LookupPanel({
+  children,
+  emptyLabel,
+  loading,
+}: {
+  children: ReactNode;
+  emptyLabel: string;
+  loading: boolean;
+}) {
+  const hasItems = Array.isArray(children) ? children.length > 0 : Boolean(children);
+
+  return (
+    <div className="absolute left-0 right-0 top-[calc(100%+0.25rem)] z-30 max-h-64 overflow-auto rounded-lg border border-zinc-200 bg-white py-1 shadow-lg">
+      {loading ? (
+        <p className="px-3 py-2 text-sm font-semibold text-slate-500">
+          Buscando...
+        </p>
+      ) : null}
+      {!loading && hasItems ? children : null}
+      {!loading && !hasItems ? (
+        <p className="px-3 py-2 text-sm text-zinc-500">{emptyLabel}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function QuickInput({
+  className = "",
+  onChange,
+  placeholder,
+  required = false,
+  type = "text",
+  value,
+}: {
+  className?: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  required?: boolean;
+  type?: string;
+  value: string;
+}) {
+  return (
+    <input
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      type={type}
+      aria-required={required}
+      className={`rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm ${className}`}
+    />
+  );
+}
+
+function formatClientOption(client: ClientOption) {
+  return `${client.companyName}${client.tradeName ? ` (${client.tradeName})` : ""}`;
+}
+
+function formatSellerOption(seller: Collaborator) {
+  return `${seller.name}${seller.department ? ` - ${seller.department}` : ""}`;
+}
+
+function onlyDigits(value: string) {
+  return value.replace(/\D/g, "");
 }

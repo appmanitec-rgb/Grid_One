@@ -116,6 +116,25 @@ enum OpportunityTemperature {
   COLD
 }
 
+enum SalesOpportunityPipeline {
+  COMMERCIAL_01_GENERATORS
+  COMMERCIAL_02_CONTRACTS
+  COMMERCIAL_03_PARTS_SERVICES
+}
+
+enum SalesOpportunityType {
+  GENERATOR_SALE
+  GENERATOR_RENTAL
+  INSTALLATION_RETROFIT
+  MAINTENANCE_CONTRACT
+  CONTRACT_RENEWAL
+  CONTRACT_EXPANSION
+  PARTS_SALE
+  FIELD_SERVICE
+  EMERGENCY_CORRECTIVE
+  OTHER
+}
+
 enum OpportunityLossReason {
   PRICE
   DEADLINE
@@ -1273,11 +1292,13 @@ model Proposal {
 }
 
 model SalesOpportunity {
-  id                String                 @id @default(uuid())
+  id                String                   @id @default(uuid())
   title             String
-  stage             SalesOpportunityStage  @default(PROSPECTION)
-  temperature       OpportunityTemperature @default(WARM)
-  estimatedValue    Float                  @default(0)
+  stage             SalesOpportunityStage    @default(PROSPECTION)
+  pipeline          SalesOpportunityPipeline @default(COMMERCIAL_03_PARTS_SERVICES)
+  opportunityType   SalesOpportunityType     @default(FIELD_SERVICE)
+  temperature       OpportunityTemperature   @default(WARM)
+  estimatedValue    Float                    @default(0)
   expectedCloseDate DateTime?
   source            String?
   notes             String?
@@ -1304,6 +1325,8 @@ model SalesOpportunity {
   updatedAt DateTime @updatedAt
 
   @@index([stage])
+  @@index([pipeline, stage])
+  @@index([opportunityType])
   @@index([assignedSellerId])
   @@index([clientId, stage])
   @@map("sales_opportunities")

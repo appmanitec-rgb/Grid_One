@@ -3,7 +3,9 @@ import {
   CommercialInspectionStatus,
   OpportunityLossReason,
   OpportunityTemperature,
+  SalesOpportunityPipeline,
   SalesOpportunityStage,
+  SalesOpportunityType,
 } from '@prisma/client';
 import {
   IsBoolean,
@@ -39,6 +41,14 @@ export class CreateOpportunityDto {
   @IsUUID()
   @IsOptional()
   assignedSellerId?: string;
+
+  @IsEnum(SalesOpportunityPipeline)
+  @IsOptional()
+  pipeline?: SalesOpportunityPipeline;
+
+  @IsEnum(SalesOpportunityType)
+  @IsOptional()
+  opportunityType?: SalesOpportunityType;
 
   @IsEnum(SalesOpportunityStage)
   @IsOptional()

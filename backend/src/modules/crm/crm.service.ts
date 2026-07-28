@@ -7,7 +7,10 @@ import {
   CommercialInspectionStatus,
   OpportunityLossReason,
   Prisma,
+  SalesOpportunityPipeline,
   SalesOpportunityStage,
+  SalesOpportunityType,
+  UserRole,
 } from '@prisma/client';
 import { DatabaseService } from 'src/database/database.service';
 import {
@@ -23,7 +26,53 @@ import {
 export class CrmService {
   constructor(private readonly prisma: DatabaseService) {}
 
-  listOpportunities(stage?: string) {
+  listSellers(query?: string, take?: string | number, pipeline?: string) {
+    const search = query?.trim();
+    const limit = this.parseLookupLimit(take);
+    const normalizedPipeline = this.normalizePipeline(pipeline);
+    const andWhere: Prisma.UserWhereInput[] = [];
+    if (search) {
+      andWhere.push({
+        OR: [
+          { name: { contains: search, mode: Prisma.QueryMode.insensitive } },
+          { email: { contains: search, mode: Prisma.QueryMode.insensitive } },
+          {
+            department: {
+              contains: search,
+              mode: Prisma.QueryMode.insensitive,
+            },
+          },
+        ],
+      });
+    }
+    if (normalizedPipeline) {
+      andWhere.push(this.buildSellerDepartmentWhere(normalizedPipeline));
+    }
+
+    const where: Prisma.UserWhereInput = {
+      role: UserRole.SALES,
+      isActive: true,
+      ...(andWhere.length > 0 ? { AND: andWhere } : {}),
+    };
+
+    return this.prisma.user.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        department: true,
+      },
+      orderBy: { name: 'asc' },
+      take: limit,
+    });
+  }
+
+  listOpportunities(
+    stage?: string,
+    pipeline?: string,
+    opportunityType?: string,
+  ) {
     const normalizedStage =
       stage &&
       Object.values(SalesOpportunityStage).includes(
@@ -31,9 +80,17 @@ export class CrmService {
       )
         ? (stage as SalesOpportunityStage)
         : undefined;
+    const normalizedPipeline = this.normalizePipeline(pipeline);
+    const normalizedType = this.normalizeOpportunityType(opportunityType);
+
+    const where: Prisma.SalesOpportunityWhereInput = {
+      ...(normalizedStage ? { stage: normalizedStage } : {}),
+      ...(normalizedPipeline ? { pipeline: normalizedPipeline } : {}),
+      ...(normalizedType ? { opportunityType: normalizedType } : {}),
+    };
 
     return this.prisma.salesOpportunity.findMany({
-      where: normalizedStage ? { stage: normalizedStage } : {},
+      where,
       include: {
         client: { select: { id: true, companyName: true, tradeName: true } },
         assignedSeller: { select: { id: true, name: true } },
@@ -107,9 +164,11 @@ export class CrmService {
     return opportunity;
   }
 
-  async opportunityPipeline() {
+  async opportunityPipeline(pipeline?: string) {
+    const normalizedPipeline = this.normalizePipeline(pipeline);
     const rows = await this.prisma.salesOpportunity.groupBy({
       by: ['stage'],
+      where: normalizedPipeline ? { pipeline: normalizedPipeline } : undefined,
       _count: { _all: true },
       _sum: { estimatedValue: true },
     });
@@ -125,7 +184,12 @@ export class CrmService {
     });
   }
 
-  createOpportunity(dto: CreateOpportunityDto) {
+  async createOpportunity(dto: CreateOpportunityDto) {
+    const opportunityType =
+      dto.opportunityType ?? SalesOpportunityType.FIELD_SERVICE;
+    const pipeline = this.resolvePipeline(dto.pipeline, opportunityType);
+    await this.assertCommercialSeller(dto.assignedSellerId, pipeline);
+
     const stage = dto.stage ?? SalesOpportunityStage.PROSPECTION;
     const stageData = this.buildOpportunityStageData(
       stage,
@@ -141,6 +205,8 @@ export class CrmService {
         clientAddressId: dto.clientAddressId,
         primaryContactId: dto.primaryContactId,
         assignedSellerId: dto.assignedSellerId,
+        pipeline,
+        opportunityType,
         stage,
         temperature: dto.temperature,
         estimatedValue: Number(dto.estimatedValue || 0),
@@ -164,6 +230,16 @@ export class CrmService {
     });
     if (!existing) throw new NotFoundException('Oportunidade nao encontrada.');
 
+    const opportunityType = dto.opportunityType ?? existing.opportunityType;
+    const pipeline = this.resolvePipeline(
+      dto.pipeline ??
+        (dto.opportunityType !== undefined ? undefined : existing.pipeline),
+      opportunityType,
+    );
+    if (dto.assignedSellerId !== undefined) {
+      await this.assertCommercialSeller(dto.assignedSellerId, pipeline);
+    }
+
     const nextStage = dto.stage ?? existing.stage;
     const stageData = this.buildOpportunityStageData(
       nextStage,
@@ -180,6 +256,8 @@ export class CrmService {
         clientAddressId: dto.clientAddressId,
         primaryContactId: dto.primaryContactId,
         assignedSellerId: dto.assignedSellerId,
+        pipeline,
+        opportunityType,
         stage: nextStage,
         temperature: dto.temperature,
         estimatedValue:
@@ -485,5 +563,126 @@ export class CrmService {
       : 0;
     const next = current + 1;
     return `VIS-${String(next).padStart(5, '0')}`;
+  }
+
+  private async assertCommercialSeller(
+    sellerId?: string | null,
+    pipeline?: SalesOpportunityPipeline,
+  ) {
+    if (!sellerId) return;
+
+    const seller = await this.prisma.user.findFirst({
+      where: {
+        id: sellerId,
+        role: UserRole.SALES,
+        isActive: true,
+        ...(pipeline
+          ? { AND: [this.buildSellerDepartmentWhere(pipeline)] }
+          : {}),
+      },
+      select: { id: true },
+    });
+
+    if (!seller) {
+      throw new BadRequestException(
+        'Vendedor responsavel deve ser um usuario ativo do comercial e compativel com o pipeline.',
+      );
+    }
+  }
+
+  private normalizePipeline(input?: string) {
+    return input &&
+      Object.values(SalesOpportunityPipeline).includes(
+        input as SalesOpportunityPipeline,
+      )
+      ? (input as SalesOpportunityPipeline)
+      : undefined;
+  }
+
+  private normalizeOpportunityType(input?: string) {
+    return input &&
+      Object.values(SalesOpportunityType).includes(
+        input as SalesOpportunityType,
+      )
+      ? (input as SalesOpportunityType)
+      : undefined;
+  }
+
+  private resolvePipeline(
+    input: SalesOpportunityPipeline | undefined,
+    opportunityType: SalesOpportunityType,
+  ) {
+    const inferred = this.inferPipelineByType(opportunityType);
+    if (!input) return inferred;
+    if (opportunityType !== SalesOpportunityType.OTHER && input !== inferred) {
+      throw new BadRequestException(
+        'Tipo de oportunidade incompativel com o pipeline comercial selecionado.',
+      );
+    }
+    return input;
+  }
+
+  private inferPipelineByType(opportunityType: SalesOpportunityType) {
+    const generatorTypes: SalesOpportunityType[] = [
+      SalesOpportunityType.GENERATOR_SALE,
+      SalesOpportunityType.GENERATOR_RENTAL,
+      SalesOpportunityType.INSTALLATION_RETROFIT,
+    ];
+    if (generatorTypes.includes(opportunityType)) {
+      return SalesOpportunityPipeline.COMMERCIAL_01_GENERATORS;
+    }
+
+    const contractTypes: SalesOpportunityType[] = [
+      SalesOpportunityType.MAINTENANCE_CONTRACT,
+      SalesOpportunityType.CONTRACT_RENEWAL,
+      SalesOpportunityType.CONTRACT_EXPANSION,
+    ];
+    if (contractTypes.includes(opportunityType)) {
+      return SalesOpportunityPipeline.COMMERCIAL_02_CONTRACTS;
+    }
+
+    return SalesOpportunityPipeline.COMMERCIAL_03_PARTS_SERVICES;
+  }
+
+  private buildSellerDepartmentWhere(
+    pipeline: SalesOpportunityPipeline,
+  ): Prisma.UserWhereInput {
+    const specificTerms: Record<SalesOpportunityPipeline, string[]> = {
+      [SalesOpportunityPipeline.COMMERCIAL_01_GENERATORS]: [
+        'Comercial 01',
+        'Gerador',
+        'Geradores',
+      ],
+      [SalesOpportunityPipeline.COMMERCIAL_02_CONTRACTS]: [
+        'Comercial 02',
+        'Contrato',
+        'Contratos',
+      ],
+      [SalesOpportunityPipeline.COMMERCIAL_03_PARTS_SERVICES]: [
+        'Comercial 03',
+        'Pecas',
+        'Peças',
+        'Servico',
+        'Serviço',
+        'Servicos',
+        'Serviços',
+      ],
+    };
+
+    return {
+      OR: [
+        { department: null },
+        { department: { equals: 'Comercial', mode: 'insensitive' } },
+        ...specificTerms[pipeline].map((term) => ({
+          department: { contains: term, mode: 'insensitive' as const },
+        })),
+      ],
+    };
+  }
+
+  private parseLookupLimit(value?: string | number) {
+    const parsed = Number(value ?? 10);
+    if (!Number.isFinite(parsed)) return 10;
+    return Math.min(Math.max(Math.trunc(parsed), 1), 20);
   }
 }

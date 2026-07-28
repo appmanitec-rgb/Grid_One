@@ -218,6 +218,67 @@ export class ClientsService {
     });
   }
 
+  lookup(query?: string, take?: string | number) {
+    const search = query?.trim();
+    const digits = search?.replace(/\D/g, '') ?? '';
+    const limit = this.parseLookupLimit(take);
+
+    const where: Prisma.ClientWhereInput = search
+      ? {
+          OR: [
+            {
+              companyName: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+            {
+              tradeName: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+            {
+              contactName: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+            {
+              email: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+            ...(digits
+              ? [
+                  {
+                    cnpj: {
+                      contains: digits,
+                    },
+                  },
+                ]
+              : []),
+          ],
+        }
+      : {};
+
+    return this.database.client.findMany({
+      where,
+      select: {
+        id: true,
+        companyName: true,
+        tradeName: true,
+        cnpj: true,
+        contactName: true,
+        city: true,
+        state: true,
+      },
+      orderBy: { companyName: 'asc' },
+      take: limit,
+    });
+  }
+
   async findOne(id: string) {
     const client = await this.database.client.findUnique({
       where: { id },
@@ -507,5 +568,11 @@ export class ClientsService {
   async remove(id: string) {
     await this.findOne(id);
     return this.database.client.delete({ where: { id } });
+  }
+
+  private parseLookupLimit(value?: string | number) {
+    const parsed = Number(value ?? 10);
+    if (!Number.isFinite(parsed)) return 10;
+    return Math.min(Math.max(Math.trunc(parsed), 1), 20);
   }
 }
