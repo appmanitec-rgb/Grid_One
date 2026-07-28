@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -17,15 +18,22 @@ import {
   PartsCoverageType,
   PreventiveRecurrence,
   Prisma,
+  ProposalHourType,
+  ProposalItemKind,
   ProposalStatus,
+  ProposalTechnicianType,
   ProposalType,
+  SalesOpportunityType,
   SalesOpportunityStage,
   UserRole,
 } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
-import { CreateProposalDto } from './dto/create-proposal.dto';
+import {
+  CreateProposalDto,
+  QuickProposalGeneratorDto,
+} from './dto/create-proposal.dto';
 import { UpdateProposalDto } from './dto/update-proposal.dto';
 
 @Injectable()
@@ -54,15 +62,19 @@ export class ProposalsService {
 
   async create(createProposalDto: CreateProposalDto, actorUserId?: string) {
     await this.assertInternalActor(actorUserId);
-    const subtotal = this.calculateTotal(createProposalDto.items);
-    const discountValue = Math.max(0, Number(createProposalDto.discount || 0));
-    const calculatedTotal = Math.max(0, subtotal - discountValue);
 
     return this.prisma.$transaction(async (tx) => {
       const linkedOpportunity = createProposalDto.salesOpportunityId
         ? await tx.salesOpportunity.findUnique({
             where: { id: createProposalDto.salesOpportunityId },
-            select: { id: true, clientId: true, stage: true },
+            select: {
+              id: true,
+              clientId: true,
+              stage: true,
+              assignedSellerId: true,
+              pipeline: true,
+              opportunityType: true,
+            },
           })
         : null;
 
@@ -79,6 +91,26 @@ export class ProposalsService {
         );
       }
 
+      const sellerUserId =
+        linkedOpportunity?.assignedSellerId ?? createProposalDto.userId;
+      if (!sellerUserId) {
+        throw new BadRequestException(
+          'Informe um vendedor comercial para a proposta.',
+        );
+      }
+      await this.assertProposalSeller(tx, sellerUserId);
+
+      const normalizedItems = await this.prepareProposalItems(
+        tx,
+        createProposalDto.items,
+      );
+      const subtotal = this.calculateTotal(normalizedItems);
+      const discountValue = Math.max(
+        0,
+        Number(createProposalDto.discount || 0),
+      );
+      const calculatedTotal = Math.max(0, subtotal - discountValue);
+
       const nextCode = await this.generateNextNewCode(tx);
       const parsed = this.parseProposalCode(nextCode);
 
@@ -91,7 +123,7 @@ export class ProposalsService {
           clientId: createProposalDto.clientId,
           salesOpportunityId: linkedOpportunity?.id,
           generatorId: createProposalDto.generatorId,
-          userId: createProposalDto.userId,
+          userId: sellerUserId,
           type: createProposalDto.type,
           totalValue: calculatedTotal,
           validUntil: createProposalDto.validUntil
@@ -114,11 +146,17 @@ export class ProposalsService {
           externalNotes: createProposalDto.externalNotes,
           discount: discountValue,
           items: {
-            create: createProposalDto.items.map((item) => ({
+            create: normalizedItems.map((item) => ({
+              kind: item.kind,
+              description: item.description,
               catalogItemId: item.catalogItemId,
               quantity: item.quantity,
+              hours: item.hours,
               unitPrice: item.unitPrice,
-              totalPrice: item.quantity * item.unitPrice,
+              discountPercent: item.discountPercent,
+              hourType: item.hourType,
+              technicianType: item.technicianType,
+              totalPrice: item.totalPrice,
             })),
           },
         },
@@ -127,7 +165,7 @@ export class ProposalsService {
       await this.createMovement(
         tx,
         proposal.id,
-        createProposalDto.userId,
+        actorUserId ?? sellerUserId,
         'CREATE_DRAFT',
         null,
         ProposalStatus.DRAFT,
@@ -139,12 +177,13 @@ export class ProposalsService {
           entityType: 'PROPOSAL',
           entityId: proposal.id,
           action: 'CREATE',
-          actorUserId: createProposalDto.userId,
+          actorUserId: actorUserId ?? sellerUserId,
           afterPayload: {
             status: ProposalStatus.DRAFT,
             totalValue: calculatedTotal,
             clientId: createProposalDto.clientId,
             salesOpportunityId: linkedOpportunity?.id ?? null,
+            sellerUserId,
           },
         },
         tx,
@@ -168,7 +207,13 @@ export class ProposalsService {
           client: true,
           items: { include: { catalogItem: true } },
           salesOpportunity: {
-            select: { id: true, title: true, stage: true },
+            select: {
+              id: true,
+              title: true,
+              stage: true,
+              pipeline: true,
+              opportunityType: true,
+            },
           },
         },
       });
@@ -220,13 +265,19 @@ export class ProposalsService {
           clientId: source.clientId,
           salesOpportunityId: source.salesOpportunityId,
           generatorId: source.generatorId,
-          userId: revisedByUserId || source.userId,
+          userId: source.userId,
           parentProposalId: source.id,
           items: {
             create: source.items.map((item) => ({
+              kind: item.kind,
+              description: item.description,
               catalogItemId: item.catalogItemId,
               quantity: item.quantity,
+              hours: item.hours,
               unitPrice: item.unitPrice,
+              discountPercent: item.discountPercent,
+              hourType: item.hourType,
+              technicianType: item.technicianType,
               totalPrice: item.totalPrice,
             })),
           },
@@ -569,6 +620,229 @@ export class ProposalsService {
     });
   }
 
+  getPricingOptions() {
+    return {
+      hourTypes: [
+        {
+          value: ProposalHourType.ONE_OFF,
+          label: 'Hora avulsa',
+          defaultDiscountPercent: 0,
+        },
+        {
+          value: ProposalHourType.CONTRACT,
+          label: 'Hora contrato',
+          defaultDiscountPercent: 20,
+        },
+        {
+          value: ProposalHourType.EMERGENCY,
+          label: 'Hora emergencia',
+          defaultDiscountPercent: 0,
+        },
+        {
+          value: ProposalHourType.TRAVEL,
+          label: 'Hora deslocamento',
+          defaultDiscountPercent: 0,
+        },
+        {
+          value: ProposalHourType.ENGINEERING,
+          label: 'Hora engenharia',
+          defaultDiscountPercent: 0,
+        },
+      ],
+      technicianTypes: [
+        {
+          value: ProposalTechnicianType.JUNIOR_TECHNICIAN,
+          label: 'Tecnico junior',
+        },
+        {
+          value: ProposalTechnicianType.MID_LEVEL_TECHNICIAN,
+          label: 'Tecnico pleno',
+        },
+        {
+          value: ProposalTechnicianType.SENIOR_TECHNICIAN,
+          label: 'Tecnico senior',
+        },
+        {
+          value: ProposalTechnicianType.APPLICATION_ENGINEER,
+          label: 'Engenheiro de aplicacao',
+        },
+        {
+          value: ProposalTechnicianType.SPECIALIST,
+          label: 'Especialista',
+        },
+      ],
+    };
+  }
+
+  async getScopeTemplates(opportunityType?: string) {
+    const normalizedType = this.normalizeOpportunityType(opportunityType);
+    return this.prisma.proposalScopeTemplate.findMany({
+      where: {
+        active: true,
+        ...(normalizedType
+          ? {
+              OR: [
+                { compatibleOpportunityTypes: { has: normalizedType } },
+                { compatibleOpportunityTypes: { isEmpty: true } },
+              ],
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        category: true,
+        description: true,
+        scopeText: true,
+        tags: true,
+        compatibleOpportunityTypes: true,
+      },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    });
+  }
+
+  async lookupGenerators(query?: string, take?: string, clientId?: string) {
+    const search = query?.trim();
+    const limit = this.parseLookupLimit(take);
+    const searchNumber = Number(search?.replace(',', '.') ?? NaN);
+    const where: Prisma.GeneratorWhereInput = {
+      ...(clientId ? { clientId } : {}),
+      ...(search
+        ? {
+            OR: [
+              {
+                name: {
+                  contains: search,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+              {
+                assetTag: {
+                  contains: search,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+              {
+                serialNumber: {
+                  contains: search,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+              {
+                brand: {
+                  contains: search,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+              {
+                engineModelName: {
+                  contains: search,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+              {
+                installationSite: {
+                  contains: search,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+              ...(Number.isFinite(searchNumber)
+                ? [{ power: searchNumber }]
+                : []),
+            ],
+          }
+        : {}),
+    };
+
+    return this.prisma.generator.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        assetTag: true,
+        brand: true,
+        serialNumber: true,
+        power: true,
+        voltage: true,
+        engineModelName: true,
+        installationSite: true,
+        clientId: true,
+        client: { select: { id: true, companyName: true, tradeName: true } },
+        currentSite: { select: { id: true, name: true, code: true } },
+      },
+      orderBy: [{ name: 'asc' }],
+      take: limit,
+    });
+  }
+
+  async createQuickGenerator(
+    dto: QuickProposalGeneratorDto,
+    actorUserId?: string,
+  ) {
+    await this.assertInternalActor(actorUserId);
+    const client = await this.prisma.client.findUnique({
+      where: { id: dto.clientId },
+      select: { id: true },
+    });
+    if (!client) {
+      throw new NotFoundException('Cliente nao encontrado para a maquina.');
+    }
+
+    if (dto.currentSiteId) {
+      const site = await this.prisma.site.findUnique({
+        where: { id: dto.currentSiteId },
+        select: { id: true, clientId: true },
+      });
+      if (!site || site.clientId !== dto.clientId) {
+        throw new BadRequestException(
+          'Local/obra invalido para o cliente informado.',
+        );
+      }
+    }
+
+    if (dto.serialNumber) {
+      const existing = await this.prisma.generator.findUnique({
+        where: { serialNumber: dto.serialNumber },
+        select: { id: true },
+      });
+      if (existing) {
+        throw new ConflictException(
+          'Ja existe uma maquina com este numero de serie.',
+        );
+      }
+    }
+
+    return this.prisma.generator.create({
+      data: {
+        name: dto.name.trim(),
+        assetTag: dto.assetTag?.trim() || undefined,
+        brand: dto.brand?.trim() || 'Nao informado',
+        engineModelName: dto.modelName?.trim() || undefined,
+        serialNumber: dto.serialNumber?.trim() || undefined,
+        power: Math.max(0, Number(dto.power || 0)),
+        voltage: dto.voltage?.trim() || undefined,
+        installationSite: dto.installationSite?.trim() || undefined,
+        notes: dto.notes?.trim() || undefined,
+        clientId: dto.clientId,
+        currentSiteId: dto.currentSiteId,
+        createdByUserId: actorUserId,
+      },
+      select: {
+        id: true,
+        name: true,
+        assetTag: true,
+        brand: true,
+        serialNumber: true,
+        power: true,
+        voltage: true,
+        engineModelName: true,
+        installationSite: true,
+        clientId: true,
+        currentSite: { select: { id: true, name: true, code: true } },
+      },
+    });
+  }
+
   async findAll(actorUserId?: string) {
     const scope = await this.getActorScope(actorUserId);
     return this.prisma.proposal.findMany({
@@ -581,7 +855,13 @@ export class ProposalsService {
         client: true,
         generator: true,
         salesOpportunity: {
-          select: { id: true, title: true, stage: true },
+          select: {
+            id: true,
+            title: true,
+            stage: true,
+            pipeline: true,
+            opportunityType: true,
+          },
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -598,7 +878,13 @@ export class ProposalsService {
         client: true,
         generator: true,
         salesOpportunity: {
-          select: { id: true, title: true, stage: true },
+          select: {
+            id: true,
+            title: true,
+            stage: true,
+            pipeline: true,
+            opportunityType: true,
+          },
         },
         parentProposal: {
           select: { id: true, code: true },
@@ -909,10 +1195,197 @@ export class ProposalsService {
     });
   }
 
-  private calculateTotal(
-    items: Array<{ quantity: number; unitPrice: number }>,
+  private calculateTotal(items: Array<{ totalPrice: number }>) {
+    return items.reduce((acc, item) => acc + item.totalPrice, 0);
+  }
+
+  private async prepareProposalItems(
+    tx: Prisma.TransactionClient,
+    items: CreateProposalDto['items'],
   ) {
-    return items.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0);
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new BadRequestException('Adicione ao menos um item na proposta.');
+    }
+
+    const catalogIds = [
+      ...new Set(
+        items
+          .map((item) => item.catalogItemId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const catalogItems =
+      catalogIds.length > 0
+        ? await tx.catalogItem.findMany({
+            where: { id: { in: catalogIds }, isActive: true },
+            select: { id: true, type: true, name: true },
+          })
+        : [];
+    const catalogById = new Map(catalogItems.map((item) => [item.id, item]));
+
+    return items.map((item, index) => {
+      const catalogItem = item.catalogItemId
+        ? catalogById.get(item.catalogItemId)
+        : null;
+      if (item.catalogItemId && !catalogItem) {
+        throw new BadRequestException(
+          `Item ${index + 1}: catalogo informado nao existe ou esta inativo.`,
+        );
+      }
+
+      const kind =
+        item.kind ??
+        (catalogItem?.type === 'SERVICE'
+          ? ProposalItemKind.CATALOG_SERVICE
+          : item.catalogItemId
+            ? ProposalItemKind.PART_MATERIAL
+            : ProposalItemKind.OTHER);
+
+      if (
+        (kind === ProposalItemKind.PART_MATERIAL ||
+          kind === ProposalItemKind.CATALOG_SERVICE) &&
+        !item.catalogItemId
+      ) {
+        throw new BadRequestException(
+          `Item ${index + 1}: selecione um item de catalogo.`,
+        );
+      }
+
+      if (kind === ProposalItemKind.HOURLY_SERVICE) {
+        return this.prepareHourlyItem(item, index);
+      }
+
+      if (kind === ProposalItemKind.OTHER && !item.description?.trim()) {
+        throw new BadRequestException(
+          `Item ${index + 1}: descreva o item avulso.`,
+        );
+      }
+
+      const quantity = Number(item.quantity ?? 1);
+      const unitPrice = Number(item.unitPrice ?? 0);
+      const discountPercent = this.normalizeDiscountPercent(
+        item.discountPercent ?? 0,
+        index,
+      );
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        throw new BadRequestException(
+          `Item ${index + 1}: quantidade deve ser maior que zero.`,
+        );
+      }
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+        throw new BadRequestException(
+          `Item ${index + 1}: valor de venda invalido.`,
+        );
+      }
+
+      return {
+        kind,
+        description: item.description?.trim() || catalogItem?.name || null,
+        catalogItemId: item.catalogItemId,
+        quantity: Math.max(1, Math.trunc(quantity)),
+        hours: null,
+        unitPrice,
+        discountPercent,
+        hourType: null,
+        technicianType: null,
+        totalPrice: quantity * unitPrice * (1 - discountPercent / 100),
+      };
+    });
+  }
+
+  private prepareHourlyItem(
+    item: CreateProposalDto['items'][number],
+    index: number,
+  ) {
+    const hours = Number(item.hours ?? item.quantity ?? 0);
+    const unitPrice = Number(item.unitPrice ?? 0);
+    const hourType = item.hourType ?? ProposalHourType.ONE_OFF;
+    const discountPercent = this.normalizeDiscountPercent(
+      item.discountPercent ?? (hourType === ProposalHourType.CONTRACT ? 20 : 0),
+      index,
+    );
+
+    if (!Number.isFinite(hours) || hours <= 0) {
+      throw new BadRequestException(
+        `Item ${index + 1}: informe quantidade de horas maior que zero.`,
+      );
+    }
+    if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+      throw new BadRequestException(
+        `Item ${index + 1}: informe valor hora de venda maior que zero.`,
+      );
+    }
+    if (!item.technicianType) {
+      throw new BadRequestException(
+        `Item ${index + 1}: informe o tipo de tecnico.`,
+      );
+    }
+
+    return {
+      kind: ProposalItemKind.HOURLY_SERVICE,
+      description:
+        item.description?.trim() ||
+        `Servico por hora - ${this.hourTypeLabel(hourType)}`,
+      catalogItemId: item.catalogItemId,
+      quantity: Math.max(1, Math.ceil(hours)),
+      hours,
+      unitPrice,
+      discountPercent,
+      hourType,
+      technicianType: item.technicianType,
+      totalPrice: hours * unitPrice * (1 - discountPercent / 100),
+    };
+  }
+
+  private normalizeDiscountPercent(value: number, index: number) {
+    const discount = Number(value || 0);
+    if (!Number.isFinite(discount) || discount < 0 || discount > 100) {
+      throw new BadRequestException(
+        `Item ${index + 1}: desconto do item deve ficar entre 0 e 100%.`,
+      );
+    }
+    return discount;
+  }
+
+  private async assertProposalSeller(
+    tx: Prisma.TransactionClient,
+    userId: string,
+  ) {
+    const seller = await tx.user.findFirst({
+      where: { id: userId, role: UserRole.SALES, isActive: true },
+      select: { id: true },
+    });
+    if (!seller) {
+      throw new BadRequestException(
+        'Vendedor da proposta deve ser um usuario comercial ativo.',
+      );
+    }
+  }
+
+  private normalizeOpportunityType(input?: string) {
+    return input &&
+      Object.values(SalesOpportunityType).includes(
+        input as SalesOpportunityType,
+      )
+      ? (input as SalesOpportunityType)
+      : undefined;
+  }
+
+  private parseLookupLimit(value?: string | number) {
+    const parsed = Number(value ?? 10);
+    if (!Number.isFinite(parsed)) return 10;
+    return Math.min(Math.max(Math.trunc(parsed), 1), 20);
+  }
+
+  private hourTypeLabel(hourType: ProposalHourType) {
+    const labels: Record<ProposalHourType, string> = {
+      [ProposalHourType.ONE_OFF]: 'Hora avulsa',
+      [ProposalHourType.CONTRACT]: 'Hora contrato',
+      [ProposalHourType.EMERGENCY]: 'Hora emergencia',
+      [ProposalHourType.TRAVEL]: 'Hora deslocamento',
+      [ProposalHourType.ENGINEERING]: 'Hora engenharia',
+    };
+    return labels[hourType] || hourType;
   }
 
   private async getActorScope(actorUserId?: string) {

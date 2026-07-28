@@ -49,10 +49,28 @@ type Proposal = {
   revisions?: Array<{ id: string; code: string; status: string; createdAt: string }>;
   client?: { id: string; companyName: string } | null;
   generator?: { id: string; name: string } | null;
-  salesOpportunity?: { id: string; title: string; stage: string } | null;
+  salesOpportunity?: {
+    id: string;
+    title: string;
+    stage: string;
+    pipeline?: string | null;
+    opportunityType?: string | null;
+  } | null;
   generatedContract?: { id: string; code: string; status: string } | null;
   user?: { id: string; name: string; role: string } | null;
-  items: Array<{ id: string; quantity: number; unitPrice: number; totalPrice: number; catalogItem?: { name: string } | null }>;
+  items: Array<{
+    id: string;
+    kind?: string | null;
+    description?: string | null;
+    quantity: number;
+    hours?: number | null;
+    unitPrice: number;
+    discountPercent?: number | null;
+    totalPrice: number;
+    hourType?: string | null;
+    technicianType?: string | null;
+    catalogItem?: { name: string } | null;
+  }>;
   movements?: Array<{
     id: string;
     action: string;
@@ -787,8 +805,22 @@ export default function ProposalDetailPage() {
             <tbody>
               {proposalItems.map((item) => (
                 <tr key={item.id} className="border-b border-slate-100">
-                  <td className="px-3 py-3 text-slate-800">{item.catalogItem?.name || "Item"}</td>
-                  <td className="px-3 py-3 text-slate-600">{item.quantity}</td>
+                  <td className="px-3 py-3 text-slate-800">
+                    <p className="font-medium">
+                      {item.catalogItem?.name || item.description || "Item"}
+                    </p>
+                    {item.kind === "HOURLY_SERVICE" ? (
+                      <p className="mt-1 text-xs text-slate-500">
+                        {item.hourType || "Hora"} | {item.technicianType || "Tecnico"}
+                        {item.discountPercent ? ` | desconto ${item.discountPercent}%` : ""}
+                      </p>
+                    ) : null}
+                  </td>
+                  <td className="px-3 py-3 text-slate-600">
+                    {item.kind === "HOURLY_SERVICE"
+                      ? `${Number(item.hours || 0).toLocaleString("pt-BR")} h`
+                      : item.quantity}
+                  </td>
                   <td className="px-3 py-3 text-slate-600">
                     {formatCurrency(Number(item.unitPrice || 0))}
                   </td>

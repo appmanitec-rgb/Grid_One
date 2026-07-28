@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, UserRole } from '@prisma/client';
+import { ItemType, Prisma, UserRole } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
 import { CreateCatalogDto } from './dto/create-catalog.dto';
 import { UpdateCatalogDto } from './dto/update-catalog.dto';
@@ -88,6 +88,91 @@ export class CatalogsService {
     return this.maskCatalogValues(
       this.withOperationalSummary(item),
       this.canViewCostData(actor),
+    );
+  }
+
+  async lookup(
+    query?: string,
+    type?: string,
+    take?: string | number,
+    actor?: CatalogActor,
+  ) {
+    const search = query?.trim();
+    const limit = this.parseLookupLimit(take);
+    const normalizedType = Object.values(ItemType).includes(type as ItemType)
+      ? (type as ItemType)
+      : undefined;
+    const where: Prisma.CatalogItemWhereInput = {
+      isActive: true,
+      ...(normalizedType ? { type: normalizedType } : {}),
+      ...(search
+        ? {
+            OR: [
+              {
+                name: {
+                  contains: search,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+              {
+                sku: {
+                  contains: search,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+              {
+                description: {
+                  contains: search,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+              {
+                commercialDescription: {
+                  contains: search,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+              {
+                category: {
+                  contains: search,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+              {
+                brand: {
+                  contains: search,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+
+    const items = await this.prisma.catalogItem.findMany({
+      where,
+      select: {
+        id: true,
+        sku: true,
+        name: true,
+        description: true,
+        commercialDescription: true,
+        type: true,
+        unit: true,
+        basePrice: true,
+        brand: true,
+        category: true,
+        costPrice: true,
+        averageCost: true,
+        lastCost: true,
+        profitMargin: true,
+      },
+      orderBy: { name: 'asc' },
+      take: limit,
+    });
+
+    return items.map((item) =>
+      this.maskCatalogValues(item, this.canViewCostData(actor)),
     );
   }
 
@@ -298,6 +383,12 @@ export class CatalogsService {
     }
 
     return masked as T;
+  }
+
+  private parseLookupLimit(value?: string | number) {
+    const parsed = Number(value ?? 10);
+    if (!Number.isFinite(parsed)) return 10;
+    return Math.min(Math.max(Math.trunc(parsed), 1), 20);
   }
 
   private assertNoDirectStockMutation(dto: Record<string, any>) {

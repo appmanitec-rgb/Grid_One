@@ -1,4 +1,9 @@
-import { ProposalType } from '@prisma/client';
+import {
+  ProposalHourType,
+  ProposalItemKind,
+  ProposalTechnicianType,
+  ProposalType,
+} from '@prisma/client';
 import {
   IsString,
   IsNotEmpty,
@@ -17,16 +22,43 @@ import { Type } from 'class-transformer';
 
 class ProposalItemDto {
   @IsString()
-  @IsNotEmpty()
-  catalogItemId!: string;
+  @IsOptional()
+  catalogItemId?: string;
+
+  @IsEnum(ProposalItemKind)
+  @IsOptional()
+  kind?: ProposalItemKind;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
 
   @IsNumber()
   @Min(1)
-  quantity!: number;
+  @IsOptional()
+  quantity?: number;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  hours?: number;
 
   @IsNumber()
   @Min(0)
   unitPrice!: number;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  discountPercent?: number;
+
+  @IsEnum(ProposalHourType)
+  @IsOptional()
+  hourType?: ProposalHourType;
+
+  @IsEnum(ProposalTechnicianType)
+  @IsOptional()
+  technicianType?: ProposalTechnicianType;
 }
 
 export class CreateProposalDto {
@@ -43,8 +75,8 @@ export class CreateProposalDto {
   generatorId?: string;
 
   @IsString()
-  @IsNotEmpty()
-  userId!: string;
+  @IsOptional()
+  userId?: string;
 
   @IsEnum(ProposalType)
   type!: ProposalType;
@@ -114,4 +146,51 @@ export class CreateProposalDto {
   @ValidateNested({ each: true })
   @Type(() => ProposalItemDto)
   items!: ProposalItemDto[];
+}
+
+export class QuickProposalGeneratorDto {
+  @IsString()
+  @IsNotEmpty()
+  name!: string;
+
+  @IsString()
+  @IsOptional()
+  assetTag?: string;
+
+  @IsString()
+  @IsOptional()
+  brand?: string;
+
+  @IsString()
+  @IsOptional()
+  modelName?: string;
+
+  @IsString()
+  @IsOptional()
+  serialNumber?: string;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  power?: number;
+
+  @IsString()
+  @IsOptional()
+  voltage?: string;
+
+  @IsString()
+  @IsOptional()
+  installationSite?: string;
+
+  @IsString()
+  @IsOptional()
+  notes?: string;
+
+  @IsUUID()
+  @IsNotEmpty()
+  clientId!: string;
+
+  @IsUUID()
+  @IsOptional()
+  currentSiteId?: string;
 }

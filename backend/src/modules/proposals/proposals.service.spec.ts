@@ -1,7 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   AccountsReceivableStatus,
+  ProposalHourType,
+  ProposalItemKind,
   ProposalStatus,
+  ProposalTechnicianType,
   ProposalType,
   UserRole,
 } from '@prisma/client';
@@ -14,8 +17,18 @@ describe('ProposalsService', () => {
   let service: ProposalsService;
   let auditLogsService: { record: jest.Mock };
   let db: {
-    proposal: { findUnique: jest.Mock; update: jest.Mock };
-    user: { findUnique: jest.Mock };
+    proposal: {
+      findMany: jest.Mock;
+      findUnique: jest.Mock;
+      create: jest.Mock;
+      update: jest.Mock;
+    };
+    proposalScopeTemplate: { findMany: jest.Mock };
+    user: { findFirst: jest.Mock; findUnique: jest.Mock };
+    client: { findUnique: jest.Mock };
+    site: { findUnique: jest.Mock };
+    catalogItem: { findMany: jest.Mock };
+    salesOpportunity: { findUnique: jest.Mock; update: jest.Mock };
     proposalMovement: { create: jest.Mock };
     serviceContract: {
       findMany: jest.Mock;
@@ -37,18 +50,42 @@ describe('ProposalsService', () => {
       findFirst: jest.Mock;
     };
     costCenterEntry: { create: jest.Mock };
-    generator: { updateMany: jest.Mock };
+    generator: {
+      findUnique: jest.Mock;
+      findMany: jest.Mock;
+      create: jest.Mock;
+      updateMany: jest.Mock;
+    };
     $transaction: jest.Mock;
   };
 
   beforeEach(async () => {
     db = {
       proposal: {
+        findMany: jest.fn(),
         findUnique: jest.fn(),
+        create: jest.fn(),
         update: jest.fn(),
       },
+      proposalScopeTemplate: {
+        findMany: jest.fn(),
+      },
       user: {
+        findFirst: jest.fn(),
         findUnique: jest.fn(),
+      },
+      client: {
+        findUnique: jest.fn(),
+      },
+      site: {
+        findUnique: jest.fn(),
+      },
+      catalogItem: {
+        findMany: jest.fn(),
+      },
+      salesOpportunity: {
+        findUnique: jest.fn(),
+        update: jest.fn(),
       },
       proposalMovement: {
         create: jest.fn(),
@@ -80,6 +117,9 @@ describe('ProposalsService', () => {
         create: jest.fn(),
       },
       generator: {
+        findUnique: jest.fn(),
+        findMany: jest.fn(),
+        create: jest.fn(),
         updateMany: jest.fn(),
       },
       $transaction: jest.fn((cb: (tx: typeof db) => unknown) => cb(db)),
@@ -108,6 +148,191 @@ describe('ProposalsService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it('blocks proposal creation when seller is not active sales user', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      role: UserRole.ADMIN,
+      linkedClientId: null,
+    });
+    db.salesOpportunity.findUnique.mockResolvedValue(null);
+    db.user.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.create(
+        {
+          clientId: 'client-1',
+          userId: 'admin-1',
+          type: ProposalType.SERVICES,
+          items: [
+            {
+              kind: ProposalItemKind.HOURLY_SERVICE,
+              description: 'Servico por hora',
+              hourType: ProposalHourType.ONE_OFF,
+              technicianType: ProposalTechnicianType.MID_LEVEL_TECHNICIAN,
+              hours: 2,
+              unitPrice: 300,
+            },
+          ],
+        },
+        'admin-1',
+      ),
+    ).rejects.toThrow(
+      'Vendedor da proposta deve ser um usuario comercial ativo.',
+    );
+
+    expect(db.proposal.create).not.toHaveBeenCalled();
+  });
+
+  it('calculates hourly contract service with default 20 percent discount', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      role: UserRole.ADMIN,
+      linkedClientId: null,
+    });
+    db.salesOpportunity.findUnique.mockResolvedValue(null);
+    db.user.findFirst.mockResolvedValue({ id: 'seller-1' });
+    db.catalogItem.findMany.mockResolvedValue([]);
+    db.proposal.findMany.mockResolvedValue([]);
+    db.proposal.create.mockResolvedValue({ id: 'proposal-1' });
+    db.proposal.findUnique.mockResolvedValue({ id: 'proposal-1' });
+
+    await service.create(
+      {
+        clientId: 'client-1',
+        userId: 'seller-1',
+        type: ProposalType.SERVICES,
+        items: [
+          {
+            kind: ProposalItemKind.HOURLY_SERVICE,
+            description: 'Hora contrato tecnico senior',
+            hourType: ProposalHourType.CONTRACT,
+            technicianType: ProposalTechnicianType.SENIOR_TECHNICIAN,
+            hours: 5,
+            unitPrice: 200,
+          },
+        ],
+      },
+      'admin-1',
+    );
+
+    expect(db.proposal.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: 'seller-1',
+          totalValue: 800,
+          items: {
+            create: [
+              expect.objectContaining({
+                kind: ProposalItemKind.HOURLY_SERVICE,
+                hours: 5,
+                unitPrice: 200,
+                discountPercent: 20,
+                totalPrice: 800,
+              }),
+            ],
+          },
+        }),
+      }),
+    );
+  });
+
+  it('keeps old catalog item proposal compatible without new fields', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      role: UserRole.ADMIN,
+      linkedClientId: null,
+    });
+    db.salesOpportunity.findUnique.mockResolvedValue(null);
+    db.user.findFirst.mockResolvedValue({ id: 'seller-1' });
+    db.catalogItem.findMany.mockResolvedValue([
+      { id: 'catalog-1', type: 'PART', name: 'Filtro' },
+    ]);
+    db.proposal.findMany.mockResolvedValue([]);
+    db.proposal.create.mockResolvedValue({ id: 'proposal-1' });
+    db.proposal.findUnique.mockResolvedValue({ id: 'proposal-1' });
+
+    await service.create(
+      {
+        clientId: 'client-1',
+        userId: 'seller-1',
+        type: ProposalType.PARTS,
+        items: [{ catalogItemId: 'catalog-1', quantity: 2, unitPrice: 150 }],
+      },
+      'admin-1',
+    );
+
+    expect(db.proposal.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          totalValue: 300,
+          items: {
+            create: [
+              expect.objectContaining({
+                kind: ProposalItemKind.PART_MATERIAL,
+                catalogItemId: 'catalog-1',
+                quantity: 2,
+                totalPrice: 300,
+              }),
+            ],
+          },
+        }),
+      }),
+    );
+  });
+
+  it('returns only active scope templates ordered by service', async () => {
+    db.proposalScopeTemplate.findMany.mockResolvedValue([
+      { id: 'scope-1', name: 'TOF' },
+    ]);
+
+    const result = await service.getScopeTemplates('FIELD_SERVICE');
+
+    expect(result).toEqual([{ id: 'scope-1', name: 'TOF' }]);
+    expect(db.proposalScopeTemplate.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          active: true,
+          OR: expect.any(Array),
+        }),
+      }),
+    );
+  });
+
+  it('creates quick generator linked to selected client', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      role: UserRole.ADMIN,
+      linkedClientId: null,
+    });
+    db.client.findUnique.mockResolvedValue({ id: 'client-1' });
+    db.generator.findUnique.mockResolvedValue(null);
+    db.generator.create.mockResolvedValue({ id: 'generator-1' });
+
+    await service.createQuickGenerator(
+      {
+        clientId: 'client-1',
+        name: 'GMG proposta',
+        brand: 'Stemac',
+        modelName: 'G100',
+        serialNumber: 'SN-20GB',
+        power: 100,
+      },
+      'admin-1',
+    );
+
+    expect(db.generator.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          clientId: 'client-1',
+          name: 'GMG proposta',
+          brand: 'Stemac',
+          engineModelName: 'G100',
+          power: 100,
+        }),
+      }),
+    );
   });
 
   it('blocks invalid status transition for common user', async () => {

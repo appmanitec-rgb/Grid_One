@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -14,7 +15,10 @@ import type { Request } from 'express';
 import { RequireAccessPolicy } from '../auth/access-policy.decorator';
 import { AccessPolicyGuard } from '../auth/access-policy.guard';
 import { AuthGuard } from '../auth/auth.guard';
-import { CreateProposalDto } from './dto/create-proposal.dto';
+import {
+  CreateProposalDto,
+  QuickProposalGeneratorDto,
+} from './dto/create-proposal.dto';
 import { UpdateProposalDto } from './dto/update-proposal.dto';
 import { ProposalsService } from './proposals.service';
 
@@ -174,6 +178,36 @@ export class ProposalsController {
   async myUpdates(@Req() req: Request) {
     const userId = (req['user'] as any)?.sub as string;
     return this.proposalsService.getMyUpdates(userId);
+  }
+
+  @RequireAccessPolicy('proposals.view')
+  @Get('scope-templates')
+  scopeTemplates(@Query('opportunityType') opportunityType?: string) {
+    return this.proposalsService.getScopeTemplates(opportunityType);
+  }
+
+  @RequireAccessPolicy('proposals.view')
+  @Get('pricing-options')
+  pricingOptions() {
+    return this.proposalsService.getPricingOptions();
+  }
+
+  @RequireAccessPolicy('proposals.view')
+  @Get('generator-lookup')
+  generatorLookup(
+    @Query('q') query?: string,
+    @Query('take') take?: string,
+    @Query('clientId') clientId?: string,
+  ) {
+    return this.proposalsService.lookupGenerators(query, take, clientId);
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('proposals.create')
+  @Post('quick-generator')
+  quickGenerator(@Req() req: Request, @Body() body: QuickProposalGeneratorDto) {
+    const userId = (req['user'] as any)?.sub as string | undefined;
+    return this.proposalsService.createQuickGenerator(body, userId);
   }
 
   @RequireAccessPolicy('proposals.view')

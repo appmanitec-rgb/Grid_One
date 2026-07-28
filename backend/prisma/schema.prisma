@@ -88,6 +88,29 @@ enum ProposalType {
   CONTRACT
 }
 
+enum ProposalItemKind {
+  CATALOG_SERVICE
+  HOURLY_SERVICE
+  PART_MATERIAL
+  OTHER
+}
+
+enum ProposalHourType {
+  ONE_OFF
+  CONTRACT
+  EMERGENCY
+  TRAVEL
+  ENGINEERING
+}
+
+enum ProposalTechnicianType {
+  JUNIOR_TECHNICIAN
+  MID_LEVEL_TECHNICIAN
+  SENIOR_TECHNICIAN
+  APPLICATION_ENGINEER
+  SPECIALIST
+}
+
 enum ProposalStatus {
   DRAFT
   BOARD_REVIEW
@@ -1404,18 +1427,42 @@ model ProposalMovement {
 }
 
 model ProposalItem {
-  id         String @id @default(uuid())
-  quantity   Int    @default(1)
-  unitPrice  Float
-  totalPrice Float
+  id              String                  @id @default(uuid())
+  kind            ProposalItemKind        @default(PART_MATERIAL)
+  description     String?
+  quantity        Int                     @default(1)
+  hours           Float?
+  unitPrice       Float
+  discountPercent Float?                  @default(0)
+  totalPrice      Float
+  hourType        ProposalHourType?
+  technicianType  ProposalTechnicianType?
 
   proposalId String
   proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
 
-  catalogItemId String
-  catalogItem   CatalogItem @relation(fields: [catalogItemId], references: [id])
+  catalogItemId String?
+  catalogItem   CatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
 
   @@map("proposal_items")
+}
+
+model ProposalScopeTemplate {
+  id                         String                 @id @default(uuid())
+  name                       String
+  category                   String?
+  description                String?
+  scopeText                  String
+  active                     Boolean                @default(true)
+  sortOrder                  Int                    @default(0)
+  tags                       String[]               @default([])
+  compatibleOpportunityTypes SalesOpportunityType[] @default([])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active, sortOrder])
+  @@map("proposal_scope_templates")
 }
 
 model MaintenanceOrder {

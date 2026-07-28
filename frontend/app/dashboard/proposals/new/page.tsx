@@ -5,11 +5,11 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
-import { decodeJwtPayload, getStoredAccessToken } from "@/lib/auth-session";
 
 type CatalogItem = {
   id: string;
   name: string;
+  sku?: string | null;
   code?: string | null;
   basePrice?: number | null;
   type?: string | null;
@@ -26,15 +26,26 @@ type Generator = {
   id: string;
   name?: string | null;
   clientId?: string | null;
+  assetTag?: string | null;
+  brand?: string | null;
+  serialNumber?: string | null;
+  power?: number | null;
+  voltage?: string | null;
+  engineModelName?: string | null;
+  installationSite?: string | null;
+  client?: { id: string; companyName?: string | null; tradeName?: string | null } | null;
+  currentSite?: { id: string; name?: string | null; code?: string | null } | null;
 };
 
 type LinkedOpportunity = {
   id: string;
   title: string;
   stage: string;
+  pipeline?: string | null;
+  opportunityType?: string | null;
   estimatedValue?: number | null;
   client: { id: string; companyName: string; tradeName?: string | null };
-  assignedSeller?: { id: string; name: string } | null;
+  assignedSeller?: { id: string; name: string; email?: string | null; department?: string | null } | null;
   inspections?: Array<{
     id: string;
     code: string;
@@ -58,6 +69,44 @@ type RowItem = {
   unitPrice: string;
 };
 
+type HourlyItem = {
+  description: string;
+  hourType: string;
+  technicianType: string;
+  hours: string;
+  unitPrice: string;
+  discountPercent: string;
+};
+
+type OtherItem = {
+  description: string;
+  quantity: string;
+  unitPrice: string;
+};
+
+type SellerOption = {
+  id: string;
+  name: string;
+  email?: string | null;
+  department?: string | null;
+};
+
+type ScopeTemplate = {
+  id: string;
+  name: string;
+  category?: string | null;
+  description?: string | null;
+  scopeText: string;
+  tags?: string[];
+  compatibleOpportunityTypes?: string[];
+};
+
+type PricingOption = {
+  value: string;
+  label: string;
+  defaultDiscountPercent?: number;
+};
+
 const OPPORTUNITY_STAGE_LABEL: Record<string, string> = {
   PROSPECTION: "Prospeccao",
   SITE_SURVEY_SCHEDULED: "Vistoria Agendada",
@@ -79,15 +128,52 @@ function formatMoney(value: number) {
   return value.toFixed(2);
 }
 
+function onlyDigits(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function formatClientOption(client: Client) {
+  return [client.companyName, client.tradeName, client.cnpj]
+    .filter(Boolean)
+    .join(" | ");
+}
+
+function formatGeneratorOption(generator: Generator) {
+  const details = [
+    generator.assetTag,
+    generator.serialNumber,
+    generator.engineModelName,
+    generator.power ? `${generator.power} kVA` : null,
+  ].filter(Boolean);
+  return `${generator.name || "Maquina"}${details.length ? ` | ${details.join(" | ")}` : ""}`;
+}
+
+function joinScopeTexts(texts: string[]) {
+  const unique = Array.from(
+    new Set(
+      texts
+        .map((text) => text.trim())
+        .filter(Boolean),
+    ),
+  );
+  return unique.map((text) => `- ${text.replace(/^-+\s*/, "")}`).join("\n");
+}
+
+function defaultHourlyDiscount(hourType: string) {
+  return hourType === "CONTRACT" ? "20" : "0";
+}
+
 function SearchableSelect({
   items,
   value,
   onChange,
+  onSearch,
   placeholder,
 }: {
   items: CatalogItem[];
   value: string;
   onChange: (val: string) => void;
+  onSearch?: (term: string) => void;
   placeholder: string;
 }) {
   const [search, setSearch] = useState("");
@@ -96,7 +182,8 @@ function SearchableSelect({
   useEffect(() => {
     const selected = items.find((i) => i.id === value);
     if (selected) {
-      setSearch(`${selected.code ? `[${selected.code}] ` : ""}${selected.name}`);
+      const code = selected.code || selected.sku;
+      setSearch(`${code ? `[${code}] ` : ""}${selected.name}`);
     }
   }, [value, items]);
 
@@ -115,9 +202,11 @@ function SearchableSelect({
         type="text"
         value={search}
         onChange={(e) => {
-          setSearch(e.target.value);
+          const next = e.target.value;
+          setSearch(next);
           setIsOpen(true);
           onChange("");
+          onSearch?.(next);
         }}
         onFocus={() => setIsOpen(true)}
         onBlur={() => setTimeout(() => setIsOpen(false), 180)}
@@ -138,7 +227,7 @@ function SearchableSelect({
                 className="cursor-pointer border-b border-zinc-100 p-2 text-sm hover:bg-emerald-50 last:border-0"
               >
                 <span className="mr-2 font-mono text-xs font-bold text-zinc-400">
-                  {item.code || "S/COD"}
+                  {item.code || item.sku || "S/COD"}
                 </span>
                 <span className="text-zinc-700">{item.name}</span>
               </li>
@@ -162,8 +251,13 @@ export default function NewProposalPage() {
   } | null>(null);
 
   const [clients, setClients] = useState<Client[]>([]);
-  const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([]);
+  const [partOptions, setPartOptions] = useState<CatalogItem[]>([]);
+  const [serviceOptions, setServiceOptions] = useState<CatalogItem[]>([]);
   const [generators, setGenerators] = useState<Generator[]>([]);
+  const [sellers, setSellers] = useState<SellerOption[]>([]);
+  const [scopeTemplates, setScopeTemplates] = useState<ScopeTemplate[]>([]);
+  const [hourTypes, setHourTypes] = useState<PricingOption[]>([]);
+  const [technicianTypes, setTechnicianTypes] = useState<PricingOption[]>([]);
   const [linkedOpportunity, setLinkedOpportunity] = useState<LinkedOpportunity | null>(null);
   const [loadingOpportunity, setLoadingOpportunity] = useState(false);
   const [linkedOpportunityError, setLinkedOpportunityError] = useState("");
@@ -171,14 +265,51 @@ export default function NewProposalPage() {
   const [selectedClientId, setSelectedClientId] = useState("");
   const [clientSearch, setClientSearch] = useState("");
   const [clientDropdownOpen, setClientDropdownOpen] = useState(false);
+  const [clientLookupLoading, setClientLookupLoading] = useState(false);
+  const [quickClientOpen, setQuickClientOpen] = useState(false);
+  const [quickClientSaving, setQuickClientSaving] = useState(false);
+  const [quickClient, setQuickClient] = useState({
+    companyName: "",
+    tradeName: "",
+    cnpj: "",
+    phone: "",
+    email: "",
+    contactName: "",
+    address: "",
+    city: "",
+    state: "",
+  });
   const [selectedEquipmentId, setSelectedEquipmentId] = useState("");
+  const [equipmentSearch, setEquipmentSearch] = useState("");
+  const [equipmentDropdownOpen, setEquipmentDropdownOpen] = useState(false);
+  const [equipmentLookupLoading, setEquipmentLookupLoading] = useState(false);
+  const [quickGeneratorOpen, setQuickGeneratorOpen] = useState(false);
+  const [quickGeneratorSaving, setQuickGeneratorSaving] = useState(false);
+  const [quickGenerator, setQuickGenerator] = useState({
+    name: "",
+    assetTag: "",
+    brand: "",
+    modelName: "",
+    serialNumber: "",
+    power: "",
+    voltage: "",
+    installationSite: "",
+    notes: "",
+  });
+  const [selectedSellerId, setSelectedSellerId] = useState("");
+  const [sellerSearch, setSellerSearch] = useState("");
+  const [sellerDropdownOpen, setSellerDropdownOpen] = useState(false);
+  const [sellerLookupLoading, setSellerLookupLoading] = useState(false);
   const [serviceType, setServiceType] = useState("");
   const [loadingBaseItems, setLoadingBaseItems] = useState(false);
 
   const [parts, setParts] = useState<RowItem[]>([]);
   const [labor, setLabor] = useState<RowItem[]>([]);
+  const [hourlyServices, setHourlyServices] = useState<HourlyItem[]>([]);
+  const [otherItems, setOtherItems] = useState<OtherItem[]>([]);
 
   const [scope, setScope] = useState("");
+  const [selectedScopeTemplateIds, setSelectedScopeTemplateIds] = useState<string[]>([]);
   const [freight, setFreight] = useState("FOB");
   const [validUntil, setValidUntil] = useState("");
   const [paymentTerm, setPaymentTerm] = useState("");
@@ -197,16 +328,27 @@ export default function NewProposalPage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const [clientsRes, catalogRes, generatorsRes] = await Promise.all([
-          apiFetch(apiUrl("/clients")),
-          apiFetch(apiUrl("/catalogs")),
-          apiFetch(apiUrl("/generators")),
+        const [clientsRes, partsRes, servicesRes, pricingRes, scopesRes] = await Promise.all([
+          apiFetch(apiUrl("/clients/lookup?take=10"), { cache: "no-store" }),
+          apiFetch(apiUrl("/catalogs/lookup?type=PART&take=10"), { cache: "no-store" }),
+          apiFetch(apiUrl("/catalogs/lookup?type=SERVICE&take=10"), { cache: "no-store" }),
+          apiFetch(apiUrl("/proposals/pricing-options"), { cache: "no-store" }),
+          apiFetch(apiUrl("/proposals/scope-templates"), { cache: "no-store" }),
         ]);
 
         if (clientsRes.ok) setClients((await clientsRes.json()) as Client[]);
-        if (catalogRes.ok) setCatalogItems((await catalogRes.json()) as CatalogItem[]);
-        if (generatorsRes.ok) setGenerators((await generatorsRes.json()) as Generator[]);
-        if (!clientsRes.ok || !catalogRes.ok || !generatorsRes.ok) {
+        if (partsRes.ok) setPartOptions((await partsRes.json()) as CatalogItem[]);
+        if (servicesRes.ok) setServiceOptions((await servicesRes.json()) as CatalogItem[]);
+        if (pricingRes.ok) {
+          const pricing = (await pricingRes.json()) as {
+            hourTypes?: PricingOption[];
+            technicianTypes?: PricingOption[];
+          };
+          setHourTypes(pricing.hourTypes || []);
+          setTechnicianTypes(pricing.technicianTypes || []);
+        }
+        if (scopesRes.ok) setScopeTemplates((await scopesRes.json()) as ScopeTemplate[]);
+        if (!clientsRes.ok || !partsRes.ok || !servicesRes.ok) {
           setFeedback({
             kind: "error",
             text: "Nao foi possivel carregar todos os dados base da proposta.",
@@ -256,6 +398,11 @@ export default function NewProposalPage() {
         setLinkedOpportunity(data);
         setSelectedClientId(data.client.id);
         setClientSearch(data.client.companyName || data.client.tradeName || "");
+        if (data.assignedSeller?.id) {
+          setSelectedSellerId(data.assignedSeller.id);
+          setSellerSearch(data.assignedSeller.name || "");
+          setSellers([data.assignedSeller]);
+        }
       } catch (error: unknown) {
         if (cancelled) return;
         setLinkedOpportunityError(
@@ -279,32 +426,65 @@ export default function NewProposalPage() {
     if (selected) setClientSearch(selected.companyName || "");
   }, [clients, selectedClientId]);
 
-  const availableParts = useMemo(
-    () => catalogItems.filter((item) => item.type !== "SERVICE"),
-    [catalogItems],
-  );
-  const availableServices = useMemo(
-    () => catalogItems.filter((item) => item.type === "SERVICE"),
-    [catalogItems],
-  );
+  useEffect(() => {
+    if (linkedOpportunity) return;
+    const handle = window.setTimeout(async () => {
+      setClientLookupLoading(true);
+      try {
+        const params = new URLSearchParams({ take: "10" });
+        if (clientSearch.trim()) params.set("q", clientSearch.trim());
+        const res = await apiFetch(apiUrl(`/clients/lookup?${params.toString()}`), {
+          cache: "no-store",
+        });
+        if (res.ok) setClients((await res.json()) as Client[]);
+      } finally {
+        setClientLookupLoading(false);
+      }
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [clientSearch, linkedOpportunity]);
+
+  useEffect(() => {
+    const handle = window.setTimeout(async () => {
+      setEquipmentLookupLoading(true);
+      try {
+        const params = new URLSearchParams({ take: "10" });
+        if (equipmentSearch.trim()) params.set("q", equipmentSearch.trim());
+        if (selectedClientId) params.set("clientId", selectedClientId);
+        const res = await apiFetch(
+          apiUrl(`/proposals/generator-lookup?${params.toString()}`),
+          { cache: "no-store" },
+        );
+        if (res.ok) setGenerators((await res.json()) as Generator[]);
+      } finally {
+        setEquipmentLookupLoading(false);
+      }
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [equipmentSearch, selectedClientId]);
+
+  useEffect(() => {
+    if (linkedOpportunity?.assignedSeller?.id) return;
+    const handle = window.setTimeout(async () => {
+      setSellerLookupLoading(true);
+      try {
+        const params = new URLSearchParams({ take: "10" });
+        if (sellerSearch.trim()) params.set("q", sellerSearch.trim());
+        const res = await apiFetch(apiUrl(`/crm/sellers?${params.toString()}`), {
+          cache: "no-store",
+        });
+        if (res.ok) setSellers((await res.json()) as SellerOption[]);
+      } finally {
+        setSellerLookupLoading(false);
+      }
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [sellerSearch, linkedOpportunity]);
+
   const availableGenerators = useMemo(
     () => generators.filter((g) => g.clientId === selectedClientId),
     [generators, selectedClientId],
   );
-
-  const filteredClients = useMemo(() => {
-    const term = clientSearch.trim().toLowerCase();
-    if (!term) return clients.slice(0, 30);
-
-    return clients
-      .filter(
-        (c) =>
-          (c.companyName || "").toLowerCase().includes(term) ||
-          (c.tradeName || "").toLowerCase().includes(term) ||
-          (c.cnpj || "").toLowerCase().includes(term),
-      )
-      .slice(0, 30);
-  }, [clients, clientSearch]);
 
   const addPart = () =>
     setParts((prev) => [...prev, { catalogItemId: "", quantity: "1", unitPrice: "" }]);
@@ -316,7 +496,7 @@ export default function NewProposalPage() {
       const copy = [...prev];
       copy[index] = { ...copy[index], [field]: value };
       if (field === "catalogItemId") {
-        const itemInfo = catalogItems.find((i) => i.id === value);
+        const itemInfo = partOptions.find((i) => i.id === value);
         copy[index].unitPrice = String(itemInfo?.basePrice ?? "");
       }
       return copy;
@@ -333,12 +513,241 @@ export default function NewProposalPage() {
       const copy = [...prev];
       copy[index] = { ...copy[index], [field]: value };
       if (field === "catalogItemId") {
-        const itemInfo = catalogItems.find((i) => i.id === value);
+        const itemInfo = serviceOptions.find((i) => i.id === value);
         copy[index].unitPrice = String(itemInfo?.basePrice ?? "");
       }
       return copy;
     });
   };
+
+  async function lookupCatalog(type: "PART" | "SERVICE", term: string) {
+    const params = new URLSearchParams({ type, take: "10" });
+    if (term.trim()) params.set("q", term.trim());
+    const res = await apiFetch(apiUrl(`/catalogs/lookup?${params.toString()}`), {
+      cache: "no-store",
+    });
+    if (!res.ok) return;
+    const payload = (await res.json()) as CatalogItem[];
+    if (type === "PART") setPartOptions(payload);
+    if (type === "SERVICE") setServiceOptions(payload);
+  }
+
+  const addHourlyService = () =>
+    setHourlyServices((prev) => [
+      ...prev,
+      {
+        description: "Servico por hora",
+        hourType: "ONE_OFF",
+        technicianType: "MID_LEVEL_TECHNICIAN",
+        hours: "1",
+        unitPrice: "",
+        discountPercent: "0",
+      },
+    ]);
+  const removeHourlyService = (index: number) =>
+    setHourlyServices((prev) => prev.filter((_, i) => i !== index));
+  const updateHourlyService = (
+    index: number,
+    field: keyof HourlyItem,
+    value: string,
+  ) => {
+    setHourlyServices((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value };
+      if (field === "hourType") {
+        copy[index].discountPercent = defaultHourlyDiscount(value);
+      }
+      return copy;
+    });
+  };
+
+  const addOtherItem = () =>
+    setOtherItems((prev) => [
+      ...prev,
+      { description: "", quantity: "1", unitPrice: "" },
+    ]);
+  const removeOtherItem = (index: number) =>
+    setOtherItems((prev) => prev.filter((_, i) => i !== index));
+  const updateOtherItem = (
+    index: number,
+    field: keyof OtherItem,
+    value: string,
+  ) => {
+    setOtherItems((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value };
+      return copy;
+    });
+  };
+
+  async function handleCreateQuickClient() {
+    const state = quickClient.state.trim().toUpperCase();
+    if (
+      !quickClient.companyName.trim() ||
+      onlyDigits(quickClient.cnpj).length < 11 ||
+      !quickClient.phone.trim() ||
+      !quickClient.address.trim() ||
+      !quickClient.city.trim() ||
+      state.length !== 2
+    ) {
+      setFeedback({
+        kind: "error",
+        text: "Informe nome, CPF/CNPJ, telefone, endereco, cidade e UF.",
+      });
+      return;
+    }
+
+    setQuickClientSaving(true);
+    setFeedback(null);
+    try {
+      const res = await apiFetch(apiUrl("/clients"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyName: quickClient.companyName.trim(),
+          tradeName: quickClient.tradeName.trim() || undefined,
+          cnpj: onlyDigits(quickClient.cnpj),
+          email: quickClient.email.trim() || undefined,
+          phone: quickClient.phone.trim(),
+          address: quickClient.address.trim(),
+          city: quickClient.city.trim(),
+          state,
+          clientType: "NO_CONTRACT",
+          addresses: [
+            {
+              type: "INSTALLATION",
+              street: quickClient.address.trim(),
+              city: quickClient.city.trim(),
+              state,
+              country: "Brasil",
+            },
+          ],
+          contacts: quickClient.contactName.trim()
+            ? [
+                {
+                  name: quickClient.contactName.trim(),
+                  status: "ACTIVE",
+                  role: "Contato comercial",
+                  phone: quickClient.phone.trim(),
+                  email: quickClient.email.trim() || undefined,
+                },
+              ]
+            : undefined,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(await readApiErrorMessage(res, "Falha ao cadastrar cliente."));
+      }
+
+      const created = (await res.json()) as Client;
+      setSelectedClientId(created.id);
+      setClientSearch(formatClientOption(created));
+      setClients((current) => [created, ...current.filter((c) => c.id !== created.id)]);
+      setSelectedEquipmentId("");
+      setEquipmentSearch("");
+      setQuickClientOpen(false);
+      setQuickClient({
+        companyName: "",
+        tradeName: "",
+        cnpj: "",
+        phone: "",
+        email: "",
+        contactName: "",
+        address: "",
+        city: "",
+        state: "",
+      });
+      setFeedback({ kind: "success", text: "Cliente cadastrado e selecionado." });
+    } catch (error: unknown) {
+      setFeedback({
+        kind: "error",
+        text: error instanceof Error ? error.message : "Falha ao cadastrar cliente.",
+      });
+    } finally {
+      setQuickClientSaving(false);
+    }
+  }
+
+  async function handleCreateQuickGenerator() {
+    if (!selectedClientId) {
+      setFeedback({ kind: "error", text: "Selecione o cliente antes da maquina." });
+      return;
+    }
+    if (!quickGenerator.name.trim()) {
+      setFeedback({ kind: "error", text: "Informe o nome/apelido da maquina." });
+      return;
+    }
+
+    setQuickGeneratorSaving(true);
+    setFeedback(null);
+    try {
+      const res = await apiFetch(apiUrl("/proposals/quick-generator"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: selectedClientId,
+          name: quickGenerator.name.trim(),
+          assetTag: quickGenerator.assetTag.trim() || undefined,
+          brand: quickGenerator.brand.trim() || undefined,
+          modelName: quickGenerator.modelName.trim() || undefined,
+          serialNumber: quickGenerator.serialNumber.trim() || undefined,
+          power: quickGenerator.power ? Number(quickGenerator.power) : undefined,
+          voltage: quickGenerator.voltage.trim() || undefined,
+          installationSite: quickGenerator.installationSite.trim() || undefined,
+          notes: quickGenerator.notes.trim() || undefined,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(await readApiErrorMessage(res, "Falha ao cadastrar maquina."));
+      }
+
+      const created = (await res.json()) as Generator;
+      setSelectedEquipmentId(created.id);
+      setEquipmentSearch(formatGeneratorOption(created));
+      setGenerators((current) => [created, ...current.filter((g) => g.id !== created.id)]);
+      setQuickGeneratorOpen(false);
+      setQuickGenerator({
+        name: "",
+        assetTag: "",
+        brand: "",
+        modelName: "",
+        serialNumber: "",
+        power: "",
+        voltage: "",
+        installationSite: "",
+        notes: "",
+      });
+      setFeedback({ kind: "success", text: "Maquina cadastrada e selecionada." });
+    } catch (error: unknown) {
+      setFeedback({
+        kind: "error",
+        text: error instanceof Error ? error.message : "Falha ao cadastrar maquina.",
+      });
+    } finally {
+      setQuickGeneratorSaving(false);
+    }
+  }
+
+  const selectedScopeTemplates = useMemo(
+    () =>
+      scopeTemplates.filter((template) =>
+        selectedScopeTemplateIds.includes(template.id),
+      ),
+    [scopeTemplates, selectedScopeTemplateIds],
+  );
+  const combinedScopeText = useMemo(
+    () => joinScopeTexts(selectedScopeTemplates.map((template) => template.scopeText)),
+    [selectedScopeTemplates],
+  );
+  function appendScopeTemplates() {
+    if (!combinedScopeText) return;
+    const currentParts = scope
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const next = joinScopeTexts([...currentParts, ...selectedScopeTemplates.map((template) => template.scopeText)]);
+    setScope(next);
+  }
 
   const addItemsFromEquipmentBase = async () => {
     if (!selectedEquipmentId) {
@@ -416,7 +825,24 @@ export default function NewProposalPage() {
     () => labor.reduce((acc, item) => acc + Number(item.quantity || 0) * Number(item.unitPrice || 0), 0),
     [labor],
   );
-  const subtotal = partsTotal + laborTotal;
+  const hourlyTotal = useMemo(
+    () =>
+      hourlyServices.reduce((acc, item) => {
+        const gross = Number(item.hours || 0) * Number(item.unitPrice || 0);
+        const discount = Math.min(100, Math.max(0, Number(item.discountPercent || 0)));
+        return acc + gross * (1 - discount / 100);
+      }, 0),
+    [hourlyServices],
+  );
+  const otherTotal = useMemo(
+    () =>
+      otherItems.reduce(
+        (acc, item) => acc + Number(item.quantity || 0) * Number(item.unitPrice || 0),
+        0,
+      ),
+    [otherItems],
+  );
+  const subtotal = partsTotal + laborTotal + hourlyTotal + otherTotal;
 
   const maxDiscountAllowed = USER_ROLE === "ADMIN" ? subtotal : subtotal * 0.07;
 
@@ -452,7 +878,16 @@ export default function NewProposalPage() {
       setFeedback({ kind: "error", text: "Selecione um cliente." });
       return;
     }
-    if (parts.length === 0 && labor.length === 0) {
+    if (!selectedSellerId) {
+      setFeedback({ kind: "error", text: "Selecione um vendedor comercial." });
+      return;
+    }
+    if (
+      parts.length === 0 &&
+      labor.length === 0 &&
+      hourlyServices.length === 0 &&
+      otherItems.length === 0
+    ) {
       setFeedback({
         kind: "error",
         text: "Adicione pelo menos um item ou servico.",
@@ -470,15 +905,45 @@ export default function NewProposalPage() {
     setIsSubmitting(true);
     setFeedback(null);
 
-    const allItems = [...parts, ...labor].filter((item) => item.catalogItemId);
-    const token = getStoredAccessToken();
-    const tokenPayload = token ? decodeJwtPayload<{ sub?: string }>(token) : null;
+    const allItems = [
+      ...parts
+        .filter((item) => item.catalogItemId)
+        .map((item) => ({
+          kind: "PART_MATERIAL",
+          catalogItemId: item.catalogItemId,
+          quantity: Number(item.quantity || 0),
+          unitPrice: Number(item.unitPrice || 0),
+        })),
+      ...labor
+        .filter((item) => item.catalogItemId)
+        .map((item) => ({
+          kind: "CATALOG_SERVICE",
+          catalogItemId: item.catalogItemId,
+          quantity: Number(item.quantity || 0),
+          unitPrice: Number(item.unitPrice || 0),
+        })),
+      ...hourlyServices.map((item) => ({
+        kind: "HOURLY_SERVICE",
+        description: item.description || "Servico por hora",
+        hourType: item.hourType,
+        technicianType: item.technicianType,
+        hours: Number(item.hours || 0),
+        unitPrice: Number(item.unitPrice || 0),
+        discountPercent: Number(item.discountPercent || 0),
+      })),
+      ...otherItems.map((item) => ({
+        kind: "OTHER",
+        description: item.description,
+        quantity: Number(item.quantity || 0),
+        unitPrice: Number(item.unitPrice || 0),
+      })),
+    ];
 
     const payload = {
       clientId: selectedClientId,
       salesOpportunityId: linkedOpportunity?.id || undefined,
       generatorId: selectedEquipmentId || undefined,
-      userId: tokenPayload?.sub,
+      userId: selectedSellerId,
       type: "PARTS_AND_SERVICES",
       scope,
       freight,
@@ -494,11 +959,7 @@ export default function NewProposalPage() {
       internalNotes,
       externalNotes,
       discount: finalDiscount,
-      items: allItems.map((item) => ({
-        catalogItemId: item.catalogItemId,
-        quantity: Number(item.quantity || 0),
-        unitPrice: Number(item.unitPrice || 0),
-      })),
+      items: allItems,
     };
 
     try {
@@ -588,6 +1049,9 @@ export default function NewProposalPage() {
               <p className="mt-1 text-sm text-zinc-600">
                 Vendedor: {linkedOpportunity.assignedSeller?.name || "Nao definido"} | Valor estimado: R$ {Number(linkedOpportunity.estimatedValue || 0).toLocaleString("pt-BR")}
               </p>
+              <p className="mt-1 text-sm text-zinc-600">
+                Pipeline: {linkedOpportunity.pipeline || "Nao informado"} | Tipo: {linkedOpportunity.opportunityType || "Nao informado"}
+              </p>
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -632,7 +1096,7 @@ export default function NewProposalPage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
           <h2 className="mb-4 border-b pb-2 text-lg font-bold text-zinc-800">1. Cliente e Equipamento</h2>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
             <div>
               <label className="mb-1 block text-sm font-medium text-zinc-700">Cliente</label>
               {linkedOpportunity ? (
@@ -658,10 +1122,12 @@ export default function NewProposalPage() {
                   />
                   {clientDropdownOpen ? (
                     <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-xl">
-                      {filteredClients.length === 0 ? (
+                      {clientLookupLoading ? (
+                        <p className="p-3 text-sm text-zinc-500">Buscando clientes...</p>
+                      ) : clients.length === 0 ? (
                         <p className="p-3 text-sm text-zinc-500">Nenhum cliente encontrado.</p>
                       ) : (
-                        filteredClients.map((c) => (
+                        clients.map((c) => (
                           <button
                             key={c.id}
                             type="button"
@@ -669,7 +1135,8 @@ export default function NewProposalPage() {
                               event.preventDefault();
                               setSelectedClientId(c.id);
                               setSelectedEquipmentId("");
-                              setClientSearch(c.companyName || "");
+                              setEquipmentSearch("");
+                              setClientSearch(formatClientOption(c));
                               setClientDropdownOpen(false);
                             }}
                             className="block w-full border-b border-zinc-100 px-3 py-2 text-left hover:bg-emerald-50 last:border-0"
@@ -686,23 +1153,125 @@ export default function NewProposalPage() {
                   ) : null}
                 </div>
               )}
+              {!linkedOpportunity ? (
+                <button
+                  type="button"
+                  onClick={() => setQuickClientOpen((current) => !current)}
+                  className="mt-2 text-xs font-semibold text-emerald-700 hover:text-emerald-600"
+                >
+                  {quickClientOpen ? "Fechar cliente rapido" : "Cliente rapido"}
+                </button>
+              ) : null}
             </div>
 
             <div>
               <label className="mb-1 block text-sm font-medium text-zinc-700">Equipamento</label>
-              <select
-                value={selectedEquipmentId}
-                onChange={(e) => setSelectedEquipmentId(e.target.value)}
+              <div className="relative">
+                <input
+                  type="text"
+                  value={equipmentSearch}
+                  onChange={(e) => {
+                    setEquipmentSearch(e.target.value);
+                    setSelectedEquipmentId("");
+                    setEquipmentDropdownOpen(true);
+                  }}
+                  onFocus={() => setEquipmentDropdownOpen(true)}
+                  onBlur={() => setTimeout(() => setEquipmentDropdownOpen(false), 150)}
+                  disabled={!selectedClientId}
+                  placeholder={selectedClientId ? "Pesquisar maquina" : "Escolha o cliente"}
+                  className="w-full rounded-lg border border-zinc-300 bg-white p-2.5 text-sm outline-none focus:border-emerald-500 disabled:bg-zinc-100"
+                />
+                {equipmentDropdownOpen && selectedClientId && !selectedEquipmentId ? (
+                  <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-xl">
+                    {equipmentLookupLoading ? (
+                      <p className="p-3 text-sm text-zinc-500">Buscando maquinas...</p>
+                    ) : availableGenerators.length === 0 ? (
+                      <p className="p-3 text-sm text-zinc-500">Nenhuma maquina encontrada.</p>
+                    ) : (
+                      availableGenerators.map((gen) => (
+                        <button
+                          key={gen.id}
+                          type="button"
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                            setSelectedEquipmentId(gen.id);
+                            setEquipmentSearch(formatGeneratorOption(gen));
+                            setEquipmentDropdownOpen(false);
+                          }}
+                          className="block w-full border-b border-zinc-100 px-3 py-2 text-left hover:bg-emerald-50 last:border-0"
+                        >
+                          <p className="text-sm font-semibold text-zinc-800">{gen.name || "Maquina"}</p>
+                          <p className="text-xs text-zinc-500">
+                            {[gen.assetTag, gen.serialNumber, gen.power ? `${gen.power} kVA` : null]
+                              .filter(Boolean)
+                              .join(" | ") || "Sem tag/serie"}
+                          </p>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuickGeneratorOpen((current) => !current)}
                 disabled={!selectedClientId}
-                className="w-full rounded-lg border border-zinc-300 bg-white p-2.5 disabled:bg-zinc-100"
+                className="mt-2 text-xs font-semibold text-emerald-700 hover:text-emerald-600 disabled:text-zinc-400"
               >
-                <option value="">{selectedClientId ? "Selecione a maquina" : "Escolha o cliente"}</option>
-                {availableGenerators.map((gen) => (
-                  <option key={gen.id} value={gen.id}>
-                    {gen.name || "Equipamento"}
-                  </option>
-                ))}
-              </select>
+                {quickGeneratorOpen ? "Fechar maquina rapida" : "Maquina rapida"}
+              </button>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">Vendedor</label>
+              {linkedOpportunity?.assignedSeller ? (
+                <div className="rounded-lg border border-sky-200 bg-sky-50 p-3">
+                  <p className="text-sm font-semibold text-zinc-800">{linkedOpportunity.assignedSeller.name}</p>
+                  <p className="mt-1 text-xs text-sky-700">Herdado da oportunidade.</p>
+                </div>
+              ) : (
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={sellerSearch}
+                    onChange={(e) => {
+                      setSellerSearch(e.target.value);
+                      setSelectedSellerId("");
+                      setSellerDropdownOpen(true);
+                    }}
+                    onFocus={() => setSellerDropdownOpen(true)}
+                    onBlur={() => setTimeout(() => setSellerDropdownOpen(false), 150)}
+                    placeholder="Pesquisar vendedor comercial"
+                    className="w-full rounded-lg border border-zinc-300 bg-white p-2.5 text-sm outline-none focus:border-emerald-500"
+                  />
+                  {sellerDropdownOpen && !selectedSellerId ? (
+                    <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-xl">
+                      {sellerLookupLoading ? (
+                        <p className="p-3 text-sm text-zinc-500">Buscando vendedores...</p>
+                      ) : sellers.length === 0 ? (
+                        <p className="p-3 text-sm text-zinc-500">Nenhum vendedor encontrado.</p>
+                      ) : (
+                        sellers.map((seller) => (
+                          <button
+                            key={seller.id}
+                            type="button"
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              setSelectedSellerId(seller.id);
+                              setSellerSearch(seller.name || "");
+                              setSellerDropdownOpen(false);
+                            }}
+                            className="block w-full border-b border-zinc-100 px-3 py-2 text-left hover:bg-emerald-50 last:border-0"
+                          >
+                            <p className="text-sm font-semibold text-zinc-800">{seller.name}</p>
+                            <p className="text-xs text-zinc-500">{seller.department || seller.email || "Comercial"}</p>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
 
             <div>
@@ -722,6 +1291,44 @@ export default function NewProposalPage() {
               </select>
             </div>
           </div>
+
+          {quickClientOpen && !linkedOpportunity ? (
+            <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                <input className="rounded border border-emerald-200 bg-white p-2 text-sm" placeholder="Razao social/nome" value={quickClient.companyName} onChange={(e) => setQuickClient((current) => ({ ...current, companyName: e.target.value }))} />
+                <input className="rounded border border-emerald-200 bg-white p-2 text-sm" placeholder="Nome fantasia" value={quickClient.tradeName} onChange={(e) => setQuickClient((current) => ({ ...current, tradeName: e.target.value }))} />
+                <input className="rounded border border-emerald-200 bg-white p-2 text-sm" placeholder="CPF/CNPJ" value={quickClient.cnpj} onChange={(e) => setQuickClient((current) => ({ ...current, cnpj: e.target.value }))} />
+                <input className="rounded border border-emerald-200 bg-white p-2 text-sm" placeholder="Telefone" value={quickClient.phone} onChange={(e) => setQuickClient((current) => ({ ...current, phone: e.target.value }))} />
+                <input className="rounded border border-emerald-200 bg-white p-2 text-sm" placeholder="E-mail" value={quickClient.email} onChange={(e) => setQuickClient((current) => ({ ...current, email: e.target.value }))} />
+                <input className="rounded border border-emerald-200 bg-white p-2 text-sm" placeholder="Contato" value={quickClient.contactName} onChange={(e) => setQuickClient((current) => ({ ...current, contactName: e.target.value }))} />
+                <input className="rounded border border-emerald-200 bg-white p-2 text-sm md:col-span-2" placeholder="Endereco" value={quickClient.address} onChange={(e) => setQuickClient((current) => ({ ...current, address: e.target.value }))} />
+                <input className="rounded border border-emerald-200 bg-white p-2 text-sm" placeholder="Cidade" value={quickClient.city} onChange={(e) => setQuickClient((current) => ({ ...current, city: e.target.value }))} />
+                <input className="rounded border border-emerald-200 bg-white p-2 text-sm" placeholder="UF" maxLength={2} value={quickClient.state} onChange={(e) => setQuickClient((current) => ({ ...current, state: e.target.value.toUpperCase() }))} />
+                <button type="button" disabled={quickClientSaving} onClick={handleCreateQuickClient} className="rounded bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50">
+                  {quickClientSaving ? "Salvando..." : "Salvar cliente"}
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {quickGeneratorOpen && selectedClientId ? (
+            <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                <input className="rounded border border-sky-200 bg-white p-2 text-sm" placeholder="Nome/apelido" value={quickGenerator.name} onChange={(e) => setQuickGenerator((current) => ({ ...current, name: e.target.value }))} />
+                <input className="rounded border border-sky-200 bg-white p-2 text-sm" placeholder="Tag patrimonial" value={quickGenerator.assetTag} onChange={(e) => setQuickGenerator((current) => ({ ...current, assetTag: e.target.value }))} />
+                <input className="rounded border border-sky-200 bg-white p-2 text-sm" placeholder="Fabricante" value={quickGenerator.brand} onChange={(e) => setQuickGenerator((current) => ({ ...current, brand: e.target.value }))} />
+                <input className="rounded border border-sky-200 bg-white p-2 text-sm" placeholder="Modelo" value={quickGenerator.modelName} onChange={(e) => setQuickGenerator((current) => ({ ...current, modelName: e.target.value }))} />
+                <input className="rounded border border-sky-200 bg-white p-2 text-sm" placeholder="Numero de serie" value={quickGenerator.serialNumber} onChange={(e) => setQuickGenerator((current) => ({ ...current, serialNumber: e.target.value }))} />
+                <input className="rounded border border-sky-200 bg-white p-2 text-sm" placeholder="Potencia kVA" type="number" min="0" value={quickGenerator.power} onChange={(e) => setQuickGenerator((current) => ({ ...current, power: e.target.value }))} />
+                <input className="rounded border border-sky-200 bg-white p-2 text-sm" placeholder="Tensao" value={quickGenerator.voltage} onChange={(e) => setQuickGenerator((current) => ({ ...current, voltage: e.target.value }))} />
+                <input className="rounded border border-sky-200 bg-white p-2 text-sm" placeholder="Local/site" value={quickGenerator.installationSite} onChange={(e) => setQuickGenerator((current) => ({ ...current, installationSite: e.target.value }))} />
+                <input className="rounded border border-sky-200 bg-white p-2 text-sm md:col-span-3" placeholder="Observacao" value={quickGenerator.notes} onChange={(e) => setQuickGenerator((current) => ({ ...current, notes: e.target.value }))} />
+                <button type="button" disabled={quickGeneratorSaving} onClick={handleCreateQuickGenerator} className="rounded bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-50">
+                  {quickGeneratorSaving ? "Salvando..." : "Salvar maquina"}
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           <div className="mt-3">
             <button
@@ -757,9 +1364,10 @@ export default function NewProposalPage() {
               <div className="min-w-[250px] flex-1">
                 <label className="mb-1 block text-xs font-medium text-zinc-500">Buscar peca</label>
                 <SearchableSelect
-                  items={availableParts}
+                  items={partOptions}
                   value={part.catalogItemId}
                   onChange={(val) => updatePart(index, "catalogItemId", val)}
+                  onSearch={(term) => void lookupCatalog("PART", term)}
                   placeholder="Nome ou codigo"
                 />
               </div>
@@ -814,9 +1422,10 @@ export default function NewProposalPage() {
               <div className="min-w-[250px] flex-1">
                 <label className="mb-1 block text-xs font-medium text-zinc-500">Buscar servico</label>
                 <SearchableSelect
-                  items={availableServices}
+                  items={serviceOptions}
                   value={lab.catalogItemId}
                   onChange={(val) => updateLabor(index, "catalogItemId", val)}
+                  onSearch={(term) => void lookupCatalog("SERVICE", term)}
                   placeholder="Nome ou codigo"
                 />
               </div>
@@ -852,12 +1461,154 @@ export default function NewProposalPage() {
         </div>
 
         <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 border-b pb-2 text-lg font-bold text-zinc-800">4. Condicoes comerciais e financeiras</h2>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b pb-2">
+            <div>
+              <h2 className="text-lg font-bold text-zinc-800">4. Servico por hora</h2>
+              <p className="text-xs text-zinc-500">Valor de venda ao cliente. Custo interno nao e exibido.</p>
+            </div>
+            <button
+              type="button"
+              onClick={addHourlyService}
+              className="rounded-md bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-100"
+            >
+              + Adicionar hora
+            </button>
+          </div>
+
+          {hourlyServices.length === 0 ? <p className="text-sm italic text-zinc-500">Nenhum servico por hora adicionado.</p> : null}
+
+          {hourlyServices.map((item, index) => {
+            const gross = Number(item.hours || 0) * Number(item.unitPrice || 0);
+            const discount = Math.min(100, Math.max(0, Number(item.discountPercent || 0)));
+            const total = gross * (1 - discount / 100);
+            return (
+              <div key={`hourly-${index}`} className="mb-3 grid grid-cols-1 gap-3 rounded-lg border border-amber-100 bg-amber-50 p-3 md:grid-cols-6">
+                <input
+                  className="rounded-md border border-amber-200 bg-white p-2 text-sm md:col-span-2"
+                  placeholder="Descricao"
+                  value={item.description}
+                  onChange={(e) => updateHourlyService(index, "description", e.target.value)}
+                />
+                <select
+                  value={item.hourType}
+                  onChange={(e) => updateHourlyService(index, "hourType", e.target.value)}
+                  className="rounded-md border border-amber-200 bg-white p-2 text-sm"
+                >
+                  {(hourTypes.length ? hourTypes : [{ value: "ONE_OFF", label: "Hora avulsa" }]).map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <select
+                  value={item.technicianType}
+                  onChange={(e) => updateHourlyService(index, "technicianType", e.target.value)}
+                  className="rounded-md border border-amber-200 bg-white p-2 text-sm"
+                >
+                  {(technicianTypes.length ? technicianTypes : [{ value: "MID_LEVEL_TECHNICIAN", label: "Tecnico pleno" }]).map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.25"
+                  value={item.hours}
+                  onChange={(e) => updateHourlyService(index, "hours", e.target.value)}
+                  className="rounded-md border border-amber-200 bg-white p-2 text-sm"
+                  placeholder="Horas"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={item.unitPrice}
+                  onChange={(e) => updateHourlyService(index, "unitPrice", e.target.value)}
+                  className="rounded-md border border-amber-200 bg-white p-2 text-sm"
+                  placeholder="Valor hora"
+                />
+                <div className="flex items-center gap-2 md:col-span-6">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={item.discountPercent}
+                    onChange={(e) => updateHourlyService(index, "discountPercent", e.target.value)}
+                    className="w-28 rounded-md border border-amber-200 bg-white p-2 text-sm"
+                    placeholder="Desc. %"
+                  />
+                  <span className="text-sm font-semibold text-amber-800">Total: R$ {formatMoney(total)}</span>
+                  <button type="button" onClick={() => removeHourlyService(index)} className="ml-auto p-2 text-lg text-red-500 hover:text-red-700">X</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+          <div className="mb-4 flex items-center justify-between border-b pb-2">
+            <h2 className="text-lg font-bold text-zinc-800">5. Outros itens</h2>
+            <button
+              type="button"
+              onClick={addOtherItem}
+              className="rounded-md bg-zinc-100 px-3 py-1.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-200"
+            >
+              + Adicionar outro
+            </button>
+          </div>
+          {otherItems.length === 0 ? <p className="text-sm italic text-zinc-500">Nenhum item avulso adicionado.</p> : null}
+          {otherItems.map((item, index) => (
+            <div key={`other-${index}`} className="mb-3 grid grid-cols-1 gap-3 rounded-lg border border-zinc-100 bg-zinc-50 p-3 md:grid-cols-[1fr_100px_140px_auto]">
+              <input className="rounded-md border border-zinc-300 p-2 text-sm" placeholder="Descricao do item" value={item.description} onChange={(e) => updateOtherItem(index, "description", e.target.value)} />
+              <input type="number" min="1" className="rounded-md border border-zinc-300 p-2 text-sm" placeholder="Qtd" value={item.quantity} onChange={(e) => updateOtherItem(index, "quantity", e.target.value)} />
+              <input type="number" min="0" step="0.01" className="rounded-md border border-zinc-300 p-2 text-sm" placeholder="Valor" value={item.unitPrice} onChange={(e) => updateOtherItem(index, "unitPrice", e.target.value)} />
+              <button type="button" onClick={() => removeOtherItem(index)} className="p-2 text-lg text-red-500 hover:text-red-700">X</button>
+            </div>
+          ))}
+        </div>
+
+        <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-4 border-b pb-2 text-lg font-bold text-zinc-800">6. Condicoes comerciais e financeiras</h2>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
             <div className="md:col-span-4">
               <label className="mb-1 block text-sm font-medium text-zinc-700">Escopo</label>
+              <div className="mb-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-zinc-500">Escopos prontos</p>
+                  <button
+                    type="button"
+                    onClick={appendScopeTemplates}
+                    disabled={selectedScopeTemplates.length === 0}
+                    className="rounded bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                  >
+                    Adicionar ao escopo
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                  {scopeTemplates.map((template) => (
+                    <label key={template.id} className="flex items-start gap-2 rounded border border-zinc-200 bg-white p-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={selectedScopeTemplateIds.includes(template.id)}
+                        onChange={(e) => {
+                          setSelectedScopeTemplateIds((current) =>
+                            e.target.checked
+                              ? [...current, template.id]
+                              : current.filter((id) => id !== template.id),
+                          );
+                        }}
+                      />
+                      <span>
+                        <span className="block font-semibold text-zinc-800">{template.name}</span>
+                        <span className="block text-xs text-zinc-500">{template.category || "Escopo comercial"}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                {combinedScopeText ? (
+                  <pre className="mt-3 whitespace-pre-wrap rounded border border-zinc-200 bg-white p-3 text-xs leading-5 text-zinc-700">{combinedScopeText}</pre>
+                ) : null}
+              </div>
               <textarea
-                rows={2}
+                rows={6}
                 value={scope}
                 onChange={(e) => setScope(e.target.value)}
                 className="w-full rounded-lg border border-zinc-300 p-3 text-sm"

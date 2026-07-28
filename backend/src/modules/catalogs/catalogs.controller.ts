@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -27,6 +28,18 @@ export class CatalogsController {
   @Post()
   create(@Body() createCatalogDto: CreateCatalogDto) {
     return this.catalogsService.create(createCatalogDto);
+  }
+
+  @RequireAccessPolicy('catalog.view')
+  @Get('lookup')
+  lookup(
+    @Req() req: Request,
+    @Query('q') query?: string,
+    @Query('type') type?: string,
+    @Query('take') take?: string,
+  ) {
+    const actor = req['user'] as CatalogActor;
+    return this.catalogsService.lookup(query, type, take, actor);
   }
 
   @RequireAccessPolicy('catalog.view')
