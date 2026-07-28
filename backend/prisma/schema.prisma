@@ -231,6 +231,25 @@ enum GeneratorCriticality {
   C
 }
 
+enum MaintenanceTemplateCategory {
+  OIL
+  FILTER
+  BATTERY
+  SPARK_PLUG
+  INSPECTION
+  TEST
+  CLEANING
+  ELECTRICAL
+  MECHANICAL
+  OTHER
+}
+
+enum MaintenanceIntervalUnit {
+  DAYS
+  MONTHS
+  YEARS
+}
+
 enum ContractStatus {
   ACTIVE
   SUSPENDED
@@ -1005,17 +1024,22 @@ model GeneratorModel {
   name  String  @unique
   brand String?
 
-  suggestedItems         CatalogItem[]           @relation("ModelSuggestedItems")
+  suggestedItems         CatalogItem[]                       @relation("ModelSuggestedItems")
   baseItems              ModelBaseItem[]
+  maintenanceTemplates   GeneratorModelMaintenanceTemplate[]
   category               String?
   defaultPowerKva        Float?
   defaultPowerKw         Float?
   defaultVoltage         String?
+  frequencyHz            Int?
   controllerType         String?
   engineModel            String?
   alternatorModel        String?
   defaultFuelConsumption String?
   defaultTankCapacity    String?
+  description            String?
+  isActive               Boolean                             @default(true)
+  notes                  String?
   maintenancePlan        Json?
   manuals                GeneratorManual[]
   serviceReportTemplates ServiceReportTemplate[]
@@ -1026,6 +1050,27 @@ model GeneratorModel {
   updatedAt DateTime @updatedAt
 
   @@map("modelos")
+}
+
+model GeneratorModelMaintenanceTemplate {
+  id                String                      @id @default(uuid())
+  generatorModelId  String
+  generatorModel    GeneratorModel              @relation(fields: [generatorModelId], references: [id], onDelete: Cascade)
+  name              String
+  description       String?
+  category          MaintenanceTemplateCategory @default(OTHER)
+  intervalValue     Int?
+  intervalUnit      MaintenanceIntervalUnit?
+  hourMeterInterval Int?
+  required          Boolean                     @default(true)
+  active            Boolean                     @default(true)
+  sortOrder         Int                         @default(0)
+  notes             String?
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
+
+  @@index([generatorModelId, active, sortOrder])
+  @@map("generator_model_maintenance_templates")
 }
 
 model Generator {

@@ -4,7 +4,12 @@
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, ServiceGroup, TicketStatus } from '@prisma/client';
+import {
+  MaintenanceTemplateCategory,
+  Prisma,
+  ServiceGroup,
+  TicketStatus,
+} from '@prisma/client';
 import { DatabaseService } from 'src/database/database.service';
 import { CreateGeneratorDto } from './dto/create-generator.dto';
 import { UpdateGeneratorDto } from './dto/update-generator.dto';
@@ -59,6 +64,16 @@ const generatorTechnicalDateFields = new Set<string>([
   'batteryInstallationDate',
   'batteryLastReplacementDate',
 ]);
+
+const generatorModelInclude = {
+  baseItems: {
+    include: { catalogItem: true },
+    orderBy: { createdAt: 'asc' as const },
+  },
+  maintenanceTemplates: {
+    orderBy: [{ sortOrder: 'asc' as const }, { createdAt: 'asc' as const }],
+  },
+} satisfies Prisma.GeneratorModelInclude;
 
 @Injectable()
 export class GeneratorsService {
@@ -471,23 +486,32 @@ export class GeneratorsService {
 
   async findAllModels() {
     return this.database.generatorModel.findMany({
-      include: {
-        baseItems: {
-          include: { catalogItem: true },
-          orderBy: { createdAt: 'asc' },
-        },
-      },
+      include: generatorModelInclude,
       orderBy: [{ brand: 'asc' }, { name: 'asc' }],
     });
   }
 
+  async findModelById(id: string) {
+    const model = await this.database.generatorModel.findUnique({
+      where: { id },
+      include: generatorModelInclude,
+    });
+    if (!model) {
+      throw new NotFoundException('Modelo nao encontrado.');
+    }
+    return model;
+  }
+
   async createModel(data: CreateGeneratorModelDto) {
+    const name = this.normalizeRequiredText(data.name, 'Nome do modelo');
+    await this.ensureModelNameAvailable(name);
+
     return this.database.$transaction(async (tx) => {
       const model = await tx.generatorModel.create({
-        data: {
-          name: data.name,
-          brand: data.brand,
-        },
+        data: this.buildGeneratorModelData({
+          ...data,
+          name,
+        }) as Prisma.GeneratorModelUncheckedCreateInput,
       });
 
       if (data.baseItems && data.baseItems.length > 0) {
@@ -504,9 +528,17 @@ export class GeneratorsService {
         });
       }
 
+      if (data.maintenanceTemplates?.length) {
+        await this.applyMaintenanceTemplates(
+          tx,
+          model.id,
+          data.maintenanceTemplates,
+        );
+      }
+
       return tx.generatorModel.findUnique({
         where: { id: model.id },
-        include: { baseItems: { include: { catalogItem: true } } },
+        include: generatorModelInclude,
       });
     });
   }
@@ -518,14 +550,21 @@ export class GeneratorsService {
     if (!existing) {
       throw new NotFoundException('Modelo nao encontrado.');
     }
+    const nextName =
+      data.name !== undefined
+        ? this.normalizeRequiredText(data.name, 'Nome do modelo')
+        : undefined;
+    if (nextName) {
+      await this.ensureModelNameAvailable(nextName, id);
+    }
 
     return this.database.$transaction(async (tx) => {
       await tx.generatorModel.update({
         where: { id },
-        data: {
-          name: data.name,
-          brand: data.brand,
-        },
+        data: this.buildGeneratorModelData({
+          ...data,
+          name: nextName,
+        }) as Prisma.GeneratorModelUncheckedUpdateInput,
       });
 
       if (data.baseItems) {
@@ -545,9 +584,13 @@ export class GeneratorsService {
         }
       }
 
+      if (data.maintenanceTemplates) {
+        await this.applyMaintenanceTemplates(tx, id, data.maintenanceTemplates);
+      }
+
       return tx.generatorModel.findUnique({
         where: { id },
-        include: { baseItems: { include: { catalogItem: true } } },
+        include: generatorModelInclude,
       });
     });
   }
@@ -639,6 +682,141 @@ export class GeneratorsService {
         include: { catalogItem: true },
       });
     });
+  }
+
+  private async ensureModelNameAvailable(name: string, excludeId?: string) {
+    const existing = await this.database.generatorModel.findFirst({
+      where: {
+        name: { equals: name, mode: 'insensitive' },
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      throw new ConflictException('Ja existe um modelo com este nome.');
+    }
+  }
+
+  private buildGeneratorModelData(
+    data: Partial<CreateGeneratorModelDto & UpdateGeneratorModelDto>,
+  ) {
+    const source = data as Record<string, unknown>;
+    const result: Record<string, unknown> = {};
+
+    if (data.name !== undefined) result.name = data.name;
+    if (data.isActive !== undefined) result.isActive = data.isActive;
+
+    for (const field of [
+      'brand',
+      'category',
+      'defaultVoltage',
+      'controllerType',
+      'engineModel',
+      'alternatorModel',
+      'defaultFuelConsumption',
+      'defaultTankCapacity',
+      'description',
+      'notes',
+    ]) {
+      if (source[field] !== undefined) {
+        result[field] = this.normalizeOptionalText(source[field]);
+      }
+    }
+
+    for (const field of ['defaultPowerKva', 'defaultPowerKw', 'frequencyHz']) {
+      if (source[field] !== undefined) {
+        result[field] = this.normalizeOptionalNumber(source[field], field);
+      }
+    }
+
+    return result;
+  }
+
+  private async applyMaintenanceTemplates(
+    tx: Prisma.TransactionClient,
+    modelId: string,
+    templates: CreateGeneratorModelDto['maintenanceTemplates'],
+  ) {
+    const seenIds = new Set<string>();
+
+    for (const [index, item] of (templates ?? []).entries()) {
+      const data = {
+        name: this.normalizeRequiredText(
+          item.name,
+          `Item de manutencao ${index + 1}`,
+        ),
+        description: this.normalizeOptionalText(item.description),
+        category: item.category ?? MaintenanceTemplateCategory.OTHER,
+        intervalValue: item.intervalValue ?? null,
+        intervalUnit: item.intervalUnit ?? null,
+        hourMeterInterval: item.hourMeterInterval ?? null,
+        required: item.required ?? true,
+        active: item.active ?? true,
+        sortOrder: item.sortOrder ?? index,
+        notes: this.normalizeOptionalText(item.notes),
+      };
+
+      if (!item.id) {
+        await tx.generatorModelMaintenanceTemplate.create({
+          data: { ...data, generatorModelId: modelId },
+        });
+        continue;
+      }
+
+      if (seenIds.has(item.id)) {
+        throw new BadRequestException(
+          'Item de manutencao repetido na mesma edicao.',
+        );
+      }
+      seenIds.add(item.id);
+
+      const existing = await tx.generatorModelMaintenanceTemplate.findUnique({
+        where: { id: item.id },
+        select: { id: true, generatorModelId: true },
+      });
+      if (!existing) {
+        throw new NotFoundException('Item de manutencao nao encontrado.');
+      }
+      if (existing.generatorModelId !== modelId) {
+        throw new BadRequestException(
+          'Item de manutencao nao pertence a este modelo.',
+        );
+      }
+
+      await tx.generatorModelMaintenanceTemplate.update({
+        where: { id: item.id },
+        data,
+      });
+    }
+  }
+
+  private normalizeRequiredText(value: unknown, label: string) {
+    const normalized = this.normalizeOptionalText(value);
+    if (!normalized) {
+      throw new BadRequestException(`${label} e obrigatorio.`);
+    }
+    return normalized;
+  }
+
+  private normalizeOptionalText(value: unknown) {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    if (typeof value !== 'string' && typeof value !== 'number') {
+      throw new BadRequestException('Valor textual invalido.');
+    }
+    const text = String(value).trim();
+    return text || null;
+  }
+
+  private normalizeOptionalNumber(value: unknown, label: string) {
+    if (value === undefined) return undefined;
+    if (value === null || value === '') return null;
+    const number = Number(value);
+    if (!Number.isFinite(number) || number < 0) {
+      throw new BadRequestException(`${label} invalido.`);
+    }
+    return number;
   }
 
   private async ensureCatalogItemsExist(catalogItemIds: string[]) {

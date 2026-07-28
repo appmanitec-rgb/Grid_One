@@ -82,12 +82,15 @@ describe('defaultAccessPolicyByRole', () => {
     expect(auditor.equipments.view).toBe(true);
     expect(auditor.equipments.update).toBe(false);
     expect(auditor.equipments.delete).toBe(false);
+    expect(auditor.equipments.manageModels).toBe(false);
 
     expect(technician.equipments.view).toBe(true);
     expect(technician.equipments.update).toBe(false);
+    expect(technician.equipments.manageModels).toBe(false);
 
     expect(client.pages.equipments).toBe(false);
     expect(client.equipments.view).toBe(false);
+    expect(client.equipments.manageModels).toBe(false);
   });
 
   it('keeps inventory editing restricted while allowing read-only audit', () => {

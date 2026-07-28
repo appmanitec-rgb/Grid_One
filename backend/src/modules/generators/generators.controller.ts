@@ -52,6 +52,12 @@ export class GeneratorsController {
     return this.generatorsService.findAllModels();
   }
 
+  @RequireAccessPolicy('pages.equipments', 'equipments.view')
+  @Get('models/:id')
+  findModelById(@Param('id') id: string) {
+    return this.generatorsService.findModelById(id);
+  }
+
   @UseGuards(AuthGuard)
   @RequireAccessPolicy('pages.equipments', 'equipments.manageModels')
   @Post('models')
