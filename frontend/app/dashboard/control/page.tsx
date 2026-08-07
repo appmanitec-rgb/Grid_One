@@ -480,7 +480,60 @@ const PRIMARY_BUTTON =
 const SECONDARY_BUTTON =
   "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
 
+export type UserManagementArea =
+  | "overview"
+  | "new"
+  | "control"
+  | "documents"
+  | "permissions";
+
+const USER_MANAGEMENT_AREAS: Array<{
+  key: UserManagementArea;
+  label: string;
+  href: string;
+  description: string;
+}> = [
+  {
+    key: "overview",
+    label: "Visao geral",
+    href: "/dashboard/management/users",
+    description: "Resumo executivo da base, riscos e atalhos.",
+  },
+  {
+    key: "new",
+    label: "Criacao",
+    href: "/dashboard/management/users/new",
+    description: "Entrada de novos usuarios e clientes vinculados.",
+  },
+  {
+    key: "control",
+    label: "Controle",
+    href: "/dashboard/management/users/control",
+    description: "Status, senha, cargo, hierarquia e selecao em lote.",
+  },
+  {
+    key: "documents",
+    label: "Documentos",
+    href: "/dashboard/management/users/documents",
+    description: "Certificados, NRs e liberacoes proximas do vencimento.",
+  },
+  {
+    key: "permissions",
+    label: "Permissoes",
+    href: "/dashboard/management/users/permissions",
+    description: "Matriz de acesso por area e regras sensiveis.",
+  },
+];
+
 export default function AccessControlPage() {
+  return <UserManagementWorkspace area="overview" />;
+}
+
+export function UserManagementWorkspace({
+  area = "overview",
+}: {
+  area?: UserManagementArea;
+}) {
   const router = useRouter();
   const viewerAccess = useMemo(() => getAccessFromToken(), []);
   const canManageSensitivePeople = viewerAccess.people.manageSensitive;
@@ -1315,6 +1368,62 @@ export default function AccessControlPage() {
     );
   }
 
+  const managementSectionProps: Parameters<typeof ManagementSection>[0] = {
+    query,
+    roleFilter,
+    statusFilter,
+    departmentFilter,
+    skillFilter,
+    regionFilter,
+    expiringOnly,
+    departments,
+    regions,
+    filteredUsers,
+    selectedUserId,
+    selectedUser,
+    selectedPassword,
+    certifications,
+    certificationForm,
+    certificationsLoading,
+    selectedIds,
+    clients,
+    managers,
+    policy,
+    usersWithExpiringSet,
+    isLoading,
+    saving,
+    isSelectedMaster,
+    canManageSensitivePeople,
+    onQueryChange: setQuery,
+    onRoleFilterChange: setRoleFilter,
+    onStatusFilterChange: setStatusFilter,
+    onDepartmentFilterChange: setDepartmentFilter,
+    onSkillFilterChange: setSkillFilter,
+    onRegionFilterChange: setRegionFilter,
+    onExpiringOnlyChange: setExpiringOnly,
+    onToggleSelectAll: toggleSelectAllFiltered,
+    onToggleSelectOne: toggleSelectOne,
+    onSelectUser: setSelectedUserId,
+    onBulkPatch: applyBulkPatch,
+    onUpdateSelectedUser: updateSelectedUser,
+    onSelectedPasswordChange: setSelectedPassword,
+    onCertificationFormChange: setCertificationForm,
+    onEditCertification: editCertification,
+    onResetCertificationForm: resetCertificationForm,
+    onSaveCertification: saveCertification,
+    onDeleteCertification: deleteCertification,
+    onResetSelectedUser: resetSelectedUserDraft,
+    onSaveSelectedUser: saveSelectedUser,
+    onSetPagePermission: setPagePermission,
+    onSetCatalogPermission: setCatalogPermission,
+    onSetUsersPermission: setUsersPermission,
+    onSetProposalPermission: setProposalPermission,
+    onSetOrderPermission: setOrderPermission,
+    onSetSectionPermission: setSectionPermission,
+    onSetAuditRead: setAuditRead,
+    onPolicyChange: setPolicy,
+  };
+
   return (
     <div className="space-y-6 pb-4">
       <AccessHero
@@ -1325,19 +1434,14 @@ export default function AccessControlPage() {
         onRefresh={() => void loadUsers()}
       />
 
+      <UserManagementNav activeArea={area} stats={stats} />
+
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
       {success ? <StatusBanner tone="emerald">{success}</StatusBanner> : null}
 
-      <div className="grid gap-6 2xl:grid-cols-[minmax(0,0.92fr)_minmax(380px,0.88fr)]">
-        <ProvisioningCard
-          newUser={newUser}
-          clients={clients}
-          saving={saving}
-          canManageSensitivePeople={canManageSensitivePeople}
-          onChange={setNewUser}
-          onSubmit={handleCreateUser}
-        />
-        <GovernanceRadar
+      {area === "overview" ? (
+        <UserManagementOverview
+          stats={stats}
           viewerAccess={viewerAccess}
           presenceRows={presenceRows}
           pendingApprovals={pendingApprovals}
@@ -1348,63 +1452,49 @@ export default function AccessControlPage() {
           onChangeAuditDomain={setAuditDomainFilter}
           onApprovalDecision={decideApproval}
         />
-      </div>
+      ) : null}
 
-      <ManagementSection
-        query={query}
-        roleFilter={roleFilter}
-        statusFilter={statusFilter}
-        departmentFilter={departmentFilter}
-        skillFilter={skillFilter}
-        regionFilter={regionFilter}
-        expiringOnly={expiringOnly}
-        departments={departments}
-        regions={regions}
-        filteredUsers={filteredUsers}
-        selectedUserId={selectedUserId}
-        selectedUser={selectedUser}
-        selectedPassword={selectedPassword}
-        certifications={certifications}
-        certificationForm={certificationForm}
-        certificationsLoading={certificationsLoading}
-        selectedIds={selectedIds}
-        clients={clients}
-        managers={managers}
-        policy={policy}
-        usersWithExpiringSet={usersWithExpiringSet}
-        isLoading={isLoading}
-        saving={saving}
-        isSelectedMaster={isSelectedMaster}
-        canManageSensitivePeople={canManageSensitivePeople}
-        onQueryChange={setQuery}
-        onRoleFilterChange={setRoleFilter}
-        onStatusFilterChange={setStatusFilter}
-        onDepartmentFilterChange={setDepartmentFilter}
-        onSkillFilterChange={setSkillFilter}
-        onRegionFilterChange={setRegionFilter}
-        onExpiringOnlyChange={setExpiringOnly}
-        onToggleSelectAll={toggleSelectAllFiltered}
-        onToggleSelectOne={toggleSelectOne}
-        onSelectUser={setSelectedUserId}
-        onBulkPatch={applyBulkPatch}
-        onUpdateSelectedUser={updateSelectedUser}
-        onSelectedPasswordChange={setSelectedPassword}
-        onCertificationFormChange={setCertificationForm}
-        onEditCertification={editCertification}
-        onResetCertificationForm={resetCertificationForm}
-        onSaveCertification={saveCertification}
-        onDeleteCertification={deleteCertification}
-        onResetSelectedUser={resetSelectedUserDraft}
-        onSaveSelectedUser={saveSelectedUser}
-        onSetPagePermission={setPagePermission}
-        onSetCatalogPermission={setCatalogPermission}
-        onSetUsersPermission={setUsersPermission}
-        onSetProposalPermission={setProposalPermission}
-        onSetOrderPermission={setOrderPermission}
-        onSetSectionPermission={setSectionPermission}
-        onSetAuditRead={setAuditRead}
-        onPolicyChange={setPolicy}
-      />
+      {area === "new" ? (
+        <div className="grid gap-6 2xl:grid-cols-[minmax(0,0.95fr)_minmax(340px,0.55fr)]">
+          <ProvisioningCard
+            newUser={newUser}
+            clients={clients}
+            saving={saving}
+            canManageSensitivePeople={canManageSensitivePeople}
+            onChange={setNewUser}
+            onSubmit={handleCreateUser}
+          />
+          <UserCreationGuide />
+        </div>
+      ) : null}
+
+      {area === "control" ? (
+        <ManagementSection
+          {...managementSectionProps}
+          eyebrow="Controle"
+          title="Controle de usuarios"
+          description="Triagem operacional de contas, status, senha, vinculos e edicoes em lote."
+        />
+      ) : null}
+
+      {area === "documents" ? (
+        <UserDocumentsSection
+          expiringCerts={expiringCerts}
+          users={users}
+          isLoading={isLoading}
+          saving={saving}
+          onRefresh={() => void loadUsers()}
+        />
+      ) : null}
+
+      {area === "permissions" ? (
+        <ManagementSection
+          {...managementSectionProps}
+          eyebrow="Permissoes"
+          title="Permissoes por usuario"
+          description="Selecione uma conta e ajuste a matriz de acesso com contexto de cargo, hierarquia e areas sensiveis."
+        />
+      ) : null}
     </div>
   );
 }
@@ -1501,6 +1591,328 @@ function AccessHero({
         </div>
       }
     />
+  );
+}
+
+function UserManagementNav({
+  activeArea,
+  stats,
+}: {
+  activeArea: UserManagementArea;
+  stats: {
+    total: number;
+    active: number;
+    admins: number;
+    live: number;
+    approvals: number;
+    expiring: number;
+  };
+}) {
+  return (
+    <SectionCard
+      eyebrow="Gestao de usuarios"
+      title="Divisoes da area"
+      description="Cada rotina fica em uma pagina propria, mas todas continuam usando a mesma base de usuarios, permissoes e certificados."
+      actions={<DataPill tone="slate">{stats.active} contas ativas</DataPill>}
+    >
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        {USER_MANAGEMENT_AREAS.map((item) => {
+          const active = item.key === activeArea;
+          return (
+            <Link
+              key={item.key}
+              href={item.href}
+              className={`rounded-[22px] border px-4 py-4 transition ${
+                active
+                  ? "border-sky-300 bg-sky-50 text-slate-950 shadow-[0_18px_44px_-36px_rgba(14,116,144,0.5)]"
+                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold">{item.label}</p>
+                {active ? <DataPill tone="blue">Atual</DataPill> : null}
+              </div>
+              <p className="mt-2 text-xs leading-5 text-slate-500">
+                {item.description}
+              </p>
+            </Link>
+          );
+        })}
+      </div>
+    </SectionCard>
+  );
+}
+
+function UserManagementOverview({
+  stats,
+  viewerAccess,
+  presenceRows,
+  pendingApprovals,
+  expiringCerts,
+  filteredAuditRows,
+  auditDomainFilter,
+  saving,
+  onChangeAuditDomain,
+  onApprovalDecision,
+}: {
+  stats: {
+    total: number;
+    active: number;
+    admins: number;
+    live: number;
+    approvals: number;
+    expiring: number;
+  };
+  viewerAccess: AccessPolicy;
+  presenceRows: PresenceRow[];
+  pendingApprovals: PendingApprovalRow[];
+  expiringCerts: ExpiringCertRow[];
+  filteredAuditRows: AuditRow[];
+  auditDomainFilter: "ALL" | AuditDomain;
+  saving: boolean;
+  onChangeAuditDomain: Dispatch<SetStateAction<"ALL" | AuditDomain>>;
+  onApprovalDecision: (
+    id: string,
+    decision: "approve" | "reject",
+  ) => Promise<void>;
+}) {
+  return (
+    <div className="grid gap-6 2xl:grid-cols-[minmax(0,0.82fr)_minmax(380px,0.78fr)]">
+      <SectionCard
+        eyebrow="Mapa operacional"
+        title="Fluxos separados por responsabilidade"
+        description="Use a visao geral para decidir o caminho; as alteracoes ficam nas paginas de rotina."
+      >
+        <div className="grid gap-3 md:grid-cols-2">
+          <WorkflowCard
+            href="/dashboard/management/users/new"
+            title="Criacao de usuarios"
+            description="Cadastrar colaborador, cliente vinculado, cargo e senha inicial."
+            metric={`${stats.total} contas`}
+            tone="blue"
+          />
+          <WorkflowCard
+            href="/dashboard/management/users/control"
+            title="Controle de contas"
+            description="Ativar, pausar, filtrar por area, editar dados e resetar senha."
+            metric={`${stats.active} ativas`}
+            tone="emerald"
+          />
+          <WorkflowCard
+            href="/dashboard/management/users/documents"
+            title="Documentos a vencer"
+            description="Acompanhar NRs, certificados tecnicos e liberacoes proximas da validade."
+            metric={`${stats.expiring} alertas`}
+            tone="rose"
+          />
+          <WorkflowCard
+            href="/dashboard/management/users/permissions"
+            title="Permissoes"
+            description="Revisar matriz por area, perfil, auditoria e acesso a dados sensiveis."
+            metric={`${stats.admins} admins`}
+            tone="amber"
+          />
+        </div>
+      </SectionCard>
+
+      <GovernanceRadar
+        viewerAccess={viewerAccess}
+        presenceRows={presenceRows}
+        pendingApprovals={pendingApprovals}
+        expiringCerts={expiringCerts}
+        filteredAuditRows={filteredAuditRows}
+        auditDomainFilter={auditDomainFilter}
+        saving={saving}
+        onChangeAuditDomain={onChangeAuditDomain}
+        onApprovalDecision={onApprovalDecision}
+      />
+    </div>
+  );
+}
+
+function WorkflowCard({
+  href,
+  title,
+  description,
+  metric,
+  tone,
+}: {
+  href: string;
+  title: string;
+  description: string;
+  metric: string;
+  tone: Tone;
+}) {
+  return (
+    <Link
+      href={href}
+      className="rounded-[24px] border border-slate-200 bg-white px-4 py-4 text-left transition hover:border-slate-300 hover:bg-slate-50"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-950">{title}</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            {description}
+          </p>
+        </div>
+        <DataPill tone={tone}>{metric}</DataPill>
+      </div>
+    </Link>
+  );
+}
+
+function UserCreationGuide() {
+  return (
+    <SectionCard
+      eyebrow="Padrao de entrada"
+      title="Como cadastrar sem retrabalho"
+      description="O usuario nasce com permissoes do cargo e depois pode ser refinado em Controle ou Permissoes."
+    >
+      <div className="space-y-3">
+        <FieldBox>
+          <p className="text-sm font-semibold text-slate-950">
+            1. Cargo define a matriz inicial
+          </p>
+          <p className="mt-1 text-sm leading-6 text-slate-600">
+            Tecnico, financeiro, RH, comercial e cliente recebem um conjunto
+            base de permissoes compativel com a funcao.
+          </p>
+        </FieldBox>
+        <FieldBox>
+          <p className="text-sm font-semibold text-slate-950">
+            2. Cliente precisa de vinculo
+          </p>
+          <p className="mt-1 text-sm leading-6 text-slate-600">
+            Contas do tipo cliente devem apontar para o cadastro de cliente
+            correto para liberar o portal sem abrir dados internos.
+          </p>
+        </FieldBox>
+        <FieldBox>
+          <p className="text-sm font-semibold text-slate-950">
+            3. Documentos vivem na base operacional
+          </p>
+          <p className="mt-1 text-sm leading-6 text-slate-600">
+            NR-35, treinamentos e liberacoes tecnicas devem ser atualizados em
+            Documentos, de onde o dashboard passa a consumir os alertas.
+          </p>
+        </FieldBox>
+      </div>
+    </SectionCard>
+  );
+}
+
+function UserDocumentsSection({
+  expiringCerts,
+  users,
+  isLoading,
+  saving,
+  onRefresh,
+}: {
+  expiringCerts: ExpiringCertRow[];
+  users: UserRow[];
+  isLoading: boolean;
+  saving: boolean;
+  onRefresh: () => void;
+}) {
+  const sortedRows = [...expiringCerts].sort(
+    (a, b) =>
+      new Date(a.validUntil).getTime() - new Date(b.validUntil).getTime(),
+  );
+  const usersWithDocumentsDue = new Set(
+    expiringCerts.map((row) => row.user?.id).filter(Boolean),
+  );
+
+  return (
+    <div className="grid gap-6 2xl:grid-cols-[minmax(0,0.92fr)_minmax(340px,0.58fr)]">
+      <SectionCard
+        eyebrow="Documentos"
+        title="Documentos a vencer"
+        description="Fila de certificados, NRs e liberacoes que exigem atualizacao operacional."
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={SECONDARY_BUTTON}
+              onClick={onRefresh}
+              disabled={isLoading || saving}
+            >
+              Atualizar
+            </button>
+            <Link href="/dashboard/hr/documentation" className={PRIMARY_BUTTON}>
+              Abrir documentacao
+            </Link>
+          </div>
+        }
+      >
+        {isLoading ? (
+          <InlineMessage>Carregando documentos...</InlineMessage>
+        ) : sortedRows.length === 0 ? (
+          <EmptyState
+            title="Nenhum vencimento nos proximos 30 dias"
+            description="Quando uma NR, certificado tecnico ou liberacao se aproximar da validade, ela aparece aqui."
+          />
+        ) : (
+          <div className="space-y-3">
+            {sortedRows.map((row) => {
+              const remainingDays = daysUntil(row.validUntil);
+              return (
+                <div
+                  key={row.id}
+                  className="rounded-[24px] border border-slate-200 bg-white px-4 py-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-950">
+                        {row.code}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {row.user?.name || "Usuario nao localizado"}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Validade: {formatDate(row.validUntil)}
+                      </p>
+                    </div>
+                    <DataPill tone={remainingDays <= 7 ? "rose" : "amber"}>
+                      {remainingDays} dia(s)
+                    </DataPill>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </SectionCard>
+
+      <SectionCard
+        eyebrow="Cobertura"
+        title="Resumo da base"
+        description="Indicadores rapidos para priorizar a regularizacao."
+      >
+        <div className="space-y-3">
+          <MiniInfo
+            label="Usuarios internos"
+            value={String(users.filter((user) => user.role !== "CLIENT").length)}
+            helper="Contas internas que podem ter documentacao tecnica."
+            tone="slate"
+          />
+          <MiniInfo
+            label="Com vencimento"
+            value={String(usersWithDocumentsDue.size)}
+            helper="Pessoas com ao menos um documento vencendo."
+            tone={usersWithDocumentsDue.size > 0 ? "rose" : "emerald"}
+          />
+          <FieldBox>
+            <p className="text-sm font-semibold text-slate-950">
+              Fonte dos dados
+            </p>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              Esta lista vem da mesma base usada em Documentacao de
+              colaboradores. O dashboard deve apenas resumir estes registros.
+            </p>
+          </FieldBox>
+        </div>
+      </SectionCard>
+    </div>
   );
 }
 
@@ -1944,6 +2356,9 @@ function GovernanceRadar({
 }
 
 function ManagementSection({
+  eyebrow = "Operacao",
+  title = "Usuarios e permissoes",
+  description = "A lista principal ficou mais limpa para triagem, enquanto o editor lateral concentra regras, hierarquia e postura de acesso.",
   query,
   roleFilter,
   statusFilter,
@@ -1998,6 +2413,9 @@ function ManagementSection({
   onSetAuditRead,
   onPolicyChange,
 }: {
+  eyebrow?: string;
+  title?: string;
+  description?: string;
   query: string;
   roleFilter: "ALL" | UserRole;
   statusFilter: "ALL" | "ACTIVE" | "INACTIVE";
@@ -2071,9 +2489,9 @@ function ManagementSection({
 }) {
   return (
     <SectionCard
-      eyebrow="Operacao"
-      title="Usuarios e permissoes"
-      description="A lista principal ficou mais limpa para triagem, enquanto o editor lateral concentra regras, hierarquia e postura de acesso."
+      eyebrow={eyebrow}
+      title={title}
+      description={description}
       actions={
         <DataPill tone="slate">
           {filteredUsers.length} usuarios em foco

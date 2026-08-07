@@ -219,7 +219,9 @@ export function getDefaultDashboardPath(access: AccessPolicy): string {
   if (pages.catalog) return "/dashboard/catalog";
   if (pages.inventory) return "/dashboard/inventory";
   if (pages.finance) return "/dashboard/finance/cash-flow";
-  if (pages.usersControl || access.users.manage) return "/dashboard/control";
+  if (pages.usersControl || access.users.manage) {
+    return "/dashboard/management/users";
+  }
 
   return "/dashboard/profile";
 }

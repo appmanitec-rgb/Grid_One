@@ -93,7 +93,7 @@ const MAIN_SECTIONS: NavSection[] = [
       {
         key: "overview_management",
         label: "Gestão",
-        href: "/dashboard/control",
+        href: "/dashboard/management/users",
         enabled: true,
       },
       {

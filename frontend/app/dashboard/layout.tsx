@@ -321,7 +321,7 @@ export default function DashboardLayout({
         enabled: visiblePages.usersControl,
       },
       {
-        href: "/dashboard/control",
+        href: "/dashboard/management/users",
         label: "Gestão",
         mobileLabel: "Gestão",
         icon: "AC",

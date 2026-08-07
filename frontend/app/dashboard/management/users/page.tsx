@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { UserManagementWorkspace } from "../../control/page";
 
 export default function ManagementUsersPage() {
-  redirect("/dashboard/control");
+  return <UserManagementWorkspace area="overview" />;
 }
