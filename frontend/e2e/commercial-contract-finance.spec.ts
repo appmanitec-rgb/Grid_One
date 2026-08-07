@@ -62,6 +62,10 @@ type MaintenanceOrder = {
   contract?: { id: string; code?: string } | null;
 };
 
+type DeliveryShareResponse = {
+  shareUrl: string;
+};
+
 test.describe.serial("fluxo comercial -> contrato -> financeiro -> preventiva", () => {
   test("cliente aprova proposta no portal e contrato gera AR/preventiva/OS sem duplicidade", async ({
     page,
@@ -310,6 +314,74 @@ test.describe.serial("fluxo comercial -> contrato -> financeiro -> preventiva", 
       { method: "POST", body: {} },
     );
     expect(invalidConvert.status).toBe(400);
+  });
+
+  test("cliente aprova proposta pelo link seguro de envio", async ({ page }) => {
+    const [data, adminSession, salesSession] = await Promise.all([
+      getE2eEntityData(),
+      apiLogin(accounts.admin),
+      apiLogin(accounts.sales),
+    ]);
+    const adminToken = adminSession.access_token;
+    const salesUserId = requireUserId(salesSession.user);
+    const generator = await apiRequest<GeneratorDetail>(
+      adminToken,
+      `/generators/${data.clientAEquipmentId}`,
+    );
+    const clientId = generator.client?.id ?? generator.clientId;
+    expect(clientId).toBeTruthy();
+    const catalogItem = await firstCatalogItem(adminToken);
+
+    const proposal = await createProposalReadyForCustomerReview({
+      token: adminToken,
+      userId: salesUserId,
+      clientId: clientId!,
+      generatorId: generator.id,
+      siteId: generator.currentSite?.id,
+      catalogItemId: catalogItem.id,
+      label: "link-seguro",
+      amount: 2111,
+    });
+
+    const delivery = await apiRequest<DeliveryShareResponse>(
+      adminToken,
+      "/deliveries",
+      {
+        method: "POST",
+        body: {
+          channel: "EMAIL",
+          documentType: "PROPOSAL",
+          documentId: proposal.id,
+          recipientTarget: "cliente.aprovador@example.test",
+          recipientName: "Cliente Aprovador",
+          message: "Proposta para aprovacao por link seguro.",
+          expiresInDays: 7,
+        },
+      },
+    );
+    const sharePath = new URL(delivery.shareUrl).pathname;
+
+    await page.goto(sharePath, {
+      waitUntil: "domcontentloaded",
+      timeout: 45_000,
+    });
+    await expectLoaded(page, new RegExp(`Proposta ${proposal.code}`));
+    await expect(page.locator("body")).toContainText(/Aceite da proposta/i);
+    await page.getByLabel(/Nome do aprovador/i).fill("Cliente Aprovador");
+    await page.getByLabel(/CPF do aprovador/i).fill("12345678909");
+    await page
+      .getByLabel(/Assinatura eletronica simples/i)
+      .fill("Cliente Aprovador");
+    await page.getByRole("button", { name: /Aprovar proposta/i }).click();
+    await expect(page.locator("body")).toContainText(
+      /Proposta aprovada com aceite assinado/i,
+    );
+
+    const approved = await apiRequest<Proposal>(
+      adminToken,
+      `/proposals/${proposal.id}`,
+    );
+    expect(approved.status).toBe("WON");
   });
 });
 

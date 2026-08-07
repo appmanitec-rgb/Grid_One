@@ -1,15 +1,32 @@
 {
+  "company": {
+    "name": "MANITEC Grupos Geradores"
+  },
   "client": {
     "name": "Cliente Exemplo"
   },
   "equipment": {
     "name": "GMG Principal",
-    "serialNumber": "SN-001"
+    "serialNumber": "SN-001",
+    "site": "Matriz",
+    "power": "500 kVA"
   },
   "workOrder": {
     "number": "OS-0001",
     "title": "Preventiva mensal",
-    "status": "Concluida"
+    "status": "Concluida",
+    "type": "Preventiva",
+    "priority": "Media",
+    "technician": "Tecnico MANITEC",
+    "contract": "CTR-0001",
+    "openedAt": "01/07/2026 08:00",
+    "scheduledTo": "02/07/2026 08:00",
+    "startedAt": "02/07/2026 08:15",
+    "finishedAt": "02/07/2026 11:30",
+    "report": "Servico executado conforme checklist aprovado."
+  },
+  "technicalScope": {
+    "description": "Inspecao preventiva, testes funcionais e verificacao geral do grupo gerador."
   },
   "items": [
     {
@@ -18,5 +35,9 @@
       "unitPrice": "R$ 100,00",
       "total": "R$ 100,00"
     }
-  ]
+  ],
+  "signatures": {
+    "technician": "Tecnico MANITEC",
+    "customer": "Assinatura / aceite do cliente"
+  }
 }

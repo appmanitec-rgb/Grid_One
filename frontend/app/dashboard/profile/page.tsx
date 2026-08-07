@@ -142,7 +142,7 @@ export default function ProfilePage() {
         <div className="flex flex-wrap gap-2">
           <Badge>{roleLabels[profile.role] || profile.role}</Badge>
           <Badge>{profile.isActive ? "Conta ativa" : "Conta inativa"}</Badge>
-          <Badge>{profile.mfaEnabled ? "MFA ativo" : "MFA pendente"}</Badge>
+          <Badge>MFA hibernado</Badge>
         </div>
       </div>
 
@@ -190,7 +190,7 @@ export default function ProfilePage() {
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-lg font-bold text-slate-900">Segurança da conta</h2>
             <div className="mt-4 grid gap-3">
-              <ReadOnly label="MFA" value={profile.mfaEnabled ? "Configurado" : "Pendente"} />
+              <ReadOnly label="MFA" value="Hibernado temporariamente" />
               <ReadOnly label="Última atualização" value={formatDateTime(profile.updatedAt)} />
               <ReadOnly label="Última presença" value={formatDateTime(profile.availabilityUpdatedAt)} />
             </div>

@@ -9,6 +9,7 @@ import {
   createDocumentDelivery,
   DEFAULT_DELIVERY_TEMPLATES,
   DELIVERY_CHANNEL_OPTIONS,
+  MANITEC_TAGGO_URL,
   fetchDeliveryPreferences,
   labelDeliveryChannel,
   renderDeliveryTemplate,
@@ -32,7 +33,9 @@ const SECONDARY_BUTTON =
 const TEMPLATE_TOKENS = [
   "{documentLabel}",
   "{counterpartName}",
+  "{companyContacts}",
   "{shareUrl}",
+  "{taggoUrl}",
   "{recipientName}",
 ];
 
@@ -123,13 +126,16 @@ export default function DocumentSharePanel({
       documentCode: documentLabel,
       counterpartName: defaultRecipientName || recipientName.trim() || "cliente",
       companyLabel: preferences?.companyLabel || "Manitec",
+      companyContacts: buildCompanyContacts(preferences),
       shareUrl: shareUrl || "[link seguro]",
+      taggoUrl: MANITEC_TAGGO_URL,
       recipientName: recipientName.trim() || defaultRecipientName || "cliente",
     }),
     [
       defaultRecipientName,
       documentLabel,
       preferences?.companyLabel,
+      preferences,
       recipientName,
       shareUrl,
     ],
@@ -484,4 +490,15 @@ function providerTone(
         : preferences?.providerStatus.webhook;
 
   return active ? ("emerald" as const) : ("amber" as const);
+}
+
+function buildCompanyContacts(preferences: DeliveryComposerPreferences | null) {
+  const contacts = [
+    preferences?.replyToEmail || preferences?.fromEmail
+      ? `E-mail ${preferences.replyToEmail || preferences.fromEmail}`
+      : null,
+    preferences?.defaultWhatsapp ? `WhatsApp ${preferences.defaultWhatsapp}` : null,
+  ].filter(Boolean);
+
+  return contacts.length > 0 ? contacts.join(" | ") : "responda este contato";
 }

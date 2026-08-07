@@ -7,7 +7,11 @@ import TopBar from "./components/TopBar";
 import SidebarNavigation, {
   SidebarAccess,
 } from "./components/SidebarNavigation";
-import { canAccessDashboardPath, getAccessFromToken } from "@/lib/access";
+import {
+  canAccessDashboardPath,
+  getAccessFromToken,
+  getDefaultDashboardPath,
+} from "@/lib/access";
 import {
   applyDashboardTheme,
   clearAppliedDashboardTheme,
@@ -93,7 +97,12 @@ export default function DashboardLayout({
   useEffect(() => {
     if (!accessReady) return;
     if (!canAccessDashboardPath(pathname, visiblePages)) {
-      router.replace(currentRole === "CLIENT" ? "/portal" : "/dashboard");
+      const access = getAccessFromToken();
+      router.replace(
+        currentRole === "CLIENT"
+          ? "/portal"
+          : getDefaultDashboardPath(access),
+      );
     }
   }, [accessReady, currentRole, pathname, router, visiblePages]);
 
@@ -295,6 +304,13 @@ export default function DashboardLayout({
         label: "Agentes",
         mobileLabel: "Agentes",
         icon: "RH",
+        enabled: visiblePages.people,
+      },
+      {
+        href: "/dashboard/hr/documentation",
+        label: "Documentação",
+        mobileLabel: "Docs RH",
+        icon: "DC",
         enabled: visiblePages.people,
       },
       {

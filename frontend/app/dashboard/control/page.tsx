@@ -28,6 +28,7 @@ import {
   SectionCard,
   SelectInput,
   StatusBanner,
+  TextAreaInput,
   TextInput,
 } from "../components/DashboardPageKit";
 
@@ -138,6 +139,22 @@ type ExpiringCertRow = {
   user?: { id: string; name: string } | null;
 };
 
+type CertificationScope = "SAFETY" | "TECHNICAL";
+
+type UserCertificationRow = {
+  id: string;
+  userId: string;
+  code: string;
+  scope: CertificationScope;
+  issuer?: string | null;
+  validUntil: string;
+  metadata?: {
+    notes?: string;
+  } | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 type NewUserForm = {
   name: string;
   email: string;
@@ -149,6 +166,15 @@ type NewUserForm = {
   branch: string;
   approvalDiscountLimit: string;
   hourCost: string;
+};
+
+type CertificationForm = {
+  id: string;
+  code: string;
+  scope: CertificationScope;
+  issuer: string;
+  validUntil: string;
+  notes: string;
 };
 
 type PermissionItem<TKey extends string> = {
@@ -173,6 +199,20 @@ const EMPTY_NEW_USER: NewUserForm = {
   branch: "",
   approvalDiscountLimit: "",
   hourCost: "",
+};
+
+const EMPTY_CERTIFICATION_FORM: CertificationForm = {
+  id: "",
+  code: "",
+  scope: "SAFETY",
+  issuer: "",
+  validUntil: "",
+  notes: "",
+};
+
+const CERTIFICATION_SCOPE_LABELS: Record<CertificationScope, string> = {
+  SAFETY: "NR / Seguranca",
+  TECHNICAL: "Tecnico / Ferramentas",
 };
 
 const ROLE_OPTIONS: UserRole[] = [
@@ -292,7 +332,7 @@ const CATALOG_ITEMS = [
 >;
 const USER_ITEMS = [
   { key: "manage", label: "Gerenciar usuarios" },
-  { key: "manageSecurity", label: "Seguranca e MFA" },
+  { key: "manageSecurity", label: "Seguranca" },
   { key: "manageCertifications", label: "Certificacoes" },
   { key: "manageSpecialties", label: "Especialidades" },
   { key: "manageHierarchy", label: "Hierarquia e gestores" },
@@ -447,6 +487,13 @@ export default function AccessControlPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
+  const [selectedPassword, setSelectedPassword] = useState("");
+  const [certifications, setCertifications] = useState<UserCertificationRow[]>(
+    [],
+  );
+  const [certificationForm, setCertificationForm] =
+    useState<CertificationForm>(EMPTY_CERTIFICATION_FORM);
+  const [certificationsLoading, setCertificationsLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [policy, setPolicy] = useState<AccessPolicy>(
     defaultAccessByRole("NORMAL"),
@@ -570,6 +617,8 @@ export default function AccessControlPage() {
   useEffect(() => {
     const record = users.find((user) => user.id === selectedUserId) ?? null;
     setSelectedUser(record ? cloneUser(record) : null);
+    setSelectedPassword("");
+    setCertificationForm(EMPTY_CERTIFICATION_FORM);
 
     if (record) {
       setPolicy(
@@ -596,6 +645,60 @@ export default function AccessControlPage() {
     },
     [router],
   );
+
+  const loadUserCertifications = useCallback(
+    async (userId: string) => {
+      if (!viewerAccess.users.manageCertifications) {
+        setCertifications([]);
+        return;
+      }
+
+      setCertificationsLoading(true);
+      try {
+        const res = await apiFetch(`/users/${userId}/certifications`, {
+          cache: "no-store",
+        });
+
+        if (await handleUnauthorized(res)) return;
+        if (!res.ok) {
+          throw new Error(
+            await readApiError(
+              res,
+              "Nao foi possivel carregar as certificacoes do usuario.",
+            ),
+          );
+        }
+
+        const rows = (await res.json()) as UserCertificationRow[];
+        setCertifications(
+          rows.sort(
+            (a, b) =>
+              new Date(a.validUntil).getTime() -
+              new Date(b.validUntil).getTime(),
+          ),
+        );
+      } catch (certError: unknown) {
+        setCertifications([]);
+        setError(
+          certError instanceof Error
+            ? certError.message
+            : "Nao foi possivel carregar as certificacoes.",
+        );
+      } finally {
+        setCertificationsLoading(false);
+      }
+    },
+    [handleUnauthorized, viewerAccess.users.manageCertifications],
+  );
+
+  useEffect(() => {
+    if (!selectedUserId) {
+      setCertifications([]);
+      return;
+    }
+
+    void loadUserCertifications(selectedUserId);
+  }, [loadUserCertifications, selectedUserId]);
 
   const loadUsers = useCallback(async () => {
     setIsLoading(true);
@@ -768,6 +871,11 @@ export default function AccessControlPage() {
     setSuccess("");
 
     try {
+      const trimmedPassword = selectedPassword.trim();
+      if (trimmedPassword && trimmedPassword.length < 6) {
+        throw new Error("A nova senha precisa ter ao menos 6 caracteres.");
+      }
+
       if (selectedUser.role === "CLIENT" && !selectedUser.linkedClientId) {
         throw new Error(
           "Selecione o cliente vinculado antes de salvar a conta externa.",
@@ -803,6 +911,7 @@ export default function AccessControlPage() {
         skillLevel: selectedUser.skillLevel || undefined,
         regionTags: splitTags(selectedUser.regionTags || []),
         mfaEnabled: Boolean(selectedUser.mfaEnabled),
+        ...(trimmedPassword ? { password: trimmedPassword } : {}),
         accessPolicy: policy,
       };
 
@@ -823,6 +932,7 @@ export default function AccessControlPage() {
 
       await loadUsers();
       setSelectedUserId(selectedUser.id);
+      setSelectedPassword("");
       setSuccess(`Cadastro de ${selectedUser.name} atualizado com sucesso.`);
     } catch (saveError: unknown) {
       setError(
@@ -958,6 +1068,7 @@ export default function AccessControlPage() {
     const base = users.find((user) => user.id === selectedUserId);
     if (!base) return;
     setSelectedUser(cloneUser(base));
+    setSelectedPassword("");
     setPolicy(
       normalizeEditableAccessPolicy(
         (base.accessPolicy as AccessPolicy) || defaultAccessByRole(base.role),
@@ -965,6 +1076,139 @@ export default function AccessControlPage() {
     );
     setSuccess("");
     setError("");
+  }
+
+  function editCertification(row: UserCertificationRow) {
+    const notes =
+      row.metadata && typeof row.metadata.notes === "string"
+        ? row.metadata.notes
+        : "";
+
+    setCertificationForm({
+      id: row.id,
+      code: row.code,
+      scope: row.scope,
+      issuer: row.issuer || "",
+      validUntil: toDateInputValue(row.validUntil),
+      notes,
+    });
+  }
+
+  function resetCertificationForm() {
+    setCertificationForm(EMPTY_CERTIFICATION_FORM);
+  }
+
+  async function saveCertification() {
+    if (!selectedUser) {
+      setError("Selecione um usuario para editar certificacoes.");
+      return;
+    }
+
+    if (selectedUser.isSystemMaster) {
+      setError("O usuario master nao pode ser alterado por esta tela.");
+      return;
+    }
+
+    if (!certificationForm.code.trim() || !certificationForm.validUntil) {
+      setError("Informe o codigo e a validade do certificado.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const payload = {
+        code: certificationForm.code.trim().toUpperCase(),
+        scope: certificationForm.scope,
+        issuer: certificationForm.issuer.trim() || undefined,
+        validUntil: certificationForm.validUntil,
+        metadata: certificationForm.notes.trim()
+          ? { notes: certificationForm.notes.trim() }
+          : undefined,
+      };
+
+      const isEditing = Boolean(certificationForm.id);
+      const res = await apiFetch(
+        isEditing
+          ? `/users/${selectedUser.id}/certifications/${certificationForm.id}`
+          : `/users/${selectedUser.id}/certifications`,
+        {
+          method: isEditing ? "PATCH" : "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        },
+      );
+
+      if (await handleUnauthorized(res)) return;
+      if (!res.ok) {
+        throw new Error(
+          await readApiError(res, "Nao foi possivel salvar o certificado."),
+        );
+      }
+
+      resetCertificationForm();
+      await loadUserCertifications(selectedUser.id);
+      await loadUsers();
+      setSelectedUserId(selectedUser.id);
+      setSuccess(
+        isEditing
+          ? "Certificado atualizado com sucesso."
+          : "Certificado cadastrado com sucesso.",
+      );
+    } catch (certError: unknown) {
+      setError(
+        certError instanceof Error
+          ? certError.message
+          : "Nao foi possivel salvar o certificado.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteCertification(certId: string) {
+    if (!selectedUser) {
+      setError("Selecione um usuario para remover certificacoes.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const res = await apiFetch(
+        `/users/${selectedUser.id}/certifications/${certId}`,
+        {
+          method: "DELETE",
+        },
+      );
+
+      if (await handleUnauthorized(res)) return;
+      if (!res.ok) {
+        throw new Error(
+          await readApiError(res, "Nao foi possivel remover o certificado."),
+        );
+      }
+
+      resetCertificationForm();
+      await loadUserCertifications(selectedUser.id);
+      await loadUsers();
+      setSelectedUserId(selectedUser.id);
+      setSuccess("Certificado removido com sucesso.");
+    } catch (certError: unknown) {
+      setError(
+        certError instanceof Error
+          ? certError.message
+          : "Nao foi possivel remover o certificado.",
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   function setPagePermission(key: keyof AccessPolicy["pages"], value: boolean) {
@@ -1119,6 +1363,10 @@ export default function AccessControlPage() {
         filteredUsers={filteredUsers}
         selectedUserId={selectedUserId}
         selectedUser={selectedUser}
+        selectedPassword={selectedPassword}
+        certifications={certifications}
+        certificationForm={certificationForm}
+        certificationsLoading={certificationsLoading}
         selectedIds={selectedIds}
         clients={clients}
         managers={managers}
@@ -1140,6 +1388,12 @@ export default function AccessControlPage() {
         onSelectUser={setSelectedUserId}
         onBulkPatch={applyBulkPatch}
         onUpdateSelectedUser={updateSelectedUser}
+        onSelectedPasswordChange={setSelectedPassword}
+        onCertificationFormChange={setCertificationForm}
+        onEditCertification={editCertification}
+        onResetCertificationForm={resetCertificationForm}
+        onSaveCertification={saveCertification}
+        onDeleteCertification={deleteCertification}
         onResetSelectedUser={resetSelectedUserDraft}
         onSaveSelectedUser={saveSelectedUser}
         onSetPagePermission={setPagePermission}
@@ -1702,6 +1956,10 @@ function ManagementSection({
   filteredUsers,
   selectedUserId,
   selectedUser,
+  selectedPassword,
+  certifications,
+  certificationForm,
+  certificationsLoading,
   selectedIds,
   clients,
   managers,
@@ -1723,6 +1981,12 @@ function ManagementSection({
   onSelectUser,
   onBulkPatch,
   onUpdateSelectedUser,
+  onSelectedPasswordChange,
+  onCertificationFormChange,
+  onEditCertification,
+  onResetCertificationForm,
+  onSaveCertification,
+  onDeleteCertification,
   onResetSelectedUser,
   onSaveSelectedUser,
   onSetPagePermission,
@@ -1746,6 +2010,10 @@ function ManagementSection({
   filteredUsers: UserRow[];
   selectedUserId: string;
   selectedUser: UserRow | null;
+  selectedPassword: string;
+  certifications: UserCertificationRow[];
+  certificationForm: CertificationForm;
+  certificationsLoading: boolean;
   selectedIds: string[];
   clients: ClientOption[];
   managers: UserRow[];
@@ -1769,6 +2037,12 @@ function ManagementSection({
     buildPayload: (user: UserRow) => Record<string, unknown>,
   ) => Promise<void>;
   onUpdateSelectedUser: (changes: Partial<UserRow>) => void;
+  onSelectedPasswordChange: Dispatch<SetStateAction<string>>;
+  onCertificationFormChange: Dispatch<SetStateAction<CertificationForm>>;
+  onEditCertification: (row: UserCertificationRow) => void;
+  onResetCertificationForm: () => void;
+  onSaveCertification: () => Promise<void>;
+  onDeleteCertification: (certId: string) => Promise<void>;
   onResetSelectedUser: () => void;
   onSaveSelectedUser: () => Promise<void>;
   onSetPagePermission: (
@@ -1933,10 +2207,10 @@ function ManagementSection({
             <button
               type="button"
               className={SECONDARY_BUTTON}
-              onClick={() => void onBulkPatch(() => ({ mfaEnabled: true }))}
-              disabled={saving || selectedIds.length === 0}
+              onClick={() => undefined}
+              disabled
             >
-              Exigir MFA
+              MFA hibernado
             </button>
             <button
               type="button"
@@ -1965,6 +2239,10 @@ function ManagementSection({
           />
           <UserEditorCard
             selectedUser={selectedUser}
+            selectedPassword={selectedPassword}
+            certifications={certifications}
+            certificationForm={certificationForm}
+            certificationsLoading={certificationsLoading}
             clients={clients}
             managers={managers}
             policy={policy}
@@ -1972,6 +2250,12 @@ function ManagementSection({
             isSelectedMaster={isSelectedMaster}
             canManageSensitivePeople={canManageSensitivePeople}
             onUpdateSelectedUser={onUpdateSelectedUser}
+            onSelectedPasswordChange={onSelectedPasswordChange}
+            onCertificationFormChange={onCertificationFormChange}
+            onEditCertification={onEditCertification}
+            onResetCertificationForm={onResetCertificationForm}
+            onSaveCertification={onSaveCertification}
+            onDeleteCertification={onDeleteCertification}
             onResetSelectedUser={onResetSelectedUser}
             onSaveSelectedUser={onSaveSelectedUser}
             onSetPagePermission={onSetPagePermission}
@@ -2084,7 +2368,7 @@ function UserListPanel({
                         </DataPill>
                       ) : null}
                       {user.mfaEnabled ? (
-                        <DataPill tone="blue">MFA ativo</DataPill>
+                        <DataPill tone="slate">MFA hibernado</DataPill>
                       ) : null}
                       {usersWithExpiringSet.has(user.id) ? (
                         <DataPill tone="rose">Certificacao critica</DataPill>
@@ -2111,6 +2395,10 @@ function UserListPanel({
 
 function UserEditorCard({
   selectedUser,
+  selectedPassword,
+  certifications,
+  certificationForm,
+  certificationsLoading,
   clients,
   managers,
   policy,
@@ -2118,6 +2406,12 @@ function UserEditorCard({
   isSelectedMaster,
   canManageSensitivePeople,
   onUpdateSelectedUser,
+  onSelectedPasswordChange,
+  onCertificationFormChange,
+  onEditCertification,
+  onResetCertificationForm,
+  onSaveCertification,
+  onDeleteCertification,
   onResetSelectedUser,
   onSaveSelectedUser,
   onSetPagePermission,
@@ -2130,6 +2424,10 @@ function UserEditorCard({
   onPolicyChange,
 }: {
   selectedUser: UserRow | null;
+  selectedPassword: string;
+  certifications: UserCertificationRow[];
+  certificationForm: CertificationForm;
+  certificationsLoading: boolean;
   clients: ClientOption[];
   managers: UserRow[];
   policy: AccessPolicy;
@@ -2137,6 +2435,12 @@ function UserEditorCard({
   isSelectedMaster: boolean;
   canManageSensitivePeople: boolean;
   onUpdateSelectedUser: (changes: Partial<UserRow>) => void;
+  onSelectedPasswordChange: Dispatch<SetStateAction<string>>;
+  onCertificationFormChange: Dispatch<SetStateAction<CertificationForm>>;
+  onEditCertification: (row: UserCertificationRow) => void;
+  onResetCertificationForm: () => void;
+  onSaveCertification: () => Promise<void>;
+  onDeleteCertification: (certId: string) => Promise<void>;
   onResetSelectedUser: () => void;
   onSaveSelectedUser: () => Promise<void>;
   onSetPagePermission: (
@@ -2517,6 +2821,227 @@ function UserEditorCard({
           </FormField>
         </div>
 
+        <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)]">
+          <FieldBox className="space-y-4">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">
+                Acesso e senha
+              </p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                A senha atual nao fica visivel no sistema. Para alterar,
+                defina uma nova senha e salve o cadastro.
+              </p>
+            </div>
+            <FormField label="Nova senha" hint="Opcional; minimo 6 caracteres">
+              <TextInput
+                type="password"
+                autoComplete="new-password"
+                value={selectedPassword}
+                onChange={(event) =>
+                  onSelectedPasswordChange(event.target.value)
+                }
+                placeholder="Digite para redefinir a senha"
+                disabled={isSelectedMaster}
+              />
+            </FormField>
+            {selectedPassword ? (
+              <InlineMessage>
+                A nova senha sera aplicada quando clicar em Salvar alteracoes.
+              </InlineMessage>
+            ) : null}
+          </FieldBox>
+
+          <FieldBox className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  Certificacoes do usuario
+                </p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  Controle NR, treinamentos tecnicos, ferramentas e vencimentos.
+                </p>
+              </div>
+              <DataPill tone="blue">
+                {certifications.length} registro(s)
+              </DataPill>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <FormField label="Codigo">
+                <TextInput
+                  value={certificationForm.code}
+                  onChange={(event) =>
+                    onCertificationFormChange((prev) => ({
+                      ...prev,
+                      code: event.target.value,
+                    }))
+                  }
+                  placeholder="NR-10, NR-35, SEP, FERR-001"
+                  disabled={isSelectedMaster}
+                />
+              </FormField>
+              <FormField label="Tipo">
+                <SelectInput
+                  value={certificationForm.scope}
+                  onChange={(event) =>
+                    onCertificationFormChange((prev) => ({
+                      ...prev,
+                      scope: event.target.value as CertificationScope,
+                    }))
+                  }
+                  disabled={isSelectedMaster}
+                >
+                  {Object.entries(CERTIFICATION_SCOPE_LABELS).map(
+                    ([scope, label]) => (
+                      <option key={scope} value={scope}>
+                        {label}
+                      </option>
+                    ),
+                  )}
+                </SelectInput>
+              </FormField>
+              <FormField label="Emissor">
+                <TextInput
+                  value={certificationForm.issuer}
+                  onChange={(event) =>
+                    onCertificationFormChange((prev) => ({
+                      ...prev,
+                      issuer: event.target.value,
+                    }))
+                  }
+                  placeholder="SENAI, fornecedor, interno..."
+                  disabled={isSelectedMaster}
+                />
+              </FormField>
+              <FormField label="Validade">
+                <TextInput
+                  type="date"
+                  value={certificationForm.validUntil}
+                  onChange={(event) =>
+                    onCertificationFormChange((prev) => ({
+                      ...prev,
+                      validUntil: event.target.value,
+                    }))
+                  }
+                  disabled={isSelectedMaster}
+                />
+              </FormField>
+              <FormField label="Observacoes" className="md:col-span-2">
+                <TextAreaInput
+                  value={certificationForm.notes}
+                  onChange={(event) =>
+                    onCertificationFormChange((prev) => ({
+                      ...prev,
+                      notes: event.target.value,
+                    }))
+                  }
+                  placeholder="Ex.: certificado anexado no RH, ferramenta liberada ate nova inspeção."
+                  disabled={isSelectedMaster}
+                />
+              </FormField>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={PRIMARY_BUTTON}
+                onClick={() => void onSaveCertification()}
+                disabled={saving || isSelectedMaster}
+              >
+                {certificationForm.id
+                  ? "Atualizar certificado"
+                  : "Adicionar certificado"}
+              </button>
+              <button
+                type="button"
+                className={SECONDARY_BUTTON}
+                onClick={onResetCertificationForm}
+                disabled={saving}
+              >
+                Novo / limpar
+              </button>
+            </div>
+
+            {certificationsLoading ? (
+              <InlineMessage>Carregando certificacoes...</InlineMessage>
+            ) : certifications.length === 0 ? (
+              <EmptyState
+                title="Sem certificacoes cadastradas"
+                description="Registre aqui os certificados de NR, treinamentos e liberacoes de ferramenta."
+              />
+            ) : (
+              <div className="space-y-3">
+                {certifications.map((certification) => {
+                  const expiresInDays = daysUntil(certification.validUntil);
+                  const tone: Tone =
+                    expiresInDays <= 30 ? "rose" : "emerald";
+                  const notes =
+                    certification.metadata &&
+                    typeof certification.metadata.notes === "string"
+                      ? certification.metadata.notes
+                      : "";
+
+                  return (
+                    <div
+                      key={certification.id}
+                      className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {certification.code}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {
+                              CERTIFICATION_SCOPE_LABELS[
+                                certification.scope
+                              ]
+                            }{" "}
+                            {certification.issuer
+                              ? `- ${certification.issuer}`
+                              : ""}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            Validade: {formatDate(certification.validUntil)}
+                          </p>
+                          {notes ? (
+                            <p className="mt-2 text-xs leading-5 text-slate-600">
+                              {notes}
+                            </p>
+                          ) : null}
+                        </div>
+                        <DataPill tone={tone}>
+                          {expiresInDays} dia(s)
+                        </DataPill>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className={SECONDARY_BUTTON}
+                          onClick={() => onEditCertification(certification)}
+                          disabled={saving || isSelectedMaster}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          className={SECONDARY_BUTTON}
+                          onClick={() =>
+                            void onDeleteCertification(certification.id)
+                          }
+                          disabled={saving || isSelectedMaster}
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </FieldBox>
+        </div>
+
         <div className="mt-4">
           <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/75 px-4 py-3 text-sm text-slate-700">
             <input
@@ -2526,9 +3051,9 @@ function UserEditorCard({
               onChange={(event) =>
                 onUpdateSelectedUser({ mfaEnabled: event.target.checked })
               }
-              disabled={isSelectedMaster}
+              disabled
             />
-            MFA obrigatorio para a conta
+            MFA hibernado temporariamente
           </label>
         </div>
       </div>
@@ -2902,6 +3427,13 @@ function formatDate(value?: string | null) {
   return new Intl.DateTimeFormat("pt-BR", {
     dateStyle: "medium",
   }).format(parsed);
+}
+
+function toDateInputValue(value?: string | null) {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toISOString().slice(0, 10);
 }
 
 function daysUntil(value: string) {

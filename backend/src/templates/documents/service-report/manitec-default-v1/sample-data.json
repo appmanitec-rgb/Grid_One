@@ -1,13 +1,25 @@
 {
+  "company": {
+    "name": "MANITEC Grupos Geradores"
+  },
   "client": {
     "name": "Cliente Exemplo"
   },
   "equipment": {
     "name": "GMG Principal",
-    "serialNumber": "SN-001"
+    "serialNumber": "SN-001",
+    "site": "Matriz",
+    "power": "500 kVA",
+    "generator": {
+      "model": "Cummins"
+    }
   },
   "serviceReport": {
     "number": "LDT-0001",
+    "title": "Laudo tecnico de atendimento",
+    "status": "Liberado",
+    "startedAt": "02/07/2026 08:15",
+    "finishedAt": "02/07/2026 11:30",
     "diagnosis": "Sistema operando dentro dos parametros.",
     "performedServices": "Inspecao e testes funcionais.",
     "recommendations": "Manter plano preventivo."
@@ -18,5 +30,14 @@
       "type": "PHOTO",
       "fileName": "painel.jpg"
     }
-  ]
+  ],
+  "signatures": {
+    "technician": "Tecnico MANITEC",
+    "customer": "Aceite formal do cliente"
+  },
+  "metadata": {
+    "templateKey": "service-report/manitec-default-v1",
+    "generatedAt": "2026-07-02T11:30:00.000Z",
+    "documentId": "service-report-1"
+  }
 }

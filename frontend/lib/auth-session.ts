@@ -217,8 +217,16 @@ export async function refreshAccessSession() {
 
 export async function ensureValidSession() {
   const accessToken = getStoredAccessToken();
-  if (accessToken && !isTokenExpiringSoon(accessToken)) {
-    return true;
+  if (accessToken) {
+    const payload = decodeJwtPayload<AuthTokenPayload>(accessToken);
+    if (payload?.mfaSetupRequired) {
+      clearAuthSession();
+      return false;
+    }
+
+    if (!isTokenExpiringSoon(accessToken)) {
+      return true;
+    }
   }
 
   if (!getStoredRefreshToken()) {

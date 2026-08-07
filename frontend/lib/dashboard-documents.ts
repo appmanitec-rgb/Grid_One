@@ -89,6 +89,9 @@ export type ProposalDocumentPayload = {
     validUntil?: string | null;
     revision: number;
     issuedAt: string;
+    customerDecisionAt?: string | null;
+    customerDecisionSource?: string | null;
+    customerDecisionNote?: string | null;
     scope?: string | null;
     freight?: string | null;
     paymentTerm?: string | null;

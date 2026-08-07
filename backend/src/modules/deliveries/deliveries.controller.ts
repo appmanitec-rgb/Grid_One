@@ -11,6 +11,7 @@ import type { Request } from 'express';
 import { RequireAccessPolicy } from '../auth/access-policy.decorator';
 import { AccessPolicyGuard } from '../auth/access-policy.guard';
 import { AuthGuard } from '../auth/auth.guard';
+import { ApproveSharedProposalDto } from './dto/approve-shared-proposal.dto';
 import { CreateDocumentDeliveryDto } from './dto/create-document-delivery.dto';
 import { CreateDocumentEmailDeliveryDto } from './dto/create-document-email-delivery.dto';
 import { DeliveriesService } from './deliveries.service';
@@ -77,7 +78,27 @@ export class DeliveriesController {
     return this.deliveriesService.getSharedDocument(token);
   }
 
+  @Post('share/:token/proposal-approval')
+  approveSharedProposal(
+    @Req() req: Request,
+    @Param('token') token: string,
+    @Body() dto: ApproveSharedProposalDto,
+  ) {
+    return this.deliveriesService.approveSharedProposal(
+      token,
+      dto,
+      this.extractMetadata(req),
+    );
+  }
+
   private readActorUserId(req: AuthenticatedRequest) {
     return req.user?.sub || '';
+  }
+
+  private extractMetadata(req: Request) {
+    return {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    };
   }
 }

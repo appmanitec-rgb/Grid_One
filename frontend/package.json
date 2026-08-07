@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3001",
+    "dev": "next dev -H 0.0.0.0 -p 3001",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -H 0.0.0.0 -p 3001",
     "lint": "eslint",
     "e2e": "node scripts/run-e2e.mjs",
     "e2e:staging": "node scripts/run-e2e.mjs e2e/staging-smoke.spec.ts --project=chromium",

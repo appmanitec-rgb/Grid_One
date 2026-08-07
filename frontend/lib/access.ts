@@ -201,6 +201,29 @@ const ACCESS_ROUTE_RULES: AccessRouteRule[] = [
   { prefix: "/dashboard/control", permission: "usersControl" },
 ];
 
+export function getDefaultDashboardPath(access: AccessPolicy): string {
+  const pages = access.pages;
+
+  if (pages.dashboard) return "/dashboard";
+  if (pages.people || access.users.manageCertifications) {
+    return "/dashboard/hr/documentation";
+  }
+  if (pages.technicianPortal) return "/dashboard/tecnico";
+  if (pages.orders) return "/dashboard/orders";
+  if (pages.serviceReports) return "/dashboard/relatorios-tecnicos";
+  if (pages.tickets) return "/dashboard/atendimento";
+  if (pages.proposals) return "/dashboard/proposals";
+  if (pages.contracts) return "/dashboard/contracts";
+  if (pages.clients) return "/dashboard/clients";
+  if (pages.equipments) return "/dashboard/equipments";
+  if (pages.catalog) return "/dashboard/catalog";
+  if (pages.inventory) return "/dashboard/inventory";
+  if (pages.finance) return "/dashboard/finance/cash-flow";
+  if (pages.usersControl || access.users.manage) return "/dashboard/control";
+
+  return "/dashboard/profile";
+}
+
 const EMPTY_ACCESS_POLICY: AccessPolicy = {
   pages: {
     dashboard: false,
@@ -780,6 +803,7 @@ export function canAccessDashboardPath(
   pages: AccessPages,
 ): boolean {
   if (!pathname.startsWith("/dashboard")) return true;
+  if (pathname === "/dashboard/profile") return true;
   if (pathname === "/dashboard") return pages.dashboard;
 
   for (const rule of ACCESS_ROUTE_RULES) {

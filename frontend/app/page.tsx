@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
+import { getAccessFromToken, getDefaultDashboardPath } from "@/lib/access";
 import { apiFetch, apiUrl } from "@/lib/api";
 import {
   clearAuthSession,
@@ -42,7 +43,11 @@ export default function LoginPage() {
       if (!cancelled && hasSession) {
         const token = getStoredAccessToken();
         const payload = token ? decodeJwtPayload<{ role?: string }>(token) : null;
-        router.replace(payload?.role === "CLIENT" ? "/portal" : "/dashboard");
+        router.replace(
+          payload?.role === "CLIENT"
+            ? "/portal"
+            : getDefaultDashboardPath(getAccessFromToken()),
+        );
       }
     }
 
@@ -92,7 +97,11 @@ export default function LoginPage() {
       }
 
       persistAuthenticatedSession(data);
-      router.push(data?.user?.role === "CLIENT" ? "/portal" : "/dashboard");
+      router.push(
+        data?.user?.role === "CLIENT"
+          ? "/portal"
+          : getDefaultDashboardPath(getAccessFromToken()),
+      );
     } catch {
       setError("Erro de conexao com o servidor. Verifique se o backend esta ativo.");
     } finally {
@@ -124,7 +133,11 @@ export default function LoginPage() {
       }
 
       persistAuthenticatedSession(data);
-      router.push(data?.user?.role === "CLIENT" ? "/portal" : "/dashboard");
+      router.push(
+        data?.user?.role === "CLIENT"
+          ? "/portal"
+          : getDefaultDashboardPath(getAccessFromToken()),
+      );
     } catch {
       setError("Falha ao validar MFA.");
     } finally {
@@ -179,7 +192,11 @@ export default function LoginPage() {
         setRecoveryCodes(data.recoveryCodes);
       }
       persistAuthenticatedSession(data);
-      router.push(data?.user?.role === "CLIENT" ? "/portal" : "/dashboard");
+      router.push(
+        data?.user?.role === "CLIENT"
+          ? "/portal"
+          : getDefaultDashboardPath(getAccessFromToken()),
+      );
     } catch {
       setError("Falha ao concluir setup MFA.");
     } finally {

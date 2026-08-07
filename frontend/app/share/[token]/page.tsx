@@ -1,10 +1,12 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import {
+  approveSharedProposal,
   fetchSharedDocument,
   type DeliveriesApiError,
+  type SharedProposalApprovalResponse,
   type SharedDocumentEnvelope,
 } from "@/lib/document-deliveries";
 import { EmptyState, StatusBanner } from "../../dashboard/components/DashboardPageKit";
@@ -21,6 +23,14 @@ export default function SharedDocumentPage() {
   const [data, setData] = useState<SharedDocumentEnvelope | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [signerName, setSignerName] = useState("");
+  const [signerCpf, setSignerCpf] = useState("");
+  const [signatureData, setSignatureData] = useState("");
+  const [approvalNote, setApprovalNote] = useState("");
+  const [approval, setApproval] =
+    useState<SharedProposalApprovalResponse | null>(null);
+  const [approvalError, setApprovalError] = useState("");
+  const [approving, setApproving] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -34,6 +44,15 @@ export default function SharedDocumentPage() {
         const payload = await fetchSharedDocument(token);
         if (active) {
           setData(payload);
+          if (payload.kind === "proposal") {
+            const defaultSigner =
+              payload.share.recipientName ||
+              payload.client.contactName ||
+              payload.client.tradeName ||
+              payload.client.companyName ||
+              "";
+            setSignerName((current) => current || defaultSigner);
+          }
         }
       } catch (loadError: unknown) {
         const apiError = loadError as DeliveriesApiError;
@@ -59,6 +78,45 @@ export default function SharedDocumentPage() {
     };
   }, [token]);
 
+  async function handleApproveProposal(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!token || !data || data.kind !== "proposal") return;
+
+    setApproving(true);
+    setApprovalError("");
+    try {
+      const response = await approveSharedProposal(token, {
+        signerName,
+        signerCpf,
+        signatureData,
+        note: approvalNote,
+      });
+      setApproval(response);
+      setData((current) => {
+        if (!current || current.kind !== "proposal") return current;
+        return {
+          ...current,
+          document: {
+            ...current.document,
+            status: response.proposal.status,
+            statusLabel: response.proposal.statusLabel,
+            customerDecisionAt: response.proposal.customerDecisionAt,
+            customerDecisionSource: response.proposal.customerDecisionSource,
+            customerDecisionNote: "Aprovada via link seguro com aceite assinado.",
+          },
+        };
+      });
+    } catch (approveError: unknown) {
+      setApprovalError(
+        approveError instanceof Error
+          ? approveError.message
+          : "Nao foi possivel aprovar esta proposta.",
+      );
+    } finally {
+      setApproving(false);
+    }
+  }
+
   if (!data) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-8">
@@ -73,12 +131,43 @@ export default function SharedDocumentPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
-      {renderSharedDocument(data)}
+      {renderSharedDocument(data, {
+        signerName,
+        signerCpf,
+        signatureData,
+        approvalNote,
+        approval,
+        approvalError,
+        approving,
+        onSignerNameChange: setSignerName,
+        onSignerCpfChange: setSignerCpf,
+        onSignatureDataChange: setSignatureData,
+        onApprovalNoteChange: setApprovalNote,
+        onApprove: handleApproveProposal,
+      })}
     </div>
   );
 }
 
-function renderSharedDocument(data: SharedDocumentEnvelope) {
+type ProposalApprovalPanelState = {
+  signerName: string;
+  signerCpf: string;
+  signatureData: string;
+  approvalNote: string;
+  approval: SharedProposalApprovalResponse | null;
+  approvalError: string;
+  approving: boolean;
+  onSignerNameChange: (value: string) => void;
+  onSignerCpfChange: (value: string) => void;
+  onSignatureDataChange: (value: string) => void;
+  onApprovalNoteChange: (value: string) => void;
+  onApprove: (event: FormEvent<HTMLFormElement>) => void;
+};
+
+function renderSharedDocument(
+  data: SharedDocumentEnvelope,
+  approvalPanel?: ProposalApprovalPanelState,
+) {
   if (data.kind === "proposal") {
     return (
       <PrintDocumentShell
@@ -111,6 +200,9 @@ function renderSharedDocument(data: SharedDocumentEnvelope) {
             ))}
           </PrintTable>
         </PrintSection>
+        {approvalPanel ? (
+          <ProposalApprovalPanel data={data} state={approvalPanel} />
+        ) : null}
       </PrintDocumentShell>
     );
   }
@@ -195,6 +287,117 @@ function renderSharedDocument(data: SharedDocumentEnvelope) {
     </PrintDocumentShell>
   );
 }
+
+type SharedProposalEnvelope = Extract<SharedDocumentEnvelope, { kind: "proposal" }>;
+
+function ProposalApprovalPanel({
+  data,
+  state,
+}: {
+  data: SharedProposalEnvelope;
+  state: ProposalApprovalPanelState;
+}) {
+  const canApprove = data.document.status === "CLIENT_REVIEW";
+  const decidedAt =
+    state.approval?.decision.decidedAt || data.document.customerDecisionAt || null;
+
+  return (
+    <PrintSection title="Aceite da proposta">
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        {state.approval ? (
+          <StatusBanner tone="emerald">
+            {state.approval.message} Hash: {state.approval.decision.signatureHash.slice(0, 16)}
+          </StatusBanner>
+        ) : decidedAt ? (
+          <StatusBanner tone="emerald">
+            Proposta ja registrada como {data.document.statusLabel.toLowerCase()} em {formatDateTime(decidedAt)}.
+          </StatusBanner>
+        ) : canApprove ? (
+          <StatusBanner tone="blue">
+            Assine abaixo para aprovar esta proposta pelo link seguro. Tambem e possivel responder o e-mail recebido.
+          </StatusBanner>
+        ) : (
+          <StatusBanner tone="amber">
+            Esta proposta nao esta disponivel para aprovacao por este link.
+          </StatusBanner>
+        )}
+
+        {state.approvalError ? (
+          <div className="mt-3">
+            <StatusBanner tone="rose">{state.approvalError}</StatusBanner>
+          </div>
+        ) : null}
+
+        {canApprove && !state.approval ? (
+          <form onSubmit={state.onApprove} className="mt-4 grid gap-3 md:grid-cols-2">
+            <label className="block text-sm">
+              <span className="mb-1 block font-semibold text-slate-700">
+                Nome do aprovador
+              </span>
+              <input
+                value={state.signerName}
+                onChange={(event) => state.onSignerNameChange(event.target.value)}
+                className={INPUT_CLASS}
+                placeholder="Nome completo"
+                required
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1 block font-semibold text-slate-700">
+                CPF do aprovador
+              </span>
+              <input
+                value={state.signerCpf}
+                onChange={(event) => state.onSignerCpfChange(event.target.value)}
+                className={INPUT_CLASS}
+                inputMode="numeric"
+                placeholder="000.000.000-00"
+                required
+              />
+            </label>
+            <label className="block text-sm md:col-span-2">
+              <span className="mb-1 block font-semibold text-slate-700">
+                Assinatura eletronica simples
+              </span>
+              <input
+                value={state.signatureData}
+                onChange={(event) =>
+                  state.onSignatureDataChange(event.target.value)
+                }
+                className={INPUT_CLASS}
+                placeholder="Digite seu nome completo como aceite"
+                required
+              />
+            </label>
+            <label className="block text-sm md:col-span-2">
+              <span className="mb-1 block font-semibold text-slate-700">
+                Observacao
+              </span>
+              <textarea
+                value={state.approvalNote}
+                onChange={(event) => state.onApprovalNoteChange(event.target.value)}
+                className={`${INPUT_CLASS} min-h-24`}
+                placeholder="Opcional"
+              />
+            </label>
+            <div className="md:col-span-2">
+              <button
+                type="submit"
+                disabled={state.approving}
+                className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {state.approving ? "Registrando..." : "Aprovar proposta"}
+              </button>
+            </div>
+          </form>
+        ) : null}
+      </div>
+    </PrintSection>
+  );
+}
+
+const INPUT_CLASS =
+  "w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("pt-BR", {

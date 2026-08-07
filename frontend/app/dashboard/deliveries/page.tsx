@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { clearAuthSession } from "@/lib/auth-session";
@@ -168,13 +169,18 @@ export default function DeliveriesPage() {
           },
         ]}
         actions={
-          <button
-            type="button"
-            onClick={() => void loadHistory()}
-            className={SECONDARY_BUTTON}
-          >
-            Atualizar historico
-          </button>
+          <>
+            <Link href="/dashboard/documents" className={SECONDARY_BUTTON}>
+              Voltar para documentos
+            </Link>
+            <button
+              type="button"
+              onClick={() => void loadHistory()}
+              className={SECONDARY_BUTTON}
+            >
+              Atualizar historico
+            </button>
+          </>
         }
       />
 

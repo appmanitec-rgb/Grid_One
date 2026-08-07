@@ -5,16 +5,21 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  AuditDomain,
   DeliveryChannel,
   DeliveryDocumentType,
   DeliveryStatus,
   Prisma,
+  ProposalStatus,
+  SalesOpportunityStage,
   UserRole,
 } from '@prisma/client';
 import { createHash, createHmac, randomBytes } from 'crypto';
 import { DatabaseService } from '../../database/database.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { DocumentsService } from '../documents/documents.service';
 import { allAccessPolicy, effectiveAccessPolicy } from '../users/access-policy';
+import { ApproveSharedProposalDto } from './dto/approve-shared-proposal.dto';
 import { CreateDocumentDeliveryDto } from './dto/create-document-delivery.dto';
 import { CreateDocumentEmailDeliveryDto } from './dto/create-document-email-delivery.dto';
 
@@ -37,6 +42,16 @@ type DeliveryRecord = Prisma.DocumentDeliveryGetPayload<{
     };
   };
 }>;
+
+type ShareTokenWithDelivery = Prisma.DocumentShareTokenGetPayload<{
+  include: {
+    delivery: true;
+  };
+}>;
+
+type ActiveShareToken = ShareTokenWithDelivery & {
+  delivery: NonNullable<ShareTokenWithDelivery['delivery']>;
+};
 
 type DocumentDescriptor = {
   documentCode: string;
@@ -77,8 +92,15 @@ type DeliveryTemplateContext = {
   documentLabel: string;
   counterpartName: string;
   companyLabel: string;
+  companyContacts: string;
   shareUrl: string;
+  taggoUrl: string;
   recipientName: string;
+};
+
+type RequestMetadata = {
+  ip?: string;
+  userAgent?: string | string[];
 };
 
 type DispatchInput = {
@@ -121,17 +143,20 @@ const DELIVERY_CHANNELS: DeliveryChannel[] = [
   DeliveryChannel.WEBHOOK,
 ];
 
+const MANITEC_TAGGO_URL = 'https://taggo.one/marketingmanitec';
+const SHARE_LINK_SIGNATURE_SOURCE = 'SHARE_LINK_SIGNATURE';
+
 const DEFAULT_DELIVERY_TEMPLATES: DeliveryTemplateMap = {
   PROPOSAL: {
     EMAIL: {
       subject: '{documentLabel} - compartilhamento seguro',
       message:
-        'Ola, {recipientName}.\n\n{companyLabel} compartilhou a {documentLabel} com seguranca para {counterpartName}.\n\nAcesse pelo link:\n{shareUrl}',
+        'Ola, {recipientName}.\n\n{companyLabel} compartilhou a {documentLabel} com seguranca para {counterpartName}.\n\nAcesse pelo link para visualizar e aprovar com assinatura, nome e CPF:\n{shareUrl}\n\nSe preferir, responda este e-mail com sua aprovacao.\n\nContatos Manitec: {companyContacts}\nTaggo Manitec: {taggoUrl}',
     },
     WHATSAPP: {
       subject: null,
       message:
-        '{companyLabel} compartilhou a {documentLabel} com seguranca.\n\nConta: {counterpartName}\nLink:\n{shareUrl}',
+        '{companyLabel} compartilhou a {documentLabel} com seguranca.\n\nConta: {counterpartName}\nAprove pelo link com assinatura, nome e CPF:\n{shareUrl}\n\nContatos: {companyContacts}\nTaggo: {taggoUrl}',
     },
     WEBHOOK: {
       subject: null,
@@ -197,6 +222,7 @@ export class DeliveriesService {
   constructor(
     private readonly prisma: DatabaseService,
     private readonly documentsService: DocumentsService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   async createDelivery(dto: CreateDocumentDeliveryDto, actorUserId: string) {
@@ -228,7 +254,7 @@ export class DeliveriesService {
       documentCode: descriptor.documentCode,
       counterpartName: descriptor.counterpartName,
       shareUrl,
-      companyLabel: companyPreferences.companyLabel,
+      companyPreferences,
       recipientName,
     });
     const subject =
@@ -520,21 +546,7 @@ export class DeliveriesService {
   }
 
   async getSharedDocument(token: string) {
-    const tokenHash = this.hashToken(token);
-    const shareToken = await this.prisma.documentShareToken.findUnique({
-      where: { tokenHash },
-      include: {
-        delivery: true,
-      },
-    });
-
-    if (!shareToken || !shareToken.delivery) {
-      throw new NotFoundException('Link seguro nao encontrado.');
-    }
-
-    if (shareToken.expiresAt.getTime() < Date.now()) {
-      throw new ForbiddenException('Este link seguro expirou.');
-    }
+    const shareToken = await this.loadActiveShareToken(token);
 
     await this.prisma.$transaction([
       this.prisma.documentShareToken.update({
@@ -566,8 +578,14 @@ export class DeliveriesService {
       throw new NotFoundException('Snapshot do documento nao encontrado.');
     }
 
+    const enrichedPayload = await this.enrichSharedPayload(
+      payload,
+      shareToken.documentType,
+      shareToken.documentId,
+    );
+
     return {
-      ...payload,
+      ...enrichedPayload,
       share: {
         recipientName: shareToken.recipientName,
         recipientEmail: shareToken.recipientEmail,
@@ -575,6 +593,187 @@ export class DeliveriesService {
         openedCount: shareToken.openedCount + 1,
       },
     };
+  }
+
+  async approveSharedProposal(
+    token: string,
+    dto: ApproveSharedProposalDto,
+    metadata: RequestMetadata,
+  ) {
+    const shareToken = await this.loadActiveShareToken(token);
+    if (shareToken.documentType !== DeliveryDocumentType.PROPOSAL) {
+      throw new BadRequestException(
+        'Este link seguro nao pertence a uma proposta.',
+      );
+    }
+
+    const signerName = dto.signerName.trim();
+    const signerCpf = this.normalizeCpf(dto.signerCpf);
+    const signatureData = dto.signatureData.trim();
+    const note = dto.note?.trim() || '';
+
+    if (signerCpf.length !== 11) {
+      throw new BadRequestException('Informe um CPF com 11 digitos.');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const proposal = await tx.proposal.findFirst({
+        where: {
+          id: shareToken.documentId,
+          ...(shareToken.clientId ? { clientId: shareToken.clientId } : {}),
+        },
+        select: {
+          id: true,
+          code: true,
+          status: true,
+          totalValue: true,
+          validUntil: true,
+          salesOpportunityId: true,
+          clientId: true,
+          customerDecisionAt: true,
+        },
+      });
+
+      if (!proposal) {
+        throw new NotFoundException('Proposta nao encontrada.');
+      }
+
+      if (proposal.status !== ProposalStatus.CLIENT_REVIEW) {
+        throw new BadRequestException(
+          'A proposta nao esta disponivel para aprovacao do cliente.',
+        );
+      }
+
+      if (proposal.validUntil && proposal.validUntil.getTime() < Date.now()) {
+        throw new BadRequestException(
+          'Proposta vencida nao pode ser aprovada.',
+        );
+      }
+
+      const now = new Date();
+      const approvalHash = this.buildSharedApprovalHash({
+        proposalId: proposal.id,
+        proposalCode: proposal.code,
+        signerName,
+        signerCpf,
+        signatureData,
+        shareTokenId: shareToken.id,
+        decidedAt: now.toISOString(),
+      });
+      const decisionNote = this.composeSharedApprovalNote({
+        signerName,
+        signerCpf,
+        signatureData,
+        note,
+        approvalHash,
+        recipientEmail: shareToken.recipientEmail,
+      });
+
+      const updated = await tx.proposal.update({
+        where: { id: proposal.id },
+        data: {
+          status: ProposalStatus.WON,
+          requestedDiscountPercent: null,
+          requestedDiscountReason: null,
+          customerDecisionAt: now,
+          customerDecisionByUserId: null,
+          customerDecisionSource: SHARE_LINK_SIGNATURE_SOURCE,
+          customerDecisionNote: decisionNote,
+        },
+        select: {
+          id: true,
+          code: true,
+          status: true,
+          totalValue: true,
+          validUntil: true,
+          customerDecisionAt: true,
+          customerDecisionSource: true,
+          customerDecisionNote: true,
+        },
+      });
+
+      await tx.proposalMovement.create({
+        data: {
+          proposalId: proposal.id,
+          action: 'SHARE_LINK_APPROVE_SIGNATURE',
+          fromStatus: proposal.status,
+          toStatus: ProposalStatus.WON,
+          note: decisionNote,
+        },
+      });
+
+      if (proposal.salesOpportunityId) {
+        await tx.salesOpportunity.update({
+          where: { id: proposal.salesOpportunityId },
+          data: {
+            stage: SalesOpportunityStage.WON,
+            wonAt: now,
+          },
+        });
+      }
+
+      await tx.documentShareToken.update({
+        where: { id: shareToken.id },
+        data: { lastOpenedAt: now },
+      });
+
+      await tx.documentDelivery.update({
+        where: { id: shareToken.delivery.id },
+        data:
+          shareToken.delivery.status === DeliveryStatus.DELIVERED
+            ? {}
+            : {
+                status: DeliveryStatus.DELIVERED,
+                deliveredAt: now,
+              },
+      });
+
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.PROPOSALS,
+          entityType: 'PROPOSAL',
+          entityId: proposal.id,
+          action: 'SHARE_LINK_APPROVE_SIGNATURE',
+          beforePayload: {
+            status: proposal.status,
+            customerDecisionAt:
+              proposal.customerDecisionAt?.toISOString() ?? null,
+          },
+          afterPayload: {
+            status: ProposalStatus.WON,
+            clientId: proposal.clientId,
+            customerDecisionAt: now.toISOString(),
+            customerDecisionSource: SHARE_LINK_SIGNATURE_SOURCE,
+            signerName,
+            signerCpf: this.maskCpf(signerCpf),
+            signatureHash: approvalHash,
+            shareTokenId: shareToken.id,
+            recipientEmail: shareToken.recipientEmail ?? null,
+            ip: metadata.ip ?? null,
+            userAgent: this.normalizeUserAgent(metadata.userAgent),
+          },
+          reason: decisionNote,
+        },
+        tx,
+      );
+
+      return {
+        message: 'Proposta aprovada com aceite assinado.',
+        proposal: {
+          ...updated,
+          statusLabel: this.labelProposalStatus(updated.status),
+          validUntil: updated.validUntil?.toISOString() ?? null,
+          customerDecisionAt: updated.customerDecisionAt?.toISOString() ?? null,
+        },
+        decision: {
+          source: SHARE_LINK_SIGNATURE_SOURCE,
+          signerName,
+          signerCpf: this.formatCpf(signerCpf),
+          signatureHash: approvalHash,
+          decidedAt: now.toISOString(),
+        },
+      };
+    });
   }
 
   private async loadDocumentSnapshot(
@@ -654,12 +853,79 @@ export class DeliveriesService {
     return `O documento ${documentLabel.toLowerCase()} foi compartilhado com seguranca para ${recipient}.\n\nAcesse pelo link:\n${input.shareUrl}`;
   }
 
+  private async loadActiveShareToken(token: string): Promise<ActiveShareToken> {
+    const tokenHash = this.hashToken(token);
+    const shareToken = await this.prisma.documentShareToken.findUnique({
+      where: { tokenHash },
+      include: {
+        delivery: true,
+      },
+    });
+
+    if (!shareToken || !shareToken.delivery) {
+      throw new NotFoundException('Link seguro nao encontrado.');
+    }
+
+    if (shareToken.expiresAt.getTime() < Date.now()) {
+      throw new ForbiddenException('Este link seguro expirou.');
+    }
+
+    return shareToken as ActiveShareToken;
+  }
+
+  private async enrichSharedPayload(
+    payload: Record<string, unknown>,
+    documentType: DeliveryDocumentType,
+    documentId: string,
+  ) {
+    if (
+      documentType !== DeliveryDocumentType.PROPOSAL ||
+      payload.kind !== 'proposal'
+    ) {
+      return payload;
+    }
+
+    const proposal = await this.prisma.proposal.findUnique({
+      where: { id: documentId },
+      select: {
+        status: true,
+        customerDecisionAt: true,
+        customerDecisionSource: true,
+        customerDecisionNote: true,
+      },
+    });
+
+    if (!proposal) {
+      return payload;
+    }
+
+    const documentPayload =
+      payload.document && typeof payload.document === 'object'
+        ? (payload.document as Record<string, unknown>)
+        : {};
+
+    return {
+      ...payload,
+      document: {
+        ...documentPayload,
+        status: proposal.status,
+        statusLabel: this.labelProposalStatus(proposal.status),
+        customerDecisionAt: proposal.customerDecisionAt?.toISOString() ?? null,
+        customerDecisionSource: proposal.customerDecisionSource,
+        customerDecisionNote:
+          proposal.customerDecisionSource === SHARE_LINK_SIGNATURE_SOURCE
+            ? 'Aprovada via link seguro com aceite assinado.'
+            : proposal.customerDecisionNote,
+      },
+    };
+  }
+
   private buildTemplateContext(input: {
     documentType: DeliveryDocumentType;
     documentCode: string;
     counterpartName: string;
     shareUrl: string;
-    companyLabel: string | null;
+    companyPreferences: CompanyDeliveryPreferences;
     recipientName: string;
   }): DeliveryTemplateContext {
     return {
@@ -667,8 +933,10 @@ export class DeliveriesService {
       documentCode: input.documentCode,
       documentLabel: `${this.labelDocumentType(input.documentType)} ${input.documentCode}`,
       counterpartName: input.counterpartName,
-      companyLabel: input.companyLabel || 'Manitec',
+      companyLabel: input.companyPreferences.companyLabel || 'Manitec',
+      companyContacts: this.buildCompanyContacts(input.companyPreferences),
       shareUrl: input.shareUrl,
+      taggoUrl: MANITEC_TAGGO_URL,
       recipientName: input.recipientName || 'cliente',
     };
   }
@@ -682,8 +950,23 @@ export class DeliveriesService {
       .replaceAll('{documentCode}', context.documentCode)
       .replaceAll('{counterpartName}', context.counterpartName)
       .replaceAll('{companyLabel}', context.companyLabel)
+      .replaceAll('{companyContacts}', context.companyContacts)
       .replaceAll('{shareUrl}', context.shareUrl)
+      .replaceAll('{taggoUrl}', context.taggoUrl)
       .replaceAll('{recipientName}', context.recipientName);
+  }
+
+  private buildCompanyContacts(preferences: CompanyDeliveryPreferences) {
+    const contacts = [
+      preferences.replyToEmail || preferences.fromEmail
+        ? `E-mail ${preferences.replyToEmail || preferences.fromEmail}`
+        : null,
+      preferences.defaultWhatsapp
+        ? `WhatsApp ${preferences.defaultWhatsapp}`
+        : null,
+    ].filter((item): item is string => Boolean(item));
+
+    return contacts.length > 0 ? contacts.join(' | ') : 'responda este contato';
   }
 
   private async dispatchDelivery(
@@ -941,6 +1224,25 @@ export class DeliveriesService {
     const greeting = input.recipientName
       ? `Ola, ${this.escapeHtml(input.recipientName)}`
       : 'Ola';
+    const actionLabel =
+      input.documentType === DeliveryDocumentType.PROPOSAL
+        ? 'Abrir proposta e aprovar'
+        : 'Abrir documento';
+    const approvalHint =
+      input.documentType === DeliveryDocumentType.PROPOSAL
+        ? `<div style="margin: 20px 0; padding: 16px; border-radius: 18px; background: #eef6ff; border: 1px solid #bfdbfe; color: #1e3a8a; font-size: 14px; line-height: 1.6;">
+            Voce pode aprovar esta proposta pelo link seguro com assinatura, nome e CPF. Se preferir, responda este e-mail informando sua aprovacao.
+          </div>`
+        : '';
+    const contactBlock = `
+      <div style="margin: 20px 0 0; padding: 16px; border-radius: 18px; background: #f8fafc; border: 1px solid #e2e8f0;">
+        <div style="font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #64748b; font-weight: 700;">Contatos Manitec</div>
+        <p style="margin: 8px 0 0; font-size: 14px; line-height: 1.7; color: #334155;">${this.escapeHtml(
+          this.buildCompanyContacts(input.companyPreferences),
+        )}</p>
+        <p style="margin: 8px 0 0; font-size: 14px; line-height: 1.7;"><a href="${MANITEC_TAGGO_URL}" style="color: #1d4ed8; font-weight: 700;">Taggo Manitec</a></p>
+      </div>
+    `;
     const footer = input.companyPreferences.emailFooter
       ? `<p style="margin: 18px 0 0; font-size: 13px; line-height: 1.7; color: #475569; white-space: pre-line;">${this.escapeHtml(
           input.companyPreferences.emailFooter,
@@ -962,11 +1264,13 @@ export class DeliveriesService {
           <div style="padding: 28px 32px; color: #1f2937;">
             <p style="margin: 0 0 12px; font-size: 15px; line-height: 1.7;">${greeting},</p>
             <p style="margin: 0 0 18px; font-size: 15px; line-height: 1.7; white-space: pre-line;">${this.escapeHtml(input.message)}</p>
-            <a href="${input.shareUrl}" style="display: inline-block; background: #0f172a; color: #ffffff; text-decoration: none; padding: 14px 18px; border-radius: 16px; font-weight: 700;">Abrir documento</a>
+            ${approvalHint}
+            <a href="${input.shareUrl}" style="display: inline-block; background: #0f172a; color: #ffffff; text-decoration: none; padding: 14px 18px; border-radius: 16px; font-weight: 700;">${actionLabel}</a>
             <p style="margin: 18px 0 0; font-size: 13px; line-height: 1.7; color: #6b7280;">
               Se o botao nao abrir, use este link:<br />
               <a href="${input.shareUrl}" style="color: #1d4ed8;">${input.shareUrl}</a>
             </p>
+            ${contactBlock}
             ${footer}
             ${companyLabel}
           </div>
@@ -1148,6 +1452,92 @@ export class DeliveriesService {
       },
       {} as DeliveryTemplateMap,
     );
+  }
+
+  private composeSharedApprovalNote(input: {
+    signerName: string;
+    signerCpf: string;
+    signatureData: string;
+    note: string;
+    approvalHash: string;
+    recipientEmail: string | null;
+  }) {
+    return [
+      'Aprovado via link seguro.',
+      `Assinante: ${input.signerName}`,
+      `CPF: ${this.formatCpf(input.signerCpf)}`,
+      `Assinatura: ${input.signatureData}`,
+      input.recipientEmail ? `E-mail do envio: ${input.recipientEmail}` : null,
+      input.note ? `Observacao: ${input.note}` : null,
+      `Hash de aprovacao: ${input.approvalHash}`,
+    ]
+      .filter((line): line is string => Boolean(line))
+      .join('\n');
+  }
+
+  private buildSharedApprovalHash(input: {
+    proposalId: string;
+    proposalCode: string;
+    signerName: string;
+    signerCpf: string;
+    signatureData: string;
+    shareTokenId: string;
+    decidedAt: string;
+  }) {
+    return createHash('sha256')
+      .update(
+        [
+          input.proposalId,
+          input.proposalCode,
+          input.signerName,
+          input.signerCpf,
+          input.signatureData,
+          input.shareTokenId,
+          input.decidedAt,
+        ].join('|'),
+      )
+      .digest('hex');
+  }
+
+  private normalizeCpf(value: string) {
+    return value.replace(/\D/g, '');
+  }
+
+  private formatCpf(value: string) {
+    const digits = this.normalizeCpf(value);
+    if (digits.length !== 11) return value;
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(
+      6,
+      9,
+    )}-${digits.slice(9)}`;
+  }
+
+  private maskCpf(value: string) {
+    const digits = this.normalizeCpf(value);
+    if (digits.length !== 11) return '***';
+    return `${digits.slice(0, 3)}.***.***-${digits.slice(9)}`;
+  }
+
+  private normalizeUserAgent(value: string | string[] | undefined) {
+    if (Array.isArray(value)) return value.join(' ');
+    return value ?? null;
+  }
+
+  private labelProposalStatus(status: ProposalStatus) {
+    const labels: Record<ProposalStatus, string> = {
+      DRAFT: 'Rascunho',
+      BOARD_REVIEW: 'Em analise',
+      REVISION_REQUIRED: 'Revisao solicitada',
+      CLIENT_REVIEW: 'Aguardando decisao',
+      DISCOUNT_REVIEW: 'Analise de desconto',
+      WON: 'Aprovada',
+      LOST: 'Recusada',
+      SENT: 'Enviada',
+      APPROVED: 'Aprovada',
+      REJECTED: 'Rejeitada',
+    };
+
+    return labels[status] || status;
   }
 
   private labelDocumentType(documentType: DeliveryDocumentType) {

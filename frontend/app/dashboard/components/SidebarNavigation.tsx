@@ -316,6 +316,12 @@ const MAIN_SECTIONS: NavSection[] = [
         enabled: true,
       },
       {
+        key: "hr_documentation",
+        label: "Documentação",
+        href: "/dashboard/hr/documentation",
+        enabled: true,
+      },
+      {
         key: "hr_epi_tools",
         label: "EPIs e Ferramentas",
         href: "/dashboard/hr/epis-tools",

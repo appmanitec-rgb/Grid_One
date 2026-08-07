@@ -82,9 +82,35 @@ export type DeliveryTemplateRenderContext = {
   documentCode?: string | null;
   counterpartName?: string | null;
   companyLabel?: string | null;
+  companyContacts?: string | null;
   shareUrl?: string | null;
+  taggoUrl?: string | null;
   recipientName?: string | null;
 };
+
+export type SharedProposalApprovalResponse = {
+  message: string;
+  proposal: {
+    id: string;
+    code: string;
+    status: string;
+    statusLabel: string;
+    totalValue: number;
+    validUntil?: string | null;
+    customerDecisionAt?: string | null;
+    customerDecisionSource?: string | null;
+    customerDecisionNote?: string | null;
+  };
+  decision: {
+    source: string;
+    signerName: string;
+    signerCpf: string;
+    signatureHash: string;
+    decidedAt: string;
+  };
+};
+
+export const MANITEC_TAGGO_URL = "https://taggo.one/marketingmanitec";
 
 export const DELIVERY_CHANNEL_OPTIONS: DeliveryChannel[] = [
   "EMAIL",
@@ -104,12 +130,12 @@ export const DEFAULT_DELIVERY_TEMPLATES: DeliveryTemplateMap = {
     EMAIL: {
       subject: "{documentLabel} - compartilhamento seguro",
       message:
-        "Ola, {recipientName}.\n\n{companyLabel} compartilhou a {documentLabel} com seguranca para {counterpartName}.\n\nAcesse pelo link:\n{shareUrl}",
+        "Ola, {recipientName}.\n\n{companyLabel} compartilhou a {documentLabel} com seguranca para {counterpartName}.\n\nAcesse pelo link para visualizar e aprovar com assinatura, nome e CPF:\n{shareUrl}\n\nSe preferir, responda este e-mail com sua aprovacao.\n\nContatos Manitec: {companyContacts}\nTaggo Manitec: {taggoUrl}",
     },
     WHATSAPP: {
       subject: null,
       message:
-        "{companyLabel} compartilhou a {documentLabel} com seguranca.\n\nConta: {counterpartName}\nLink:\n{shareUrl}",
+        "{companyLabel} compartilhou a {documentLabel} com seguranca.\n\nConta: {counterpartName}\nAprove pelo link com assinatura, nome e CPF:\n{shareUrl}\n\nContatos: {companyContacts}\nTaggo: {taggoUrl}",
     },
     WEBHOOK: {
       subject: null,
@@ -258,7 +284,9 @@ export function renderDeliveryTemplate(
     .replaceAll("{documentCode}", context.documentCode || context.documentLabel)
     .replaceAll("{counterpartName}", context.counterpartName || "cliente")
     .replaceAll("{companyLabel}", context.companyLabel || "Manitec")
+    .replaceAll("{companyContacts}", context.companyContacts || "responda este contato")
     .replaceAll("{shareUrl}", context.shareUrl || "[link seguro]")
+    .replaceAll("{taggoUrl}", context.taggoUrl || MANITEC_TAGGO_URL)
     .replaceAll("{recipientName}", context.recipientName || "cliente");
 }
 
@@ -363,6 +391,29 @@ export async function fetchSharedDocument(token: string) {
   return parseJsonOrThrow<SharedDocumentEnvelope>(
     response,
     "Nao foi possivel abrir este link seguro.",
+  );
+}
+
+export async function approveSharedProposal(
+  token: string,
+  input: {
+    signerName: string;
+    signerCpf: string;
+    signatureData: string;
+    note?: string;
+  },
+) {
+  const response = await fetch(apiUrl(`/deliveries/share/${token}/proposal-approval`), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+
+  return parseJsonOrThrow<SharedProposalApprovalResponse>(
+    response,
+    "Nao foi possivel aprovar a proposta.",
   );
 }
 

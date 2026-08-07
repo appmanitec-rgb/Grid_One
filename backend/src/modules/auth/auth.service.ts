@@ -11,6 +11,7 @@ const ACCESS_TOKEN_TTL = '12h';
 const MFA_SETUP_TOKEN_TTL = '30m';
 const MFA_CHALLENGE_TTL = '5m';
 const REFRESH_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const MFA_AUTH_ENABLED = process.env.MFA_AUTH_ENABLED === 'true';
 
 type DeviceContext = {
   deviceId?: string;
@@ -56,61 +57,63 @@ export class AuthService {
     }
 
     const accessPolicy = this.resolveAccessPolicy(user);
-    const userPayload = this.buildUserPayload(user, accessPolicy);
 
-    const isInternalUser = user.role !== UserRole.CLIENT;
-    if (isInternalUser && !user.mfaEnabled) {
-      const temporaryToken = await this.issueAccessToken({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        isSystemMaster: user.isSystemMaster,
-        accessPolicy,
-        linkedClientId: user.linkedClientId,
-        mfaSetupRequired: true,
-      });
+    if (MFA_AUTH_ENABLED) {
+      const userPayload = this.buildUserPayload(user, accessPolicy);
+      const isInternalUser = user.role !== UserRole.CLIENT;
+      if (isInternalUser && !user.mfaEnabled) {
+        const temporaryToken = await this.issueAccessToken({
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          isSystemMaster: user.isSystemMaster,
+          accessPolicy,
+          linkedClientId: user.linkedClientId,
+          mfaSetupRequired: true,
+        });
 
-      return {
-        status: 'mfa_setup_required',
-        mfa_setup_required: true,
-        access_token: temporaryToken,
-        user: userPayload,
-      };
-    }
-
-    if (user.mfaEnabled) {
-      if (mfaCode?.trim()) {
-        await this.mfaService.verifyUserMfa(user.id, mfaCode.trim());
-        return this.issueLoginSuccess(
-          {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            role: user.role,
-            isSystemMaster: user.isSystemMaster,
-            accessPolicy,
-            linkedClientId: user.linkedClientId,
-          },
-          device,
-        );
+        return {
+          status: 'mfa_setup_required',
+          mfa_setup_required: true,
+          access_token: temporaryToken,
+          user: userPayload,
+        };
       }
 
-      const challengeToken = await this.jwtService.signAsync(
-        {
-          sub: user.id,
-          purpose: 'mfa_challenge',
-          nonce: randomBytes(16).toString('hex'),
-        },
-        { expiresIn: MFA_CHALLENGE_TTL },
-      );
+      if (user.mfaEnabled) {
+        if (mfaCode?.trim()) {
+          await this.mfaService.verifyUserMfa(user.id, mfaCode.trim());
+          return this.issueLoginSuccess(
+            {
+              id: user.id,
+              email: user.email,
+              name: user.name,
+              role: user.role,
+              isSystemMaster: user.isSystemMaster,
+              accessPolicy,
+              linkedClientId: user.linkedClientId,
+            },
+            device,
+          );
+        }
 
-      return {
-        status: 'mfa_required',
-        mfa_required: true,
-        challengeToken,
-        user: userPayload,
-      };
+        const challengeToken = await this.jwtService.signAsync(
+          {
+            sub: user.id,
+            purpose: 'mfa_challenge',
+            nonce: randomBytes(16).toString('hex'),
+          },
+          { expiresIn: MFA_CHALLENGE_TTL },
+        );
+
+        return {
+          status: 'mfa_required',
+          mfa_required: true,
+          challengeToken,
+          user: userPayload,
+        };
+      }
     }
 
     return this.issueLoginSuccess(

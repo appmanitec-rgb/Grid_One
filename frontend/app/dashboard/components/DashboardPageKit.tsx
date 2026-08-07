@@ -187,9 +187,9 @@ export function SectionCard({
         className,
       )}
     >
-      <div className="absolute inset-x-0 top-0 h-16 bg-[radial-gradient(circle_at_top_left,rgba(15,23,42,0.04),transparent_48%)]" />
-      <div className="absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-slate-900/18 to-transparent" />
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-[radial-gradient(circle_at_top_left,rgba(15,23,42,0.04),transparent_48%)]" />
+      <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-slate-900/18 to-transparent" />
+      <div className="relative z-10 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           {eyebrow ? (
             <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-slate-500">

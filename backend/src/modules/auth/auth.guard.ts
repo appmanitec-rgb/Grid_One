@@ -12,6 +12,8 @@ type AuthPayload = {
   mfaSetupRequired?: boolean;
 };
 
+const MFA_AUTH_ENABLED = process.env.MFA_AUTH_ENABLED === 'true';
+
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(private readonly jwtService: JwtService) {}
@@ -36,7 +38,8 @@ export class AuthGuard implements CanActivate {
     }
 
     const path = (request.path || request.url || '').toLowerCase();
-    const requiresMfaSetup = payload.mfaSetupRequired === true;
+    const requiresMfaSetup =
+      MFA_AUTH_ENABLED && payload.mfaSetupRequired === true;
     const allowedWhenPendingSetup = path.startsWith('/auth/mfa');
 
     if (requiresMfaSetup && !allowedWhenPendingSetup) {
