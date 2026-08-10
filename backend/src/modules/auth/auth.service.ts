@@ -42,7 +42,15 @@ export class AuthService {
     mfaCode?: string,
     device?: DeviceContext,
   ) {
-    const user = await this.database.user.findUnique({ where: { email } });
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await this.database.user.findFirst({
+      where: {
+        email: {
+          equals: normalizedEmail,
+          mode: 'insensitive',
+        },
+      },
+    });
     if (!user) {
       throw new UnauthorizedException('E-mail ou palavra-passe incorretos.');
     }

@@ -70,6 +70,10 @@ const sensitiveUserFields = [
   'kpiTargetJson',
 ] as const;
 
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
 @Injectable()
 export class UsersService {
   constructor(
@@ -78,8 +82,14 @@ export class UsersService {
   ) {}
 
   async create(createUserDto: CreateUserDto, actorUserId?: string) {
-    const userExists = await this.prisma.user.findUnique({
-      where: { email: createUserDto.email },
+    const normalizedEmail = normalizeEmail(createUserDto.email);
+    const userExists = await this.prisma.user.findFirst({
+      where: {
+        email: {
+          equals: normalizedEmail,
+          mode: 'insensitive',
+        },
+      },
       select: { id: true },
     });
     if (userExists) {
@@ -110,6 +120,7 @@ export class UsersService {
         CreateUserDto,
         'password' | 'accessPolicy' | 'role' | 'managerId'
       >),
+      email: normalizedEmail,
       role,
       managerId: managerId ?? null,
       linkedClientId,
@@ -181,6 +192,7 @@ export class UsersService {
       where: { id },
       select: {
         id: true,
+        email: true,
         role: true,
         accessPolicy: true,
         isSystemMaster: true,
@@ -192,6 +204,24 @@ export class UsersService {
     }
     if (currentUser.isSystemMaster) {
       throw new ForbiddenException('Usuario master nao pode ser editado.');
+    }
+
+    if (updateUserDto.email) {
+      const normalizedEmail = normalizeEmail(updateUserDto.email);
+      const emailOwner = await this.prisma.user.findFirst({
+        where: {
+          email: {
+            equals: normalizedEmail,
+            mode: 'insensitive',
+          },
+          NOT: { id },
+        },
+        select: { id: true },
+      });
+      if (emailOwner) {
+        throw new BadRequestException('Este e-mail ja esta em uso.');
+      }
+      updateData.email = normalizedEmail;
     }
 
     await this.assertCanManageSensitiveUserFields(updateUserDto, actorUserId);
@@ -341,12 +371,20 @@ export class UsersService {
     delete (allowed as Partial<UpdateUserDto>).salesTargetMonthly;
     delete (allowed as Partial<UpdateUserDto>).kpiTargetJson;
 
-    if (allowed.email && allowed.email !== currentUser.email) {
-      const exists = await this.prisma.user.findUnique({
-        where: { email: allowed.email },
+    if (allowed.email) {
+      const normalizedEmail = normalizeEmail(allowed.email);
+      const exists = await this.prisma.user.findFirst({
+        where: {
+          email: {
+            equals: normalizedEmail,
+            mode: 'insensitive',
+          },
+          NOT: { id: userId },
+        },
         select: { id: true },
       });
       if (exists) throw new BadRequestException('Este e-mail ja esta em uso.');
+      allowed.email = normalizedEmail;
     }
 
     const dataToUpdate: Prisma.UserUpdateInput = {
