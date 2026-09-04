@@ -11,8 +11,20 @@ import { ItemType, ProductOrigin } from '@prisma/client';
 
 export class CreateCatalogDto {
   @IsString()
-  @IsNotEmpty()
-  sku!: string;
+  @IsOptional()
+  sku?: string;
+
+  @IsString()
+  @IsOptional()
+  skuAreaId?: string;
+
+  @IsString()
+  @IsOptional()
+  skuFamilyId?: string;
+
+  @IsString()
+  @IsOptional()
+  skuApplicationId?: string;
 
   @IsString()
   @IsNotEmpty()

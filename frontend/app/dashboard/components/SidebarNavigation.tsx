@@ -19,6 +19,7 @@ export type SidebarAccess = {
   inventory: boolean;
   people: boolean;
   usersControl: boolean;
+  studio: boolean;
   tickets: boolean;
   serviceReports: boolean;
   technicianPortal: boolean;
@@ -44,7 +45,7 @@ type NavItem = {
 type NavSection = {
   id: string;
   title: string;
-  icon: "overview" | "crm" | "ops" | "assets" | "stock" | "finance" | "people";
+  icon: "overview" | "crm" | "ops" | "assets" | "stock" | "finance" | "people" | "hr" | "studio";
   items: NavItem[];
 };
 
@@ -144,6 +145,13 @@ const MAIN_SECTIONS: NavSection[] = [
         key: "crm_contracts",
         label: "Contratos",
         href: "/dashboard/contracts",
+        enabled: true,
+        badgeKey: "contractsAttention",
+      },
+      {
+        key: "crm_contract_renewals",
+        label: "Renovações",
+        href: "/dashboard/contracts/renewals",
         enabled: true,
         badgeKey: "contractsAttention",
       },
@@ -305,16 +313,23 @@ const MAIN_SECTIONS: NavSection[] = [
     ],
   },
   {
-    id: "hr",
+    id: "people",
     title: "Agentes",
     icon: "people",
     items: [
       {
         key: "hr_collaborators",
-        label: "Agentes",
+        label: "Agentes e Acessos",
         href: "/dashboard/hr/collaborators",
         enabled: true,
       },
+    ],
+  },
+  {
+    id: "hr",
+    title: "RH Operacional",
+    icon: "hr",
+    items: [
       {
         key: "hr_documentation",
         label: "Documentação",
@@ -343,6 +358,31 @@ const MAIN_SECTIONS: NavSection[] = [
         key: "hr_fleet",
         label: "Frota",
         href: "/dashboard/hr/fleet",
+        enabled: true,
+      },
+    ],
+  },
+  {
+    id: "studio",
+    title: "Manitec Studio",
+    icon: "studio",
+    items: [
+      {
+        key: "studio_data",
+        label: "Dados",
+        href: "/dashboard/developer/data",
+        enabled: true,
+      },
+      {
+        key: "studio_history",
+        label: "Historico",
+        href: "/dashboard/developer/history",
+        enabled: true,
+      },
+      {
+        key: "studio_utilization",
+        label: "Utilizacao",
+        href: "/dashboard/developer/utilization",
         enabled: true,
       },
     ],
@@ -583,19 +623,19 @@ export default function SidebarNavigation({
   return (
     <aside
       className={`dashboard-sidebar z-20 hidden border-r border-white/10 bg-[linear-gradient(180deg,#0c2034_0%,#102844_48%,#132d47_100%)] shadow-[14px_0_34px_-24px_rgba(2,8,20,0.78)] transition-[width] duration-300 md:flex md:flex-col ${
-        collapsed ? "w-24" : "w-[18.5rem]"
+        collapsed ? "w-20" : "w-[18.5rem]"
       }`}
     >
       <div
-        className={`flex h-[78px] items-center border-b border-white/10 ${collapsed ? "justify-center px-3" : "gap-3 px-4"}`}
+        className={`flex items-center border-b border-white/10 ${collapsed ? "h-16 justify-center gap-1 px-2" : "h-[78px] gap-3 px-4"}`}
       >
-        <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-white/95 shadow-sm">
+        <div className={`${collapsed ? "h-9 w-9 rounded-xl" : "h-11 w-11 rounded-2xl"} flex items-center justify-center overflow-hidden border border-white/10 bg-white/95 shadow-sm`}>
           <Image
             src="/brand/manitec-logo-transparent.png"
             alt="Manitec"
             width={40}
             height={40}
-            className="h-8 w-8 object-contain"
+            className={`${collapsed ? "h-7 w-7" : "h-8 w-8"} object-contain`}
           />
         </div>
 
@@ -613,15 +653,15 @@ export default function SidebarNavigation({
         <button
           type="button"
           onClick={onToggleCollapsed}
-          className="dashboard-sidebar-toggle rounded-xl border border-white/10 bg-white/8 px-2.5 py-1.5 text-xs font-bold text-slate-100 hover:bg-white/14"
+          className={`${collapsed ? "flex h-8 w-8 items-center justify-center" : "flex h-8 w-8 items-center justify-center"} dashboard-sidebar-toggle rounded-xl border border-white/10 bg-white/8 text-slate-100 hover:bg-white/14`}
           title={collapsed ? "Expandir menu" : "Minimizar menu"}
         >
-          {collapsed ? ">" : "<"}
+          <ChevronIcon direction={collapsed ? "right" : "left"} />
         </button>
       </div>
 
       <div
-        className={`flex-1 overflow-y-auto py-4 ${collapsed ? "px-2.5" : "px-3"}`}
+        className={`flex-1 overflow-y-auto ${collapsed ? "px-2 py-3" : "px-3 py-4"}`}
       >
         {!collapsed && favoriteItems.length > 0 && (
           <section className="dashboard-sidebar-panel mb-4 rounded-[22px] border border-white/10 bg-white/[0.04] p-2.5">
@@ -662,20 +702,27 @@ export default function SidebarNavigation({
           const open = openSections[section.id] ?? hasActive;
 
           if (collapsed) {
+            const sectionHref = getSectionLandingHref(section);
+            const badgeValue = getSectionBadgeValue(section, counters);
             return (
               <div key={section.id} className="mb-2">
-                <button
-                  type="button"
-                  onClick={() => toggleSection(section.id)}
-                  className={`dashboard-sidebar-toggle flex w-full items-center justify-center rounded-xl border px-2 py-3 ${
+                <Link
+                  href={sectionHref}
+                  className={`dashboard-sidebar-toggle relative mx-auto flex h-11 w-12 items-center justify-center rounded-xl border ${
                     hasActive
                       ? "dashboard-accent-surface text-white"
                       : "border-white/10 bg-white/[0.05] text-slate-200 hover:bg-white/[0.1]"
                   }`}
-                  title={section.title}
+                  title={`${section.title} - abrir`}
+                  aria-label={`${section.title} - abrir`}
                 >
                   <SidebarIcon icon={section.icon} />
-                </button>
+                  {badgeValue > 0 ? (
+                    <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-white px-1 text-[9px] font-black text-slate-900 shadow-sm">
+                      {badgeValue > 9 ? "9+" : badgeValue}
+                    </span>
+                  ) : null}
+                </Link>
               </div>
             );
           }
@@ -776,7 +823,7 @@ export default function SidebarNavigation({
       </div>
 
       <div
-        className={`dashboard-sidebar-footer border-t border-white/10 bg-black/10 ${collapsed ? "px-2.5 py-3" : "p-3"}`}
+        className={`dashboard-sidebar-footer border-t border-white/10 bg-black/10 ${collapsed ? "px-2 py-3" : "p-3"}`}
       >
         {collapsed ? (
           <div className="space-y-2">
@@ -786,7 +833,7 @@ export default function SidebarNavigation({
                   key={item.key}
                   href={item.href || "/dashboard/profile"}
                   title={item.label}
-                  className={`flex h-10 items-center justify-center rounded-xl border ${isItemActive(pathname, item.href) ? "dashboard-accent-surface text-white" : "border-white/10 bg-white/[0.05] text-slate-100"}`}
+                  className={`mx-auto flex h-10 w-12 items-center justify-center rounded-xl border ${isItemActive(pathname, item.href) ? "dashboard-accent-surface text-white" : "border-white/10 bg-white/[0.05] text-slate-100"}`}
                 >
                   <SidebarIcon icon="overview" />
                 </Link>
@@ -822,7 +869,7 @@ export default function SidebarNavigation({
         <button
           type="button"
           onClick={onLogout}
-          className={`mt-3 w-full rounded-2xl border border-red-300/60 bg-red-500/10 px-3 py-2.5 text-sm font-semibold text-red-100 hover:bg-red-500/18 ${collapsed ? "text-xs" : ""}`}
+          className={`mt-3 w-full rounded-2xl border border-red-300/60 bg-red-500/10 px-3 py-2.5 text-sm font-semibold text-red-100 hover:bg-red-500/18 ${collapsed ? "rounded-xl px-2 py-2 text-xs" : ""}`}
         >
           {collapsed ? "Sair" : "Encerrar sessão"}
         </button>
@@ -835,6 +882,36 @@ function isItemActive(pathname: string, href?: string) {
   if (!href) return false;
   if (href === "/dashboard") return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function getSectionLandingHref(section: NavSection) {
+  return section.items.find((item) => item.href)?.href || "/dashboard";
+}
+
+function getSectionBadgeValue(section: NavSection, counters: SidebarCounters) {
+  return section.items.reduce((sum, item) => {
+    if (!item.badgeKey) return sum;
+    return sum + counters[item.badgeKey];
+  }, 0);
+}
+
+function ChevronIcon({ direction }: { direction: "left" | "right" }) {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      className={`h-4 w-4 ${direction === "left" ? "rotate-180" : ""}`}
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M7.5 4.5 12.5 10l-5 5.5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 function isItemAllowed(href: string | undefined, access: SidebarAccess) {
@@ -935,6 +1012,36 @@ function SidebarIcon({ icon }: { icon: NavSection["icon"] }) {
           <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
           <circle cx="8.5" cy="7" r="4" />
           <path d="M20 8v6M17 11h6" />
+        </svg>
+      );
+    case "hr":
+      return (
+        <svg
+          viewBox="0 0 24 24"
+          className={common}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <path d="M8 6h13" />
+          <path d="M8 12h13" />
+          <path d="M8 18h13" />
+          <path d="M3 6h.01" />
+          <path d="M3 12h.01" />
+          <path d="M3 18h.01" />
+        </svg>
+      );
+    case "studio":
+      return (
+        <svg
+          viewBox="0 0 24 24"
+          className={common}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <path d="M4 4h16v16H4z" />
+          <path d="M8 8h8M8 12h5M8 16h8" />
         </svg>
       );
     default:

@@ -10,16 +10,38 @@
     "contract.endDate"
   ],
   "fields": {
+    "company.name": "Nome institucional da Manitec",
+    "company.document": "CNPJ da Manitec",
+    "client.id": "Codigo interno do cliente",
+    "client.name": "Razao social ou nome fantasia do cliente",
+    "client.document": "CNPJ/documento do cliente",
+    "client.address": "Endereco completo do cliente",
+    "contact.name": "Contato principal do cliente",
+    "contact.role": "Cargo do contato",
+    "contact.phone": "Telefone do contato",
+    "contact.mobile": "Celular do contato",
+    "contact.email": "E-mail do contato",
+    "consultant.name": "Responsavel comercial",
+    "consultant.email": "E-mail do responsavel",
     "contract.number": "Codigo do contrato",
+    "contract.date": "Data de emissao",
     "contract.startDate": "Inicio da vigencia",
     "contract.endDate": "Fim da vigencia",
+    "contract.validityDescription": "Descricao da vigencia",
     "contract.recurringAmount": "Valor recorrente",
-    "items[].description": "Equipamento coberto"
+    "contract.dueDay": "Dia de vencimento",
+    "contract.paymentMethod": "Meio de pagamento",
+    "contract.preventiveRecurrence": "Recorrencia preventiva",
+    "contract.correctiveVisitAllowance": "Chamados corretivos inclusos",
+    "contract.responseTime": "Prazo de atendimento",
+    "contract.partsCoverage": "Cobertura de pecas",
+    "commercialTerms.adjustmentIndex": "Indice de reajuste",
+    "items[].description": "Equipamento coberto",
+    "items[].serialNumber": "Serie do equipamento",
+    "items[].site": "Local do equipamento",
+    "items[].coverage": "Valor/cobertura do equipamento"
   },
-  "sensitiveFieldsDenied": [
-    "internalCost",
-    "margin",
-    "hourCost",
-    "storageKey"
-  ]
+  "useDocxTemplate": true,
+  "legacyMarkersSupported": true,
+  "sensitiveFieldsDenied": ["internalCost", "margin", "hourCost", "storageKey"]
 }

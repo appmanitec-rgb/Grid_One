@@ -1,56 +1,119 @@
 {
-  "title": "Contrato {{contract.number}}",
-  "subtitle": "{{company.name}} | {{client.name}} | Vigencia {{contract.startDate}} ate {{contract.endDate}}",
+  "title": "Contrato de Prestação de Serviços {{contract.number}}",
+  "subtitle": "Manutenção de grupos geradores | Emissão: {{contract.date}}",
   "sections": [
     {
-      "heading": "Partes",
+      "heading": "Quadro-resumo",
       "paragraphs": [
-        "Contratada: {{company.name}} | Documento: {{company.document}}",
-        "Contratante: {{client.name}} | Documento: {{client.document}}",
-        "Contato do cliente: {{contact.name}} | {{contact.email}} | {{contact.phone}}"
+        "Contratada: {{company.name}} | CNPJ: {{company.document}}",
+        "Contratante: {{client.name}} | CNPJ/CPF: {{client.document}}",
+        "Vigência: {{contract.startDate}} a {{contract.endDate}} | Valor: {{contract.recurringAmount}} por {{contract.billingPeriod}}",
+        "Vencimento: dia {{contract.dueDay}} | Pagamento: {{contract.paymentMethod}} | Reajuste: {{commercialTerms.adjustmentIndex}}",
+        "Preventiva: {{contract.preventiveRecurrence}} | SLA inicial: {{contract.responseTime}} | Corretivas incluídas: {{contract.correctiveVisitAllowance}}"
       ]
     },
     {
-      "heading": "Resumo contratual",
+      "heading": "1. Identificação das partes",
       "paragraphs": [
-        "Contrato: {{contract.number}} | Status: {{contract.status}}",
-        "Titulo: {{contract.title}}",
-        "Vigencia: {{contract.startDate}} ate {{contract.endDate}}",
-        "Valor recorrente: {{contract.recurringAmount}} | Vencimento: dia {{contract.dueDay}}"
+        "CONTRATADA: {{company.name}}, inscrita no CNPJ sob nº {{company.document}}, com sede em {{company.address}}, neste ato representada por seu responsável autorizado.",
+        "CONTRATANTE: {{client.name}}, inscrita no CNPJ/CPF sob nº {{client.document}}, com endereço em {{client.address}}, neste ato representada por {{contact.name}}, {{contact.role}}, e-mail {{contact.email}}, telefone {{contact.phone}}.",
+        "Responsável comercial MANITEC: {{consultant.name}} | {{consultant.email}} | {{consultant.phone}}."
       ]
     },
     {
-      "heading": "Escopo tecnico e SLA",
+      "heading": "2. Objeto e equipamentos cobertos",
       "paragraphs": [
-        "Recorrencia preventiva: {{technicalScope.preventiveRecurrence}}",
-        "Tempo de resposta: {{technicalScope.responseTime}}",
-        "Cobertura de pecas: {{technicalScope.partsCoverage}}",
-        "Observacoes: {{technicalScope.notes}}"
-      ]
-    },
-    {
-      "heading": "Equipamentos cobertos",
+        "O presente contrato tem por objeto a prestação dos serviços de manutenção preventiva e atendimento corretivo nos equipamentos abaixo relacionados, conforme condições, limites e exclusões deste documento."
+      ],
       "table": {
         "rowsPath": "items",
-        "emptyText": "Nenhum equipamento vinculado ao contrato.",
+        "emptyText": "Nenhum equipamento foi vinculado ao contrato.",
         "columns": [
           { "header": "Equipamento", "path": "description" },
-          { "header": "Serie", "path": "serialNumber" },
+          { "header": "Série", "path": "serialNumber" },
           { "header": "Local", "path": "site" },
           { "header": "Cobertura", "path": "coverage", "align": "right" }
         ]
       }
     },
     {
-      "heading": "Assinaturas",
+      "heading": "3. Escopo técnico e atendimento",
       "paragraphs": [
-        "{{signatures.company}}",
-        "{{signatures.client}}"
+        "Periodicidade da manutenção preventiva: {{contract.preventiveRecurrence}}.",
+        "Janela preferencial para execução: {{contract.maintenanceWindow}}.",
+        "Prazo para resposta inicial aos chamados: {{contract.responseTime}}.",
+        "Canal para chamados: {{contract.emergencyChannel}}.",
+        "Franquia corretiva: {{contract.correctiveVisitAllowancePeriod}}.",
+        "Cobertura de peças e materiais: {{contract.partsCoverage}}.",
+        "Gestão de combustível: {{contract.fuelManagement}}."
       ]
+    },
+    {
+      "heading": "4. Condições comerciais",
+      "paragraphs": [
+        "A CONTRATANTE pagará à CONTRATADA o valor de {{contract.recurringAmount}} por {{contract.billingPeriod}}.",
+        "A cobrança será emitida {{contract.billingIssueRule}}, com vencimento no dia {{contract.dueDay}}. Forma de pagamento: {{contract.paymentMethod}}. {{contract.paymentDetails}}",
+        "Os valores serão reajustados pelo índice {{commercialTerms.adjustmentIndex}}, observada a data-base {{contract.adjustmentBaseMonth}}.",
+        "Chamados e serviços fora do escopo: {{contract.extraCallPolicy}}."
+      ]
+    },
+    {
+      "heading": "5. Vigência, renovação e encerramento",
+      "paragraphs": [
+        "Este contrato vigorará de {{contract.startDate}} a {{contract.endDate}}.",
+        "Renovação: {{contract.renewalNotes}}.",
+        "Comunicação prévia: {{contract.renewalNotice}}.",
+        "Rescisão: {{contract.cancellationRule}}. Permanecem devidos os serviços executados e demais obrigações vencidas até a data efetiva do encerramento."
+      ]
+    },
+    {
+      "heading": "6. Obrigações da CONTRATADA",
+      "paragraphs": ["{{contract.contractorObligations}}"]
+    },
+    {
+      "heading": "7. Obrigações da CONTRATANTE",
+      "paragraphs": ["{{contract.clientObligations}}"]
+    },
+    {
+      "heading": "8. Exclusões e serviços adicionais",
+      "paragraphs": [
+        "{{contract.exclusions}}",
+        "Qualquer serviço, peça ou deslocamento não incluído será previamente orçado e dependerá de aprovação da CONTRATANTE, salvo medida emergencial expressamente autorizada."
+      ]
+    },
+    {
+      "heading": "9. Responsabilidade, segurança e confidencialidade",
+      "paragraphs": [
+        "Cada parte responderá por seus atos, por seus empregados e por terceiros sob sua responsabilidade. A CONTRATANTE deverá garantir acesso seguro aos equipamentos e informar riscos existentes no local.",
+        "Informações técnicas, comerciais e operacionais trocadas em razão deste contrato serão tratadas como confidenciais, ressalvadas exigências legais e regulatórias.",
+        "As partes comprometem-se a tratar dados pessoais somente para execução do contrato e cumprimento de obrigações legais, observando a legislação aplicável."
+      ]
+    },
+    {
+      "heading": "10. Disposições finais",
+      "paragraphs": [
+        "As condições deste documento, seus anexos e eventuais propostas vinculadas formam o acordo entre as partes. Alterações somente terão validade quando registradas por escrito.",
+        "Condições adicionais: {{contract.additionalClauses}}",
+        "Fica eleito o foro de {{contract.legalVenue}}, com renúncia a qualquer outro, por mais privilegiado que seja, salvo disposição legal obrigatória diversa."
+      ]
+    },
+    {
+      "heading": "Aceite e assinaturas",
+      "paragraphs": [
+        "E, por estarem de acordo, as partes firmam o presente instrumento, inclusive por meio eletrônico, reconhecendo a validade das assinaturas e registros de aceite.",
+        "CONTRATADA: {{signatures.company}} | Responsável: {{signatures.companySigner}}",
+        "CONTRATANTE: {{signatures.client}} | Responsável: {{signatures.clientSigner}}",
+        "Local e data: {{contract.signaturePlace}}, {{contract.date}}."
+      ]
+    },
+    {
+      "heading": "Anexo I - Roteiro de manutenção preventiva",
+      "pageBreakBefore": true,
+      "paragraphs": ["{{contract.preventiveChecklist}}"]
     }
   ],
   "footer": [
-    "Template: {{metadata.templateKey}}",
-    "Gerado no servidor em {{metadata.generatedAt}}"
+    "Documento {{contract.number}} | Versão do modelo: {{metadata.templateKey}}",
+    "Gerado em {{metadata.generatedAt}} | Código de rastreio: {{metadata.sourceId}}"
   ]
 }

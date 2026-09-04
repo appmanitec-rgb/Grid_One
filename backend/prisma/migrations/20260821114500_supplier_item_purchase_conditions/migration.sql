@@ -1,0 +1,11 @@
+ALTER TABLE "supplier_catalog_items"
+  ADD COLUMN "purchasePaymentTerm" TEXT,
+  ADD COLUMN "purchaseTaxMode" TEXT DEFAULT 'AMOUNT',
+  ADD COLUMN "purchaseTaxPercent" DOUBLE PRECISION DEFAULT 0,
+  ADD COLUMN "purchaseTaxAmount" DOUBLE PRECISION DEFAULT 0,
+  ADD COLUMN "freightAmount" DOUBLE PRECISION DEFAULT 0,
+  ADD COLUMN "otherPurchaseCosts" DOUBLE PRECISION DEFAULT 0;
+
+ALTER TABLE "catalog_price_revisions"
+  ADD COLUMN "purchaseTaxMode" TEXT NOT NULL DEFAULT 'AMOUNT',
+  ADD COLUMN "purchaseTaxPercent" DOUBLE PRECISION NOT NULL DEFAULT 0;

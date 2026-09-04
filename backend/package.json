@@ -5,13 +5,17 @@
   "author": "",
   "private": true,
   "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22 <25",
+    "npm": ">=10"
+  },
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "npm run prisma:ensure:local && nest start",
     "start:dev": "npm run prisma:ensure:local && nest start --watch",
     "start:debug": "npm run prisma:ensure:local && nest start --debug --watch",
-    "start:prod": "node dist/main",
+    "start:prod": "node dist/src/main.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "lint:fix": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
@@ -29,6 +33,7 @@
     "db:backup": "node scripts/db-backup.js",
     "db:restore": "node scripts/db-restore.js",
     "db:reset": "node scripts/db-block-reset.js",
+    "templates:sync:proposal": "node scripts/sync-proposal-template.js",
     "prisma:ensure:local": "node scripts/prisma-ensure-local-client.js",
     "prisma:generate:safe": "node scripts/prisma-generate-safe.js",
     "prisma:generate:local": "npm run prisma:generate:safe",

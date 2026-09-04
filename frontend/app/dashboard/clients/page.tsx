@@ -17,6 +17,8 @@ type ClientListItem = {
   preferences?: string | null;
   clientType?: "CONTRACT" | "NO_CONTRACT" | null;
   isDelinquent?: boolean | null;
+  proposalCreationBlocked?: boolean | null;
+  proposalBlockReason?: string | null;
   withholdsInss?: boolean | null;
   withholdsIss?: boolean | null;
   contacts?: Array<{
@@ -47,6 +49,8 @@ export default function ClientsPage() {
   const [inssFilter, setInssFilter] = useState<FilterOption>("ALL");
   const [retentionFilter, setRetentionFilter] = useState<FilterOption>("ALL");
   const [delinquentFilter, setDelinquentFilter] = useState<FilterOption>("ALL");
+  const [proposalBlockFilter, setProposalBlockFilter] =
+    useState<FilterOption>("ALL");
   const [contractFilter, setContractFilter] = useState<ContractFilter>("ALL");
 
   useEffect(() => {
@@ -79,8 +83,19 @@ export default function ClientsPage() {
           : !client.isDelinquent);
       const matchesContract =
         contractFilter === "ALL" || client.clientType === contractFilter;
+      const matchesProposalBlock =
+        proposalBlockFilter === "ALL" ||
+        (proposalBlockFilter === "YES"
+          ? Boolean(client.proposalCreationBlocked)
+          : !client.proposalCreationBlocked);
 
-      if (!matchesInss || !matchesRetention || !matchesDelinquent || !matchesContract) {
+      if (
+        !matchesInss ||
+        !matchesRetention ||
+        !matchesDelinquent ||
+        !matchesContract ||
+        !matchesProposalBlock
+      ) {
         return false;
       }
       if (!term) return true;
@@ -123,7 +138,15 @@ export default function ClientsPage() {
           .includes(term),
       );
     });
-  }, [clients, query, inssFilter, retentionFilter, delinquentFilter, contractFilter]);
+  }, [
+    clients,
+    query,
+    inssFilter,
+    retentionFilter,
+    delinquentFilter,
+    contractFilter,
+    proposalBlockFilter,
+  ]);
 
   return (
     <div className="p-8">
@@ -159,7 +182,7 @@ export default function ClientsPage() {
           className="w-full rounded-lg border border-zinc-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
         />
         {showFilters ? (
-          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-4">
+          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-5">
             <SelectFilter
               label="Retem INSS"
               value={inssFilter}
@@ -200,6 +223,16 @@ export default function ClientsPage() {
                 { value: "NO_CONTRACT", label: "Sem contrato" },
               ]}
             />
+            <SelectFilter
+              label="Bloqueio de propostas"
+              value={proposalBlockFilter}
+              onChange={(value) => setProposalBlockFilter(value as FilterOption)}
+              options={[
+                { value: "ALL", label: "Todos" },
+                { value: "YES", label: "Bloqueados" },
+                { value: "NO", label: "Liberados" },
+              ]}
+            />
           </div>
         ) : null}
         <p className="mt-2 text-xs text-zinc-500">
@@ -225,6 +258,14 @@ export default function ClientsPage() {
                   <td className="p-4">
                     <p className="font-bold text-zinc-800">{client.companyName}</p>
                     <p className="text-xs text-zinc-500">{client.tradeName || "---"}</p>
+                    {client.proposalCreationBlocked ? (
+                      <span
+                        className="mt-2 inline-flex rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700"
+                        title={client.proposalBlockReason || "Propostas bloqueadas"}
+                      >
+                        Propostas bloqueadas
+                      </span>
+                    ) : null}
                   </td>
                   <td className="p-4 font-medium text-zinc-600">{client.cnpj || "Nao informado"}</td>
                   <td className="p-4 text-sm text-zinc-600">

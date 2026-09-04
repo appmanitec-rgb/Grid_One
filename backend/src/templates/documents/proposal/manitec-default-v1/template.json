@@ -1,73 +1,66 @@
 {
   "title": "Proposta Comercial {{proposal.number}}",
-  "subtitle": "{{company.name}} | {{client.name}} | Emissao {{proposal.date}}",
+  "subtitle": "{{proposal.title}} | Emissão: {{proposal.date}} | Validade: {{proposal.validUntil}}",
   "sections": [
     {
-      "heading": "Dados institucionais",
+      "heading": "Resumo executivo",
       "paragraphs": [
-        "Empresa: {{company.name}} | Documento: {{company.document}}",
-        "Endereco: {{company.address}} | Contato: {{company.email}} {{company.phone}}"
+        "Cliente: {{client.name}} | CNPJ/CPF: {{client.document}}",
+        "Responsável: {{contact.name}} | {{contact.email}} | {{contact.phone}}",
+        "Valor total: {{proposal.total}} | Pagamento: {{proposal.paymentTerms}} | Prazo: {{proposal.deliveryTerms}}"
       ]
     },
     {
-      "heading": "Cliente",
+      "heading": "1. Apresentação",
       "paragraphs": [
-        "Cliente: {{client.name}} | Documento: {{client.document}}",
-        "Contato: {{contact.name}} | {{contact.email}} | {{contact.phone}}",
-        "Endereco: {{client.address}}"
+        "A {{company.name}} apresenta esta proposta para {{client.name}}, conforme escopo e condições comerciais descritos a seguir.",
+        "Responsável comercial: {{consultant.name}} | {{consultant.email}} | {{consultant.phone}}."
       ]
     },
     {
-      "heading": "Resumo da proposta",
+      "heading": "2. Equipamento e escopo",
       "paragraphs": [
-        "Numero: {{proposal.number}} | Status: {{proposal.status}}",
-        "Validade: {{proposal.validUntil}} | Total: {{proposal.total}}",
+        "Equipamento: {{equipment.name}} | Série: {{equipment.serialNumber}} | Local: {{equipment.site}}",
         "Escopo: {{proposal.scope}}"
       ]
     },
     {
-      "heading": "Equipamento",
-      "paragraphs": [
-        "Equipamento: {{equipment.name}} | Serie: {{equipment.serialNumber}}",
-        "Modelo/Fabricante: {{equipment.generator.model}} | Potencia: {{equipment.generator.power}}",
-        "Local: {{equipment.site}}"
-      ]
-    },
-    {
-      "heading": "Itens e servicos",
+      "heading": "3. Itens e serviços",
       "table": {
         "rowsPath": "items",
         "emptyText": "Nenhum item comercial informado.",
         "columns": [
-          { "header": "Descricao", "path": "description" },
+          { "header": "Descrição", "path": "description" },
           { "header": "SKU", "path": "sku" },
           { "header": "Qtd.", "path": "quantity", "align": "right" },
-          { "header": "Unitario", "path": "unitPrice", "align": "right" },
+          { "header": "Unitário", "path": "unitPrice", "align": "right" },
           { "header": "Total", "path": "total", "align": "right" }
         ]
       }
     },
     {
-      "heading": "Condicoes comerciais",
+      "heading": "4. Condições comerciais",
       "paragraphs": [
-        "Pagamento: {{commercialTerms.payment}}",
-        "Frete: {{commercialTerms.freight}} | Prazo: {{commercialTerms.delivery}}",
+        "Valor total da proposta: {{proposal.total}}.",
+        "Pagamento: {{proposal.paymentTerms}} | Forma: {{proposal.paymentMethod}}.",
+        "Frete: {{proposal.freight}} | Prazo: {{proposal.deliveryTerms}}.",
         "Garantia: {{technicalScope.warranty}}",
-        "Exclusoes: {{technicalScope.exclusions}}",
-        "Observacoes: {{proposal.notes}}"
+        "Impostos: {{proposal.taxes}}",
+        "Exclusões: {{technicalScope.exclusions}}",
+        "Observações: {{proposal.notes}}"
       ]
     },
     {
-      "heading": "Aceite",
+      "heading": "5. Aceite",
       "paragraphs": [
-        "Ao aprovar esta proposta, o cliente declara ciencia do escopo, valores, prazos e condicoes comerciais descritas neste documento.",
-        "{{signatures.client}}"
+        "A aprovação desta proposta confirma a ciência e o aceite do escopo, dos valores, dos prazos e das condições comerciais aqui apresentados.",
+        "Cliente: {{client.name}} | Responsável pelo aceite: {{approval.clientSignerName}}",
+        "Data: {{approval.date}} | Assinatura: ______________________________________________"
       ]
     }
   ],
   "footer": [
-    "Template: {{metadata.templateKey}}",
-    "Gerado no servidor em {{metadata.generatedAt}}",
-    "Documento institucional gerado fora do layout operacional do ERP."
+    "{{company.name}} | {{company.document}} | {{company.email}} | {{company.phone}}",
+    "Documento {{proposal.number}} | Modelo {{metadata.templateKey}} | Rastreio {{metadata.sourceId}}"
   ]
 }

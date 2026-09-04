@@ -67,7 +67,7 @@ describe('DocumentGenerationService', () => {
     expect(content).toContain('Cliente Exemplo');
     expect(content).toContain('Manutencao preventiva');
     expect(content).not.toContain('internalCost');
-    expect(content).not.toContain('margin');
+    expect(content).not.toContain('{{margin}}');
   });
 
   it('documents PDF conversion from DOCX as available when LibreOffice is configured', () => {

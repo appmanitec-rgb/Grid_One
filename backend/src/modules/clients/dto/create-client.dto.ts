@@ -101,6 +101,27 @@ export class CreateClientContactDto {
   email?: string;
 }
 
+export class CreateClientGeneratorDto {
+  @IsString()
+  @IsNotEmpty()
+  name!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  brand!: string;
+
+  @IsString()
+  @IsOptional()
+  model?: string;
+
+  @IsString()
+  @IsOptional()
+  serialNumber?: string;
+
+  @IsNumber()
+  power!: number;
+}
+
 export class CreateClientDto {
   @IsString()
   @IsNotEmpty()
@@ -182,6 +203,19 @@ export class CreateClientDto {
 
   @IsBoolean()
   @IsOptional()
+  proposalCreationBlocked?: boolean;
+
+  @IsString()
+  @IsOptional()
+  proposalBlockReason?: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  blockedPaymentTerms?: string[];
+
+  @IsBoolean()
+  @IsOptional()
   withholdsInss?: boolean;
 
   @IsBoolean()
@@ -212,4 +246,10 @@ export class CreateClientDto {
   @IsUUID('4', { each: true })
   @IsOptional()
   generatorIds?: string[];
+
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => CreateClientGeneratorDto)
+  newGenerators?: CreateClientGeneratorDto[];
 }

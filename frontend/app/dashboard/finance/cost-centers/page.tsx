@@ -642,22 +642,6 @@ export default function CostCentersPage() {
               : "slate",
           },
         ]}
-        actions={
-          <>
-            <Link
-              href="/dashboard/finance/cash-flow"
-              className={PRIMARY_BUTTON}
-            >
-              Ver fluxo de caixa
-            </Link>
-            <Link href="/dashboard/contracts" className={SECONDARY_BUTTON}>
-              Ver contratos
-            </Link>
-            <Link href="/dashboard/equipments" className={SECONDARY_BUTTON}>
-              Ver ativos
-            </Link>
-          </>
-        }
         aside={
           <div className="space-y-3">
             <FieldBox>

@@ -13,6 +13,7 @@ import {
   ClientType,
   CommissionStatus,
   ContractInvoiceStatus,
+  ContractRenewalStatus,
   ContractStatus,
   CostCenterEntryType,
   FinancialPeriodStatus,
@@ -25,6 +26,11 @@ import { DatabaseService } from 'src/database/database.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 import { UpdateContractDto } from './dto/update-contract.dto';
+import {
+  CreateContractRenewalDto,
+  UpdateContractRenewalDto,
+  UpdateContractRenewalStatusDto,
+} from './dto/contract-renewal.dto';
 
 @Injectable()
 export class ContractsService {
@@ -256,6 +262,335 @@ export class ContractsService {
         include: this.contractInclude(),
       });
     });
+  }
+
+  async findRenewalPortfolio(actorUserId?: string) {
+    const scope = await this.getActorScope(actorUserId);
+    const now = new Date();
+    const contracts = await this.prisma.serviceContract.findMany({
+      where: {
+        ...(scope?.role === UserRole.CLIENT
+          ? { clientId: this.requireLinkedClientId(scope) }
+          : {}),
+        status: { not: ContractStatus.CANCELED },
+      },
+      include: {
+        client: {
+          select: {
+            id: true,
+            companyName: true,
+            isDelinquent: true,
+          },
+        },
+        equipments: {
+          include: {
+            generator: {
+              select: { id: true, name: true, serialNumber: true },
+            },
+          },
+        },
+        renewals: {
+          include: {
+            createdByUser: { select: { id: true, name: true, email: true } },
+          },
+          orderBy: { sequence: 'desc' },
+        },
+      },
+      orderBy: { endDate: 'asc' },
+    });
+
+    const items = contracts.map((contract) => {
+      const daysRemaining = Math.ceil(
+        (contract.endDate.getTime() - now.getTime()) / 86_400_000,
+      );
+      const activeRenewal = contract.renewals.find((renewal) =>
+        this.isOpenRenewalStatus(renewal.status),
+      );
+      const attentionState = activeRenewal
+        ? 'IN_RENEWAL'
+        : daysRemaining < 0
+          ? 'EXPIRED'
+          : daysRemaining <= contract.alertDays
+            ? 'EXPIRING'
+            : 'CURRENT';
+
+      return {
+        ...contract,
+        activeRenewal: activeRenewal || null,
+        daysRemaining,
+        attentionState,
+      };
+    });
+
+    return {
+      generatedAt: now.toISOString(),
+      summary: {
+        active: items.filter((item) => item.status === ContractStatus.ACTIVE)
+          .length,
+        expiring: items.filter((item) => item.attentionState === 'EXPIRING')
+          .length,
+        expired: items.filter((item) => item.attentionState === 'EXPIRED')
+          .length,
+        inRenewal: items.filter((item) => item.attentionState === 'IN_RENEWAL')
+          .length,
+        withPartsIncluded: items.filter(
+          (item) => item.partsCoverage === 'INCLUDED',
+        ).length,
+      },
+      items,
+    };
+  }
+
+  async startRenewal(
+    contractId: string,
+    dto: CreateContractRenewalDto,
+    actorUserId?: string,
+  ) {
+    await this.assertInternalActor(actorUserId);
+    const contract = await this.findOne(contractId, actorUserId);
+    const existing = contract.renewals?.find((renewal) =>
+      this.isOpenRenewalStatus(renewal.status),
+    );
+    if (existing) return existing;
+
+    const proposedStartDate = dto.proposedStartDate
+      ? new Date(dto.proposedStartDate)
+      : this.addDays(contract.endDate, 1);
+    const currentDurationDays = Math.max(
+      1,
+      Math.round(
+        (contract.endDate.getTime() - contract.startDate.getTime()) /
+          86_400_000,
+      ),
+    );
+    const proposedEndDate = dto.proposedEndDate
+      ? new Date(dto.proposedEndDate)
+      : this.addDays(proposedStartDate, currentDurationDays);
+    this.validateDates(
+      proposedStartDate.toISOString(),
+      proposedEndDate.toISOString(),
+    );
+
+    const proposedRecurringAmount =
+      dto.proposedRecurringAmount ?? contract.recurringAmount;
+    const adjustmentPercent =
+      dto.adjustmentPercent ??
+      (contract.recurringAmount > 0
+        ? ((proposedRecurringAmount - contract.recurringAmount) /
+            contract.recurringAmount) *
+          100
+        : 0);
+
+    return this.prisma.$transaction(async (tx) => {
+      const latest = await tx.contractRenewal.findFirst({
+        where: { contractId },
+        orderBy: { sequence: 'desc' },
+        select: { sequence: true },
+      });
+      const renewal = await tx.contractRenewal.create({
+        data: {
+          contractId,
+          sequence: (latest?.sequence || 0) + 1,
+          currentStartDate: contract.startDate,
+          currentEndDate: contract.endDate,
+          currentRecurringAmount: contract.recurringAmount,
+          currentPartsCoverage: contract.partsCoverage,
+          proposedStartDate,
+          proposedEndDate,
+          proposedRecurringAmount,
+          proposedPartsCoverage:
+            dto.proposedPartsCoverage ?? contract.partsCoverage,
+          adjustmentPercent,
+          partsNotes: dto.partsNotes,
+          customerNotes: dto.customerNotes,
+          internalNotes: dto.internalNotes,
+          createdByUserId: actorUserId,
+        },
+        include: this.renewalInclude(),
+      });
+
+      await tx.serviceContract.update({
+        where: { id: contractId },
+        data: {
+          status:
+            contract.status === ContractStatus.SUSPENDED
+              ? ContractStatus.SUSPENDED
+              : ContractStatus.RENEWAL,
+        },
+      });
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.CONTRACTS,
+          entityType: 'CONTRACT_RENEWAL',
+          entityId: renewal.id,
+          action: 'START_RENEWAL',
+          actorUserId,
+          afterPayload: renewal as unknown as Prisma.InputJsonValue,
+        },
+        tx,
+      );
+      return renewal;
+    });
+  }
+
+  async updateRenewal(
+    contractId: string,
+    renewalId: string,
+    dto: UpdateContractRenewalDto,
+    actorUserId?: string,
+  ) {
+    await this.assertInternalActor(actorUserId);
+    const existing = await this.requireRenewal(contractId, renewalId);
+    if (!this.isOpenRenewalStatus(existing.status)) {
+      throw new BadRequestException(
+        'Renovacao finalizada nao pode mais ser alterada.',
+      );
+    }
+
+    const proposedStartDate = dto.proposedStartDate
+      ? new Date(dto.proposedStartDate)
+      : existing.proposedStartDate;
+    const proposedEndDate = dto.proposedEndDate
+      ? new Date(dto.proposedEndDate)
+      : existing.proposedEndDate;
+    this.validateDates(
+      proposedStartDate.toISOString(),
+      proposedEndDate.toISOString(),
+    );
+
+    const updated = await this.prisma.contractRenewal.update({
+      where: { id: renewalId },
+      data: {
+        proposedStartDate: dto.proposedStartDate
+          ? proposedStartDate
+          : undefined,
+        proposedEndDate: dto.proposedEndDate ? proposedEndDate : undefined,
+        proposedRecurringAmount: dto.proposedRecurringAmount,
+        proposedPartsCoverage: dto.proposedPartsCoverage,
+        adjustmentPercent: dto.adjustmentPercent,
+        partsNotes: dto.partsNotes,
+        customerNotes: dto.customerNotes,
+        internalNotes: dto.internalNotes,
+      },
+      include: this.renewalInclude(),
+    });
+
+    await this.auditLogsService.record({
+      domain: AuditDomain.CONTRACTS,
+      entityType: 'CONTRACT_RENEWAL',
+      entityId: renewalId,
+      action: 'UPDATE_RENEWAL',
+      actorUserId,
+      beforePayload: existing as unknown as Prisma.InputJsonValue,
+      afterPayload: dto as unknown as Prisma.InputJsonValue,
+    });
+    return updated;
+  }
+
+  async updateRenewalStatus(
+    contractId: string,
+    renewalId: string,
+    dto: UpdateContractRenewalStatusDto,
+    actorUserId?: string,
+  ) {
+    await this.assertInternalActor(actorUserId);
+    const existing = await this.requireRenewal(contractId, renewalId);
+    this.validateRenewalTransition(existing.status, dto.status);
+    if (
+      dto.status === ContractRenewalStatus.COMPLETED &&
+      existing.contract.client.isDelinquent
+    ) {
+      throw new BadRequestException(
+        'Regularize a inadimplencia do cliente antes de concluir a renovacao.',
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const completed = dto.status === ContractRenewalStatus.COMPLETED;
+      const closedStatuses: ContractRenewalStatus[] = [
+        ContractRenewalStatus.COMPLETED,
+        ContractRenewalStatus.REJECTED,
+        ContractRenewalStatus.CANCELED,
+      ];
+      const closed = closedStatuses.includes(dto.status);
+      const internalNotes = [existing.internalNotes, dto.note]
+        .filter(Boolean)
+        .join('\n')
+        .trim();
+
+      const renewal = await tx.contractRenewal.update({
+        where: { id: renewalId },
+        data: {
+          status: dto.status,
+          internalNotes: internalNotes || undefined,
+          completedAt: completed ? new Date() : undefined,
+        },
+        include: this.renewalInclude(),
+      });
+
+      if (completed) {
+        await tx.serviceContract.update({
+          where: { id: contractId },
+          data: {
+            status: ContractStatus.ACTIVE,
+            startDate: renewal.proposedStartDate,
+            endDate: renewal.proposedEndDate,
+            recurringAmount: renewal.proposedRecurringAmount,
+            partsCoverage: renewal.proposedPartsCoverage,
+            notes: [renewal.contract.notes, renewal.customerNotes]
+              .filter(Boolean)
+              .join('\n')
+              .trim(),
+          },
+        });
+        await this.syncContractAutomation(tx, contractId, actorUserId);
+      } else if (closed) {
+        await tx.serviceContract.update({
+          where: { id: contractId },
+          data: {
+            status:
+              renewal.contract.status === ContractStatus.SUSPENDED
+                ? ContractStatus.SUSPENDED
+                : ContractStatus.ACTIVE,
+          },
+        });
+      } else {
+        await tx.serviceContract.update({
+          where: { id: contractId },
+          data: {
+            status:
+              renewal.contract.status === ContractStatus.SUSPENDED
+                ? ContractStatus.SUSPENDED
+                : ContractStatus.RENEWAL,
+          },
+        });
+      }
+
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.CONTRACTS,
+          entityType: 'CONTRACT_RENEWAL',
+          entityId: renewalId,
+          action: completed ? 'COMPLETE_RENEWAL' : 'MOVE_RENEWAL',
+          actorUserId,
+          reason: dto.note,
+          beforePayload: { status: existing.status },
+          afterPayload: { status: dto.status },
+        },
+        tx,
+      );
+      return renewal;
+    });
+  }
+
+  async findRenewal(
+    contractId: string,
+    renewalId: string,
+    actorUserId?: string,
+  ) {
+    const renewal = await this.requireRenewal(contractId, renewalId);
+    await this.assertContractScope(renewal.contract.clientId, actorUserId);
+    return renewal;
   }
 
   async generateUpcomingPreventiveOrders(
@@ -679,7 +1014,101 @@ export class ContractsService {
           generator: { select: { id: true, name: true, serialNumber: true } },
         },
       },
+      renewals: {
+        orderBy: { sequence: 'desc' as const },
+        include: {
+          createdByUser: { select: { id: true, name: true, email: true } },
+        },
+      },
     };
+  }
+
+  private renewalInclude() {
+    return {
+      createdByUser: { select: { id: true, name: true, email: true } },
+      contract: {
+        include: {
+          client: {
+            select: {
+              id: true,
+              companyName: true,
+              isDelinquent: true,
+            },
+          },
+          equipments: {
+            include: {
+              generator: {
+                select: { id: true, name: true, serialNumber: true },
+              },
+            },
+          },
+        },
+      },
+    };
+  }
+
+  private async requireRenewal(contractId: string, renewalId: string) {
+    const renewal = await this.prisma.contractRenewal.findFirst({
+      where: { id: renewalId, contractId },
+      include: this.renewalInclude(),
+    });
+    if (!renewal) {
+      throw new NotFoundException('Processo de renovacao nao encontrado.');
+    }
+    return renewal;
+  }
+
+  private isOpenRenewalStatus(status: ContractRenewalStatus) {
+    const closedStatuses: ContractRenewalStatus[] = [
+      ContractRenewalStatus.COMPLETED,
+      ContractRenewalStatus.REJECTED,
+      ContractRenewalStatus.CANCELED,
+    ];
+    return !closedStatuses.includes(status);
+  }
+
+  private validateRenewalTransition(
+    current: ContractRenewalStatus,
+    next: ContractRenewalStatus,
+  ) {
+    if (current === next) return;
+    const transitions: Record<ContractRenewalStatus, ContractRenewalStatus[]> =
+      {
+        DRAFT: [
+          ContractRenewalStatus.IN_ANALYSIS,
+          ContractRenewalStatus.CANCELED,
+        ],
+        IN_ANALYSIS: [
+          ContractRenewalStatus.DRAFT,
+          ContractRenewalStatus.DOCUMENT_READY,
+          ContractRenewalStatus.REJECTED,
+          ContractRenewalStatus.CANCELED,
+        ],
+        DOCUMENT_READY: [
+          ContractRenewalStatus.IN_ANALYSIS,
+          ContractRenewalStatus.SENT,
+          ContractRenewalStatus.CANCELED,
+        ],
+        SENT: [
+          ContractRenewalStatus.DOCUMENT_READY,
+          ContractRenewalStatus.APPROVED,
+          ContractRenewalStatus.REJECTED,
+          ContractRenewalStatus.CANCELED,
+        ],
+        APPROVED: [
+          ContractRenewalStatus.SENT,
+          ContractRenewalStatus.COMPLETED,
+          ContractRenewalStatus.CANCELED,
+        ],
+        COMPLETED: [],
+        REJECTED: [],
+        CANCELED: [],
+      };
+    if (!transitions[current].includes(next)) {
+      throw new BadRequestException(
+        `Transicao de renovacao invalida: ${current} para ${next}.`,
+      );
+    }
   }
 
   private async validateEquipmentsOwnership(
@@ -865,6 +1294,12 @@ export class ContractsService {
     if (copy.getDate() < day) {
       copy.setDate(0);
     }
+    return copy;
+  }
+
+  private addDays(base: Date, days: number) {
+    const copy = new Date(base);
+    copy.setDate(copy.getDate() + days);
     return copy;
   }
 

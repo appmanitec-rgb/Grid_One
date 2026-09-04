@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import SessionHeartbeat from "../SessionHeartbeat";
 import {
   clearAuthSession,
   decodeJwtPayload,
@@ -80,6 +81,7 @@ export default function PortalLayout({
 
   return (
     <div className="min-h-screen bg-[#f3f7fb] text-slate-900">
+      <SessionHeartbeat source="CLIENT_PORTAL" />
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
           <div>

@@ -5,6 +5,7 @@ import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
+import { loadControlOptions, optionLabel, type ControlOption } from "@/lib/control-options";
 
 type ClientRow = { id: string; companyName: string; cnpj?: string | null };
 type SiteRow = { id: string; name: string; code?: string | null; clientId: string };
@@ -19,6 +20,12 @@ type GeneratorModelRow = {
   name: string;
   brand?: string | null;
   baseItems?: ModelBaseItem[];
+};
+type ManufacturerRow = {
+  id: string;
+  name: string;
+  type?: string | null;
+  isActive?: boolean | null;
 };
 
 type FormState = Record<string, string>;
@@ -140,6 +147,11 @@ export default function NewEquipmentPage() {
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [sites, setSites] = useState<SiteRow[]>([]);
   const [models, setModels] = useState<GeneratorModelRow[]>([]);
+  const [manufacturers, setManufacturers] = useState<ManufacturerRow[]>([]);
+  const [controlOptions, setControlOptions] = useState({
+    applications: [] as ControlOption[],
+    operationModes: [] as ControlOption[],
+  });
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [applyModelBaseItems, setApplyModelBaseItems] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -159,15 +171,25 @@ export default function NewEquipmentPage() {
     setLoading(true);
     setError("");
     try {
-      const [clientsRes, sitesRes, modelsRes] = await Promise.all([
+      const [clientsRes, sitesRes, modelsRes, manufacturersRes, options] = await Promise.all([
         apiFetch("/clients", { cache: "no-store" }),
         apiFetch("/sites", { cache: "no-store" }),
         apiFetch("/generators/models", { cache: "no-store" }),
+        apiFetch("/manufacturers", { cache: "no-store" }),
+        loadControlOptions(["EQUIPMENT_APPLICATION", "EQUIPMENT_OPERATION_MODE"]),
       ]);
 
       if (clientsRes.ok) setClients((await clientsRes.json()) as ClientRow[]);
       if (sitesRes.ok) setSites((await sitesRes.json()) as SiteRow[]);
       if (modelsRes.ok) setModels((await modelsRes.json()) as GeneratorModelRow[]);
+      if (manufacturersRes.ok) {
+        const payload = (await manufacturersRes.json()) as ManufacturerRow[];
+        setManufacturers(payload.filter((manufacturer) => manufacturer.isActive !== false));
+      }
+      setControlOptions({
+        applications: options.EQUIPMENT_APPLICATION || [],
+        operationModes: options.EQUIPMENT_OPERATION_MODE || [],
+      });
     } catch {
       setError("Nao foi possivel carregar clientes, locais ou modelos.");
     } finally {
@@ -190,6 +212,34 @@ export default function NewEquipmentPage() {
     }
     return Array.from(map.entries());
   }, [selectedModel]);
+  const generatorManufacturers = useMemo(
+    () =>
+      manufacturers.filter((manufacturer) =>
+        ["GENERATOR", "OTHER"].includes(String(manufacturer.type || "OTHER")),
+      ),
+    [manufacturers],
+  );
+  const engineManufacturers = useMemo(
+    () =>
+      manufacturers.filter((manufacturer) =>
+        ["ENGINE", "OTHER"].includes(String(manufacturer.type || "OTHER")),
+      ),
+    [manufacturers],
+  );
+  const alternatorManufacturers = useMemo(
+    () =>
+      manufacturers.filter((manufacturer) =>
+        ["ALTERNATOR", "OTHER"].includes(String(manufacturer.type || "OTHER")),
+      ),
+    [manufacturers],
+  );
+  const transferSwitchManufacturers = useMemo(
+    () =>
+      manufacturers.filter((manufacturer) =>
+        ["TRANSFER_SWITCH", "OTHER"].includes(String(manufacturer.type || "OTHER")),
+      ),
+    [manufacturers],
+  );
 
   useEffect(() => {
     if (selectedModel?.brand && !form.brand) {
@@ -240,7 +290,7 @@ export default function NewEquipmentPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 pb-24 sm:p-6 lg:p-8">
       <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
               Cadastro mestre tecnico
@@ -253,9 +303,6 @@ export default function NewEquipmentPage() {
               e bateria sem depender de planilhas paralelas.
             </p>
           </div>
-          <Link href="/dashboard/equipments" className={SECONDARY_BUTTON}>
-            Voltar
-          </Link>
         </div>
       </header>
 
@@ -302,7 +349,15 @@ export default function NewEquipmentPage() {
             </select>
           </Field>
           <TextField label="Nome/apelido" field="name" form={form} setForm={setForm} required />
-          <TextField label="Fabricante" field="brand" form={form} setForm={setForm} required />
+          <ManufacturerField
+            label="Fabricante"
+            field="brand"
+            form={form}
+            setForm={setForm}
+            manufacturers={generatorManufacturers}
+            listId="generator-manufacturer-options"
+            required
+          />
           <Field label="Modelo">
             <select
               value={form.modelId}
@@ -327,7 +382,15 @@ export default function NewEquipmentPage() {
           <SelectField label="Status operacional" field="operationalStatus" form={form} setForm={setForm} options={OPERATIONAL_STATUS_OPTIONS} />
           <SelectField label="Ciclo de vida" field="lifecycleStatus" form={form} setForm={setForm} options={LIFECYCLE_STATUS_OPTIONS} />
           <SelectField label="Criticidade" field="criticality" form={form} setForm={setForm} options={CRITICALITY_OPTIONS} />
-          <TextField label="Aplicacao" field="application" form={form} setForm={setForm} />
+          <ControlOptionField
+            label="Aplicacao"
+            field="application"
+            form={form}
+            setForm={setForm}
+            options={controlOptions.applications}
+            listId="equipment-application-options"
+            valueMode="name"
+          />
         </EditSection>
 
         {selectedModel ? (
@@ -360,11 +423,26 @@ export default function NewEquipmentPage() {
           <NumberField label="Ano de fabricacao" field="manufactureYear" form={form} setForm={setForm} />
           <DateField label="Data de instalacao" field="installationDate" form={form} setForm={setForm} />
           <DateField label="Garantia ate" field="warrantyEndDate" form={form} setForm={setForm} />
-          <TextField label="Regime de operacao" field="operationMode" form={form} setForm={setForm} />
+          <ControlOptionField
+            label="Regime de operacao"
+            field="operationMode"
+            form={form}
+            setForm={setForm}
+            options={controlOptions.operationModes}
+            listId="equipment-operation-mode-options"
+            valueMode="name"
+          />
         </EditSection>
 
         <EditSection title="3. Motor">
-          <TextField label="Fabricante" field="engineBrand" form={form} setForm={setForm} />
+          <ManufacturerField
+            label="Fabricante"
+            field="engineBrand"
+            form={form}
+            setForm={setForm}
+            manufacturers={engineManufacturers}
+            listId="engine-manufacturer-options"
+          />
           <TextField label="Modelo" field="engineModelName" form={form} setForm={setForm} />
           <TextField label="Numero de serie" field="engineSerialNumber" form={form} setForm={setForm} />
           <TextField label="Potencia" field="enginePower" form={form} setForm={setForm} />
@@ -376,7 +454,14 @@ export default function NewEquipmentPage() {
         </EditSection>
 
         <EditSection title="4. Alternador">
-          <TextField label="Fabricante" field="alternatorBrand" form={form} setForm={setForm} />
+          <ManufacturerField
+            label="Fabricante"
+            field="alternatorBrand"
+            form={form}
+            setForm={setForm}
+            manufacturers={alternatorManufacturers}
+            listId="alternator-manufacturer-options"
+          />
           <TextField label="Modelo" field="alternatorModelName" form={form} setForm={setForm} />
           <TextField label="Numero de serie" field="alternatorSerialNumber" form={form} setForm={setForm} />
           <TextField label="Tensao" field="alternatorVoltage" form={form} setForm={setForm} />
@@ -387,7 +472,14 @@ export default function NewEquipmentPage() {
 
         <EditSection title="5. QTA, bateria e observacoes">
           <SelectField label="Possui QTA" field="hasTransferSwitch" form={form} setForm={setForm} options={BOOLEAN_OPTIONS} />
-          <TextField label="QTA fabricante" field="transferSwitchBrand" form={form} setForm={setForm} />
+          <ManufacturerField
+            label="QTA fabricante"
+            field="transferSwitchBrand"
+            form={form}
+            setForm={setForm}
+            manufacturers={transferSwitchManufacturers}
+            listId="transfer-switch-manufacturer-options"
+          />
           <TextField label="QTA modelo" field="transferSwitchModel" form={form} setForm={setForm} />
           <TextField label="QTA serie" field="transferSwitchSerialNumber" form={form} setForm={setForm} />
           <TextField label="Corrente nominal" field="transferSwitchRatedCurrent" form={form} setForm={setForm} />
@@ -470,6 +562,77 @@ function TextField({
         required={required}
         className={INPUT_CLASS}
       />
+    </Field>
+  );
+}
+
+function ManufacturerField({
+  label,
+  field,
+  form,
+  setForm,
+  manufacturers,
+  listId,
+  required,
+}: FieldProps & {
+  manufacturers: ManufacturerRow[];
+  listId: string;
+  required?: boolean;
+}) {
+  return (
+    <Field label={label}>
+      <input
+        data-testid={`equipment-field-${field}`}
+        value={form[field] || ""}
+        list={listId}
+        onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
+        required={required}
+        className={INPUT_CLASS}
+      />
+      <datalist id={listId}>
+        {manufacturers.map((manufacturer) => (
+          <option
+            key={manufacturer.id}
+            value={manufacturer.name}
+            label={manufacturer.type || undefined}
+          />
+        ))}
+      </datalist>
+    </Field>
+  );
+}
+
+function ControlOptionField({
+  label,
+  field,
+  form,
+  setForm,
+  options,
+  listId,
+  valueMode,
+}: FieldProps & {
+  options: ControlOption[];
+  listId: string;
+  valueMode: "code" | "name";
+}) {
+  return (
+    <Field label={label}>
+      <input
+        data-testid={`equipment-field-${field}`}
+        value={form[field] || ""}
+        list={listId}
+        onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
+        className={INPUT_CLASS}
+      />
+      <datalist id={listId}>
+        {options.map((option) => (
+          <option
+            key={option.id}
+            value={valueMode === "code" ? option.code : option.name}
+            label={optionLabel(option)}
+          />
+        ))}
+      </datalist>
     </Field>
   );
 }

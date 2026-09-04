@@ -19,6 +19,11 @@ import { AuthGuard } from '../auth/auth.guard';
 import { ContractsService } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 import { UpdateContractDto } from './dto/update-contract.dto';
+import {
+  CreateContractRenewalDto,
+  UpdateContractRenewalDto,
+  UpdateContractRenewalStatusDto,
+} from './dto/contract-renewal.dto';
 
 @Controller('contracts')
 @UseGuards(AuthGuard, AccessPolicyGuard)
@@ -70,10 +75,73 @@ export class ContractsController {
 
   @UseGuards(AuthGuard)
   @RequireAccessPolicy('contracts.view')
+  @Get('renewals/portfolio')
+  findRenewalPortfolio(@Req() req: Request) {
+    const userId = (req['user'] as any)?.sub as string | undefined;
+    return this.contractsService.findRenewalPortfolio(userId);
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('contracts.view')
   @Get(':id')
   findOne(@Req() req: Request, @Param('id') id: string) {
     const userId = (req['user'] as any)?.sub as string | undefined;
     return this.contractsService.findOne(id, userId);
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('contracts.update')
+  @Post(':id/renewals')
+  startRenewal(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: CreateContractRenewalDto,
+  ) {
+    const userId = (req['user'] as any)?.sub as string | undefined;
+    return this.contractsService.startRenewal(id, dto, userId);
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('contracts.view')
+  @Get(':id/renewals/:renewalId')
+  findRenewal(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Param('renewalId') renewalId: string,
+  ) {
+    const userId = (req['user'] as any)?.sub as string | undefined;
+    return this.contractsService.findRenewal(id, renewalId, userId);
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('contracts.update')
+  @Patch(':id/renewals/:renewalId')
+  updateRenewal(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Param('renewalId') renewalId: string,
+    @Body() dto: UpdateContractRenewalDto,
+  ) {
+    const userId = (req['user'] as any)?.sub as string | undefined;
+    return this.contractsService.updateRenewal(id, renewalId, dto, userId);
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('contracts.update')
+  @Post(':id/renewals/:renewalId/status')
+  updateRenewalStatus(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Param('renewalId') renewalId: string,
+    @Body() dto: UpdateContractRenewalStatusDto,
+  ) {
+    const userId = (req['user'] as any)?.sub as string | undefined;
+    return this.contractsService.updateRenewalStatus(
+      id,
+      renewalId,
+      dto,
+      userId,
+    );
   }
 
   @UseGuards(AuthGuard)

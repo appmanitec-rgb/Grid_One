@@ -4,6 +4,7 @@ import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
 import { getAccessFromToken } from "@/lib/access";
+import { loadControlOptions, optionLabel, type ControlOption } from "@/lib/control-options";
 
 type ServiceGroup = "TOF" | "TM" | "TB" | "TMA" | "OUTROS";
 type MaintenanceCategory =
@@ -20,6 +21,12 @@ type MaintenanceCategory =
 type IntervalUnit = "DAYS" | "MONTHS" | "YEARS";
 
 type CatalogItem = { id: string; name: string; type: string; basePrice: number };
+type ManufacturerRow = {
+  id: string;
+  name: string;
+  type?: string | null;
+  isActive?: boolean | null;
+};
 type ModelBaseItem = {
   catalogItemId: string;
   serviceGroup: ServiceGroup;
@@ -207,6 +214,11 @@ function describeMaintenance(item: ModelMaintenanceTemplate) {
 export default function EquipmentModelsPage() {
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [models, setModels] = useState<ModelRow[]>([]);
+  const [manufacturers, setManufacturers] = useState<ManufacturerRow[]>([]);
+  const [controlOptions, setControlOptions] = useState({
+    applications: [] as ControlOption[],
+    maintenanceCategories: [] as ControlOption[],
+  });
   const [form, setForm] = useState<ModelForm>(() => emptyForm());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [canManageModels, setCanManageModels] = useState(false);
@@ -223,18 +235,48 @@ export default function EquipmentModelsPage() {
   async function load() {
     setLoading(true);
     try {
-      const [catalogRes, modelsRes] = await Promise.all([
+      const [catalogRes, modelsRes, manufacturersRes, options] = await Promise.all([
         apiFetch("/catalogs"),
         apiFetch("/generators/models"),
+        apiFetch("/manufacturers"),
+        loadControlOptions(["EQUIPMENT_APPLICATION", "MAINTENANCE_TEMPLATE_CATEGORY"]),
       ]);
       if (catalogRes.ok) setCatalog((await catalogRes.json()) as CatalogItem[]);
       if (modelsRes.ok) setModels((await modelsRes.json()) as ModelRow[]);
+      if (manufacturersRes.ok) {
+        const payload = (await manufacturersRes.json()) as ManufacturerRow[];
+        setManufacturers(
+          payload.filter((manufacturer) =>
+            manufacturer.isActive !== false &&
+            ["GENERATOR", "OTHER"].includes(String(manufacturer.type || "OTHER")),
+          ),
+        );
+      }
+      setControlOptions({
+        applications: options.EQUIPMENT_APPLICATION || [],
+        maintenanceCategories: options.MAINTENANCE_TEMPLATE_CATEGORY || [],
+      });
     } catch {
       setError("Falha ao carregar dados.");
     } finally {
       setLoading(false);
     }
   }
+
+  const maintenanceCategoryOptions = useMemo(() => {
+    const allowed = new Set(CATEGORY_OPTIONS.map((option) => option.value));
+    const controlled = controlOptions.maintenanceCategories
+      .filter((option) => allowed.has(option.code as MaintenanceCategory))
+      .map((option) => ({
+        value: option.code as MaintenanceCategory,
+        label: option.name,
+      }));
+    const controlledCodes = new Set(controlled.map((option) => option.value));
+    return [
+      ...controlled,
+      ...CATEGORY_OPTIONS.filter((option) => !controlledCodes.has(option.value)),
+    ];
+  }, [controlOptions.maintenanceCategories]);
 
   function updateForm(patch: Partial<ModelForm>) {
     setForm((prev) => ({ ...prev, ...patch }));
@@ -411,7 +453,7 @@ export default function EquipmentModelsPage() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div>
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
             Cadastro mestre tecnico
@@ -424,12 +466,6 @@ export default function EquipmentModelsPage() {
             apoiar contratos, preventivas e OS futuras.
           </p>
         </div>
-        <Link
-          href="/dashboard/equipments/new"
-          className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-        >
-          Voltar para Novo Equipamento
-        </Link>
       </div>
 
       {error ? (
@@ -475,7 +511,12 @@ export default function EquipmentModelsPage() {
             </h3>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
               <Field label="Fabricante">
-                <input value={form.brand} onChange={(e) => updateForm({ brand: e.target.value })} className={INPUT_CLASS} placeholder="STEMAC" />
+                <input value={form.brand} list="model-manufacturer-options" onChange={(e) => updateForm({ brand: e.target.value })} className={INPUT_CLASS} placeholder="STEMAC" />
+                <datalist id="model-manufacturer-options">
+                  {manufacturers.map((manufacturer) => (
+                    <option key={manufacturer.id} value={manufacturer.name} label={manufacturer.type || undefined} />
+                  ))}
+                </datalist>
               </Field>
               <Field label="Modelo">
                 <input value={form.name} onChange={(e) => updateForm({ name: e.target.value })} className={INPUT_CLASS} placeholder="180 kVA" required />
@@ -493,7 +534,12 @@ export default function EquipmentModelsPage() {
                 <input value={form.frequencyHz} onChange={(e) => updateForm({ frequencyHz: e.target.value })} className={INPUT_CLASS} inputMode="numeric" placeholder="60" />
               </Field>
               <Field label="Tipo">
-                <input value={form.category} onChange={(e) => updateForm({ category: e.target.value })} className={INPUT_CLASS} placeholder="Diesel, standby..." />
+                <input value={form.category} list="model-application-options" onChange={(e) => updateForm({ category: e.target.value })} className={INPUT_CLASS} placeholder="Diesel, standby..." />
+                <datalist id="model-application-options">
+                  {controlOptions.applications.map((option) => (
+                    <option key={option.id} value={option.name} label={optionLabel(option)} />
+                  ))}
+                </datalist>
               </Field>
               <Field label="Status">
                 <select value={form.isActive ? "ACTIVE" : "INACTIVE"} onChange={(e) => updateForm({ isActive: e.target.value === "ACTIVE" })} className={INPUT_CLASS}>
@@ -551,7 +597,7 @@ export default function EquipmentModelsPage() {
                   <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-6">
                     <input aria-label={`Nome do item de manutencao ${idx + 1}`} value={item.name} onChange={(e) => updateMaintenanceItem(idx, { name: e.target.value })} className={`${INPUT_CLASS} xl:col-span-2`} placeholder="Troca de oleo" />
                     <select aria-label={`Tipo do item de manutencao ${idx + 1}`} value={item.category} onChange={(e) => updateMaintenanceItem(idx, { category: e.target.value as MaintenanceCategory })} className={INPUT_CLASS}>
-                      {CATEGORY_OPTIONS.map((option) => (
+                      {maintenanceCategoryOptions.map((option) => (
                         <option key={option.value} value={option.value}>{option.label}</option>
                       ))}
                     </select>

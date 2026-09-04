@@ -2,23 +2,72 @@
   "company": {
     "name": "MANITEC Grupos Geradores",
     "document": "00.000.000/0001-00",
-    "address": "Endereco institucional",
+    "street": "Rua Institucional",
+    "addressNumber": "100",
+    "district": "Centro",
+    "city": "Indaiatuba",
+    "state": "SP",
+    "zipCode": "13300-000",
+    "address": "Rua Institucional, 100 - Centro - Indaiatuba - SP",
     "phone": "(00) 0000-0000",
     "email": "contato@manitec.local"
   },
   "client": {
+    "id": "CLI-0001",
     "name": "Cliente Exemplo",
+    "tradeName": "Cliente Exemplo",
     "document": "11.111.111/0001-11",
+    "street": "Avenida Cliente",
+    "addressNumber": "200",
+    "district": "Industrial",
+    "city": "Sao Paulo",
+    "state": "SP",
+    "zipCode": "01000-000",
     "contactName": "Contato Cliente"
+  },
+  "contact": {
+    "name": "Contato Cliente",
+    "role": "Compras",
+    "phone": "(11) 4000-0000",
+    "mobile": "(11) 99999-0000",
+    "email": "cliente@example.test"
+  },
+  "consultant": {
+    "name": "Consultor MANITEC",
+    "phone": "(19) 3894-5048",
+    "email": "consultor@manitec.local"
   },
   "proposal": {
     "number": "PROP-0001",
+    "title": "Manutencao preventiva do GMG principal",
     "date": "22/07/2026",
     "validUntil": "22/08/2026",
-    "total": "R$ 10.000,00"
+    "scope": "Manutencao preventiva com fornecimento de materiais.",
+    "summary": "manutencao preventiva do grupo gerador principal, incluindo fornecimento de filtros e atendimento tecnico especializado",
+    "paymentTerms": "30 dias",
+    "paymentMethod": "Boleto",
+    "deliveryTerm": "10 dia(s)",
+    "deliveryTerms": "10 dia(s)",
+    "deliveryLeadTimeDays": "10",
+    "executionLeadTimeDays": "10",
+    "freight": "FOB",
+    "taxes": "Inclusos conforme regime fiscal aplicavel.",
+    "total": "R$ 10.000,00",
+    "laborTotal": "R$ 8.000,00",
+    "materialsTotal": "R$ 2.000,00",
+    "expensesTotal": "R$ 0,00",
+    "discountTotal": "R$ 0,00",
+    "notes": "Sem observacoes adicionais."
   },
   "equipment": {
     "name": "GMG Principal",
+    "type": "Grupo gerador",
+    "manufacturer": "Cummins",
+    "engineManufacturer": "Cummins",
+    "engineSerialNumber": "MTR-001",
+    "serialNumber": "SN-001",
+    "power": "500 kVA",
+    "hourMeter": "100 h",
     "generator": {
       "model": "Cummins",
       "power": "500 kVA"
@@ -26,10 +75,58 @@
   },
   "items": [
     {
+      "kind": "PART_MATERIAL",
+      "description": "Kit de filtros para GMG",
+      "sku": "KIT-FLT-001",
+      "quantity": "1",
+      "unit": "UN",
+      "unitPrice": "R$ 2.000,00",
+      "total": "R$ 2.000,00"
+    },
+    {
+      "kind": "CATALOG_SERVICE",
       "description": "Manutencao preventiva",
-      "quantity": "1 UN",
-      "unitPrice": "R$ 10.000,00",
-      "total": "R$ 10.000,00"
+      "sku": "SERV-MP-001",
+      "quantity": "1",
+      "unit": "SV",
+      "unitPrice": "R$ 8.000,00",
+      "total": "R$ 8.000,00"
     }
-  ]
+  ],
+  "parts": [
+    {
+      "description": "Kit de filtros para GMG",
+      "sku": "KIT-FLT-001",
+      "quantity": "1",
+      "unitPrice": "R$ 2.000,00",
+      "total": "R$ 2.000,00"
+    }
+  ],
+  "services": [
+    {
+      "description": "Manutencao preventiva",
+      "sku": "SERV-MP-001",
+      "quantity": "1",
+      "unitPrice": "R$ 8.000,00",
+      "total": "R$ 8.000,00"
+    }
+  ],
+  "technicalScope": {
+    "warranty": "Garantia conforme condicoes comerciais e fabricante.",
+    "exclusions": "Obras civis e itens nao descritos no escopo."
+  },
+  "terms": {
+    "standards": "Execucao conforme normas tecnicas aplicaveis, procedimentos internos MANITEC e requisitos de seguranca do cliente.",
+    "contractorObligations": "Executar o escopo aprovado com equipe capacitada, ferramental adequado e registro dos servicos realizados.",
+    "clientObligations": "Garantir acesso seguro ao equipamento, disponibilizar responsavel para acompanhamento e informar restricoes operacionais.",
+    "default": "Valores e condicoes validos durante o prazo desta proposta, sujeitos a disponibilidade de materiais e confirmacao de agenda."
+  },
+  "approval": {
+    "clientSignerName": "Contato Cliente",
+    "date": "22/07/2026"
+  },
+  "metadata": {
+    "templateKey": "proposal/manitec-default-v1",
+    "sourceId": "proposal-sample"
+  }
 }

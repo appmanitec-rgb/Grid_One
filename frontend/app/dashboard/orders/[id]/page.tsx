@@ -19,6 +19,7 @@ import {
 import {
   OperationalBreadcrumb,
   PermissionAwareLink,
+  RelatedEntityGrid,
 } from "../../components/OperationalLinks";
 
 type Tone = "blue" | "emerald" | "amber" | "rose" | "slate";
@@ -294,28 +295,13 @@ export default function OrderDetailPage() {
         ]}
         actions={
           <>
-            <PermissionAwareLink href="/dashboard/orders" permission="orders.view" className={SECONDARY_BUTTON}>
-              Voltar para ordens
-            </PermissionAwareLink>
-            <PermissionAwareLink
-              href={`/dashboard/documents/orders/${order.id}`}
-              permission="orders.view"
-              className={SECONDARY_BUTTON}
-            >
-              Documento
-            </PermissionAwareLink>
-            {order.contract ? (
-              <PermissionAwareLink href={`/dashboard/contracts/${order.contract.id}`} permission="contracts.view" className={SECONDARY_BUTTON}>
-                Abrir contrato
-              </PermissionAwareLink>
-            ) : null}
-            {order.serviceReport ? (
+            {order.status === "COMPLETED" ? (
               <PermissionAwareLink
-                href={`/dashboard/relatorios-tecnicos/${order.serviceReport.id}`}
-                permission="serviceReports.view"
-                className={SECONDARY_BUTTON}
+                href={`/dashboard/billing?orderId=${order.id}`}
+                permission="finance.view"
+                className={PRIMARY_BUTTON}
               >
-                Abrir laudo {order.serviceReport.code}
+                Faturar O.S.
               </PermissionAwareLink>
             ) : null}
             {order.status === "OPEN" ? (
@@ -425,6 +411,78 @@ export default function OrderDetailPage() {
           Atendimento em andamento sem relatorio de visita submetido. Vale fechar essa trilha para aprovacao.
         </StatusBanner>
       ) : null}
+      {order.status === "COMPLETED" ? (
+        <StatusBanner tone="blue">
+          O.S. concluida. Proximo passo do processo: conferir valores e gerar o recebivel em Faturamento.
+        </StatusBanner>
+      ) : null}
+
+      <SectionCard
+        eyebrow="Navegacao cruzada"
+        title="Relacionamentos da O.S."
+        description="Cliente, equipamento, contrato, chamado de origem, laudo e documento reunidos fora da faixa de acoes."
+      >
+        <RelatedEntityGrid
+          items={[
+            ...(order.generator?.client?.id
+              ? [{
+                  label: order.generator.client.companyName || "Cliente da O.S.",
+                  description: "Cliente atendido por esta ordem.",
+                  href: `/dashboard/clients/${order.generator.client.id}`,
+                  badge: "Cliente",
+                  tone: "blue" as const,
+                  permission: "clients.view",
+                }]
+              : []),
+            ...(order.generator?.id
+              ? [{
+                  label: order.generator.name || "Equipamento da O.S.",
+                  description: `Equipamento atendido no site ${siteName}.`,
+                  href: `/dashboard/equipments/${order.generator.id}`,
+                  badge: "Equipamento",
+                  tone: "slate" as const,
+                  permission: "equipments.view",
+                }]
+              : []),
+            ...(order.contract
+              ? [{
+                  label: order.contract.code,
+                  description: "Contrato que originou ou cobre esta O.S.",
+                  href: `/dashboard/contracts/${order.contract.id}`,
+                  badge: "Contrato",
+                  tone: "emerald" as const,
+                  permission: "contracts.view",
+                }]
+              : []),
+            ...((order.sourceTickets || []).map((ticket) => ({
+              label: ticket.code || "Chamado de origem",
+              description: "Solicitacao que originou esta ordem.",
+              href: `/dashboard/atendimento/${ticket.id}`,
+              badge: "Chamado",
+              tone: "amber" as const,
+              permission: "tickets.view",
+            }))),
+            ...(order.serviceReport
+              ? [{
+                  label: order.serviceReport.code || "Laudo tecnico",
+                  description: "Laudo tecnico vinculado a execucao.",
+                  href: `/dashboard/relatorios-tecnicos/${order.serviceReport.id}`,
+                  badge: "Laudo",
+                  tone: "amber" as const,
+                  permission: "serviceReports.view",
+                }]
+              : []),
+            {
+              label: `Documento da O.S.`,
+              description: "Versao documental pronta para impressao.",
+              href: `/dashboard/documents/orders/${order.id}`,
+              badge: "Documento",
+              tone: "slate" as const,
+              permission: "orders.view",
+            },
+          ]}
+        />
+      </SectionCard>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_360px]">
         <div className="space-y-6">

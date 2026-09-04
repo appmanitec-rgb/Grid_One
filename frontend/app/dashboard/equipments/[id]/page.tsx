@@ -304,7 +304,7 @@ export default function EquipmentDetailPage() {
       />
 
       <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div>
           <div className="min-w-0">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
               Prontuario tecnico operacional
@@ -319,22 +319,6 @@ export default function EquipmentDetailPage() {
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {equipment.client?.id ? (
-              <ActionLink href={`/dashboard/clients/${equipment.client.id}`} permission="clients.view">
-                Cliente
-              </ActionLink>
-            ) : null}
-            {equipment.currentSite?.id ? (
-              <ActionLink href="/dashboard/sites" permission="clients.view">Local/site</ActionLink>
-            ) : null}
-            {activeContract?.id ? (
-              <ActionLink href={`/dashboard/contracts/${activeContract.id}`} permission="contracts.view">
-                Contrato
-              </ActionLink>
-            ) : null}
-            <ActionLink href="/dashboard/equipments">Voltar</ActionLink>
-          </div>
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

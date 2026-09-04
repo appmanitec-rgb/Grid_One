@@ -91,6 +91,17 @@ export class ProposalsService {
         );
       }
 
+      await this.assertCommercialEligibility(
+        tx,
+        createProposalDto.clientId,
+        createProposalDto.paymentTerm,
+      );
+      await this.assertGeneratorBelongsToClient(
+        tx,
+        createProposalDto.generatorId,
+        createProposalDto.clientId,
+      );
+
       const sellerUserId =
         linkedOpportunity?.assignedSellerId ?? createProposalDto.userId;
       if (!sellerUserId) {
@@ -109,7 +120,13 @@ export class ProposalsService {
         0,
         Number(createProposalDto.discount || 0),
       );
-      const calculatedTotal = Math.max(0, subtotal - discountValue);
+      if (!Number.isFinite(discountValue) || discountValue > subtotal) {
+        throw new BadRequestException(
+          'O desconto geral nao pode superar o subtotal da proposta.',
+        );
+      }
+      const calculatedTotal = subtotal - discountValue;
+      this.validateCommercialTerms(createProposalDto, calculatedTotal);
 
       const nextCode = await this.generateNextNewCode(tx);
       const parsed = this.parseProposalCode(nextCode);
@@ -135,7 +152,9 @@ export class ProposalsService {
           deliveryLeadTimeDays: createProposalDto.deliveryLeadTimeDays,
           paymentDetails: createProposalDto.paymentDetails,
           hasDownPayment: Boolean(createProposalDto.hasDownPayment),
-          downPaymentAmount: createProposalDto.downPaymentAmount,
+          downPaymentAmount: createProposalDto.hasDownPayment
+            ? createProposalDto.downPaymentAmount
+            : null,
           installmentCount: createProposalDto.installmentCount,
           installmentIntervalDays:
             createProposalDto.installmentIntervalDays ?? 30,
@@ -232,6 +251,12 @@ export class ProposalsService {
         throw new NotFoundException('Proposta nao encontrada.');
       }
 
+      await this.assertCommercialEligibility(
+        tx,
+        source.clientId,
+        source.paymentTerm,
+      );
+
       const sequence =
         source.baseSequence ?? this.parseProposalCode(source.code)?.sequence;
       const nextCode = sequence
@@ -310,6 +335,13 @@ export class ProposalsService {
       );
     }
 
+    await this.assertCommercialEligibility(
+      this.prisma,
+      proposal.clientId,
+      proposal.paymentTerm,
+      proposal.id,
+    );
+
     return this.changeStatus(
       id,
       ProposalStatus.BOARD_REVIEW,
@@ -325,6 +357,13 @@ export class ProposalsService {
     if (proposal.status !== ProposalStatus.BOARD_REVIEW) {
       throw new Error('A proposta precisa estar em analise da diretoria.');
     }
+
+    await this.assertCommercialEligibility(
+      this.prisma,
+      proposal.clientId,
+      proposal.paymentTerm,
+      proposal.id,
+    );
 
     return this.changeStatus(
       id,
@@ -1018,6 +1057,23 @@ export class ProposalsService {
         where: { id },
       });
 
+      if (
+        updateProposalDto.clientId !== undefined ||
+        updateProposalDto.paymentTerm !== undefined
+      ) {
+        await this.assertCommercialEligibility(
+          tx,
+          updateProposalDto.clientId ?? current.clientId,
+          updateProposalDto.paymentTerm ?? current.paymentTerm,
+          id,
+        );
+      }
+      await this.assertGeneratorBelongsToClient(
+        tx,
+        updateProposalDto.generatorId ?? current.generatorId,
+        updateProposalDto.clientId ?? current.clientId,
+      );
+
       const updated = await tx.proposal.update({
         where: { id },
         data: header,
@@ -1150,6 +1206,89 @@ export class ProposalsService {
     }
     await this.assertProposalScope(proposal.clientId, actorUserId);
     return proposal;
+  }
+
+  private async assertCommercialEligibility(
+    tx: Pick<Prisma.TransactionClient, 'client' | 'controlOption' | 'proposal'>,
+    clientId: string,
+    paymentTerm?: string | null,
+    excludeProposalId?: string,
+  ) {
+    const client = await tx.client.findUnique({
+      where: { id: clientId },
+      select: {
+        id: true,
+        companyName: true,
+        proposalCreationBlocked: true,
+        proposalBlockReason: true,
+        blockedPaymentTerms: true,
+      },
+    });
+
+    if (!client) {
+      throw new NotFoundException('Cliente da proposta nao encontrado.');
+    }
+
+    if (client.proposalCreationBlocked) {
+      const reason = client.proposalBlockReason?.trim();
+      throw new ForbiddenException(
+        reason
+          ? `Propostas bloqueadas para ${client.companyName}. Motivo: ${reason}`
+          : `Propostas bloqueadas para ${client.companyName}. Consulte o responsavel comercial.`,
+      );
+    }
+
+    const normalizedPaymentTerm = this.normalizeCommercialTerm(paymentTerm);
+    if (!normalizedPaymentTerm) return;
+
+    const clientBlockedTerms = (client.blockedPaymentTerms ?? []).map((term) =>
+      this.normalizeCommercialTerm(term),
+    );
+    if (clientBlockedTerms.includes(normalizedPaymentTerm)) {
+      throw new ForbiddenException(
+        `A condicao de pagamento "${paymentTerm}" esta bloqueada para ${client.companyName}.`,
+      );
+    }
+
+    const availablePaymentTerms = await tx.controlOption.findMany({
+      where: {
+        type: 'PAYMENT_TERM',
+        isActive: true,
+      },
+      select: { code: true, name: true, isBlockedForNewClients: true },
+    });
+    const selectedPaymentTerm = availablePaymentTerms.find(
+      (term) =>
+        this.normalizeCommercialTerm(term.code) === normalizedPaymentTerm ||
+        this.normalizeCommercialTerm(term.name) === normalizedPaymentTerm,
+    );
+    if (!selectedPaymentTerm) {
+      throw new BadRequestException(
+        `A condicao de pagamento "${paymentTerm}" nao esta ativa nas tabelas de controle.`,
+      );
+    }
+    if (!selectedPaymentTerm.isBlockedForNewClients) return;
+
+    const previousProposalCount = await tx.proposal.count({
+      where: {
+        clientId,
+        ...(excludeProposalId ? { id: { not: excludeProposalId } } : {}),
+      },
+    });
+    if (previousProposalCount === 0) {
+      throw new ForbiddenException(
+        `A condicao de pagamento "${paymentTerm}" nao e permitida para clientes sem historico de propostas.`,
+      );
+    }
+  }
+
+  private normalizeCommercialTerm(value?: string | null) {
+    return (value ?? '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ');
   }
 
   private async syncOpportunityFromProposalStatus(
@@ -1362,6 +1501,57 @@ export class ProposalsService {
     }
   }
 
+  private async assertGeneratorBelongsToClient(
+    tx: Pick<Prisma.TransactionClient, 'generator'>,
+    generatorId: string | null | undefined,
+    clientId: string,
+  ) {
+    if (!generatorId) return;
+
+    const generator = await tx.generator.findUnique({
+      where: { id: generatorId },
+      select: { id: true, clientId: true },
+    });
+    if (!generator) {
+      throw new NotFoundException('Equipamento da proposta nao encontrado.');
+    }
+    if (generator.clientId !== clientId) {
+      throw new BadRequestException(
+        'O equipamento selecionado nao pertence ao cliente da proposta.',
+      );
+    }
+  }
+
+  private validateCommercialTerms(
+    dto: CreateProposalDto,
+    calculatedTotal: number,
+  ) {
+    if (dto.validUntil) {
+      const validUntil = new Date(dto.validUntil);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (validUntil < today) {
+        throw new BadRequestException(
+          'A validade da proposta nao pode estar no passado.',
+        );
+      }
+    }
+
+    if (dto.hasDownPayment) {
+      const downPayment = Number(dto.downPaymentAmount ?? 0);
+      if (!Number.isFinite(downPayment) || downPayment <= 0) {
+        throw new BadRequestException(
+          'Informe um valor de entrada maior que zero.',
+        );
+      }
+      if (downPayment > calculatedTotal) {
+        throw new BadRequestException(
+          'O valor de entrada nao pode superar o total da proposta.',
+        );
+      }
+    }
+  }
+
   private normalizeOpportunityType(input?: string) {
     return input &&
       Object.values(SalesOpportunityType).includes(
@@ -1457,6 +1647,7 @@ export class ProposalsService {
   }
 
   private async generateNextNewCode(tx: Prisma.TransactionClient) {
+    await this.lockProposalNumbering(tx);
     const proposals = await tx.proposal.findMany({ select: { code: true } });
 
     let maxSequence = 19999;
@@ -1474,6 +1665,7 @@ export class ProposalsService {
     tx: Prisma.TransactionClient,
     sequence: number,
   ) {
+    await this.lockProposalNumbering(tx);
     const prefix = `${String(sequence).padStart(5, '0')}/`;
     const proposals = await tx.proposal.findMany({
       where: {
@@ -1497,6 +1689,13 @@ export class ProposalsService {
     }
 
     return this.formatProposalCode(sequence, maxRevision + 1);
+  }
+
+  private async lockProposalNumbering(tx: Prisma.TransactionClient) {
+    await tx.$executeRawUnsafe(
+      'SELECT pg_advisory_xact_lock(hashtext($1))',
+      'manitec:proposal-numbering',
+    );
   }
 
   private async generateNextContractCode(tx: Prisma.TransactionClient) {

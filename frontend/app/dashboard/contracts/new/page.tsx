@@ -286,9 +286,6 @@ export default function NewContractPage() {
             >
               Atualizar referencias
             </button>
-            <Link href="/dashboard/contracts" className={SECONDARY_BUTTON}>
-              Voltar para contratos
-            </Link>
           </>
         }
         aside={

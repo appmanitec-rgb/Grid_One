@@ -1,16 +1,25 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { clearAuthSession } from "@/lib/auth-session";
+import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
 import {
   downloadDashboardDocumentBlob,
   fetchContractDocument,
   fetchContractDocumentDocx,
+  type ContractDocumentGenerationOptions,
   type ContractDocumentPayload,
   type DashboardDocumentsApiError,
 } from "@/lib/dashboard-documents";
-import { EmptyState, StatusBanner } from "../../../components/DashboardPageKit";
+import {
+  EmptyState,
+  FormField,
+  SectionCard,
+  StatusBanner,
+  TextAreaInput,
+  TextInput,
+} from "../../../components/DashboardPageKit";
 import {
   PrintDocumentShell,
   PrintSection,
@@ -23,10 +32,14 @@ import DocumentSharePanel from "../../DocumentSharePanel";
 export default function ContractDocumentPage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  const renewalId = searchParams.get("renewalId");
   const [data, setData] = useState<ContractDocumentPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [documentBusy, setDocumentBusy] = useState(false);
+  const [generationOptions, setGenerationOptions] =
+    useState<ContractDocumentGenerationOptions | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -35,7 +48,58 @@ export default function ContractDocumentPage() {
 
     try {
       const payload = await fetchContractDocument(id);
-      setData(payload);
+      if (!renewalId) {
+        setData(payload);
+        setGenerationOptions(payload.generationDefaults);
+        return;
+      }
+
+      const response = await apiFetch(
+        apiUrl(`/contracts/${id}/renewals/${renewalId}`),
+        { cache: "no-store" },
+      );
+      if (!response.ok) {
+        throw new Error(
+          await readApiErrorMessage(
+            response,
+            "Nao foi possivel carregar os dados da renovacao.",
+          ),
+        );
+      }
+      const renewal = (await response.json()) as {
+        sequence: number;
+        proposedStartDate: string;
+        proposedEndDate: string;
+        proposedRecurringAmount: number;
+        proposedPartsCoverage: "INCLUDED" | "BILLED_SEPARATELY";
+        partsNotes?: string | null;
+        customerNotes?: string | null;
+      };
+      setData({
+        ...payload,
+        document: {
+          ...payload.document,
+          title: `Termo de renovacao - ${payload.document.code}`,
+          startDate: renewal.proposedStartDate,
+          endDate: renewal.proposedEndDate,
+          recurringAmount: renewal.proposedRecurringAmount,
+          partsCoverage: renewal.proposedPartsCoverage,
+        },
+      });
+      setGenerationOptions({
+        ...payload.generationDefaults,
+        documentTitle: `Termo de renovacao contratual ${payload.document.code}`,
+        startDate: renewal.proposedStartDate,
+        endDate: renewal.proposedEndDate,
+        recurringAmount: renewal.proposedRecurringAmount,
+        partsCoverage: renewal.proposedPartsCoverage,
+        renewalNotes:
+          renewal.customerNotes ||
+          `Renovacao ${renewal.sequence} para o novo periodo de vigencia.`,
+        additionalClauses: [renewal.partsNotes, renewal.customerNotes]
+          .filter(Boolean)
+          .join("\n\n"),
+      });
     } catch (loadError: unknown) {
       const apiError = loadError as DashboardDocumentsApiError;
       if (apiError?.status === 401) {
@@ -52,20 +116,25 @@ export default function ContractDocumentPage() {
     } finally {
       setLoading(false);
     }
-  }, [id, router]);
+  }, [id, renewalId, router]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   async function handleDownloadDocument() {
-    if (!id || !data) return;
+    if (!id || !data || !generationOptions) return;
     setDocumentBusy(true);
     setError("");
 
     try {
-      const blob = await fetchContractDocumentDocx(id);
-      downloadDashboardDocumentBlob(blob, `contrato-${data.document.code}.docx`);
+      const blob = await fetchContractDocumentDocx(id, generationOptions);
+      downloadDashboardDocumentBlob(
+        blob,
+        renewalId
+          ? `renovacao-${data.document.code}.docx`
+          : `contrato-${data.document.code}.docx`,
+      );
     } catch (downloadError: unknown) {
       const apiError = downloadError as DashboardDocumentsApiError;
       if (apiError?.status === 401) {
@@ -84,6 +153,15 @@ export default function ContractDocumentPage() {
     }
   }
 
+  function updateGenerationOption<K extends keyof ContractDocumentGenerationOptions>(
+    key: K,
+    value: ContractDocumentGenerationOptions[K],
+  ) {
+    setGenerationOptions((current) =>
+      current ? { ...current, [key]: value } : current,
+    );
+  }
+
   if (!data) {
     return (
       <div className="space-y-4">
@@ -98,6 +176,179 @@ export default function ContractDocumentPage() {
 
   return (
     <div className="space-y-5">
+      {data.viewerRole !== "CLIENT" && generationOptions ? (
+        <SectionCard
+          eyebrow="Emissão contratual"
+          title="Configurar documento"
+          description="Revise somente as condições desta emissão. Os dados do cliente, equipamentos, valores, vigência e SLA vêm do contrato cadastrado."
+        >
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <FormField label="Forma de pagamento">
+              <TextInput
+                value={generationOptions.paymentMethod}
+                onChange={(event) =>
+                  updateGenerationOption("paymentMethod", event.target.value)
+                }
+              />
+            </FormField>
+            <FormField label="Período da cobrança">
+              <TextInput
+                value={generationOptions.billingPeriod}
+                onChange={(event) =>
+                  updateGenerationOption("billingPeriod", event.target.value)
+                }
+              />
+            </FormField>
+            <FormField label="Regra de emissão">
+              <TextInput
+                value={generationOptions.billingIssueRule}
+                onChange={(event) =>
+                  updateGenerationOption("billingIssueRule", event.target.value)
+                }
+              />
+            </FormField>
+            <FormField label="Janela de manutenção">
+              <TextInput
+                value={generationOptions.maintenanceWindow}
+                onChange={(event) =>
+                  updateGenerationOption("maintenanceWindow", event.target.value)
+                }
+              />
+            </FormField>
+            <FormField label="Canal de chamados" className="md:col-span-2">
+              <TextInput
+                value={generationOptions.emergencyChannel}
+                onChange={(event) =>
+                  updateGenerationOption("emergencyChannel", event.target.value)
+                }
+              />
+            </FormField>
+            <FormField label="Renovação" className="md:col-span-2">
+              <TextInput
+                value={generationOptions.renewalNotes}
+                onChange={(event) =>
+                  updateGenerationOption("renewalNotes", event.target.value)
+                }
+              />
+            </FormField>
+            <FormField label="Foro">
+              <TextInput
+                value={generationOptions.legalVenue}
+                onChange={(event) =>
+                  updateGenerationOption("legalVenue", event.target.value)
+                }
+              />
+            </FormField>
+            <FormField label="Local de assinatura">
+              <TextInput
+                value={generationOptions.signaturePlace}
+                onChange={(event) =>
+                  updateGenerationOption("signaturePlace", event.target.value)
+                }
+              />
+            </FormField>
+            <FormField label="Representante MANITEC">
+              <TextInput
+                value={generationOptions.companySigner}
+                onChange={(event) =>
+                  updateGenerationOption("companySigner", event.target.value)
+                }
+              />
+            </FormField>
+            <FormField label="Representante do cliente">
+              <TextInput
+                value={generationOptions.clientSigner}
+                onChange={(event) =>
+                  updateGenerationOption("clientSigner", event.target.value)
+                }
+              />
+            </FormField>
+          </div>
+
+          <details className="mt-5 rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+            <summary className="cursor-pointer text-sm font-semibold text-slate-900">
+              Cláusulas e condições detalhadas
+            </summary>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <FormField label="Detalhes do pagamento">
+                <TextAreaInput
+                  value={generationOptions.paymentDetails}
+                  onChange={(event) =>
+                    updateGenerationOption("paymentDetails", event.target.value)
+                  }
+                />
+              </FormField>
+              <FormField label="Regra de rescisão">
+                <TextAreaInput
+                  value={generationOptions.cancellationRule}
+                  onChange={(event) =>
+                    updateGenerationOption("cancellationRule", event.target.value)
+                  }
+                />
+              </FormField>
+              <FormField label="Chamados fora do escopo">
+                <TextAreaInput
+                  value={generationOptions.extraCallPolicy}
+                  onChange={(event) =>
+                    updateGenerationOption("extraCallPolicy", event.target.value)
+                  }
+                />
+              </FormField>
+              <FormField label="Exclusões">
+                <TextAreaInput
+                  value={generationOptions.exclusions}
+                  onChange={(event) =>
+                    updateGenerationOption("exclusions", event.target.value)
+                  }
+                />
+              </FormField>
+              <FormField label="Obrigações da MANITEC">
+                <TextAreaInput
+                  value={generationOptions.contractorObligations}
+                  onChange={(event) =>
+                    updateGenerationOption(
+                      "contractorObligations",
+                      event.target.value,
+                    )
+                  }
+                />
+              </FormField>
+              <FormField label="Obrigações do cliente">
+                <TextAreaInput
+                  value={generationOptions.clientObligations}
+                  onChange={(event) =>
+                    updateGenerationOption("clientObligations", event.target.value)
+                  }
+                />
+              </FormField>
+              <FormField label="Condições adicionais" className="md:col-span-2">
+                <TextAreaInput
+                  value={generationOptions.additionalClauses}
+                  onChange={(event) =>
+                    updateGenerationOption("additionalClauses", event.target.value)
+                  }
+                />
+              </FormField>
+            </div>
+          </details>
+
+          <label className="mt-4 flex items-center gap-3 text-sm font-medium text-slate-700">
+            <input
+              type="checkbox"
+              checked={generationOptions.includePreventiveChecklist}
+              onChange={(event) =>
+                updateGenerationOption(
+                  "includePreventiveChecklist",
+                  event.target.checked,
+                )
+              }
+              className="h-4 w-4 rounded border-slate-300"
+            />
+            Incluir roteiro de manutenção preventiva como Anexo I
+          </label>
+        </SectionCard>
+      ) : null}
+
       <PrintDocumentShell
         company={data.company}
         title={`Contrato ${data.document.code}`}

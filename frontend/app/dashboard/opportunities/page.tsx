@@ -301,6 +301,24 @@ export default function OpportunitiesPage() {
     }
   }, []);
 
+  useEffect(() => {
+    const clientIdFromUrl = new URLSearchParams(window.location.search).get(
+      "clientId",
+    );
+    if (!clientIdFromUrl) return;
+
+    apiFetch(`/clients/${clientIdFromUrl}`, { cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Cliente nao encontrado.");
+        const client = (await res.json()) as ClientOption;
+        setClientId(client.id);
+        setClientSearch(formatClientOption(client));
+      })
+      .catch(() => {
+        setError("Nao foi possivel carregar o cliente da oportunidade.");
+      });
+  }, []);
+
   async function handleCreateOpportunity(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!title.trim() || !clientId) {

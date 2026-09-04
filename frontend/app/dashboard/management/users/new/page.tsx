@@ -1,4 +1,4 @@
-import { UserManagementWorkspace } from "../../../control/page";
+import { UserManagementWorkspace } from "../UserManagementWorkspace";
 
 export default function NewUserManagementPage() {
   return <UserManagementWorkspace area="new" />;

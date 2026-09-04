@@ -14,6 +14,7 @@ export const accessPolicyKeys = [
   'pages.inventory',
   'pages.people',
   'pages.usersControl',
+  'pages.studio',
   'pages.tickets',
   'pages.serviceReports',
   'pages.technicianPortal',
@@ -116,6 +117,12 @@ export const accessPolicyKeys = [
   'serviceReports.manageDocuments',
   'serviceReports.cancel',
   'audit.read',
+  'studio.access',
+  'studio.dataView',
+  'studio.dataEdit',
+  'studio.dataExport',
+  'studio.dataImport',
+  'studio.auditView',
 ] as const;
 
 export type AccessPolicyKey = (typeof accessPolicyKeys)[number];

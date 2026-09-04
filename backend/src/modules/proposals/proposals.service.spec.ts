@@ -20,9 +20,11 @@ describe('ProposalsService', () => {
     proposal: {
       findMany: jest.Mock;
       findUnique: jest.Mock;
+      count: jest.Mock;
       create: jest.Mock;
       update: jest.Mock;
     };
+    controlOption: { findMany: jest.Mock };
     proposalScopeTemplate: { findMany: jest.Mock };
     user: { findFirst: jest.Mock; findUnique: jest.Mock };
     client: { findUnique: jest.Mock };
@@ -56,6 +58,7 @@ describe('ProposalsService', () => {
       create: jest.Mock;
       updateMany: jest.Mock;
     };
+    $executeRawUnsafe: jest.Mock;
     $transaction: jest.Mock;
   };
 
@@ -64,8 +67,12 @@ describe('ProposalsService', () => {
       proposal: {
         findMany: jest.fn(),
         findUnique: jest.fn(),
+        count: jest.fn().mockResolvedValue(0),
         create: jest.fn(),
         update: jest.fn(),
+      },
+      controlOption: {
+        findMany: jest.fn().mockResolvedValue([]),
       },
       proposalScopeTemplate: {
         findMany: jest.fn(),
@@ -75,7 +82,13 @@ describe('ProposalsService', () => {
         findUnique: jest.fn(),
       },
       client: {
-        findUnique: jest.fn(),
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'client-1',
+          companyName: 'Cliente teste',
+          proposalCreationBlocked: false,
+          proposalBlockReason: null,
+          blockedPaymentTerms: [],
+        }),
       },
       site: {
         findUnique: jest.fn(),
@@ -122,6 +135,7 @@ describe('ProposalsService', () => {
         create: jest.fn(),
         updateMany: jest.fn(),
       },
+      $executeRawUnsafe: jest.fn().mockResolvedValue(1),
       $transaction: jest.fn((cb: (tx: typeof db) => unknown) => cb(db)),
     };
     auditLogsService = { record: jest.fn() };
@@ -182,6 +196,96 @@ describe('ProposalsService', () => {
       'Vendedor da proposta deve ser um usuario comercial ativo.',
     );
 
+    expect(db.proposal.create).not.toHaveBeenCalled();
+  });
+
+  it('blocks every new proposal when client has a commercial block', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      role: UserRole.ADMIN,
+      linkedClientId: null,
+    });
+    db.salesOpportunity.findUnique.mockResolvedValue(null);
+    db.client.findUnique.mockResolvedValue({
+      id: 'client-1',
+      companyName: 'Cliente bloqueado',
+      proposalCreationBlocked: true,
+      proposalBlockReason: 'Credito suspenso pela diretoria',
+      blockedPaymentTerms: [],
+    });
+
+    await expect(
+      service.create(
+        {
+          clientId: 'client-1',
+          userId: 'seller-1',
+          type: ProposalType.SERVICES,
+          items: [],
+        },
+        'admin-1',
+      ),
+    ).rejects.toThrow('Credito suspenso pela diretoria');
+    expect(db.proposal.create).not.toHaveBeenCalled();
+  });
+
+  it('blocks a payment term configured specifically for the client', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      role: UserRole.ADMIN,
+      linkedClientId: null,
+    });
+    db.salesOpportunity.findUnique.mockResolvedValue(null);
+    db.client.findUnique.mockResolvedValue({
+      id: 'client-1',
+      companyName: 'Cliente teste',
+      proposalCreationBlocked: false,
+      proposalBlockReason: null,
+      blockedPaymentTerms: ['30/60 dias'],
+    });
+
+    await expect(
+      service.create(
+        {
+          clientId: 'client-1',
+          userId: 'seller-1',
+          type: ProposalType.SERVICES,
+          paymentTerm: '30/60 dias',
+          items: [],
+        },
+        'admin-1',
+      ),
+    ).rejects.toThrow('esta bloqueada para Cliente teste');
+    expect(db.proposal.create).not.toHaveBeenCalled();
+  });
+
+  it('blocks a restricted payment term for a client without proposal history', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      role: UserRole.ADMIN,
+      linkedClientId: null,
+    });
+    db.salesOpportunity.findUnique.mockResolvedValue(null);
+    db.controlOption.findMany.mockResolvedValue([
+      {
+        code: '30_60_DIAS',
+        name: '30/60 dias',
+        isBlockedForNewClients: true,
+      },
+    ]);
+    db.proposal.count.mockResolvedValue(0);
+
+    await expect(
+      service.create(
+        {
+          clientId: 'client-1',
+          userId: 'seller-1',
+          type: ProposalType.SERVICES,
+          paymentTerm: '30/60 dias',
+          items: [],
+        },
+        'admin-1',
+      ),
+    ).rejects.toThrow('nao e permitida para clientes sem historico');
     expect(db.proposal.create).not.toHaveBeenCalled();
   });
 

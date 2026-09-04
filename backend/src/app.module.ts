@@ -34,6 +34,9 @@ import { CustomerPortalModule } from './modules/customer-portal/customer-portal.
 import { TicketsModule } from './modules/tickets/tickets.module';
 import { ServiceReportsModule } from './modules/service-reports/service-reports.module';
 import { TechnicianWorkModule } from './modules/technician-work/technician-work.module';
+import { StudioModule } from './modules/studio/studio.module';
+import { ManufacturersModule } from './modules/manufacturers/manufacturers.module';
+import { OperationalCostsModule } from './modules/operational-costs/operational-costs.module';
 
 @Module({
   imports: [
@@ -79,6 +82,9 @@ import { TechnicianWorkModule } from './modules/technician-work/technician-work.
     ServiceReportsModule,
     TechnicianWorkModule,
     CustomerPortalModule,
+    StudioModule,
+    ManufacturersModule,
+    OperationalCostsModule,
   ],
   controllers: [],
   providers: [

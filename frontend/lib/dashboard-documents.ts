@@ -193,6 +193,7 @@ export type ContractDocumentPayload = {
   };
   sourceProposal?: { id: string; code: string; status: string } | null;
   createdByUser?: { id: string; name: string; email: string } | null;
+  generationDefaults: ContractDocumentGenerationOptions;
   summary: {
     equipments: number;
     overdueInvoices: number;
@@ -217,6 +218,32 @@ export type ContractDocumentPayload = {
     statusLabel: string;
     paidAt?: string | null;
   }>;
+};
+
+export type ContractDocumentGenerationOptions = {
+  documentTitle?: string;
+  startDate?: string;
+  endDate?: string;
+  recurringAmount?: number;
+  partsCoverage?: "INCLUDED" | "BILLED_SEPARATELY";
+  billingPeriod: string;
+  paymentMethod: string;
+  paymentDetails: string;
+  billingIssueRule: string;
+  maintenanceWindow: string;
+  emergencyChannel: string;
+  renewalNotes: string;
+  cancellationRule: string;
+  extraCallPolicy: string;
+  contractorObligations: string;
+  clientObligations: string;
+  exclusions: string;
+  additionalClauses: string;
+  legalVenue: string;
+  signaturePlace: string;
+  companySigner: string;
+  clientSigner: string;
+  includePreventiveChecklist: boolean;
 };
 
 export type OrderDocumentPayload = {
@@ -386,11 +413,31 @@ export function fetchContractDocument(id: string) {
   return readJsonOrThrow<ContractDocumentPayload>(`/documents/contracts/${id}`);
 }
 
-export function fetchContractDocumentDocx(id: string) {
-  return fetchDocumentBlob(
-    `/documents/contracts/${id}/download-docx`,
-    "Nao foi possivel baixar o documento institucional do contrato.",
+export async function fetchContractDocumentDocx(
+  id: string,
+  options: ContractDocumentGenerationOptions,
+) {
+  const response = await apiFetch(
+    apiUrl(`/documents/contracts/${id}/download-docx`),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(options),
+    },
   );
+
+  if (!response.ok) {
+    const error = new Error(
+      await readApiErrorMessage(
+        response,
+        "Nao foi possivel gerar o documento do contrato.",
+      ),
+    ) as DashboardDocumentsApiError;
+    error.status = response.status;
+    throw error;
+  }
+
+  return response.blob();
 }
 
 export function fetchOrderDocument(id: string) {

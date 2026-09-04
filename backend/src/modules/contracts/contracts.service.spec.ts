@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import {
   AccountsReceivableStatus,
   BillingAdjustmentIndex,
+  ContractRenewalStatus,
   ContractStatus,
   GeneratorLifecycleStatus,
   PartsCoverageType,
@@ -31,7 +32,13 @@ describe('ContractsService', () => {
         findMany: jest.fn(),
         findUnique: jest.fn(),
         create: jest.fn(),
+        update: jest.fn(),
         count: jest.fn(),
+      },
+      contractRenewal: {
+        findFirst: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
       },
       generator: {
         findMany: jest.fn(),
@@ -39,10 +46,13 @@ describe('ContractsService', () => {
       },
       client: {
         update: jest.fn(),
+        updateMany: jest.fn(),
+        findMany: jest.fn(),
       },
       contractInvoice: {
         deleteMany: jest.fn(),
         createMany: jest.fn(),
+        updateMany: jest.fn(),
       },
       contractPreventiveSchedule: {
         deleteMany: jest.fn(),
@@ -256,6 +266,94 @@ describe('ContractsService', () => {
       }),
     );
   });
+
+  it('starts a renewal with a snapshot of the current contract', async () => {
+    const contract = {
+      id: 'contract-1',
+      code: 'CTR-00001',
+      clientId: 'client-1',
+      status: ContractStatus.ACTIVE,
+      startDate: new Date('2026-01-01T00:00:00.000Z'),
+      endDate: new Date('2026-12-31T00:00:00.000Z'),
+      recurringAmount: 1500,
+      partsCoverage: PartsCoverageType.BILLED_SEPARATELY,
+      renewals: [],
+      invoices: [],
+      schedules: [],
+    };
+    const renewal = {
+      id: 'renewal-1',
+      contractId: contract.id,
+      sequence: 1,
+      status: ContractRenewalStatus.DRAFT,
+    };
+    db.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      role: UserRole.ADMIN,
+      linkedClientId: null,
+    });
+    db.contractInvoice.updateMany.mockResolvedValue({ count: 0 });
+    db.serviceContract.findMany.mockResolvedValue([]);
+    db.client.findMany.mockResolvedValue([]);
+    db.serviceContract.findUnique.mockResolvedValue(contract);
+    db.contractRenewal.findFirst.mockResolvedValue(null);
+    db.contractRenewal.create.mockResolvedValue(renewal);
+
+    await service.startRenewal(
+      contract.id,
+      {
+        proposedRecurringAmount: 1650,
+        proposedPartsCoverage: PartsCoverageType.INCLUDED,
+        partsNotes: 'Filtros inclusos.',
+      },
+      'admin-1',
+    );
+
+    expect(db.contractRenewal.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          contractId: contract.id,
+          sequence: 1,
+          currentStartDate: contract.startDate,
+          currentEndDate: contract.endDate,
+          currentRecurringAmount: 1500,
+          currentPartsCoverage: PartsCoverageType.BILLED_SEPARATELY,
+          proposedRecurringAmount: 1650,
+          proposedPartsCoverage: PartsCoverageType.INCLUDED,
+          adjustmentPercent: 10,
+          partsNotes: 'Filtros inclusos.',
+        }),
+      }),
+    );
+    expect(db.serviceContract.update).toHaveBeenCalledWith({
+      where: { id: contract.id },
+      data: { status: ContractStatus.RENEWAL },
+    });
+  });
+
+  it('blocks completion when a renewal has not been approved', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      role: UserRole.ADMIN,
+      linkedClientId: null,
+    });
+    db.contractRenewal.findFirst.mockResolvedValue({
+      id: 'renewal-1',
+      contractId: 'contract-1',
+      status: ContractRenewalStatus.DRAFT,
+      contract: { clientId: 'client-1' },
+    });
+
+    await expect(
+      service.updateRenewalStatus(
+        'contract-1',
+        'renewal-1',
+        { status: ContractRenewalStatus.COMPLETED },
+        'admin-1',
+      ),
+    ).rejects.toThrow('Transicao de renovacao invalida');
+    expect(db.contractRenewal.update).not.toHaveBeenCalled();
+  });
 });
 
 type ContractDbMock = {
@@ -265,16 +363,23 @@ type ContractDbMock = {
     findMany: jest.Mock;
     findUnique: jest.Mock;
     create: jest.Mock;
+    update: jest.Mock;
     count: jest.Mock;
+  };
+  contractRenewal: {
+    findFirst: jest.Mock;
+    create: jest.Mock;
+    update: jest.Mock;
   };
   generator: {
     findMany: jest.Mock;
     updateMany: jest.Mock;
   };
-  client: { update: jest.Mock };
+  client: { update: jest.Mock; updateMany: jest.Mock; findMany: jest.Mock };
   contractInvoice: {
     deleteMany: jest.Mock;
     createMany: jest.Mock;
+    updateMany: jest.Mock;
   };
   contractPreventiveSchedule: {
     deleteMany: jest.Mock;

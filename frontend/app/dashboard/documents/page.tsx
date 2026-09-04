@@ -154,12 +154,6 @@ export default function DocumentsPage() {
             <button type="button" onClick={() => void loadHub()} className={SECONDARY_BUTTON}>
               Atualizar central
             </button>
-            <Link href="/dashboard/deliveries" className={SECONDARY_BUTTON}>
-              Historico de envios
-            </Link>
-            <Link href="/dashboard" className={PRIMARY_BUTTON}>
-              Voltar ao painel
-            </Link>
           </>
         }
       />

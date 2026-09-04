@@ -232,9 +232,6 @@ export default function MonitoringPage() {
             <button type="button" onClick={() => void loadOverview()} className={SECONDARY_BUTTON}>
               Atualizar radar
             </button>
-            <Link href="/dashboard/dispatch" className={PRIMARY_BUTTON}>
-              Abrir despacho
-            </Link>
           </>
         }
         aside={

@@ -21,6 +21,7 @@ type PageHeroProps = {
   stats?: HeroStat[];
   actions?: ReactNode;
   aside?: ReactNode;
+  asideLayout?: "side" | "stacked";
   compact?: boolean;
 };
 
@@ -61,8 +62,11 @@ export function PageHero({
   stats = [],
   actions,
   aside,
+  asideLayout = "stacked",
   compact = false,
 }: PageHeroProps) {
+  const stackedAside = asideLayout === "stacked";
+
   return (
     <section
       className={cx(
@@ -94,7 +98,10 @@ export function PageHero({
         <div className="relative">
           <div
             className={cx(
-              "grid items-start [grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr))]",
+              "grid items-start",
+              stackedAside
+                ? "grid-cols-1"
+                : "[grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr))]",
               compact ? "gap-4" : "gap-6",
             )}
           >
@@ -118,7 +125,14 @@ export function PageHero({
             </div>
 
             {aside ? (
-              <div className="min-w-0 max-w-full rounded-[24px] border border-white/10 bg-white/8 p-1.5 backdrop-blur-sm xl:justify-self-end xl:max-w-[360px]">
+              <div
+                className={cx(
+                  "dashboard-hero-aside min-w-0 max-w-full break-words rounded-[24px] border border-white/10 bg-white/8 p-1.5 backdrop-blur-sm",
+                  stackedAside
+                    ? "dashboard-hero-aside-stacked w-full"
+                    : "dashboard-hero-aside-side xl:justify-self-end xl:max-w-[360px]",
+                )}
+              >
                 {aside}
               </div>
             ) : null}
@@ -127,7 +141,14 @@ export function PageHero({
       </div>
 
       <div className={cx("relative space-y-4", compact ? "mt-4" : "mt-5 md:space-y-5")}>
-        {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
+        {actions ? (
+          <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/90 bg-white/90 px-4 py-3 shadow-[0_14px_34px_-28px_rgba(15,31,50,0.35)] sm:flex-row sm:items-center">
+            <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+              Ações da página
+            </span>
+            <div className="flex min-w-0 flex-wrap gap-2">{actions}</div>
+          </div>
+        ) : null}
 
         {stats.length > 0 ? (
           <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr))]">

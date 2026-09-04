@@ -862,22 +862,6 @@ export default function BankReconciliationPage() {
         title="Conciliação bancária"
         description="Importação de extrato, matching com ledger, divergências rastreáveis e relatório do período."
         stats={stats}
-        actions={
-          <>
-            <Link
-              href="/dashboard/finance/bank-movements"
-              className={SECONDARY_BUTTON}
-            >
-              Extrato financeiro
-            </Link>
-            <Link
-              href="/dashboard/finance/bank-accounts"
-              className={SECONDARY_BUTTON}
-            >
-              Contas e caixas
-            </Link>
-          </>
-        }
       />
 
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}

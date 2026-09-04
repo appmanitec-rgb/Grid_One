@@ -522,19 +522,6 @@ export default function BankAccountsPage() {
             tone: "amber",
           },
         ]}
-        actions={
-          <>
-            <Link href="/dashboard/finance/cash-flow" className={PRIMARY_BUTTON}>
-              Ver fluxo de caixa
-            </Link>
-            <Link href="/dashboard/finance/accounts-receivable" className={SECONDARY_BUTTON}>
-              Ver recebiveis
-            </Link>
-            <Link href="/dashboard/finance/accounts-payable" className={SECONDARY_BUTTON}>
-              Ver pagaveis
-            </Link>
-          </>
-        }
         aside={
           <div className="space-y-3">
             <FieldBox>

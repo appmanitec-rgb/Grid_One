@@ -6,10 +6,23 @@
     "email": "contratos@manitec.test"
   },
   "client": {
+    "id": "CLI-0001",
     "name": "Cliente Exemplo",
     "document": "11.111.111/0001-11",
     "address": "Avenida Cliente, 200 - Sao Paulo - SP",
     "email": "cliente@example.test"
+  },
+  "contact": {
+    "name": "Contato Cliente",
+    "role": "Compras",
+    "phone": "(11) 4000-0000",
+    "mobile": "(11) 99999-0000",
+    "email": "cliente@example.test"
+  },
+  "consultant": {
+    "name": "Consultor MANITEC",
+    "phone": "(19) 3894-5048",
+    "email": "consultor@manitec.local"
   },
   "contract": {
     "number": "CTR-0001",
@@ -18,11 +31,34 @@
     "date": "01/07/2026",
     "startDate": "01/07/2026",
     "endDate": "30/06/2027",
+    "validityDescription": "01/07/2026 a 30/06/2027",
     "recurringAmount": "R$ 5.000,00",
     "dueDay": "10",
+    "billingPeriod": "mensalidade",
+    "paymentMethod": "Boleto",
+    "paymentDetails": "Cobranca encaminhada ao contato financeiro cadastrado.",
+    "billingIssueRule": "ate o quinto dia util da competencia",
     "preventiveRecurrence": "Mensal",
+    "correctiveVisitAllowance": "2",
+    "correctiveVisitAllowancePeriod": "chamados mensais nao cumulativos",
+    "preventiveVisitSummary": "Mensal",
     "responseTime": "4h",
     "partsCoverage": "Pecas sob aprovacao previa",
+    "renewalNotes": "Renovacao mediante aceite.",
+    "renewalNotice": "30 dias antes do termino",
+    "maintenanceWindow": "Horario comercial",
+    "emergencyChannel": "Central de atendimento MANITEC",
+    "fuelManagement": "Nao incluida",
+    "adjustmentBaseMonth": "Aniversario do contrato",
+    "extraCallPolicy": "Orcamento e aprovacao previa.",
+    "cancellationRule": "Aviso escrito com 30 dias de antecedencia.",
+    "contractorObligations": "Executar o escopo com equipe capacitada.\nRegistrar os atendimentos realizados.",
+    "clientObligations": "Garantir acesso seguro.\nEfetuar os pagamentos nos prazos contratados.",
+    "exclusions": "Pecas, obras civis e itens nao descritos no escopo.",
+    "additionalClauses": "Sem condicoes adicionais.",
+    "legalVenue": "Indaiatuba/SP",
+    "signaturePlace": "Indaiatuba/SP",
+    "preventiveChecklist": "Verificar motor, combustivel, arrefecimento, gerador, baterias, comando e registrar os testes.",
     "notes": "Contrato sujeito as condicoes comerciais aprovadas."
   },
   "commercialTerms": {
@@ -36,8 +72,23 @@
       "coverage": "R$ 5.000,00"
     }
   ],
+  "services": [
+    {
+      "description": "Manutencao preventiva mensal do GMG Principal",
+      "quantity": "1",
+      "unit": "contrato",
+      "total": "R$ 5.000,00"
+    }
+  ],
   "signatures": {
     "company": "MANITEC Operacao Integrada",
-    "client": "Assinatura / aceite do cliente"
+    "companySigner": "Representante MANITEC",
+    "client": "Cliente Exemplo",
+    "clientSigner": "Representante do cliente"
+  },
+  "metadata": {
+    "templateKey": "contract/manitec-default-v1",
+    "generatedAt": "2026-08-29T12:00:00.000Z",
+    "sourceId": "contract-sample"
   }
 }

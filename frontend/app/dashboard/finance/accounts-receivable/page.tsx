@@ -775,9 +775,6 @@ export default function AccountsReceivablePage() {
                 ? "Atualizando..."
                 : "Atualizar vencidos"}
             </button>
-            <Link href="/dashboard/billing" className={SECONDARY_BUTTON}>
-              Voltar ao faturamento
-            </Link>
           </>
         }
         aside={

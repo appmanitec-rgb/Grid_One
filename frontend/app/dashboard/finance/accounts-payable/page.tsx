@@ -665,18 +665,6 @@ export default function AccountsPayablePage() {
                 ? "Atualizando..."
                 : "Atualizar vencidos"}
             </button>
-            <Link
-              href="/dashboard/purchase-orders"
-              className={SECONDARY_BUTTON}
-            >
-              Ver pedidos de compra
-            </Link>
-            <Link
-              href="/dashboard/finance/cash-flow"
-              className={SECONDARY_BUTTON}
-            >
-              Ver fluxo de caixa
-            </Link>
           </>
         }
         aside={

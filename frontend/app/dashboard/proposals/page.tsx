@@ -8,7 +8,6 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
@@ -26,6 +25,7 @@ import {
   StatusBanner,
   TextInput,
 } from "../components/DashboardPageKit";
+import { DashboardKanban } from "../components/DashboardKanban";
 import {
   KANBAN_COLUMNS,
   canMoveForward,
@@ -68,9 +68,9 @@ export default function ProposalsPage() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [movingId, setMovingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [kanbanStatusFilter, setKanbanStatusFilter] = useState("ALL");
   const [dropTarget, setDropTarget] = useState<string | null>(null);
 
-  const kanbanScrollRef = useRef<HTMLDivElement | null>(null);
   const viewerRole = useMemo(() => {
     const token = getStoredAccessToken();
     if (!token) return "NORMAL";
@@ -201,16 +201,26 @@ export default function ProposalsPage() {
 
   const filteredProposals = useMemo(() => {
     const term = query.trim().toLowerCase();
-    if (!term) return proposals;
 
     return proposals.filter((proposal) => {
+      const proposalStep = statusToFlowStep(proposal.status);
+      if (
+        viewMode === "kanban" &&
+        kanbanStatusFilter !== "ALL" &&
+        proposalStep !== kanbanStatusFilter
+      ) {
+        return false;
+      }
+      if (!term) return true;
+
       return (
         proposal.code.toLowerCase().includes(term) ||
         (proposal.client?.companyName || "").toLowerCase().includes(term) ||
-        (proposal.generator?.name || "").toLowerCase().includes(term)
+        (proposal.generator?.name || "").toLowerCase().includes(term) ||
+        statusLabel(proposal.status).toLowerCase().includes(term)
       );
     });
-  }, [proposals, query]);
+  }, [kanbanStatusFilter, proposals, query, viewMode]);
 
   const flowColumns = useMemo(
     () => buildFlowColumns(filteredProposals),
@@ -250,12 +260,6 @@ export default function ProposalsPage() {
       wonValue,
     };
   }, [proposals]);
-
-  function scrollKanban(direction: "left" | "right") {
-    if (!kanbanScrollRef.current) return;
-    const amount = direction === "left" ? -380 : 380;
-    kanbanScrollRef.current.scrollBy({ left: amount, behavior: "smooth" });
-  }
 
   return (
     <div className="space-y-6">
@@ -323,44 +327,47 @@ export default function ProposalsPage() {
             ) : null}
           </>
         }
+        asideLayout="stacked"
         aside={
-          <FieldBox className="space-y-4 rounded-[28px] border-white/60 bg-white/80 p-5 shadow-[0_22px_60px_-40px_rgba(15,31,50,0.45)]">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                Pulso do modulo
-              </p>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                Diretoria e cliente concentram as etapas mais sensiveis. A leitura abaixo
-                ajuda a antecipar gargalos sem entulhar a tela.
-              </p>
+          <FieldBox className="rounded-[24px] border-white/60 bg-white/82 p-4 shadow-[0_18px_48px_-38px_rgba(15,31,50,0.4)]">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)_minmax(260px,0.7fr)] lg:items-center">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                  Pulso do modulo
+                </p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Diretoria e cliente concentram as etapas mais sensiveis. A leitura abaixo
+                  ajuda a antecipar gargalos sem entulhar a tela.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <PulseStat
+                  label="Diretoria"
+                  value={String(stats.boardReview)}
+                  helper="Itens aguardando decisao interna."
+                  tone="blue"
+                />
+                <PulseStat
+                  label="Cliente"
+                  value={String(stats.clientReview)}
+                  helper="Itens em analise ou fechamento externo."
+                  tone="amber"
+                />
+              </div>
+              {isAdmin ? (
+                <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-900">
+                  Modo admin ativo: a movimentacao no kanban aceita override manual de etapa.
+                </div>
+              ) : isClient ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
+                  O portal concentra leitura e decisao final. Para aprovar ou recusar, abra a proposta.
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">
+                  Usuarios comuns seguem apenas as transicoes permitidas do fluxo comercial.
+                </div>
+              )}
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <PulseStat
-                label="Diretoria"
-                value={String(stats.boardReview)}
-                helper="Itens aguardando decisao interna."
-                tone="blue"
-              />
-              <PulseStat
-                label="Cliente"
-                value={String(stats.clientReview)}
-                helper="Itens em analise ou fechamento externo."
-                tone="amber"
-              />
-            </div>
-            {isAdmin ? (
-              <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
-                Modo admin ativo: a movimentacao no kanban aceita override manual de etapa.
-              </div>
-            ) : isClient ? (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                O portal concentra leitura e decisao final. Para aprovar ou recusar, abra a proposta.
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                Usuarios comuns seguem apenas as transicoes permitidas do fluxo comercial.
-              </div>
-            )}
           </FieldBox>
         }
       />
@@ -423,22 +430,18 @@ export default function ProposalsPage() {
               className="xl:min-w-[320px]"
             />
             {viewMode === "kanban" && !isClient ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => scrollKanban("left")}
-                  className={SECONDARY_BUTTON}
-                >
-                  Coluna anterior
-                </button>
-                <button
-                  type="button"
-                  onClick={() => scrollKanban("right")}
-                  className={SECONDARY_BUTTON}
-                >
-                  Proxima coluna
-                </button>
-              </>
+              <select
+                value={kanbanStatusFilter}
+                onChange={(event) => setKanbanStatusFilter(event.target.value)}
+                className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+              >
+                <option value="ALL">Todas as etapas</option>
+                {KANBAN_COLUMNS.map((column) => (
+                  <option key={column.key} value={column.key}>
+                    {column.label}
+                  </option>
+                ))}
+              </select>
             ) : null}
           </div>
         }
@@ -467,7 +470,7 @@ export default function ProposalsPage() {
         {!loading && viewMode === "kanban" ? (
           filteredProposals.length > 0 ? (
             <div className="space-y-4">
-              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="grid gap-3">
                 <div className="rounded-[28px] border border-slate-200 bg-[linear-gradient(145deg,#f8fbff_0%,#eef5ff_100%)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
                   <div className="grid gap-3 md:grid-cols-5">
                     {flowColumns.map((column, index) => (
@@ -483,10 +486,20 @@ export default function ProposalsPage() {
                 </div>
 
                 <div className="rounded-[28px] border border-slate-200 bg-slate-50/85 p-5 shadow-[0_24px_60px_-48px_rgba(15,31,50,0.38)]">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                    Leitura da operacao
-                  </p>
-                  <div className="mt-4 space-y-3">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                        Leitura da operacao
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">
+                        Encoste nas laterais do quadro para andar horizontalmente. Cada coluna tem rolagem propria para evitar listas longas.
+                      </p>
+                    </div>
+                    <DataPill tone={query.trim() || kanbanStatusFilter !== "ALL" ? "blue" : "emerald"}>
+                      {filteredProposals.length} resultado(s)
+                    </DataPill>
+                  </div>
+                  <div className="mt-4 grid gap-3 lg:grid-cols-3">
                     {portfolioColumns
                       .filter((column) => column.items.length > 0)
                       .slice(0, 3)
@@ -508,17 +521,11 @@ export default function ProposalsPage() {
                           </p>
                         </div>
                       ))}
-                    <p className="text-sm leading-6 text-slate-600">
-                      Arraste para a proxima etapa para manter o funil atualizado. Se a
-                      coluna aparecer bloqueada, a transicao nao e permitida para o perfil
-                      atual.
-                    </p>
                   </div>
                 </div>
               </div>
 
-              <div className="rounded-[30px] border border-slate-200 bg-[radial-gradient(circle_at_top,rgba(19,104,180,0.08),transparent_35%),linear-gradient(180deg,#ffffff_0%,#f7fbff_100%)] p-4 shadow-[0_32px_80px_-60px_rgba(15,31,50,0.45)]">
-                <div ref={kanbanScrollRef} className="flex gap-4 overflow-x-auto pb-2">
+              <DashboardKanban ariaLabel="Kanban comercial de propostas">
                   {flowColumns.map((column) => {
                     const canReceiveDrop = draggingProposal
                       ? isAdmin || canMoveForward(draggingProposal.status, column.key)
@@ -545,7 +552,7 @@ export default function ProposalsPage() {
                             void moveProposalToStatus(proposalId, column.key);
                           }
                         }}
-                        className={`flex min-h-[72vh] min-w-[320px] flex-col rounded-[28px] border p-4 transition ${
+                        className={`dashboard-kanban-column flex min-w-[320px] snap-start flex-col rounded-[28px] border p-4 transition ${
                           dropTarget === column.key
                             ? "border-sky-400 bg-sky-50 shadow-[0_0_0_3px_rgba(14,165,233,0.16)]"
                             : canReceiveDrop
@@ -571,7 +578,7 @@ export default function ProposalsPage() {
                           </div>
                         </div>
 
-                        <div className="mt-4 space-y-3 overflow-y-auto pr-1">
+                        <div className="dashboard-kanban-column-scroll mt-4 space-y-3 pr-1">
                           {column.items.map((proposal) => (
                             <KanbanProposalCard
                               key={proposal.id}
@@ -618,8 +625,7 @@ export default function ProposalsPage() {
                       </section>
                     );
                   })}
-                </div>
-              </div>
+              </DashboardKanban>
             </div>
           ) : (
             <EmptyState

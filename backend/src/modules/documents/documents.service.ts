@@ -31,6 +31,7 @@ import {
 } from './document-generation.service';
 import { GeneratedProposalPdf } from './proposal-pdf.service';
 import { ProposalPdfService } from './proposal-pdf.service';
+import { ContractDocumentOptionsDto } from './dto/contract-document-options.dto';
 
 type DocumentState = 'ready' | 'attention' | 'pending';
 type DocumentKind = 'proposal' | 'contract' | 'order';
@@ -144,6 +145,31 @@ export class DocumentsService {
             address: true,
             city: true,
             state: true,
+            addresses: {
+              select: {
+                type: true,
+                street: true,
+                number: true,
+                complement: true,
+                district: true,
+                zipCode: true,
+                city: true,
+                state: true,
+                country: true,
+              },
+              orderBy: [{ type: 'asc' }, { createdAt: 'asc' }],
+            },
+            contacts: {
+              select: {
+                name: true,
+                status: true,
+                role: true,
+                phone: true,
+                mobile: true,
+                email: true,
+              },
+              orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
+            },
           },
         },
         generator: {
@@ -159,8 +185,10 @@ export class DocumentsService {
             alternatorVoltage: true,
             engineBrand: true,
             engineModelName: true,
+            engineSerialNumber: true,
             alternatorBrand: true,
             alternatorModelName: true,
+            alternatorSerialNumber: true,
             model: {
               select: {
                 id: true,
@@ -275,6 +303,7 @@ export class DocumentsService {
         installmentIntervalDays: proposal.installmentIntervalDays,
         firstDueDate: proposal.firstDueDate?.toISOString() || null,
         externalNotes: proposal.externalNotes,
+        discount: proposal.discount,
         generatedContract: proposal.generatedContract,
       },
       client: proposal.client,
@@ -291,8 +320,14 @@ export class DocumentsService {
       },
       items: proposal.items.map((item) => ({
         id: item.id,
+        kind: item.kind,
+        description: item.description,
         quantity: item.quantity,
+        hours: item.hours,
         unitPrice: item.unitPrice,
+        discountPercent: item.discountPercent,
+        hourType: item.hourType,
+        technicianType: item.technicianType,
         totalPrice: item.totalPrice,
         catalogItem: item.catalogItem,
       })),
@@ -378,6 +413,8 @@ export class DocumentsService {
             companyName: true,
             tradeName: true,
             cnpj: true,
+            stateRegistration: true,
+            municipalRegistration: true,
             contactName: true,
             phone: true,
             email: true,
@@ -385,6 +422,31 @@ export class DocumentsService {
             city: true,
             state: true,
             isDelinquent: true,
+            addresses: {
+              select: {
+                type: true,
+                street: true,
+                number: true,
+                complement: true,
+                district: true,
+                zipCode: true,
+                city: true,
+                state: true,
+                country: true,
+              },
+              orderBy: [{ type: 'asc' }, { createdAt: 'asc' }],
+            },
+            contacts: {
+              select: {
+                name: true,
+                status: true,
+                role: true,
+                phone: true,
+                mobile: true,
+                email: true,
+              },
+              orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
+            },
           },
         },
         sourceProposal: {
@@ -392,6 +454,22 @@ export class DocumentsService {
             id: true,
             code: true,
             status: true,
+            items: {
+              select: {
+                kind: true,
+                description: true,
+                quantity: true,
+                unitPrice: true,
+                totalPrice: true,
+                catalogItem: {
+                  select: {
+                    name: true,
+                    sku: true,
+                    unit: true,
+                  },
+                },
+              },
+            },
           },
         },
         createdByUser: {
@@ -438,6 +516,9 @@ export class DocumentsService {
       DeliveryDocumentType.CONTRACT,
       contract.id,
     );
+    const primaryContact =
+      contract.client.contacts.find((contact) => contact.status === 'ACTIVE') ||
+      contract.client.contacts[0];
 
     return {
       kind: 'contract' as const,
@@ -472,6 +553,53 @@ export class DocumentsService {
       client: contract.client,
       sourceProposal: contract.sourceProposal,
       createdByUser: contract.createdByUser,
+      generationDefaults: {
+        billingPeriod: 'mensalidade',
+        paymentMethod: 'boleto bancário',
+        paymentDetails:
+          'Os dados de cobrança serão encaminhados ao contato financeiro cadastrado.',
+        billingIssueRule: 'até o quinto dia útil de cada competência',
+        maintenanceWindow:
+          'dias úteis, em horário comercial, mediante agendamento',
+        emergencyChannel: 'central de atendimento MANITEC informada ao cliente',
+        renewalNotes:
+          'mediante acordo escrito entre as partes, sem renovação automática',
+        cancellationRule:
+          'mediante comunicação escrita com antecedência mínima de 30 dias',
+        extraCallPolicy:
+          'serão objeto de orçamento prévio, incluindo mão de obra, peças e deslocamento aplicáveis',
+        contractorObligations: [
+          'a) disponibilizar profissionais capacitados e identificados;',
+          'b) utilizar ferramental e instrumentos adequados;',
+          'c) registrar os serviços executados em relatório ou ordem de serviço;',
+          'd) comunicar riscos, falhas relevantes e necessidades de intervenção adicional;',
+          'e) cumprir as normas técnicas e de segurança aplicáveis ao escopo contratado.',
+        ].join('\n'),
+        clientObligations: [
+          'a) garantir acesso seguro aos equipamentos e às instalações;',
+          'b) disponibilizar responsável para acompanhamento quando necessário;',
+          'c) informar alterações, falhas e intervenções realizadas por terceiros;',
+          'd) manter condições mínimas de segurança, iluminação e circulação no local;',
+          'e) efetuar os pagamentos nos prazos contratados.',
+        ].join('\n'),
+        exclusions: [
+          'Não estão incluídos, salvo previsão expressa: peças e consumíveis;',
+          'retífica de motores, rebobinamento de alternadores e reparos estruturais;',
+          'obras civis, adequações elétricas externas e alterações de infraestrutura;',
+          'danos causados por operação inadequada, sinistros ou intervenção de terceiros;',
+          'serviços fora dos equipamentos e locais identificados neste contrato.',
+        ].join('\n'),
+        additionalClauses: contract.notes || '',
+        legalVenue: company.city
+          ? `${company.city}${company.state ? `/${company.state}` : ''}`
+          : 'Indaiatuba/SP',
+        signaturePlace: company.city
+          ? `${company.city}${company.state ? `/${company.state}` : ''}`
+          : 'Indaiatuba/SP',
+        companySigner: contract.createdByUser?.name || '',
+        clientSigner: primaryContact?.name || contract.client.contactName || '',
+        includePreventiveChecklist: true,
+      },
       summary: {
         equipments: contract.equipments.length,
         overdueInvoices: overdueInvoices.length,
@@ -496,19 +624,31 @@ export class DocumentsService {
     };
   }
 
-  async generateContractDocument(id: string, userId: string) {
+  async generateContractDocument(
+    id: string,
+    userId: string,
+    generationOptions?: ContractDocumentOptionsDto,
+  ) {
     const generated = await this.generateAndStoreInstitutionalDocument(
       'contract',
       id,
       userId,
-      { channel: DocumentAccessChannel.INTERNAL },
+      {
+        channel: DocumentAccessChannel.INTERNAL,
+        generationOptions,
+      },
     );
     return this.toGeneratedDocumentResponse(generated);
   }
 
-  async downloadContractDocx(id: string, userId: string) {
+  async downloadContractDocx(
+    id: string,
+    userId: string,
+    generationOptions?: ContractDocumentOptionsDto,
+  ) {
     return this.generateAndStoreInstitutionalDocument('contract', id, userId, {
       channel: DocumentAccessChannel.INTERNAL,
+      generationOptions,
     });
   }
 
@@ -954,6 +1094,7 @@ export class DocumentsService {
     options: {
       channel: DocumentAccessChannel;
       metadata?: RequestMetadata;
+      generationOptions?: ContractDocumentOptionsDto;
     },
   ): Promise<
     LoadedFile & {
@@ -964,9 +1105,34 @@ export class DocumentsService {
   > {
     const actor = await this.getActorScope(userId);
     const payload = await this.loadInstitutionalPayload(kind, id, userId);
+    const generationPayload =
+      kind === 'contract' && options.generationOptions
+        ? {
+            ...payload,
+            document: {
+              ...(payload as any).document,
+              title:
+                options.generationOptions.documentTitle ??
+                (payload as any).document?.title,
+              startDate:
+                options.generationOptions.startDate ??
+                (payload as any).document?.startDate,
+              endDate:
+                options.generationOptions.endDate ??
+                (payload as any).document?.endDate,
+              recurringAmount:
+                options.generationOptions.recurringAmount ??
+                (payload as any).document?.recurringAmount,
+              partsCoverage:
+                options.generationOptions.partsCoverage ??
+                (payload as any).document?.partsCoverage,
+            },
+            generationOptions: options.generationOptions,
+          }
+        : payload;
     const generated = this.documentGenerationService.generateDocx(
       kind,
-      payload as Record<string, unknown>,
+      generationPayload as Record<string, unknown>,
     );
     const stored = await this.fileStorage.saveDocumentFile(
       this.documentStorageFolder(kind),

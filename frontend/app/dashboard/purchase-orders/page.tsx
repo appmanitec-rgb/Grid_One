@@ -51,6 +51,7 @@ export default function PurchaseOrdersPage() {
   const [notes, setNotes] = useState("");
   const [selectedDrafts, setSelectedDrafts] = useState<string[]>([]);
   const [receiveWarehouseId, setReceiveWarehouseId] = useState("");
+  const [prefillApplied, setPrefillApplied] = useState(false);
 
   async function loadData() {
     const [supRes, whRes, draftRes, poRes] = await Promise.all([
@@ -74,6 +75,25 @@ export default function PurchaseOrdersPage() {
     void loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (prefillApplied) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const draftKey = params.get("draft");
+    const supplierIdFromUrl = params.get("supplierId");
+
+    if (!draftKey && !supplierIdFromUrl) return;
+
+    if (supplierIdFromUrl) setSupplierId(supplierIdFromUrl);
+    if (draftKey) {
+      setSelectedDrafts((current) =>
+        current.includes(draftKey) ? current : [...current, draftKey],
+      );
+    }
+    setMessage("Reposicao importada do estoque. Confira fornecedor, prazo e crie o pedido.");
+    setPrefillApplied(true);
+  }, [prefillApplied]);
 
   async function createPurchaseOrder() {
     if (!supplierId || selectedDrafts.length === 0) {

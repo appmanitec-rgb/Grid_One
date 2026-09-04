@@ -28,7 +28,7 @@ const roleLabels: Record<string, string> = {
   LOGISTICS: "Operação",
   FINANCE: "Financeiro",
   SUPPLIES: "Suprimentos",
-  HR: "RH / Pessoas",
+  HR: "RH / Agentes",
   AUDITOR: "Auditor",
   CLIENT: "Cliente",
 };

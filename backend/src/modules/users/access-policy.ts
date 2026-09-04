@@ -13,6 +13,7 @@ export type AccessPolicy = {
     inventory: boolean;
     people: boolean;
     usersControl: boolean;
+    studio: boolean;
     tickets: boolean;
     serviceReports: boolean;
     technicianPortal: boolean;
@@ -154,6 +155,14 @@ export type AccessPolicy = {
   audit: {
     read: boolean;
   };
+  studio: {
+    access: boolean;
+    dataView: boolean;
+    dataEdit: boolean;
+    dataExport: boolean;
+    dataImport: boolean;
+    auditView: boolean;
+  };
 };
 
 type AccessPolicyOverrides = {
@@ -173,6 +182,7 @@ const emptyAccessPolicy: AccessPolicy = {
     inventory: false,
     people: false,
     usersControl: false,
+    studio: false,
     tickets: false,
     serviceReports: false,
     technicianPortal: false,
@@ -314,6 +324,14 @@ const emptyAccessPolicy: AccessPolicy = {
   audit: {
     read: false,
   },
+  studio: {
+    access: false,
+    dataView: false,
+    dataEdit: false,
+    dataExport: false,
+    dataImport: false,
+    auditView: false,
+  },
 };
 
 export const allAccessPolicy: AccessPolicy = mapAccessPolicy(
@@ -338,6 +356,7 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         inventory: true,
         people: true,
         usersControl: true,
+        studio: true,
         tickets: true,
         serviceReports: true,
         technicianPortal: true,
@@ -439,6 +458,14 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
       },
       audit: {
         read: true,
+      },
+      studio: {
+        access: true,
+        dataView: true,
+        dataEdit: false,
+        dataExport: true,
+        dataImport: false,
+        auditView: true,
       },
     });
   }
@@ -919,6 +946,7 @@ function mergeAccessPolicy(
     reports: mergeSection(base.reports, overrides.reports),
     settings: mergeSection(base.settings, overrides.settings),
     audit: mergeSection(base.audit, overrides.audit),
+    studio: mergeSection(base.studio, overrides.studio),
   };
 }
 
@@ -961,6 +989,7 @@ function mapAccessPolicy(
     reports: mapSection(input.reports, mapper),
     settings: mapSection(input.settings, mapper),
     audit: mapSection(input.audit, mapper),
+    studio: mapSection(input.studio, mapper),
   };
 }
 

@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   Param,
@@ -12,6 +13,7 @@ import { RequireAccessPolicy } from '../auth/access-policy.decorator';
 import { AccessPolicyGuard } from '../auth/access-policy.guard';
 import { AuthGuard } from '../auth/auth.guard';
 import { DocumentsService } from './documents.service';
+import { ContractDocumentOptionsDto } from './dto/contract-document-options.dto';
 
 @Controller('documents')
 @UseGuards(AuthGuard, AccessPolicyGuard)
@@ -109,9 +111,33 @@ export class DocumentsController {
   }
 
   @Post('contracts/:id/generate-document')
-  generateContractDocument(@Req() req: Request, @Param('id') id: string) {
+  generateContractDocument(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() options: ContractDocumentOptionsDto,
+  ) {
     const userId = (req['user'] as any)?.sub as string | undefined;
-    return this.documentsService.generateContractDocument(id, userId || '');
+    return this.documentsService.generateContractDocument(
+      id,
+      userId || '',
+      options,
+    );
+  }
+
+  @Post('contracts/:id/download-docx')
+  async generateAndDownloadContractDocx(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() options: ContractDocumentOptionsDto,
+    @Res() res: Response,
+  ) {
+    const userId = (req['user'] as any)?.sub as string | undefined;
+    const file = await this.documentsService.downloadContractDocx(
+      id,
+      userId || '',
+      options,
+    );
+    return this.sendFile(res, file);
   }
 
   @Get('contracts/:id/download-docx')

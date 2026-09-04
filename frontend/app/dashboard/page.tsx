@@ -8,7 +8,6 @@ import {
   type ReactNode,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import { getAccessFromToken } from "@/lib/access";
@@ -26,6 +25,7 @@ import {
   SectionCard,
   StatusBanner,
 } from "./components/DashboardPageKit";
+import { DashboardKanban } from "./components/DashboardKanban";
 
 type Proposal = {
   id: string;
@@ -66,6 +66,7 @@ type StageColumn = {
 type DashboardPanelKey =
   | "priorities"
   | "actions"
+  | "processes"
   | "pipeline"
   | "board"
   | "updates"
@@ -194,6 +195,7 @@ const DASHBOARD_PANELS_STORAGE_KEY = "manitec_dashboard_home_panels";
 const DEFAULT_DASHBOARD_PANELS: DashboardPanelsState = {
   priorities: true,
   actions: true,
+  processes: true,
   pipeline: true,
   board: true,
   updates: true,
@@ -202,7 +204,6 @@ const DEFAULT_DASHBOARD_PANELS: DashboardPanelsState = {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const pipelineScrollRef = useRef<HTMLDivElement | null>(null);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [boardPending, setBoardPending] = useState<Proposal[]>([]);
@@ -219,8 +220,8 @@ export default function DashboardPage() {
   const [uiNotice, setUiNotice] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
-  const [canScrollPipelineLeft, setCanScrollPipelineLeft] = useState(false);
-  const [canScrollPipelineRight, setCanScrollPipelineRight] = useState(false);
+  const [pipelineQuery, setPipelineQuery] = useState("");
+  const [pipelineStatusFilter, setPipelineStatusFilter] = useState("ALL");
   const [panelsReady, setPanelsReady] = useState(false);
   const [panelState, setPanelState] = useState<DashboardPanelsState>(
     DEFAULT_DASHBOARD_PANELS,
@@ -273,14 +274,34 @@ export default function DashboardPage() {
     [adminUsers],
   );
 
+  const filteredPipelineProposals = useMemo(() => {
+    const term = pipelineQuery.trim().toLowerCase();
+
+    return proposals.filter((proposal) => {
+      if (pipelineStatusFilter !== "ALL" && proposal.status !== pipelineStatusFilter) {
+        return false;
+      }
+      if (!term) return true;
+
+      return (
+        proposal.code.toLowerCase().includes(term) ||
+        (proposal.client?.companyName || "").toLowerCase().includes(term) ||
+        (proposal.user?.name || "").toLowerCase().includes(term) ||
+        (PIPELINE_COLUMNS.find((column) => column.key === proposal.status)?.label || "")
+          .toLowerCase()
+          .includes(term)
+      );
+    });
+  }, [pipelineQuery, pipelineStatusFilter, proposals]);
+
   const pipelineCounts = useMemo(
     () =>
       PIPELINE_COLUMNS.map((column) => ({
         ...column,
-        total: proposals.filter((proposal) => proposal.status === column.key).length,
-        items: proposals.filter((proposal) => proposal.status === column.key),
+        total: filteredPipelineProposals.filter((proposal) => proposal.status === column.key).length,
+        items: filteredPipelineProposals.filter((proposal) => proposal.status === column.key),
       })),
-    [proposals],
+    [filteredPipelineProposals],
   );
 
   const topStages = useMemo(
@@ -507,44 +528,6 @@ export default function DashboardPage() {
     });
   }, [hydrated, isBoard, canManageUsers, router]);
 
-  useEffect(() => {
-    const element = pipelineScrollRef.current;
-    if (!element) return;
-
-    const syncScrollState = () => {
-      const maxScrollLeft = Math.max(0, element.scrollWidth - element.clientWidth);
-      setCanScrollPipelineLeft(element.scrollLeft > 12);
-      setCanScrollPipelineRight(
-        maxScrollLeft > 12 && element.scrollLeft < maxScrollLeft - 12,
-      );
-    };
-
-    syncScrollState();
-    element.addEventListener("scroll", syncScrollState, { passive: true });
-
-    const resizeObserver =
-      typeof ResizeObserver !== "undefined" ? new ResizeObserver(syncScrollState) : null;
-    resizeObserver?.observe(element);
-    window.addEventListener("resize", syncScrollState);
-
-    return () => {
-      element.removeEventListener("scroll", syncScrollState);
-      resizeObserver?.disconnect();
-      window.removeEventListener("resize", syncScrollState);
-    };
-  }, []);
-
-  function scrollPipeline(direction: "left" | "right") {
-    const element = pipelineScrollRef.current;
-    if (!element) return;
-
-    const amount = Math.max(320, Math.round(element.clientWidth * 0.78));
-    element.scrollBy({
-      left: direction === "left" ? -amount : amount,
-      behavior: "smooth",
-    });
-  }
-
   async function moveProposalToStatus(proposalId: string, nextStatus: string) {
     const current = proposals.find((proposal) => proposal.id === proposalId);
     if (!current || current.status === nextStatus) return;
@@ -590,6 +573,7 @@ export default function DashboardPage() {
     setPanelState({
       priorities: expanded,
       actions: expanded,
+      processes: expanded,
       pipeline: expanded,
       board: expanded,
       updates: expanded,
@@ -644,21 +628,6 @@ export default function DashboardPage() {
                 Nova proposta
               </Link>
             ) : null}
-            {canViewOrders ? (
-              <Link href="/dashboard/orders" className={SECONDARY_BUTTON}>
-                Ver ordens
-              </Link>
-            ) : null}
-            {canManageUsers ? (
-              <Link href="/dashboard/control" className={SECONDARY_BUTTON}>
-                Abrir acessos
-              </Link>
-            ) : null}
-            {!canCreateProposal && !canViewOrders && !canManageUsers ? (
-              <span className="inline-flex items-center rounded-2xl border border-slate-200 bg-white/90 px-4 py-2.5 text-sm font-semibold text-slate-600">
-                Atalhos limitados pelo seu perfil
-              </span>
-            ) : null}
             <button
               type="button"
               onClick={() => setAllPanels(false)}
@@ -677,6 +646,7 @@ export default function DashboardPage() {
             </button>
           </>
         }
+        asideLayout="stacked"
         aside={
           <DailySnapshotPanel
             isBoard={isBoard}
@@ -790,7 +760,44 @@ export default function DashboardPage() {
         </DashboardSection>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.62fr)_380px]">
+      <DashboardSection
+        panelKey="processes"
+        expanded={panelState.processes}
+        onToggle={togglePanel}
+        eyebrow="Processos"
+        title="Caminhos de ponta a ponta"
+        description="Trilhas principais."
+        summary="Comercial -> operacao -> financeiro"
+      >
+        <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
+          <ProcessPathCard
+            title="Venda avulsa"
+            steps={["Oportunidade", "Proposta ganha", "O.S. / despacho", "Faturamento recebido"]}
+            href="/dashboard/opportunities"
+            tone="emerald"
+          />
+          <ProcessPathCard
+            title="Contrato recorrente"
+            steps={["Proposta aprovada", "Contrato", "Preventivas", "Faturas / recebiveis"]}
+            href="/dashboard/contracts"
+            tone="blue"
+          />
+          <ProcessPathCard
+            title="Execucao tecnica"
+            steps={["O.S. aberta", "Tecnico alocado", "Relatorio", "O.S. faturada"]}
+            href="/dashboard/dispatch"
+            tone="amber"
+          />
+          <ProcessPathCard
+            title="Reposicao"
+            steps={["Estoque baixo", "Pedido de compra", "Recebimento", "Saldo atualizado"]}
+            href="/dashboard/inventory"
+            tone="rose"
+          />
+        </div>
+      </DashboardSection>
+
+      <div className="space-y-6">
         <DashboardSection
           panelKey="pipeline"
           expanded={panelState.pipeline}
@@ -800,10 +807,28 @@ export default function DashboardPage() {
           description="Lista e arraste."
           summary={`${stats.total} propostas  |  ${topStages[0]?.label || "Sem fila"}`}
           actions={
-            <div className="flex flex-wrap gap-2">
+            <div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center xl:justify-end">
+              <input
+                value={pipelineQuery}
+                onChange={(event) => setPipelineQuery(event.target.value)}
+                placeholder="Pesquisar no kanban..."
+                className="h-10 min-w-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-4 focus:ring-sky-100 xl:min-w-[280px]"
+              />
+              <select
+                value={pipelineStatusFilter}
+                onChange={(event) => setPipelineStatusFilter(event.target.value)}
+                className="h-10 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+              >
+                <option value="ALL">Todas as etapas</option>
+                {PIPELINE_COLUMNS.map((column) => (
+                  <option key={column.key} value={column.key}>
+                    {column.label}
+                  </option>
+                ))}
+              </select>
               {pipelineCounts
                 .filter((column) => column.total > 0)
-                .slice(0, 4)
+                .slice(0, 3)
                 .map((column) => (
                   <DataPill key={column.key} tone={STAGE_STYLES[column.key].tone}>
                     {column.label}: {column.total}
@@ -815,42 +840,14 @@ export default function DashboardPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm leading-6 text-slate-600">
-                Arraste entre etapas ou role lateralmente.
+                Arraste entre etapas, pesquise acima ou encoste nas laterais para rolar.
               </p>
-              <div className="flex items-center gap-2">
-                {canScrollPipelineLeft ? (
-                  <PipelineScrollButton
-                    direction="left"
-                    label="Ver etapas anteriores"
-                    onClick={() => scrollPipeline("left")}
-                  />
-                ) : null}
-                {canScrollPipelineRight ? (
-                  <PipelineScrollButton
-                    direction="right"
-                    label="Ver proximas etapas"
-                    onClick={() => scrollPipeline("right")}
-                  />
-                ) : null}
-              </div>
+              <DataPill tone={pipelineQuery.trim() || pipelineStatusFilter !== "ALL" ? "blue" : "emerald"}>
+                {filteredPipelineProposals.length} resultado(s)
+              </DataPill>
             </div>
 
-            <div className="relative">
-              <div
-                className={`pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-16 bg-gradient-to-r from-[#edf1f4] via-[#edf1f4]/88 to-transparent transition duration-200 sm:block ${
-                  canScrollPipelineLeft ? "opacity-100" : "opacity-0"
-                }`}
-              />
-              <div
-                className={`pointer-events-none absolute inset-y-0 right-0 z-10 hidden w-16 bg-gradient-to-l from-[#edf1f4] via-[#edf1f4]/88 to-transparent transition duration-200 sm:block ${
-                  canScrollPipelineRight ? "opacity-100" : "opacity-0"
-                }`}
-              />
-
-              <div
-                ref={pipelineScrollRef}
-                className="scrollbar-hide flex snap-x snap-proximity gap-4 overflow-x-auto scroll-smooth px-1 pb-2"
-              >
+            <DashboardKanban ariaLabel="Kanban de propostas por etapa">
                 {pipelineCounts.map((column) => (
                   <PipelineColumnCard
                     key={column.key}
@@ -862,12 +859,11 @@ export default function DashboardPage() {
                     onMove={moveProposalToStatus}
                   />
                 ))}
-              </div>
-            </div>
+            </DashboardKanban>
           </div>
         </DashboardSection>
 
-        <div className="space-y-6">
+        <div className="grid gap-6 xl:grid-cols-3">
           {isBoard ? (
             <BoardPendingCard
               boardPending={boardPending}
@@ -916,11 +912,11 @@ function DailySnapshotPanel({
   openOrders: number;
 }) {
   return (
-    <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-sm">
+    <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-sm md:p-4">
       <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-slate-200">
         Resumo
       </p>
-      <div className="mt-4 space-y-3">
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <SnapshotLine
           label="Desconto"
           value={String(stats.discountQueue)}
@@ -962,9 +958,9 @@ function SnapshotLine({
   tone: Tone;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/6 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+    <div className="min-w-0 rounded-2xl border border-white/10 bg-white/6 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-200">
+        <p className="min-w-0 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-200">
           {label}
         </p>
         <DataPill tone={tone}>{value}</DataPill>
@@ -1041,6 +1037,45 @@ function QuickActionCard({
   );
 }
 
+function ProcessPathCard({
+  title,
+  steps,
+  href,
+  tone,
+}: {
+  title: string;
+  steps: string[];
+  href: string;
+  tone: Tone;
+}) {
+  const style = ACTION_TONES[tone];
+
+  return (
+    <Link
+      href={href}
+      className={`group relative flex min-h-[220px] flex-col overflow-hidden rounded-[24px] border px-4 py-4 shadow-[0_18px_40px_-34px_rgba(15,31,50,0.28)] transition hover:-translate-y-1 ${style.shell}`}
+    >
+      <div className={`absolute inset-x-0 top-0 h-1.5 ${style.accent}`} />
+      <p className="text-sm font-bold text-slate-950">{title}</p>
+      <div className="mt-4 space-y-2">
+        {steps.map((step, index) => (
+          <div key={`${title}-${step}`} className="flex items-center gap-2">
+            <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${style.badge}`}>
+              {index + 1}
+            </span>
+            <p className="text-sm font-medium text-slate-700">{step}</p>
+          </div>
+        ))}
+      </div>
+      <span
+        className={`mt-auto inline-flex w-fit rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.16em] ${style.badge}`}
+      >
+        Abrir trilha
+      </span>
+    </Link>
+  );
+}
+
 function PipelineColumnCard({
   column,
   draggingId,
@@ -1072,7 +1107,7 @@ function PipelineColumnCard({
         const proposalId = event.dataTransfer.getData("text/proposal-id") || draggingId;
         if (proposalId) void onMove(proposalId, column.key);
       }}
-      className={`flex h-[520px] min-w-[292px] snap-start flex-col rounded-[24px] border p-4 transition md:h-[560px] ${
+      className={`dashboard-kanban-column flex min-w-[292px] snap-start flex-col rounded-[24px] border p-4 transition ${
         style.shell
       } ${dropTarget === column.key ? "ring-2 ring-sky-300" : ""}`}
     >
@@ -1090,7 +1125,7 @@ function PipelineColumnCard({
         </span>
       </div>
 
-      <div className="space-y-3 overflow-y-auto pr-1">
+      <div className="dashboard-kanban-column-scroll space-y-3 pr-1">
         {column.items.map((item) => (
           <article
             key={item.id}
@@ -1434,42 +1469,6 @@ function CollapsedSectionSummary({ summary }: { summary: string }) {
     <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 px-4 py-3 text-sm text-slate-600">
       {summary}
     </div>
-  );
-}
-
-function PipelineScrollButton({
-  direction,
-  label,
-  onClick,
-}: {
-  direction: "left" | "right";
-  label: string;
-  onClick: () => void;
-}) {
-  const isLeft = direction === "left";
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      className="group inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white/96 text-slate-700 shadow-[0_18px_38px_-22px_rgba(15,31,50,0.28)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white"
-    >
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className={`h-4 w-4 transition-transform duration-200 ${
-          isLeft ? "group-hover:-translate-x-0.5" : "group-hover:translate-x-0.5"
-        }`}
-        aria-hidden="true"
-      >
-        <path d={isLeft ? "M15 5l-7 7 7 7" : "M9 5l7 7-7 7"} />
-      </svg>
-    </button>
   );
 }
 

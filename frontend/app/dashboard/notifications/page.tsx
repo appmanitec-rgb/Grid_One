@@ -210,9 +210,6 @@ export default function NotificationsPage() {
             >
               Atualizar fila
             </button>
-            <Link href={backAction.href} className={PRIMARY_BUTTON}>
-              {backAction.label}
-            </Link>
           </>
         }
         aside={

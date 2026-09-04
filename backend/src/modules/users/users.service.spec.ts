@@ -9,9 +9,16 @@ describe('UsersService', () => {
   let prisma: {
     user: {
       findUnique: jest.Mock;
+      findFirst: jest.Mock;
+      create: jest.Mock;
       update: jest.Mock;
       findMany: jest.Mock;
     };
+    technician: {
+      findUnique: jest.Mock;
+      create: jest.Mock;
+    };
+    $transaction: jest.Mock;
   };
   let auditLogsService: { record: jest.Mock };
 
@@ -19,10 +26,21 @@ describe('UsersService', () => {
     prisma = {
       user: {
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
+        create: jest.fn(),
         update: jest.fn(),
         findMany: jest.fn(),
       },
+      technician: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+      },
+      $transaction: jest.fn(),
     };
+    prisma.$transaction.mockImplementation(
+      async (callback: (tx: typeof prisma) => Promise<unknown>) =>
+        callback(prisma),
+    );
     auditLogsService = { record: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -41,6 +59,75 @@ describe('UsersService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it('creates the user and operational technician profile atomically', async () => {
+    const createdUser = {
+      id: 'technician-user',
+      name: 'Tecnico Integrado',
+      email: 'tecnico@manitec.test',
+      role: UserRole.TECHNICIAN,
+      managerId: null,
+    };
+    prisma.user.findFirst.mockResolvedValue(null);
+    prisma.technician.findUnique.mockResolvedValue(null);
+    prisma.user.create.mockResolvedValue(createdUser);
+    prisma.technician.create.mockResolvedValue({ id: 'technician-profile' });
+
+    const result = await service.create({
+      name: 'Tecnico Integrado',
+      email: 'TECNICO@MANITEC.TEST',
+      password: 'senha123',
+      role: UserRole.TECHNICIAN,
+      technicianProfile: {
+        cpf: '123.456.789-01',
+        phone: ' (11) 99999-9999 ',
+        skills: ['Geradores', ' Geradores ', 'Eletrica'],
+      },
+    });
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          email: 'tecnico@manitec.test',
+          role: UserRole.TECHNICIAN,
+        }),
+      }),
+    );
+    expect(prisma.user.create.mock.calls[0][0].data).not.toHaveProperty(
+      'technicianProfile',
+    );
+    expect(prisma.technician.create).toHaveBeenCalledWith({
+      data: {
+        userId: 'technician-user',
+        cpf: '12345678901',
+        phone: '(11) 99999-9999',
+        skills: ['Geradores', 'Eletrica'],
+      },
+    });
+    expect(auditLogsService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityId: 'technician-user',
+        action: 'CREATE',
+      }),
+      prisma,
+    );
+    expect(result).toEqual(expect.objectContaining(createdUser));
+  });
+
+  it('does not create an incomplete technician user', async () => {
+    await expect(
+      service.create({
+        name: 'Tecnico Incompleto',
+        email: 'incompleto@manitec.test',
+        password: 'senha123',
+        role: UserRole.TECHNICIAN,
+      }),
+    ).rejects.toThrow('Informe CPF e telefone');
+
+    expect(prisma.user.create).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('returns a safe self-profile without administrative fields', async () => {

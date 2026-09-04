@@ -297,6 +297,7 @@ function makeProposal() {
     installmentIntervalDays: null,
     firstDueDate: null,
     externalNotes: 'Observacao visivel',
+    discount: 100,
     generatedContract: null,
     clientId: 'client-1',
     client: {
@@ -323,8 +324,14 @@ function makeProposal() {
     items: [
       {
         id: 'item-1',
+        kind: 'HOURLY_SERVICE',
+        description: 'Manutencao especializada em campo',
         quantity: 1,
+        hours: 4,
         unitPrice: 1000,
+        discountPercent: 10,
+        hourType: 'ONE_OFF',
+        technicianType: 'MID_LEVEL_TECHNICIAN',
         totalPrice: 1000,
         catalogItem: {
           id: 'catalog-1',

@@ -517,12 +517,6 @@ export default function ServiceReportDetailPage() {
         description={`${report.client?.tradeName || report.client?.companyName || "Cliente"} / ${report.generator?.name || "Equipamento"} / ${report.maintenanceOrder?.title || "OS"}`}
         actions={
           <>
-            <Link
-              href="/dashboard/relatorios-tecnicos"
-              className={SECONDARY_BUTTON}
-            >
-              Voltar
-            </Link>
             {canGenerateDocument ? (
               <button
                 type="button"

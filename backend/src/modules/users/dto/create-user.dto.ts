@@ -11,8 +11,24 @@ import {
   IsUrl,
   IsUUID,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { SkillLevel, UserAvailabilityStatus, UserRole } from '@prisma/client';
+
+export class CreateUserTechnicianProfileDto {
+  @IsString()
+  @IsNotEmpty({ message: 'O CPF do tecnico e obrigatorio.' })
+  cpf: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'O telefone do tecnico e obrigatorio.' })
+  phone: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  skills: string[];
+}
 
 export class CreateUserDto {
   @IsString()
@@ -103,4 +119,9 @@ export class CreateUserDto {
   @IsBoolean()
   @IsOptional()
   mfaEnabled?: boolean;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CreateUserTechnicianProfileDto)
+  technicianProfile?: CreateUserTechnicianProfileDto;
 }

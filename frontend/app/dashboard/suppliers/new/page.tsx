@@ -22,6 +22,7 @@ import {
   TextAreaInput,
   TextInput,
 } from "../../components/DashboardPageKit";
+import { loadControlOptions, optionLabel, type ControlOption } from "@/lib/control-options";
 
 type CatalogItem = { id: string; name: string; sku?: string | null };
 
@@ -42,6 +43,10 @@ export default function SupplierFormPage() {
   const [loadingSupplier, setLoadingSupplier] = useState(false);
   const [error, setError] = useState("");
   const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([]);
+  const [controlOptions, setControlOptions] = useState({
+    states: [] as ControlOption[],
+    paymentTerms: [] as ControlOption[],
+  });
 
   const [formData, setFormData] = useState({
     companyName: "",
@@ -66,6 +71,7 @@ export default function SupplierFormPage() {
 
   useEffect(() => {
     void loadCatalogItems();
+    void loadControlledFields();
   }, []);
 
   useEffect(() => {
@@ -95,6 +101,18 @@ export default function SupplierFormPage() {
       setCatalogItems((data || []).map((item) => ({ id: item.id, name: item.name, sku: item.sku })));
     } catch {
       setCatalogItems([]);
+    }
+  }
+
+  async function loadControlledFields() {
+    try {
+      const options = await loadControlOptions(["BRAZIL_STATE", "PAYMENT_TERM"]);
+      setControlOptions({
+        states: options.BRAZIL_STATE || [],
+        paymentTerms: options.PAYMENT_TERM || [],
+      });
+    } catch {
+      setControlOptions({ states: [], paymentTerms: [] });
     }
   }
 
@@ -283,14 +301,6 @@ export default function SupplierFormPage() {
             tone: "emerald",
           },
         ]}
-        actions={
-          <Link
-            href="/dashboard/suppliers"
-            className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            Voltar para fornecedores
-          </Link>
-        }
         aside={
           <InlineMessage>
             A ideia aqui e deixar o cadastro mais leve: dados institucionais de um lado,
@@ -363,8 +373,14 @@ export default function SupplierFormPage() {
                   name="paymentTerm"
                   value={formData.paymentTerm}
                   onChange={onChange}
+                  list="supplier-payment-term-options"
                   placeholder="Ex: 28 ddl, 50/50, a vista com desconto"
                 />
+                <datalist id="supplier-payment-term-options">
+                  {controlOptions.paymentTerms.map((option) => (
+                    <option key={option.id} value={option.name} label={optionLabel(option)} />
+                  ))}
+                </datalist>
               </FormField>
             </div>
           </SectionCard>
@@ -397,9 +413,20 @@ export default function SupplierFormPage() {
                 <TextInput
                   name="state"
                   value={formData.state}
-                  onChange={onChange}
+                  onChange={(event) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      state: event.target.value.toUpperCase().slice(0, 2),
+                    }))
+                  }
+                  list="supplier-state-options"
                   placeholder="UF"
                 />
+                <datalist id="supplier-state-options">
+                  {controlOptions.states.map((option) => (
+                    <option key={option.id} value={option.code} label={option.name} />
+                  ))}
+                </datalist>
               </FormField>
 
               <FormField label="Cidade">

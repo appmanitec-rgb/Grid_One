@@ -15,6 +15,8 @@ import {
   IsInt,
   IsBoolean,
   IsDateString,
+  ArrayMinSize,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -49,6 +51,7 @@ class ProposalItemDto {
 
   @IsNumber()
   @Min(0)
+  @Max(100)
   @IsOptional()
   discountPercent?: number;
 
@@ -139,10 +142,12 @@ export class CreateProposalDto {
   externalNotes?: string;
 
   @IsNumber()
+  @Min(0)
   @IsOptional()
   discount?: number;
 
   @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => ProposalItemDto)
   items!: ProposalItemDto[];

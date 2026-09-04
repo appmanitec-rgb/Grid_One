@@ -35,6 +35,7 @@ export type InstitutionalTemplateSection = {
   heading?: string;
   paragraphs?: string[];
   table?: InstitutionalTemplateTable;
+  pageBreakBefore?: boolean;
 };
 
 export type InstitutionalTemplateDefinition = {
@@ -133,6 +134,7 @@ export class DocumentTemplateService {
 
   private templateBasePaths() {
     return [
+      ...this.sourceTemplateBasePaths('pdf'),
       resolve(process.cwd(), 'src', 'templates', 'pdf'),
       resolve(process.cwd(), 'dist', 'src', 'templates', 'pdf'),
       resolve(process.cwd(), 'dist', 'templates', 'pdf'),
@@ -142,10 +144,27 @@ export class DocumentTemplateService {
 
   private institutionalTemplateBasePaths() {
     return [
+      ...this.sourceTemplateBasePaths('documents'),
       resolve(process.cwd(), 'src', 'templates', 'documents'),
       resolve(process.cwd(), 'dist', 'src', 'templates', 'documents'),
       resolve(process.cwd(), 'dist', 'templates', 'documents'),
       resolve(__dirname, '..', '..', 'templates', 'documents'),
+    ];
+  }
+
+  private sourceTemplateBasePaths(type: 'pdf' | 'documents') {
+    return [
+      resolve(process.cwd(), 'backend', 'src', 'templates', type),
+      resolve(
+        __dirname,
+        '..',
+        '..',
+        '..',
+        '..',
+        'src',
+        'templates',
+        type,
+      ),
     ];
   }
 

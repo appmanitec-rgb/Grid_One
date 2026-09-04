@@ -31,6 +31,20 @@ export class ClientsController {
     return this.clientsService.create(createClientDto, userId);
   }
 
+  @RequireAccessPolicy(
+    'clients.create',
+    'pages.equipments',
+    'equipments.create',
+  )
+  @Post('onboarding')
+  createWithEquipments(
+    @Body() createClientDto: CreateClientDto,
+    @Req() req: Request,
+  ) {
+    const userId = (req as any).user?.sub as string | undefined;
+    return this.clientsService.create(createClientDto, userId, true);
+  }
+
   @RequireAccessPolicy('clients.view')
   @Get('lookup')
   lookup(@Query('q') query?: string, @Query('take') take?: string) {

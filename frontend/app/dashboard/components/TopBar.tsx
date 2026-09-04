@@ -13,8 +13,6 @@ import {
 import DashboardAppearanceControl from "./DashboardAppearanceControl";
 
 type TopBarProps = {
-  onExpandSidebar?: () => void;
-  canExpandSidebar?: boolean;
   appearanceTheme: DashboardThemeId;
   onChangeAppearanceTheme: (themeId: DashboardThemeId) => void;
 };
@@ -42,7 +40,7 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/dashboard/finance/cash-flow": { title: "Fluxo de Caixa", subtitle: "Previsão de saldo, entradas e saídas do dia." },
   "/dashboard/finance/bank-accounts": { title: "Contas Bancárias & Caixas", subtitle: "Consolidação de saldos por banco e caixa interno." },
   "/dashboard/finance/cost-centers": { title: "Centros de Custo (DRE)", subtitle: "Margem por contrato, ativo e cliente." },
-  "/dashboard/hr/collaborators": { title: "Agentes", subtitle: "Colaboradores, usuarios, clientes de portal e auditores separados." },
+  "/dashboard/hr/collaborators": { title: "Agentes e Acessos", subtitle: "Colaboradores, usuários internos, clientes de portal e auditores separados." },
   "/dashboard/hr/epis-tools": { title: "EPIs e Ferramentas", subtitle: "Controle de entrega, responsabilidade e rastreabilidade." },
   "/dashboard/hr/time-tracking": { title: "Apontamento e Banco de Horas", subtitle: "Horas de campo, extras e sobreaviso." },
   "/dashboard/hr/commissions": { title: "Comissões e Premiação", subtitle: "Consolidado de variáveis do comercial e operação." },
@@ -55,6 +53,9 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/dashboard/equipments": { title: "Parque de Equipamentos", subtitle: "Rastreio de ativos e manutenção." },
   "/dashboard/catalog": { title: "Inteligência de Catálogo", subtitle: "Peças, custos, margens e precificação." },
   "/dashboard/suppliers": { title: "Rede de Fornecedores", subtitle: "Compras, SLA e condições comerciais." },
+  "/dashboard/developer/data": { title: "Manitec Studio", subtitle: "Visualizacao, edicao controlada, importacao preparada e exportacao de dados." },
+  "/dashboard/developer/history": { title: "Historico do Studio", subtitle: "Auditoria e rastreabilidade dos eventos administrativos." },
+  "/dashboard/developer": { title: "Manitec Studio", subtitle: "Gerenciamento seguro dos dados do ERP." },
   "/dashboard/management/users": { title: "Área de Gestão (Admin)", subtitle: "Cadastros de usuários, permissões e governança." },
   "/dashboard/management": { title: "Área de Gestão (Admin)", subtitle: "Cadastros de usuários, permissões e governança." },
   "/dashboard/control": { title: "Área de Gestão (Admin)", subtitle: "Cadastros de usuários, permissões e governança." },
@@ -63,11 +64,13 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
 
 function getRouteFamily(pathname: string) {
   if (pathname.startsWith("/dashboard/client-portal")) return "Portal";
+  if (pathname.startsWith("/dashboard/developer")) return "Studio";
   if (pathname.startsWith("/dashboard/documents")) return "Painel";
   if (pathname.startsWith("/dashboard/deliveries")) return "Painel";
   if (pathname.startsWith("/dashboard/notifications")) return "Painel";
   if (pathname.startsWith("/dashboard/finance")) return "Financeiro";
-  if (pathname.startsWith("/dashboard/hr")) return "Agentes";
+  if (pathname.startsWith("/dashboard/hr/collaborators")) return "Agentes";
+  if (pathname.startsWith("/dashboard/hr")) return "RH Operacional";
   if (pathname.startsWith("/dashboard/catalog") || pathname.startsWith("/dashboard/suppliers") || pathname.startsWith("/dashboard/inventory") || pathname.startsWith("/dashboard/purchase-orders")) {
     return "Suprimentos";
   }
@@ -105,7 +108,10 @@ function getQuickAction(pathname: string, roleCode: string) {
   if (roleCode === "CLIENT" && pathname.startsWith("/dashboard/proposals")) {
     return { href: "/dashboard/client-portal", label: "Voltar ao portal" };
   }
-  if (pathname === "/dashboard" || pathname.startsWith("/dashboard/proposals")) {
+  if (pathname === "/dashboard") {
+    return null;
+  }
+  if (pathname.startsWith("/dashboard/proposals")) {
     return { href: "/dashboard/proposals/new", label: "Nova proposta" };
   }
   if (pathname.startsWith("/dashboard/clients")) {
@@ -144,12 +150,16 @@ function getQuickAction(pathname: string, roleCode: string) {
   if (pathname.startsWith("/dashboard/catalog")) {
     return { href: "/dashboard/catalog/new", label: "Novo item" };
   }
+  if (pathname.startsWith("/dashboard/developer/history")) {
+    return { href: "/dashboard/developer/data", label: "Tabelas" };
+  }
+  if (pathname.startsWith("/dashboard/developer")) {
+    return { href: "/dashboard/developer/history", label: "Historico" };
+  }
   return null;
 }
 
 export default function TopBar({
-  onExpandSidebar,
-  canExpandSidebar = false,
   appearanceTheme,
   onChangeAppearanceTheme,
 }: TopBarProps) {
@@ -248,6 +258,7 @@ export default function TopBar({
     () => getQuickAction(pathname, userRoleCode),
     [pathname, userRoleCode],
   );
+  const showBackButton = pathname !== "/dashboard";
   const isNotificationsPage = pathname.startsWith("/dashboard/notifications");
   const todayLabel = useMemo(
     () =>
@@ -261,41 +272,50 @@ export default function TopBar({
 
   const initials = userName.trim().charAt(0).toUpperCase() || "U";
 
+  function goBack() {
+    if (window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push("/dashboard");
+  }
+
   return (
-    <header className="dashboard-topbar sticky top-0 z-20 border-b border-white/70 bg-white/80 shadow-[0_16px_32px_-24px_rgba(15,31,50,0.3)] backdrop-blur-xl">
-      <div className="dashboard-container flex items-center justify-between gap-4 px-4 py-3 md:px-6">
-        <div className="flex items-center gap-3">
-          {canExpandSidebar && (
+    <header className="dashboard-topbar sticky top-0 z-20 border-b border-white/70 bg-white/80 shadow-[0_14px_28px_-24px_rgba(15,31,50,0.28)] backdrop-blur-xl">
+      <div className="dashboard-container flex items-center justify-between gap-3 px-4 py-2.5 md:px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          {showBackButton ? (
             <button
               type="button"
-              onClick={onExpandSidebar}
-              className="dashboard-topbar-control hidden rounded-xl border border-slate-200 bg-white/90 px-2.5 py-2 text-xs font-bold text-slate-700 shadow-sm hover:bg-white md:inline-flex"
-              title="Expandir menu"
+              onClick={goBack}
+              aria-label="Voltar para a tela anterior"
+              title="Voltar"
+              className="dashboard-topbar-control inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/12 bg-white/8 text-lg font-semibold text-white/90 shadow-sm transition hover:bg-white/12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
             >
-              <span>&gt;</span>
+              <span aria-hidden="true">&larr;</span>
             </button>
-          )}
+          ) : null}
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="dashboard-topbar-chip inline-flex rounded-full border border-slate-200 bg-slate-100/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-100">
+              <span className="dashboard-topbar-chip inline-flex rounded-full border border-slate-200 bg-slate-100/90 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-100">
                 {routeFamily}
               </span>
             </div>
-            <h2 className="mt-2 truncate text-base font-bold text-white md:text-lg">
+            <h2 className="mt-1.5 truncate text-base font-bold leading-tight text-white md:text-lg">
               {heading.title}
             </h2>
-            <p className="hidden max-w-2xl text-xs text-slate-200 md:block">
+            <p className="hidden max-w-2xl truncate text-xs text-slate-200/85 md:block">
               {heading.subtitle}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 md:gap-3">
-          <div className="dashboard-topbar-chip hidden rounded-2xl border border-slate-200 bg-white/72 px-3 py-2 text-right shadow-sm md:block">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-200/80">
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="dashboard-topbar-chip hidden rounded-xl border border-slate-200 bg-white/72 px-3 py-1.5 text-right shadow-sm lg:block">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-200/70">
               Hoje
             </p>
-            <p className="mt-1 text-sm font-semibold text-white">{todayLabel}</p>
+            <p className="text-xs font-semibold text-white">{todayLabel}</p>
           </div>
 
           <DashboardAppearanceControl
@@ -305,15 +325,15 @@ export default function TopBar({
 
           <Link
             href="/dashboard/notifications"
-            className={`dashboard-topbar-chip hidden items-center gap-3 rounded-2xl border px-3 py-2 shadow-sm transition hover:border-white/20 md:inline-flex ${
+            className={`dashboard-topbar-chip hidden items-center gap-2 rounded-xl border px-3 py-1.5 shadow-sm transition hover:border-white/20 lg:inline-flex ${
               isNotificationsPage ? "dashboard-accent-surface" : ""
             }`}
           >
             <div className="text-left">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-200/80">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-200/70">
                 Alertas
               </p>
-              <p className="mt-1 text-sm font-semibold text-white">
+              <p className="text-xs font-semibold text-white">
                 {notificationSummary.highPriority > 0
                   ? "Prioridade alta"
                   : notificationSummary.actionRequired > 0
@@ -322,7 +342,7 @@ export default function TopBar({
               </p>
             </div>
             <span
-              className={`inline-flex min-w-8 items-center justify-center rounded-full px-2 py-1 text-xs font-bold ${
+              className={`inline-flex min-w-7 items-center justify-center rounded-full px-2 py-0.5 text-xs font-bold ${
                 isNotificationsPage
                   ? "bg-white/18 text-white"
                   : notificationSummary.highPriority > 0
@@ -337,16 +357,16 @@ export default function TopBar({
           {quickAction ? (
             <Link
               href={quickAction.href}
-              className="dashboard-topbar-primary hidden rounded-2xl bg-slate-950 px-4 py-2.5 text-xs font-semibold text-white shadow-[0_18px_30px_-24px_rgba(15,31,50,0.8)] transition hover:bg-slate-800 md:inline-flex"
+              className="dashboard-topbar-control hidden rounded-xl border border-white/12 bg-white/8 px-3 py-2 text-xs font-semibold text-white/90 shadow-sm transition hover:bg-white/12 xl:inline-flex"
             >
               {quickAction.label}
             </Link>
           ) : null}
 
-          <div className="dashboard-topbar-profile flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/88 px-2 py-1.5 shadow-sm">
-            <div className="hidden text-right md:block">
-              <p className="text-sm font-bold text-white">{userName}</p>
-              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-200/80">
+          <div className="dashboard-topbar-profile flex items-center gap-2 rounded-xl border border-slate-200 bg-white/88 px-2 py-1.5 shadow-sm">
+            <div className="hidden max-w-32 text-right xl:block">
+              <p className="truncate text-xs font-bold text-white">{userName}</p>
+              <p className="truncate text-[10px] uppercase tracking-[0.14em] text-slate-200/75">
                 {userRole}
               </p>
             </div>

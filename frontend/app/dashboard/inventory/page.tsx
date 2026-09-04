@@ -251,11 +251,21 @@ export default function InventoryPage() {
           <div className="space-y-2">
             {drafts.map((draft) => (
               <article key={`${draft.warehouseId}-${draft.catalogItemId}`} className="rounded-lg border border-amber-200 bg-white p-3">
-                <p className="text-sm font-semibold text-zinc-900">{draft.item}</p>
-                <p className="text-xs text-zinc-600">{draft.warehouse} | Disp: {draft.availableQty} | Min: {draft.minQty} | Sugerido: {draft.suggestedQty}</p>
-                {draft.supplierSuggestion ? (
-                  <p className="mt-1 text-xs text-zinc-700">Sugestao: {draft.supplierSuggestion.supplierName} ({draft.supplierSuggestion.leadTimeDays ?? "?"} dias)</p>
-                ) : null}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-900">{draft.item}</p>
+                    <p className="text-xs text-zinc-600">{draft.warehouse} | Disp: {draft.availableQty} | Min: {draft.minQty} | Sugerido: {draft.suggestedQty}</p>
+                    {draft.supplierSuggestion ? (
+                      <p className="mt-1 text-xs text-zinc-700">Sugestao: {draft.supplierSuggestion.supplierName} ({draft.supplierSuggestion.leadTimeDays ?? "?"} dias)</p>
+                    ) : null}
+                  </div>
+                  <Link
+                    href={buildPurchaseDraftHref(draft)}
+                    className="inline-flex items-center justify-center rounded-lg border border-amber-300 bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-200"
+                  >
+                    Gerar compra
+                  </Link>
+                </div>
               </article>
             ))}
           </div>
@@ -263,6 +273,18 @@ export default function InventoryPage() {
       </section>
     </div>
   );
+}
+
+function buildPurchaseDraftHref(draft: ReplenishmentDraft) {
+  const params = new URLSearchParams({
+    draft: `${draft.warehouseId}:${draft.catalogItemId}`,
+  });
+
+  if (draft.supplierSuggestion?.supplierId) {
+    params.set("supplierId", draft.supplierSuggestion.supplierId);
+  }
+
+  return `/dashboard/purchase-orders?${params.toString()}`;
 }
 
 function Metric({ title, value }: { title: string; value: string }) {

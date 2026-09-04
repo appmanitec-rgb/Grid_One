@@ -40,18 +40,19 @@ export default function DashboardAppearanceControl({
       <button
         type="button"
         onClick={() => setIsOpen((current) => !current)}
-        className="dashboard-topbar-control inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
+        className="dashboard-topbar-control inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white/90 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
+        title="Tema"
       >
-        <span className="flex items-center gap-1.5">
+        <span className="flex items-center gap-1">
           {activeTheme.preview.map((color, index) => (
             <span
               key={`${activeTheme.id}-${index}`}
-              className="h-3 w-3 rounded-full border border-white/70 shadow-sm"
+              className="h-2.5 w-2.5 rounded-full border border-white/70 shadow-sm"
               style={{ backgroundColor: color }}
             />
           ))}
         </span>
-        <span>Tema</span>
+        <span className="sr-only">Tema</span>
       </button>
 
       {isOpen ? (

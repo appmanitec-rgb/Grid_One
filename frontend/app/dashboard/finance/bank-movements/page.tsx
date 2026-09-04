@@ -406,28 +406,6 @@ export default function BankMovementsPage() {
             tone: payload.finalBalance >= 0 ? "blue" : "rose",
           },
         ]}
-        actions={
-          <>
-            <Link
-              href="/dashboard/finance/bank-accounts"
-              className={SECONDARY_BUTTON}
-            >
-              Contas e caixas
-            </Link>
-            <Link
-              href="/dashboard/finance/cash-flow"
-              className={SECONDARY_BUTTON}
-            >
-              Fluxo de caixa
-            </Link>
-            <Link
-              href="/dashboard/finance/reconciliation"
-              className={SECONDARY_BUTTON}
-            >
-              Conciliação bancária
-            </Link>
-          </>
-        }
       />
 
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}

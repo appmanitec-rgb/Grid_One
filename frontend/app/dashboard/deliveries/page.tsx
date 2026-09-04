@@ -170,9 +170,6 @@ export default function DeliveriesPage() {
         ]}
         actions={
           <>
-            <Link href="/dashboard/documents" className={SECONDARY_BUTTON}>
-              Voltar para documentos
-            </Link>
             <button
               type="button"
               onClick={() => void loadHistory()}

@@ -1,10 +1,10 @@
-
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
+import { loadControlOptions, type ControlOption } from "@/lib/control-options";
 
 type CatalogItem = {
   id: string;
@@ -20,6 +20,11 @@ type Client = {
   companyName?: string | null;
   tradeName?: string | null;
   cnpj?: string | null;
+  paymentTermDefault?: string | null;
+  proposalCreationBlocked?: boolean | null;
+  proposalBlockReason?: string | null;
+  blockedPaymentTerms?: string[];
+  _count?: { proposals?: number };
 };
 
 type Generator = {
@@ -33,8 +38,16 @@ type Generator = {
   voltage?: string | null;
   engineModelName?: string | null;
   installationSite?: string | null;
-  client?: { id: string; companyName?: string | null; tradeName?: string | null } | null;
-  currentSite?: { id: string; name?: string | null; code?: string | null } | null;
+  client?: {
+    id: string;
+    companyName?: string | null;
+    tradeName?: string | null;
+  } | null;
+  currentSite?: {
+    id: string;
+    name?: string | null;
+    code?: string | null;
+  } | null;
 };
 
 type LinkedOpportunity = {
@@ -45,7 +58,12 @@ type LinkedOpportunity = {
   opportunityType?: string | null;
   estimatedValue?: number | null;
   client: { id: string; companyName: string; tradeName?: string | null };
-  assignedSeller?: { id: string; name: string; email?: string | null; department?: string | null } | null;
+  assignedSeller?: {
+    id: string;
+    name: string;
+    email?: string | null;
+    department?: string | null;
+  } | null;
   inspections?: Array<{
     id: string;
     code: string;
@@ -132,6 +150,15 @@ function onlyDigits(value: string) {
   return value.replace(/\D/g, "");
 }
 
+function normalizeCommercialTerm(value?: string | null) {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
 function formatClientOption(client: Client) {
   return [client.companyName, client.tradeName, client.cnpj]
     .filter(Boolean)
@@ -150,11 +177,7 @@ function formatGeneratorOption(generator: Generator) {
 
 function joinScopeTexts(texts: string[]) {
   const unique = Array.from(
-    new Set(
-      texts
-        .map((text) => text.trim())
-        .filter(Boolean),
-    ),
+    new Set(texts.map((text) => text.trim()).filter(Boolean)),
   );
   return unique.map((text) => `- ${text.replace(/^-+\s*/, "")}`).join("\n");
 }
@@ -233,7 +256,9 @@ function SearchableSelect({
               </li>
             ))
           ) : (
-            <li className="p-2 text-sm text-zinc-500">Nenhum item encontrado.</li>
+            <li className="p-2 text-sm text-zinc-500">
+              Nenhum item encontrado.
+            </li>
           )}
         </ul>
       ) : null}
@@ -258,7 +283,8 @@ export default function NewProposalPage() {
   const [scopeTemplates, setScopeTemplates] = useState<ScopeTemplate[]>([]);
   const [hourTypes, setHourTypes] = useState<PricingOption[]>([]);
   const [technicianTypes, setTechnicianTypes] = useState<PricingOption[]>([]);
-  const [linkedOpportunity, setLinkedOpportunity] = useState<LinkedOpportunity | null>(null);
+  const [linkedOpportunity, setLinkedOpportunity] =
+    useState<LinkedOpportunity | null>(null);
   const [loadingOpportunity, setLoadingOpportunity] = useState(false);
   const [linkedOpportunityError, setLinkedOpportunityError] = useState("");
 
@@ -309,10 +335,15 @@ export default function NewProposalPage() {
   const [otherItems, setOtherItems] = useState<OtherItem[]>([]);
 
   const [scope, setScope] = useState("");
-  const [selectedScopeTemplateIds, setSelectedScopeTemplateIds] = useState<string[]>([]);
+  const [selectedScopeTemplateIds, setSelectedScopeTemplateIds] = useState<
+    string[]
+  >([]);
   const [freight, setFreight] = useState("FOB");
   const [validUntil, setValidUntil] = useState("");
   const [paymentTerm, setPaymentTerm] = useState("");
+  const [paymentTermOptions, setPaymentTermOptions] = useState<ControlOption[]>(
+    [],
+  );
   const [deliveryLeadTimeDays, setDeliveryLeadTimeDays] = useState("");
   const [paymentDetails, setPaymentDetails] = useState("");
   const [hasDownPayment, setHasDownPayment] = useState(false);
@@ -323,22 +354,38 @@ export default function NewProposalPage() {
   const [internalNotes, setInternalNotes] = useState("");
   const [externalNotes, setExternalNotes] = useState("");
 
-  const [discountType, setDiscountType] = useState<"PERCENTAGE" | "VALUE">("PERCENTAGE");
+  const [discountType, setDiscountType] = useState<"PERCENTAGE" | "VALUE">(
+    "PERCENTAGE",
+  );
   const [discountInput, setDiscountInput] = useState("");
   useEffect(() => {
     async function fetchData() {
       try {
-        const [clientsRes, partsRes, servicesRes, pricingRes, scopesRes] = await Promise.all([
+        const [
+          clientsRes,
+          partsRes,
+          servicesRes,
+          pricingRes,
+          scopesRes,
+          controlOptions,
+        ] = await Promise.all([
           apiFetch(apiUrl("/clients/lookup?take=10"), { cache: "no-store" }),
-          apiFetch(apiUrl("/catalogs/lookup?type=PART&take=10"), { cache: "no-store" }),
-          apiFetch(apiUrl("/catalogs/lookup?type=SERVICE&take=10"), { cache: "no-store" }),
+          apiFetch(apiUrl("/catalogs/lookup?type=PART&take=10"), {
+            cache: "no-store",
+          }),
+          apiFetch(apiUrl("/catalogs/lookup?type=SERVICE&take=10"), {
+            cache: "no-store",
+          }),
           apiFetch(apiUrl("/proposals/pricing-options"), { cache: "no-store" }),
           apiFetch(apiUrl("/proposals/scope-templates"), { cache: "no-store" }),
+          loadControlOptions(["PAYMENT_TERM"]),
         ]);
 
         if (clientsRes.ok) setClients((await clientsRes.json()) as Client[]);
-        if (partsRes.ok) setPartOptions((await partsRes.json()) as CatalogItem[]);
-        if (servicesRes.ok) setServiceOptions((await servicesRes.json()) as CatalogItem[]);
+        if (partsRes.ok)
+          setPartOptions((await partsRes.json()) as CatalogItem[]);
+        if (servicesRes.ok)
+          setServiceOptions((await servicesRes.json()) as CatalogItem[]);
         if (pricingRes.ok) {
           const pricing = (await pricingRes.json()) as {
             hourTypes?: PricingOption[];
@@ -347,7 +394,9 @@ export default function NewProposalPage() {
           setHourTypes(pricing.hourTypes || []);
           setTechnicianTypes(pricing.technicianTypes || []);
         }
-        if (scopesRes.ok) setScopeTemplates((await scopesRes.json()) as ScopeTemplate[]);
+        if (scopesRes.ok)
+          setScopeTemplates((await scopesRes.json()) as ScopeTemplate[]);
+        setPaymentTermOptions(controlOptions.PAYMENT_TERM || []);
         if (!clientsRes.ok || !partsRes.ok || !servicesRes.ok) {
           setFeedback({
             kind: "error",
@@ -369,8 +418,25 @@ export default function NewProposalPage() {
     const params = new URLSearchParams(window.location.search);
     const clientIdFromUrl = params.get("clientId");
     const opportunityIdFromUrl = params.get("opportunityId");
+    const renewalContractIdFromUrl = params.get("renewalContractId");
 
     if (clientIdFromUrl) setSelectedClientId(clientIdFromUrl);
+    if (renewalContractIdFromUrl) {
+      setScope(
+        (current) =>
+          current ||
+          `Renovacao contratual vinculada ao contrato ${renewalContractIdFromUrl}. Revisar escopo, periodo, valores e equipamentos antes do envio.`,
+      );
+      setInternalNotes(
+        (current) =>
+          current ||
+          `Proposta iniciada a partir da renovacao do contrato ${renewalContractIdFromUrl}.`,
+      );
+      setFeedback({
+        kind: "success",
+        text: "Proposta de renovacao iniciada. Confira escopo, valores e equipamentos antes de enviar.",
+      });
+    }
     if (!opportunityIdFromUrl) return;
 
     let cancelled = false;
@@ -379,9 +445,12 @@ export default function NewProposalPage() {
       setLoadingOpportunity(true);
       setLinkedOpportunityError("");
       try {
-        const res = await apiFetch(apiUrl(`/crm/opportunities/${opportunityIdFromUrl}`), {
-          cache: "no-store",
-        });
+        const res = await apiFetch(
+          apiUrl(`/crm/opportunities/${opportunityIdFromUrl}`),
+          {
+            cache: "no-store",
+          },
+        );
 
         if (!res.ok) {
           throw new Error(
@@ -427,15 +496,40 @@ export default function NewProposalPage() {
   }, [clients, selectedClientId]);
 
   useEffect(() => {
+    if (!selectedClientId) return;
+    let cancelled = false;
+
+    void apiFetch(apiUrl(`/clients/${selectedClientId}`), { cache: "no-store" })
+      .then(async (response) =>
+        response.ok ? ((await response.json()) as Client) : null,
+      )
+      .then((client) => {
+        if (!client || cancelled) return;
+        setClients((current) => [
+          client,
+          ...current.filter((item) => item.id !== client.id),
+        ]);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedClientId]);
+
+  useEffect(() => {
     if (linkedOpportunity) return;
     const handle = window.setTimeout(async () => {
       setClientLookupLoading(true);
       try {
         const params = new URLSearchParams({ take: "10" });
         if (clientSearch.trim()) params.set("q", clientSearch.trim());
-        const res = await apiFetch(apiUrl(`/clients/lookup?${params.toString()}`), {
-          cache: "no-store",
-        });
+        const res = await apiFetch(
+          apiUrl(`/clients/lookup?${params.toString()}`),
+          {
+            cache: "no-store",
+          },
+        );
         if (res.ok) setClients((await res.json()) as Client[]);
       } finally {
         setClientLookupLoading(false);
@@ -470,9 +564,12 @@ export default function NewProposalPage() {
       try {
         const params = new URLSearchParams({ take: "10" });
         if (sellerSearch.trim()) params.set("q", sellerSearch.trim());
-        const res = await apiFetch(apiUrl(`/crm/sellers?${params.toString()}`), {
-          cache: "no-store",
-        });
+        const res = await apiFetch(
+          apiUrl(`/crm/sellers?${params.toString()}`),
+          {
+            cache: "no-store",
+          },
+        );
         if (res.ok) setSellers((await res.json()) as SellerOption[]);
       } finally {
         setSellerLookupLoading(false);
@@ -485,9 +582,62 @@ export default function NewProposalPage() {
     () => generators.filter((g) => g.clientId === selectedClientId),
     [generators, selectedClientId],
   );
+  const selectedClient = useMemo(
+    () => clients.find((client) => client.id === selectedClientId) ?? null,
+    [clients, selectedClientId],
+  );
+  const clientHasCommercialHistory = Boolean(selectedClient?._count?.proposals);
+
+  const paymentTermBlockReason = useCallback(
+    (option: ControlOption) => {
+      const normalizedName = normalizeCommercialTerm(option.name);
+      const normalizedCode = normalizeCommercialTerm(option.code);
+      const blockedForClient = (selectedClient?.blockedPaymentTerms || []).some(
+        (term) => {
+          const normalized = normalizeCommercialTerm(term);
+          return normalized === normalizedName || normalized === normalizedCode;
+        },
+      );
+      if (blockedForClient) return "Bloqueada para este cliente";
+      if (option.isBlockedForNewClients && !clientHasCommercialHistory) {
+        return "Bloqueada para cliente sem historico";
+      }
+      return "";
+    },
+    [clientHasCommercialHistory, selectedClient],
+  );
+
+  useEffect(() => {
+    if (!selectedClient) return;
+    const currentOption = paymentTermOptions.find(
+      (option) =>
+        normalizeCommercialTerm(option.name) ===
+          normalizeCommercialTerm(paymentTerm) ||
+        normalizeCommercialTerm(option.code) ===
+          normalizeCommercialTerm(paymentTerm),
+    );
+    if (currentOption && paymentTermBlockReason(currentOption)) {
+      setPaymentTerm("");
+      return;
+    }
+    if (paymentTerm) return;
+    const defaultOption = paymentTermOptions.find(
+      (option) =>
+        normalizeCommercialTerm(option.name) ===
+          normalizeCommercialTerm(selectedClient.paymentTermDefault) ||
+        normalizeCommercialTerm(option.code) ===
+          normalizeCommercialTerm(selectedClient.paymentTermDefault),
+    );
+    if (defaultOption && !paymentTermBlockReason(defaultOption)) {
+      setPaymentTerm(defaultOption.name);
+    }
+  }, [paymentTerm, paymentTermBlockReason, paymentTermOptions, selectedClient]);
 
   const addPart = () =>
-    setParts((prev) => [...prev, { catalogItemId: "", quantity: "1", unitPrice: "" }]);
+    setParts((prev) => [
+      ...prev,
+      { catalogItemId: "", quantity: "1", unitPrice: "" },
+    ]);
   const removePart = (index: number) =>
     setParts((prev) => prev.filter((_, i) => i !== index));
 
@@ -504,7 +654,10 @@ export default function NewProposalPage() {
   };
 
   const addLabor = () =>
-    setLabor((prev) => [...prev, { catalogItemId: "", quantity: "1", unitPrice: "" }]);
+    setLabor((prev) => [
+      ...prev,
+      { catalogItemId: "", quantity: "1", unitPrice: "" },
+    ]);
   const removeLabor = (index: number) =>
     setLabor((prev) => prev.filter((_, i) => i !== index));
 
@@ -523,9 +676,12 @@ export default function NewProposalPage() {
   async function lookupCatalog(type: "PART" | "SERVICE", term: string) {
     const params = new URLSearchParams({ type, take: "10" });
     if (term.trim()) params.set("q", term.trim());
-    const res = await apiFetch(apiUrl(`/catalogs/lookup?${params.toString()}`), {
-      cache: "no-store",
-    });
+    const res = await apiFetch(
+      apiUrl(`/catalogs/lookup?${params.toString()}`),
+      {
+        cache: "no-store",
+      },
+    );
     if (!res.ok) return;
     const payload = (await res.json()) as CatalogItem[];
     if (type === "PART") setPartOptions(payload);
@@ -636,13 +792,18 @@ export default function NewProposalPage() {
         }),
       });
       if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, "Falha ao cadastrar cliente."));
+        throw new Error(
+          await readApiErrorMessage(res, "Falha ao cadastrar cliente."),
+        );
       }
 
       const created = (await res.json()) as Client;
       setSelectedClientId(created.id);
       setClientSearch(formatClientOption(created));
-      setClients((current) => [created, ...current.filter((c) => c.id !== created.id)]);
+      setClients((current) => [
+        created,
+        ...current.filter((c) => c.id !== created.id),
+      ]);
       setSelectedEquipmentId("");
       setEquipmentSearch("");
       setQuickClientOpen(false);
@@ -657,11 +818,17 @@ export default function NewProposalPage() {
         city: "",
         state: "",
       });
-      setFeedback({ kind: "success", text: "Cliente cadastrado e selecionado." });
+      setFeedback({
+        kind: "success",
+        text: "Cliente cadastrado e selecionado.",
+      });
     } catch (error: unknown) {
       setFeedback({
         kind: "error",
-        text: error instanceof Error ? error.message : "Falha ao cadastrar cliente.",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Falha ao cadastrar cliente.",
       });
     } finally {
       setQuickClientSaving(false);
@@ -670,11 +837,26 @@ export default function NewProposalPage() {
 
   async function handleCreateQuickGenerator() {
     if (!selectedClientId) {
-      setFeedback({ kind: "error", text: "Selecione o cliente antes da maquina." });
+      setFeedback({
+        kind: "error",
+        text: "Selecione o cliente antes da maquina.",
+      });
+      return;
+    }
+    if (selectedClient?.proposalCreationBlocked) {
+      setFeedback({
+        kind: "error",
+        text: selectedClient.proposalBlockReason
+          ? `Propostas bloqueadas para este cliente: ${selectedClient.proposalBlockReason}`
+          : "Propostas bloqueadas para este cliente. Consulte o responsavel comercial.",
+      });
       return;
     }
     if (!quickGenerator.name.trim()) {
-      setFeedback({ kind: "error", text: "Informe o nome/apelido da maquina." });
+      setFeedback({
+        kind: "error",
+        text: "Informe o nome/apelido da maquina.",
+      });
       return;
     }
 
@@ -691,20 +873,27 @@ export default function NewProposalPage() {
           brand: quickGenerator.brand.trim() || undefined,
           modelName: quickGenerator.modelName.trim() || undefined,
           serialNumber: quickGenerator.serialNumber.trim() || undefined,
-          power: quickGenerator.power ? Number(quickGenerator.power) : undefined,
+          power: quickGenerator.power
+            ? Number(quickGenerator.power)
+            : undefined,
           voltage: quickGenerator.voltage.trim() || undefined,
           installationSite: quickGenerator.installationSite.trim() || undefined,
           notes: quickGenerator.notes.trim() || undefined,
         }),
       });
       if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, "Falha ao cadastrar maquina."));
+        throw new Error(
+          await readApiErrorMessage(res, "Falha ao cadastrar maquina."),
+        );
       }
 
       const created = (await res.json()) as Generator;
       setSelectedEquipmentId(created.id);
       setEquipmentSearch(formatGeneratorOption(created));
-      setGenerators((current) => [created, ...current.filter((g) => g.id !== created.id)]);
+      setGenerators((current) => [
+        created,
+        ...current.filter((g) => g.id !== created.id),
+      ]);
       setQuickGeneratorOpen(false);
       setQuickGenerator({
         name: "",
@@ -717,11 +906,17 @@ export default function NewProposalPage() {
         installationSite: "",
         notes: "",
       });
-      setFeedback({ kind: "success", text: "Maquina cadastrada e selecionada." });
+      setFeedback({
+        kind: "success",
+        text: "Maquina cadastrada e selecionada.",
+      });
     } catch (error: unknown) {
       setFeedback({
         kind: "error",
-        text: error instanceof Error ? error.message : "Falha ao cadastrar maquina.",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Falha ao cadastrar maquina.",
       });
     } finally {
       setQuickGeneratorSaving(false);
@@ -736,7 +931,10 @@ export default function NewProposalPage() {
     [scopeTemplates, selectedScopeTemplateIds],
   );
   const combinedScopeText = useMemo(
-    () => joinScopeTexts(selectedScopeTemplates.map((template) => template.scopeText)),
+    () =>
+      joinScopeTexts(
+        selectedScopeTemplates.map((template) => template.scopeText),
+      ),
     [selectedScopeTemplates],
   );
   function appendScopeTemplates() {
@@ -745,7 +943,10 @@ export default function NewProposalPage() {
       .split("\n")
       .map((line) => line.trim())
       .filter(Boolean);
-    const next = joinScopeTexts([...currentParts, ...selectedScopeTemplates.map((template) => template.scopeText)]);
+    const next = joinScopeTexts([
+      ...currentParts,
+      ...selectedScopeTemplates.map((template) => template.scopeText),
+    ]);
     setScope(next);
   }
 
@@ -763,7 +964,9 @@ export default function NewProposalPage() {
     setFeedback(null);
     try {
       const res = await apiFetch(
-        apiUrl(`/generators/${selectedEquipmentId}/base-items?group=${serviceType}`),
+        apiUrl(
+          `/generators/${selectedEquipmentId}/base-items?group=${serviceType}`,
+        ),
         {},
       );
 
@@ -818,18 +1021,31 @@ export default function NewProposalPage() {
   };
 
   const partsTotal = useMemo(
-    () => parts.reduce((acc, item) => acc + Number(item.quantity || 0) * Number(item.unitPrice || 0), 0),
+    () =>
+      parts.reduce(
+        (acc, item) =>
+          acc + Number(item.quantity || 0) * Number(item.unitPrice || 0),
+        0,
+      ),
     [parts],
   );
   const laborTotal = useMemo(
-    () => labor.reduce((acc, item) => acc + Number(item.quantity || 0) * Number(item.unitPrice || 0), 0),
+    () =>
+      labor.reduce(
+        (acc, item) =>
+          acc + Number(item.quantity || 0) * Number(item.unitPrice || 0),
+        0,
+      ),
     [labor],
   );
   const hourlyTotal = useMemo(
     () =>
       hourlyServices.reduce((acc, item) => {
         const gross = Number(item.hours || 0) * Number(item.unitPrice || 0);
-        const discount = Math.min(100, Math.max(0, Number(item.discountPercent || 0)));
+        const discount = Math.min(
+          100,
+          Math.max(0, Number(item.discountPercent || 0)),
+        );
         return acc + gross * (1 - discount / 100);
       }, 0),
     [hourlyServices],
@@ -837,7 +1053,8 @@ export default function NewProposalPage() {
   const otherTotal = useMemo(
     () =>
       otherItems.reduce(
-        (acc, item) => acc + Number(item.quantity || 0) * Number(item.unitPrice || 0),
+        (acc, item) =>
+          acc + Number(item.quantity || 0) * Number(item.unitPrice || 0),
         0,
       ),
     [otherItems],
@@ -854,7 +1071,8 @@ export default function NewProposalPage() {
     }
 
     let value = Number(discountInput) || 0;
-    if (USER_ROLE === "NORMAL" && value > maxDiscountAllowed) value = maxDiscountAllowed;
+    if (USER_ROLE === "NORMAL" && value > maxDiscountAllowed)
+      value = maxDiscountAllowed;
     return value;
   }, [discountInput, discountType, maxDiscountAllowed, subtotal, USER_ROLE]);
 
@@ -949,12 +1167,16 @@ export default function NewProposalPage() {
       freight,
       validUntil: validUntil || undefined,
       paymentTerm: paymentTerm || undefined,
-      deliveryLeadTimeDays: deliveryLeadTimeDays ? Number(deliveryLeadTimeDays) : undefined,
+      deliveryLeadTimeDays: deliveryLeadTimeDays
+        ? Number(deliveryLeadTimeDays)
+        : undefined,
       paymentDetails: paymentDetails || undefined,
       hasDownPayment,
       downPaymentAmount: hasDownPayment ? entryAmount : undefined,
       installmentCount: installments,
-      installmentIntervalDays: installmentIntervalDays ? Number(installmentIntervalDays) : undefined,
+      installmentIntervalDays: installmentIntervalDays
+        ? Number(installmentIntervalDays)
+        : undefined,
       firstDueDate: firstDueDate || undefined,
       internalNotes,
       externalNotes,
@@ -979,12 +1201,18 @@ export default function NewProposalPage() {
         return;
       }
 
-      const createdProposal = (await res.json().catch(() => null)) as { id?: string } | null;
+      const createdProposal = (await res.json().catch(() => null)) as {
+        id?: string;
+      } | null;
       setFeedback({
         kind: "success",
         text: "Proposta gerada com sucesso. Redirecionando...",
       });
-      router.push(createdProposal?.id ? `/dashboard/proposals/${createdProposal.id}` : "/dashboard/proposals");
+      router.push(
+        createdProposal?.id
+          ? `/dashboard/proposals/${createdProposal.id}`
+          : "/dashboard/proposals",
+      );
       router.refresh();
     } catch {
       setFeedback({
@@ -997,20 +1225,14 @@ export default function NewProposalPage() {
   }
   return (
     <div className="mx-auto max-w-6xl p-8 pb-10">
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-8">
         <div>
           <h1 className="text-3xl font-bold text-zinc-800">Nova Proposta</h1>
           <p className="mt-1 text-zinc-500">
-            Monte itens, condicoes comerciais e pagamento com simulacao de entrada e parcelas.
+            Monte itens, condicoes comerciais e pagamento com simulacao de
+            entrada e parcelas.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => router.push("/dashboard/proposals")}
-          className="rounded px-4 py-2 font-medium text-zinc-500 transition-colors hover:bg-zinc-200 hover:text-zinc-800"
-        >
-          Voltar
-        </button>
       </div>
 
       {loadingOpportunity ? (
@@ -1041,16 +1263,28 @@ export default function NewProposalPage() {
         <section className="rounded-xl border border-sky-200 bg-[linear-gradient(135deg,#f7fbff_0%,#eef7ff_100%)] p-5 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-700">Origem CRM</p>
-              <h2 className="mt-2 text-xl font-bold text-zinc-900">{linkedOpportunity.title}</h2>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-700">
+                Origem CRM
+              </p>
+              <h2 className="mt-2 text-xl font-bold text-zinc-900">
+                {linkedOpportunity.title}
+              </h2>
               <p className="mt-1 text-sm text-zinc-600">
-                Cliente: {linkedOpportunity.client.companyName} | Etapa: {OPPORTUNITY_STAGE_LABEL[linkedOpportunity.stage] || linkedOpportunity.stage}
+                Cliente: {linkedOpportunity.client.companyName} | Etapa:{" "}
+                {OPPORTUNITY_STAGE_LABEL[linkedOpportunity.stage] ||
+                  linkedOpportunity.stage}
               </p>
               <p className="mt-1 text-sm text-zinc-600">
-                Vendedor: {linkedOpportunity.assignedSeller?.name || "Nao definido"} | Valor estimado: R$ {Number(linkedOpportunity.estimatedValue || 0).toLocaleString("pt-BR")}
+                Vendedor:{" "}
+                {linkedOpportunity.assignedSeller?.name || "Nao definido"} |
+                Valor estimado: R${" "}
+                {Number(linkedOpportunity.estimatedValue || 0).toLocaleString(
+                  "pt-BR",
+                )}
               </p>
               <p className="mt-1 text-sm text-zinc-600">
-                Pipeline: {linkedOpportunity.pipeline || "Nao informado"} | Tipo: {linkedOpportunity.opportunityType || "Nao informado"}
+                Pipeline: {linkedOpportunity.pipeline || "Nao informado"} |
+                Tipo: {linkedOpportunity.opportunityType || "Nao informado"}
               </p>
             </div>
 
@@ -1074,9 +1308,13 @@ export default function NewProposalPage() {
 
           {latestInspection ? (
             <div className="mt-4 rounded-lg border border-sky-100 bg-white/90 p-4">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-zinc-500">Ultima vistoria vinculada</p>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-zinc-500">
+                Ultima vistoria vinculada
+              </p>
               <p className="mt-2 text-sm font-semibold text-zinc-800">
-                {latestInspection.code} | {INSPECTION_STATUS_LABEL[latestInspection.status] || latestInspection.status}
+                {latestInspection.code} |{" "}
+                {INSPECTION_STATUS_LABEL[latestInspection.status] ||
+                  latestInspection.status}
               </p>
               <p className="mt-1 text-xs text-zinc-500">
                 {latestInspection.finishedAt
@@ -1086,7 +1324,9 @@ export default function NewProposalPage() {
                     : "Sem data registrada"}
               </p>
               {latestInspection.technicalNotes ? (
-                <p className="mt-2 text-sm leading-6 text-zinc-700">{latestInspection.technicalNotes}</p>
+                <p className="mt-2 text-sm leading-6 text-zinc-700">
+                  {latestInspection.technicalNotes}
+                </p>
               ) : null}
             </div>
           ) : null}
@@ -1095,14 +1335,22 @@ export default function NewProposalPage() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 border-b pb-2 text-lg font-bold text-zinc-800">1. Cliente e Equipamento</h2>
+          <h2 className="mb-4 border-b pb-2 text-lg font-bold text-zinc-800">
+            1. Cliente e Equipamento
+          </h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
             <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Cliente</label>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">
+                Cliente
+              </label>
               {linkedOpportunity ? (
                 <div className="rounded-lg border border-sky-200 bg-sky-50 p-3">
-                  <p className="text-sm font-semibold text-zinc-800">{linkedOpportunity.client.companyName}</p>
-                  <p className="mt-1 text-xs text-sky-700">Cliente travado pela oportunidade vinculada.</p>
+                  <p className="text-sm font-semibold text-zinc-800">
+                    {linkedOpportunity.client.companyName}
+                  </p>
+                  <p className="mt-1 text-xs text-sky-700">
+                    Cliente travado pela oportunidade vinculada.
+                  </p>
                 </div>
               ) : (
                 <div className="relative">
@@ -1116,16 +1364,22 @@ export default function NewProposalPage() {
                       setClientDropdownOpen(true);
                     }}
                     onFocus={() => setClientDropdownOpen(true)}
-                    onBlur={() => setTimeout(() => setClientDropdownOpen(false), 150)}
+                    onBlur={() =>
+                      setTimeout(() => setClientDropdownOpen(false), 150)
+                    }
                     placeholder="Pesquisar cliente por nome, fantasia ou CNPJ"
                     className="w-full rounded-lg border border-zinc-300 bg-white p-2.5 text-sm outline-none focus:border-emerald-500"
                   />
                   {clientDropdownOpen ? (
                     <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-xl">
                       {clientLookupLoading ? (
-                        <p className="p-3 text-sm text-zinc-500">Buscando clientes...</p>
+                        <p className="p-3 text-sm text-zinc-500">
+                          Buscando clientes...
+                        </p>
                       ) : clients.length === 0 ? (
-                        <p className="p-3 text-sm text-zinc-500">Nenhum cliente encontrado.</p>
+                        <p className="p-3 text-sm text-zinc-500">
+                          Nenhum cliente encontrado.
+                        </p>
                       ) : (
                         clients.map((c) => (
                           <button
@@ -1141,11 +1395,18 @@ export default function NewProposalPage() {
                             }}
                             className="block w-full border-b border-zinc-100 px-3 py-2 text-left hover:bg-emerald-50 last:border-0"
                           >
-                            <p className="text-sm font-semibold text-zinc-800">{c.companyName}</p>
+                            <p className="text-sm font-semibold text-zinc-800">
+                              {c.companyName}
+                            </p>
                             <p className="text-xs text-zinc-500">
                               {c.tradeName || "-"}
                               {c.cnpj ? ` | ${c.cnpj}` : ""}
                             </p>
+                            {c.proposalCreationBlocked ? (
+                              <p className="mt-1 text-xs font-semibold text-rose-600">
+                                Propostas bloqueadas
+                              </p>
+                            ) : null}
                           </button>
                         ))
                       )}
@@ -1162,10 +1423,17 @@ export default function NewProposalPage() {
                   {quickClientOpen ? "Fechar cliente rapido" : "Cliente rapido"}
                 </button>
               ) : null}
+              {selectedClient?.proposalCreationBlocked ? (
+                <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                  Bloqueio comercial: {selectedClient.proposalBlockReason || "consulte o responsavel comercial"}.
+                </p>
+              ) : null}
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Equipamento</label>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">
+                Equipamento
+              </label>
               <div className="relative">
                 <input
                   type="text"
@@ -1176,17 +1444,27 @@ export default function NewProposalPage() {
                     setEquipmentDropdownOpen(true);
                   }}
                   onFocus={() => setEquipmentDropdownOpen(true)}
-                  onBlur={() => setTimeout(() => setEquipmentDropdownOpen(false), 150)}
+                  onBlur={() =>
+                    setTimeout(() => setEquipmentDropdownOpen(false), 150)
+                  }
                   disabled={!selectedClientId}
-                  placeholder={selectedClientId ? "Pesquisar maquina" : "Escolha o cliente"}
+                  placeholder={
+                    selectedClientId ? "Pesquisar maquina" : "Escolha o cliente"
+                  }
                   className="w-full rounded-lg border border-zinc-300 bg-white p-2.5 text-sm outline-none focus:border-emerald-500 disabled:bg-zinc-100"
                 />
-                {equipmentDropdownOpen && selectedClientId && !selectedEquipmentId ? (
+                {equipmentDropdownOpen &&
+                selectedClientId &&
+                !selectedEquipmentId ? (
                   <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-xl">
                     {equipmentLookupLoading ? (
-                      <p className="p-3 text-sm text-zinc-500">Buscando maquinas...</p>
+                      <p className="p-3 text-sm text-zinc-500">
+                        Buscando maquinas...
+                      </p>
                     ) : availableGenerators.length === 0 ? (
-                      <p className="p-3 text-sm text-zinc-500">Nenhuma maquina encontrada.</p>
+                      <p className="p-3 text-sm text-zinc-500">
+                        Nenhuma maquina encontrada.
+                      </p>
                     ) : (
                       availableGenerators.map((gen) => (
                         <button
@@ -1200,9 +1478,15 @@ export default function NewProposalPage() {
                           }}
                           className="block w-full border-b border-zinc-100 px-3 py-2 text-left hover:bg-emerald-50 last:border-0"
                         >
-                          <p className="text-sm font-semibold text-zinc-800">{gen.name || "Maquina"}</p>
+                          <p className="text-sm font-semibold text-zinc-800">
+                            {gen.name || "Maquina"}
+                          </p>
                           <p className="text-xs text-zinc-500">
-                            {[gen.assetTag, gen.serialNumber, gen.power ? `${gen.power} kVA` : null]
+                            {[
+                              gen.assetTag,
+                              gen.serialNumber,
+                              gen.power ? `${gen.power} kVA` : null,
+                            ]
                               .filter(Boolean)
                               .join(" | ") || "Sem tag/serie"}
                           </p>
@@ -1218,16 +1502,24 @@ export default function NewProposalPage() {
                 disabled={!selectedClientId}
                 className="mt-2 text-xs font-semibold text-emerald-700 hover:text-emerald-600 disabled:text-zinc-400"
               >
-                {quickGeneratorOpen ? "Fechar maquina rapida" : "Maquina rapida"}
+                {quickGeneratorOpen
+                  ? "Fechar maquina rapida"
+                  : "Maquina rapida"}
               </button>
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Vendedor</label>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">
+                Vendedor
+              </label>
               {linkedOpportunity?.assignedSeller ? (
                 <div className="rounded-lg border border-sky-200 bg-sky-50 p-3">
-                  <p className="text-sm font-semibold text-zinc-800">{linkedOpportunity.assignedSeller.name}</p>
-                  <p className="mt-1 text-xs text-sky-700">Herdado da oportunidade.</p>
+                  <p className="text-sm font-semibold text-zinc-800">
+                    {linkedOpportunity.assignedSeller.name}
+                  </p>
+                  <p className="mt-1 text-xs text-sky-700">
+                    Herdado da oportunidade.
+                  </p>
                 </div>
               ) : (
                 <div className="relative">
@@ -1240,16 +1532,22 @@ export default function NewProposalPage() {
                       setSellerDropdownOpen(true);
                     }}
                     onFocus={() => setSellerDropdownOpen(true)}
-                    onBlur={() => setTimeout(() => setSellerDropdownOpen(false), 150)}
+                    onBlur={() =>
+                      setTimeout(() => setSellerDropdownOpen(false), 150)
+                    }
                     placeholder="Pesquisar vendedor comercial"
                     className="w-full rounded-lg border border-zinc-300 bg-white p-2.5 text-sm outline-none focus:border-emerald-500"
                   />
                   {sellerDropdownOpen && !selectedSellerId ? (
                     <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-xl">
                       {sellerLookupLoading ? (
-                        <p className="p-3 text-sm text-zinc-500">Buscando vendedores...</p>
+                        <p className="p-3 text-sm text-zinc-500">
+                          Buscando vendedores...
+                        </p>
                       ) : sellers.length === 0 ? (
-                        <p className="p-3 text-sm text-zinc-500">Nenhum vendedor encontrado.</p>
+                        <p className="p-3 text-sm text-zinc-500">
+                          Nenhum vendedor encontrado.
+                        </p>
                       ) : (
                         sellers.map((seller) => (
                           <button
@@ -1263,8 +1561,12 @@ export default function NewProposalPage() {
                             }}
                             className="block w-full border-b border-zinc-100 px-3 py-2 text-left hover:bg-emerald-50 last:border-0"
                           >
-                            <p className="text-sm font-semibold text-zinc-800">{seller.name}</p>
-                            <p className="text-xs text-zinc-500">{seller.department || seller.email || "Comercial"}</p>
+                            <p className="text-sm font-semibold text-zinc-800">
+                              {seller.name}
+                            </p>
+                            <p className="text-xs text-zinc-500">
+                              {seller.department || seller.email || "Comercial"}
+                            </p>
                           </button>
                         ))
                       )}
@@ -1275,7 +1577,9 @@ export default function NewProposalPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Tipo de Servico</label>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">
+                Tipo de Servico
+              </label>
               <select
                 value={serviceType}
                 onChange={(e) => setServiceType(e.target.value)}
@@ -1295,16 +1599,112 @@ export default function NewProposalPage() {
           {quickClientOpen && !linkedOpportunity ? (
             <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-                <input className="rounded border border-emerald-200 bg-white p-2 text-sm" placeholder="Razao social/nome" value={quickClient.companyName} onChange={(e) => setQuickClient((current) => ({ ...current, companyName: e.target.value }))} />
-                <input className="rounded border border-emerald-200 bg-white p-2 text-sm" placeholder="Nome fantasia" value={quickClient.tradeName} onChange={(e) => setQuickClient((current) => ({ ...current, tradeName: e.target.value }))} />
-                <input className="rounded border border-emerald-200 bg-white p-2 text-sm" placeholder="CPF/CNPJ" value={quickClient.cnpj} onChange={(e) => setQuickClient((current) => ({ ...current, cnpj: e.target.value }))} />
-                <input className="rounded border border-emerald-200 bg-white p-2 text-sm" placeholder="Telefone" value={quickClient.phone} onChange={(e) => setQuickClient((current) => ({ ...current, phone: e.target.value }))} />
-                <input className="rounded border border-emerald-200 bg-white p-2 text-sm" placeholder="E-mail" value={quickClient.email} onChange={(e) => setQuickClient((current) => ({ ...current, email: e.target.value }))} />
-                <input className="rounded border border-emerald-200 bg-white p-2 text-sm" placeholder="Contato" value={quickClient.contactName} onChange={(e) => setQuickClient((current) => ({ ...current, contactName: e.target.value }))} />
-                <input className="rounded border border-emerald-200 bg-white p-2 text-sm md:col-span-2" placeholder="Endereco" value={quickClient.address} onChange={(e) => setQuickClient((current) => ({ ...current, address: e.target.value }))} />
-                <input className="rounded border border-emerald-200 bg-white p-2 text-sm" placeholder="Cidade" value={quickClient.city} onChange={(e) => setQuickClient((current) => ({ ...current, city: e.target.value }))} />
-                <input className="rounded border border-emerald-200 bg-white p-2 text-sm" placeholder="UF" maxLength={2} value={quickClient.state} onChange={(e) => setQuickClient((current) => ({ ...current, state: e.target.value.toUpperCase() }))} />
-                <button type="button" disabled={quickClientSaving} onClick={handleCreateQuickClient} className="rounded bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50">
+                <input
+                  className="rounded border border-emerald-200 bg-white p-2 text-sm"
+                  placeholder="Razao social/nome"
+                  value={quickClient.companyName}
+                  onChange={(e) =>
+                    setQuickClient((current) => ({
+                      ...current,
+                      companyName: e.target.value,
+                    }))
+                  }
+                />
+                <input
+                  className="rounded border border-emerald-200 bg-white p-2 text-sm"
+                  placeholder="Nome fantasia"
+                  value={quickClient.tradeName}
+                  onChange={(e) =>
+                    setQuickClient((current) => ({
+                      ...current,
+                      tradeName: e.target.value,
+                    }))
+                  }
+                />
+                <input
+                  className="rounded border border-emerald-200 bg-white p-2 text-sm"
+                  placeholder="CPF/CNPJ"
+                  value={quickClient.cnpj}
+                  onChange={(e) =>
+                    setQuickClient((current) => ({
+                      ...current,
+                      cnpj: e.target.value,
+                    }))
+                  }
+                />
+                <input
+                  className="rounded border border-emerald-200 bg-white p-2 text-sm"
+                  placeholder="Telefone"
+                  value={quickClient.phone}
+                  onChange={(e) =>
+                    setQuickClient((current) => ({
+                      ...current,
+                      phone: e.target.value,
+                    }))
+                  }
+                />
+                <input
+                  className="rounded border border-emerald-200 bg-white p-2 text-sm"
+                  placeholder="E-mail"
+                  value={quickClient.email}
+                  onChange={(e) =>
+                    setQuickClient((current) => ({
+                      ...current,
+                      email: e.target.value,
+                    }))
+                  }
+                />
+                <input
+                  className="rounded border border-emerald-200 bg-white p-2 text-sm"
+                  placeholder="Contato"
+                  value={quickClient.contactName}
+                  onChange={(e) =>
+                    setQuickClient((current) => ({
+                      ...current,
+                      contactName: e.target.value,
+                    }))
+                  }
+                />
+                <input
+                  className="rounded border border-emerald-200 bg-white p-2 text-sm md:col-span-2"
+                  placeholder="Endereco"
+                  value={quickClient.address}
+                  onChange={(e) =>
+                    setQuickClient((current) => ({
+                      ...current,
+                      address: e.target.value,
+                    }))
+                  }
+                />
+                <input
+                  className="rounded border border-emerald-200 bg-white p-2 text-sm"
+                  placeholder="Cidade"
+                  value={quickClient.city}
+                  onChange={(e) =>
+                    setQuickClient((current) => ({
+                      ...current,
+                      city: e.target.value,
+                    }))
+                  }
+                />
+                <input
+                  className="rounded border border-emerald-200 bg-white p-2 text-sm"
+                  placeholder="UF"
+                  maxLength={2}
+                  value={quickClient.state}
+                  onChange={(e) =>
+                    setQuickClient((current) => ({
+                      ...current,
+                      state: e.target.value.toUpperCase(),
+                    }))
+                  }
+                />
+                <button
+                  type="button"
+                  disabled={quickClientSaving}
+                  onClick={handleCreateQuickClient}
+                  className="rounded bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+                >
                   {quickClientSaving ? "Salvando..." : "Salvar cliente"}
                 </button>
               </div>
@@ -1314,16 +1714,113 @@ export default function NewProposalPage() {
           {quickGeneratorOpen && selectedClientId ? (
             <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-4">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-                <input className="rounded border border-sky-200 bg-white p-2 text-sm" placeholder="Nome/apelido" value={quickGenerator.name} onChange={(e) => setQuickGenerator((current) => ({ ...current, name: e.target.value }))} />
-                <input className="rounded border border-sky-200 bg-white p-2 text-sm" placeholder="Tag patrimonial" value={quickGenerator.assetTag} onChange={(e) => setQuickGenerator((current) => ({ ...current, assetTag: e.target.value }))} />
-                <input className="rounded border border-sky-200 bg-white p-2 text-sm" placeholder="Fabricante" value={quickGenerator.brand} onChange={(e) => setQuickGenerator((current) => ({ ...current, brand: e.target.value }))} />
-                <input className="rounded border border-sky-200 bg-white p-2 text-sm" placeholder="Modelo" value={quickGenerator.modelName} onChange={(e) => setQuickGenerator((current) => ({ ...current, modelName: e.target.value }))} />
-                <input className="rounded border border-sky-200 bg-white p-2 text-sm" placeholder="Numero de serie" value={quickGenerator.serialNumber} onChange={(e) => setQuickGenerator((current) => ({ ...current, serialNumber: e.target.value }))} />
-                <input className="rounded border border-sky-200 bg-white p-2 text-sm" placeholder="Potencia kVA" type="number" min="0" value={quickGenerator.power} onChange={(e) => setQuickGenerator((current) => ({ ...current, power: e.target.value }))} />
-                <input className="rounded border border-sky-200 bg-white p-2 text-sm" placeholder="Tensao" value={quickGenerator.voltage} onChange={(e) => setQuickGenerator((current) => ({ ...current, voltage: e.target.value }))} />
-                <input className="rounded border border-sky-200 bg-white p-2 text-sm" placeholder="Local/site" value={quickGenerator.installationSite} onChange={(e) => setQuickGenerator((current) => ({ ...current, installationSite: e.target.value }))} />
-                <input className="rounded border border-sky-200 bg-white p-2 text-sm md:col-span-3" placeholder="Observacao" value={quickGenerator.notes} onChange={(e) => setQuickGenerator((current) => ({ ...current, notes: e.target.value }))} />
-                <button type="button" disabled={quickGeneratorSaving} onClick={handleCreateQuickGenerator} className="rounded bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-50">
+                <input
+                  className="rounded border border-sky-200 bg-white p-2 text-sm"
+                  placeholder="Nome/apelido"
+                  value={quickGenerator.name}
+                  onChange={(e) =>
+                    setQuickGenerator((current) => ({
+                      ...current,
+                      name: e.target.value,
+                    }))
+                  }
+                />
+                <input
+                  className="rounded border border-sky-200 bg-white p-2 text-sm"
+                  placeholder="Tag patrimonial"
+                  value={quickGenerator.assetTag}
+                  onChange={(e) =>
+                    setQuickGenerator((current) => ({
+                      ...current,
+                      assetTag: e.target.value,
+                    }))
+                  }
+                />
+                <input
+                  className="rounded border border-sky-200 bg-white p-2 text-sm"
+                  placeholder="Fabricante"
+                  value={quickGenerator.brand}
+                  onChange={(e) =>
+                    setQuickGenerator((current) => ({
+                      ...current,
+                      brand: e.target.value,
+                    }))
+                  }
+                />
+                <input
+                  className="rounded border border-sky-200 bg-white p-2 text-sm"
+                  placeholder="Modelo"
+                  value={quickGenerator.modelName}
+                  onChange={(e) =>
+                    setQuickGenerator((current) => ({
+                      ...current,
+                      modelName: e.target.value,
+                    }))
+                  }
+                />
+                <input
+                  className="rounded border border-sky-200 bg-white p-2 text-sm"
+                  placeholder="Numero de serie"
+                  value={quickGenerator.serialNumber}
+                  onChange={(e) =>
+                    setQuickGenerator((current) => ({
+                      ...current,
+                      serialNumber: e.target.value,
+                    }))
+                  }
+                />
+                <input
+                  className="rounded border border-sky-200 bg-white p-2 text-sm"
+                  placeholder="Potencia kVA"
+                  type="number"
+                  min="0"
+                  value={quickGenerator.power}
+                  onChange={(e) =>
+                    setQuickGenerator((current) => ({
+                      ...current,
+                      power: e.target.value,
+                    }))
+                  }
+                />
+                <input
+                  className="rounded border border-sky-200 bg-white p-2 text-sm"
+                  placeholder="Tensao"
+                  value={quickGenerator.voltage}
+                  onChange={(e) =>
+                    setQuickGenerator((current) => ({
+                      ...current,
+                      voltage: e.target.value,
+                    }))
+                  }
+                />
+                <input
+                  className="rounded border border-sky-200 bg-white p-2 text-sm"
+                  placeholder="Local/site"
+                  value={quickGenerator.installationSite}
+                  onChange={(e) =>
+                    setQuickGenerator((current) => ({
+                      ...current,
+                      installationSite: e.target.value,
+                    }))
+                  }
+                />
+                <input
+                  className="rounded border border-sky-200 bg-white p-2 text-sm md:col-span-3"
+                  placeholder="Observacao"
+                  value={quickGenerator.notes}
+                  onChange={(e) =>
+                    setQuickGenerator((current) => ({
+                      ...current,
+                      notes: e.target.value,
+                    }))
+                  }
+                />
+                <button
+                  type="button"
+                  disabled={quickGeneratorSaving}
+                  onClick={handleCreateQuickGenerator}
+                  className="rounded bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-50"
+                >
                   {quickGeneratorSaving ? "Salvando..." : "Salvar maquina"}
                 </button>
               </div>
@@ -1334,10 +1831,14 @@ export default function NewProposalPage() {
             <button
               type="button"
               onClick={addItemsFromEquipmentBase}
-              disabled={!selectedEquipmentId || !serviceType || loadingBaseItems}
+              disabled={
+                !selectedEquipmentId || !serviceType || loadingBaseItems
+              }
               className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {loadingBaseItems ? "Carregando base..." : "Adicionar itens da base"}
+              {loadingBaseItems
+                ? "Carregando base..."
+                : "Adicionar itens da base"}
             </button>
           </div>
         </div>
@@ -1354,7 +1855,11 @@ export default function NewProposalPage() {
             </button>
           </div>
 
-          {parts.length === 0 ? <p className="text-sm italic text-zinc-500">Nenhuma peca adicionada.</p> : null}
+          {parts.length === 0 ? (
+            <p className="text-sm italic text-zinc-500">
+              Nenhuma peca adicionada.
+            </p>
+          ) : null}
 
           {parts.map((part, index) => (
             <div
@@ -1362,7 +1867,9 @@ export default function NewProposalPage() {
               className="mb-3 flex flex-wrap items-end gap-3 rounded-lg border border-zinc-100 bg-zinc-50 p-3 md:flex-nowrap"
             >
               <div className="min-w-[250px] flex-1">
-                <label className="mb-1 block text-xs font-medium text-zinc-500">Buscar peca</label>
+                <label className="mb-1 block text-xs font-medium text-zinc-500">
+                  Buscar peca
+                </label>
                 <SearchableSelect
                   items={partOptions}
                   value={part.catalogItemId}
@@ -1372,17 +1879,23 @@ export default function NewProposalPage() {
                 />
               </div>
               <div className="w-20">
-                <label className="mb-1 block text-xs font-medium text-zinc-500">Qtd</label>
+                <label className="mb-1 block text-xs font-medium text-zinc-500">
+                  Qtd
+                </label>
                 <input
                   type="number"
                   min="1"
                   value={part.quantity}
-                  onChange={(e) => updatePart(index, "quantity", e.target.value)}
+                  onChange={(e) =>
+                    updatePart(index, "quantity", e.target.value)
+                  }
                   className="w-full rounded-md border border-zinc-300 p-2 text-sm"
                 />
               </div>
               <div className="w-32">
-                <label className="mb-1 block text-xs font-medium text-zinc-500">Preco (R$)</label>
+                <label className="mb-1 block text-xs font-medium text-zinc-500">
+                  Preco (R$)
+                </label>
                 <input
                   type="number"
                   value={part.unitPrice}
@@ -1402,7 +1915,9 @@ export default function NewProposalPage() {
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
           <div className="mb-4 flex items-center justify-between border-b pb-2">
-            <h2 className="text-lg font-bold text-zinc-800">3. Mao de obra / servicos</h2>
+            <h2 className="text-lg font-bold text-zinc-800">
+              3. Mao de obra / servicos
+            </h2>
             <button
               type="button"
               onClick={addLabor}
@@ -1412,7 +1927,11 @@ export default function NewProposalPage() {
             </button>
           </div>
 
-          {labor.length === 0 ? <p className="text-sm italic text-zinc-500">Nenhum servico adicionado.</p> : null}
+          {labor.length === 0 ? (
+            <p className="text-sm italic text-zinc-500">
+              Nenhum servico adicionado.
+            </p>
+          ) : null}
 
           {labor.map((lab, index) => (
             <div
@@ -1420,7 +1939,9 @@ export default function NewProposalPage() {
               className="mb-3 flex flex-wrap items-end gap-3 rounded-lg border border-zinc-100 bg-zinc-50 p-3 md:flex-nowrap"
             >
               <div className="min-w-[250px] flex-1">
-                <label className="mb-1 block text-xs font-medium text-zinc-500">Buscar servico</label>
+                <label className="mb-1 block text-xs font-medium text-zinc-500">
+                  Buscar servico
+                </label>
                 <SearchableSelect
                   items={serviceOptions}
                   value={lab.catalogItemId}
@@ -1430,21 +1951,29 @@ export default function NewProposalPage() {
                 />
               </div>
               <div className="w-20">
-                <label className="mb-1 block text-xs font-medium text-zinc-500">Qtd</label>
+                <label className="mb-1 block text-xs font-medium text-zinc-500">
+                  Qtd
+                </label>
                 <input
                   type="number"
                   min="1"
                   value={lab.quantity}
-                  onChange={(e) => updateLabor(index, "quantity", e.target.value)}
+                  onChange={(e) =>
+                    updateLabor(index, "quantity", e.target.value)
+                  }
                   className="w-full rounded-md border border-zinc-300 p-2 text-sm"
                 />
               </div>
               <div className="w-32">
-                <label className="mb-1 block text-xs font-medium text-purple-600">Valor (R$)</label>
+                <label className="mb-1 block text-xs font-medium text-purple-600">
+                  Valor (R$)
+                </label>
                 <input
                   type="number"
                   value={lab.unitPrice}
-                  onChange={(e) => updateLabor(index, "unitPrice", e.target.value)}
+                  onChange={(e) =>
+                    updateLabor(index, "unitPrice", e.target.value)
+                  }
                   className="w-full rounded-md border border-zinc-300 p-2 text-sm font-bold text-purple-700"
                   placeholder="0.00"
                 />
@@ -1463,8 +1992,12 @@ export default function NewProposalPage() {
         <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b pb-2">
             <div>
-              <h2 className="text-lg font-bold text-zinc-800">4. Servico por hora</h2>
-              <p className="text-xs text-zinc-500">Valor de venda ao cliente. Custo interno nao e exibido.</p>
+              <h2 className="text-lg font-bold text-zinc-800">
+                4. Servico por hora
+              </h2>
+              <p className="text-xs text-zinc-500">
+                Valor de venda ao cliente. Custo interno nao e exibido.
+              </p>
             </div>
             <button
               type="button"
@@ -1475,36 +2008,67 @@ export default function NewProposalPage() {
             </button>
           </div>
 
-          {hourlyServices.length === 0 ? <p className="text-sm italic text-zinc-500">Nenhum servico por hora adicionado.</p> : null}
+          {hourlyServices.length === 0 ? (
+            <p className="text-sm italic text-zinc-500">
+              Nenhum servico por hora adicionado.
+            </p>
+          ) : null}
 
           {hourlyServices.map((item, index) => {
             const gross = Number(item.hours || 0) * Number(item.unitPrice || 0);
-            const discount = Math.min(100, Math.max(0, Number(item.discountPercent || 0)));
+            const discount = Math.min(
+              100,
+              Math.max(0, Number(item.discountPercent || 0)),
+            );
             const total = gross * (1 - discount / 100);
             return (
-              <div key={`hourly-${index}`} className="mb-3 grid grid-cols-1 gap-3 rounded-lg border border-amber-100 bg-amber-50 p-3 md:grid-cols-6">
+              <div
+                key={`hourly-${index}`}
+                className="mb-3 grid grid-cols-1 gap-3 rounded-lg border border-amber-100 bg-amber-50 p-3 md:grid-cols-6"
+              >
                 <input
                   className="rounded-md border border-amber-200 bg-white p-2 text-sm md:col-span-2"
                   placeholder="Descricao"
                   value={item.description}
-                  onChange={(e) => updateHourlyService(index, "description", e.target.value)}
+                  onChange={(e) =>
+                    updateHourlyService(index, "description", e.target.value)
+                  }
                 />
                 <select
                   value={item.hourType}
-                  onChange={(e) => updateHourlyService(index, "hourType", e.target.value)}
+                  onChange={(e) =>
+                    updateHourlyService(index, "hourType", e.target.value)
+                  }
                   className="rounded-md border border-amber-200 bg-white p-2 text-sm"
                 >
-                  {(hourTypes.length ? hourTypes : [{ value: "ONE_OFF", label: "Hora avulsa" }]).map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
+                  {(hourTypes.length
+                    ? hourTypes
+                    : [{ value: "ONE_OFF", label: "Hora avulsa" }]
+                  ).map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
                   ))}
                 </select>
                 <select
                   value={item.technicianType}
-                  onChange={(e) => updateHourlyService(index, "technicianType", e.target.value)}
+                  onChange={(e) =>
+                    updateHourlyService(index, "technicianType", e.target.value)
+                  }
                   className="rounded-md border border-amber-200 bg-white p-2 text-sm"
                 >
-                  {(technicianTypes.length ? technicianTypes : [{ value: "MID_LEVEL_TECHNICIAN", label: "Tecnico pleno" }]).map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
+                  {(technicianTypes.length
+                    ? technicianTypes
+                    : [
+                        {
+                          value: "MID_LEVEL_TECHNICIAN",
+                          label: "Tecnico pleno",
+                        },
+                      ]
+                  ).map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
                   ))}
                 </select>
                 <input
@@ -1512,7 +2076,9 @@ export default function NewProposalPage() {
                   min="0"
                   step="0.25"
                   value={item.hours}
-                  onChange={(e) => updateHourlyService(index, "hours", e.target.value)}
+                  onChange={(e) =>
+                    updateHourlyService(index, "hours", e.target.value)
+                  }
                   className="rounded-md border border-amber-200 bg-white p-2 text-sm"
                   placeholder="Horas"
                 />
@@ -1521,7 +2087,9 @@ export default function NewProposalPage() {
                   min="0"
                   step="0.01"
                   value={item.unitPrice}
-                  onChange={(e) => updateHourlyService(index, "unitPrice", e.target.value)}
+                  onChange={(e) =>
+                    updateHourlyService(index, "unitPrice", e.target.value)
+                  }
                   className="rounded-md border border-amber-200 bg-white p-2 text-sm"
                   placeholder="Valor hora"
                 />
@@ -1531,12 +2099,26 @@ export default function NewProposalPage() {
                     min="0"
                     max="100"
                     value={item.discountPercent}
-                    onChange={(e) => updateHourlyService(index, "discountPercent", e.target.value)}
+                    onChange={(e) =>
+                      updateHourlyService(
+                        index,
+                        "discountPercent",
+                        e.target.value,
+                      )
+                    }
                     className="w-28 rounded-md border border-amber-200 bg-white p-2 text-sm"
                     placeholder="Desc. %"
                   />
-                  <span className="text-sm font-semibold text-amber-800">Total: R$ {formatMoney(total)}</span>
-                  <button type="button" onClick={() => removeHourlyService(index)} className="ml-auto p-2 text-lg text-red-500 hover:text-red-700">X</button>
+                  <span className="text-sm font-semibold text-amber-800">
+                    Total: R$ {formatMoney(total)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeHourlyService(index)}
+                    className="ml-auto p-2 text-lg text-red-500 hover:text-red-700"
+                  >
+                    X
+                  </button>
                 </div>
               </div>
             );
@@ -1554,25 +2136,70 @@ export default function NewProposalPage() {
               + Adicionar outro
             </button>
           </div>
-          {otherItems.length === 0 ? <p className="text-sm italic text-zinc-500">Nenhum item avulso adicionado.</p> : null}
+          {otherItems.length === 0 ? (
+            <p className="text-sm italic text-zinc-500">
+              Nenhum item avulso adicionado.
+            </p>
+          ) : null}
           {otherItems.map((item, index) => (
-            <div key={`other-${index}`} className="mb-3 grid grid-cols-1 gap-3 rounded-lg border border-zinc-100 bg-zinc-50 p-3 md:grid-cols-[1fr_100px_140px_auto]">
-              <input className="rounded-md border border-zinc-300 p-2 text-sm" placeholder="Descricao do item" value={item.description} onChange={(e) => updateOtherItem(index, "description", e.target.value)} />
-              <input type="number" min="1" className="rounded-md border border-zinc-300 p-2 text-sm" placeholder="Qtd" value={item.quantity} onChange={(e) => updateOtherItem(index, "quantity", e.target.value)} />
-              <input type="number" min="0" step="0.01" className="rounded-md border border-zinc-300 p-2 text-sm" placeholder="Valor" value={item.unitPrice} onChange={(e) => updateOtherItem(index, "unitPrice", e.target.value)} />
-              <button type="button" onClick={() => removeOtherItem(index)} className="p-2 text-lg text-red-500 hover:text-red-700">X</button>
+            <div
+              key={`other-${index}`}
+              className="mb-3 grid grid-cols-1 gap-3 rounded-lg border border-zinc-100 bg-zinc-50 p-3 md:grid-cols-[1fr_100px_140px_auto]"
+            >
+              <input
+                className="rounded-md border border-zinc-300 p-2 text-sm"
+                placeholder="Descricao do item"
+                value={item.description}
+                onChange={(e) =>
+                  updateOtherItem(index, "description", e.target.value)
+                }
+              />
+              <input
+                type="number"
+                min="1"
+                className="rounded-md border border-zinc-300 p-2 text-sm"
+                placeholder="Qtd"
+                value={item.quantity}
+                onChange={(e) =>
+                  updateOtherItem(index, "quantity", e.target.value)
+                }
+              />
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                className="rounded-md border border-zinc-300 p-2 text-sm"
+                placeholder="Valor"
+                value={item.unitPrice}
+                onChange={(e) =>
+                  updateOtherItem(index, "unitPrice", e.target.value)
+                }
+              />
+              <button
+                type="button"
+                onClick={() => removeOtherItem(index)}
+                className="p-2 text-lg text-red-500 hover:text-red-700"
+              >
+                X
+              </button>
             </div>
           ))}
         </div>
 
         <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 border-b pb-2 text-lg font-bold text-zinc-800">6. Condicoes comerciais e financeiras</h2>
+          <h2 className="mb-4 border-b pb-2 text-lg font-bold text-zinc-800">
+            6. Condicoes comerciais e financeiras
+          </h2>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
             <div className="md:col-span-4">
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Escopo</label>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">
+                Escopo
+              </label>
               <div className="mb-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-zinc-500">Escopos prontos</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-zinc-500">
+                    Escopos prontos
+                  </p>
                   <button
                     type="button"
                     onClick={appendScopeTemplates}
@@ -1584,7 +2211,10 @@ export default function NewProposalPage() {
                 </div>
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
                   {scopeTemplates.map((template) => (
-                    <label key={template.id} className="flex items-start gap-2 rounded border border-zinc-200 bg-white p-2 text-sm">
+                    <label
+                      key={template.id}
+                      className="flex items-start gap-2 rounded border border-zinc-200 bg-white p-2 text-sm"
+                    >
                       <input
                         type="checkbox"
                         checked={selectedScopeTemplateIds.includes(template.id)}
@@ -1597,14 +2227,20 @@ export default function NewProposalPage() {
                         }}
                       />
                       <span>
-                        <span className="block font-semibold text-zinc-800">{template.name}</span>
-                        <span className="block text-xs text-zinc-500">{template.category || "Escopo comercial"}</span>
+                        <span className="block font-semibold text-zinc-800">
+                          {template.name}
+                        </span>
+                        <span className="block text-xs text-zinc-500">
+                          {template.category || "Escopo comercial"}
+                        </span>
                       </span>
                     </label>
                   ))}
                 </div>
                 {combinedScopeText ? (
-                  <pre className="mt-3 whitespace-pre-wrap rounded border border-zinc-200 bg-white p-3 text-xs leading-5 text-zinc-700">{combinedScopeText}</pre>
+                  <pre className="mt-3 whitespace-pre-wrap rounded border border-zinc-200 bg-white p-3 text-xs leading-5 text-zinc-700">
+                    {combinedScopeText}
+                  </pre>
                 ) : null}
               </div>
               <textarea
@@ -1616,7 +2252,9 @@ export default function NewProposalPage() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Frete</label>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">
+                Frete
+              </label>
               <select
                 value={freight}
                 onChange={(e) => setFreight(e.target.value)}
@@ -1629,7 +2267,9 @@ export default function NewProposalPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Validade</label>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">
+                Validade
+              </label>
               <input
                 type="date"
                 value={validUntil}
@@ -1639,7 +2279,9 @@ export default function NewProposalPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Prazo de entrega (dias)</label>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">
+                Prazo de entrega (dias)
+              </label>
               <input
                 type="number"
                 min="0"
@@ -1650,18 +2292,35 @@ export default function NewProposalPage() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Condicao de pagamento</label>
-              <input
-                type="text"
+              <label className="mb-1 block text-sm font-medium text-zinc-700">
+                Condicao de pagamento
+              </label>
+              <select
                 value={paymentTerm}
                 onChange={(e) => setPaymentTerm(e.target.value)}
-                placeholder="Ex: 30/60, 21 dias, boleto"
                 className="w-full rounded-lg border border-zinc-300 p-2.5"
-              />
+              >
+                <option value="">Selecione uma condicao</option>
+                {paymentTermOptions.map((option) => {
+                  const blockReason = paymentTermBlockReason(option);
+                  return (
+                    <option
+                      key={option.id}
+                      value={option.name}
+                      disabled={Boolean(blockReason)}
+                    >
+                      {option.name}
+                      {blockReason ? ` - ${blockReason}` : ""}
+                    </option>
+                  );
+                })}
+              </select>
             </div>
 
             <div className="md:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Dados para pagamento</label>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">
+                Dados para pagamento
+              </label>
               <textarea
                 rows={2}
                 value={paymentDetails}
@@ -1683,7 +2342,9 @@ export default function NewProposalPage() {
                 </label>
 
                 <div>
-                  <label className="mb-1 block text-xs font-bold uppercase text-blue-700">Valor entrada</label>
+                  <label className="mb-1 block text-xs font-bold uppercase text-blue-700">
+                    Valor entrada
+                  </label>
                   <input
                     type="number"
                     min="0"
@@ -1696,7 +2357,9 @@ export default function NewProposalPage() {
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-xs font-bold uppercase text-blue-700">Parcelas</label>
+                  <label className="mb-1 block text-xs font-bold uppercase text-blue-700">
+                    Parcelas
+                  </label>
                   <input
                     type="number"
                     min="1"
@@ -1707,7 +2370,9 @@ export default function NewProposalPage() {
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-xs font-bold uppercase text-blue-700">Intervalo (dias)</label>
+                  <label className="mb-1 block text-xs font-bold uppercase text-blue-700">
+                    Intervalo (dias)
+                  </label>
                   <input
                     type="number"
                     min="1"
@@ -1718,7 +2383,9 @@ export default function NewProposalPage() {
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-xs font-bold uppercase text-blue-700">Primeiro vencimento</label>
+                  <label className="mb-1 block text-xs font-bold uppercase text-blue-700">
+                    Primeiro vencimento
+                  </label>
                   <input
                     type="date"
                     value={firstDueDate}
@@ -1730,19 +2397,30 @@ export default function NewProposalPage() {
 
               <div className="mt-3 grid grid-cols-1 gap-2 text-sm md:grid-cols-3">
                 <p className="rounded border border-blue-100 bg-white px-3 py-2">
-                  Entrada: <span className="font-bold">R$ {formatMoney(entryAmount)}</span>
+                  Entrada:{" "}
+                  <span className="font-bold">
+                    R$ {formatMoney(entryAmount)}
+                  </span>
                 </p>
                 <p className="rounded border border-blue-100 bg-white px-3 py-2">
-                  Saldo: <span className="font-bold">R$ {formatMoney(remainingAfterEntry)}</span>
+                  Saldo:{" "}
+                  <span className="font-bold">
+                    R$ {formatMoney(remainingAfterEntry)}
+                  </span>
                 </p>
                 <p className="rounded border border-blue-100 bg-white px-3 py-2">
-                  Parcela ({installments}x): <span className="font-bold">R$ {formatMoney(installmentValue)}</span>
+                  Parcela ({installments}x):{" "}
+                  <span className="font-bold">
+                    R$ {formatMoney(installmentValue)}
+                  </span>
                 </p>
               </div>
             </div>
 
             <div className="md:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Observacoes internas</label>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">
+                Observacoes internas
+              </label>
               <textarea
                 rows={2}
                 value={internalNotes}
@@ -1752,7 +2430,9 @@ export default function NewProposalPage() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Observacoes para cliente</label>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">
+                Observacoes para cliente
+              </label>
               <textarea
                 rows={2}
                 value={externalNotes}
@@ -1763,7 +2443,9 @@ export default function NewProposalPage() {
 
             <div className="md:col-span-2 grid grid-cols-2 gap-2 rounded-lg border border-red-100 bg-red-50 p-2">
               <div>
-                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-red-600">Tipo desconto</label>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-red-600">
+                  Tipo desconto
+                </label>
                 <select
                   value={discountType}
                   onChange={(e) => {
@@ -1778,7 +2460,9 @@ export default function NewProposalPage() {
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-red-600">Aplicar desconto</label>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-red-600">
+                  Aplicar desconto
+                </label>
                 <input
                   type="number"
                   min="0"
@@ -1789,13 +2473,18 @@ export default function NewProposalPage() {
                       ? "border-red-500 bg-red-100 text-red-600"
                       : "border-red-300 bg-white text-red-700"
                   }`}
-                  placeholder={discountType === "PERCENTAGE" ? "Ex: 5" : "Ex: 150.00"}
+                  placeholder={
+                    discountType === "PERCENTAGE" ? "Ex: 5" : "Ex: 150.00"
+                  }
                 />
               </div>
 
               {hitDiscountLimit ? (
                 <p className="col-span-2 mt-1 text-xs font-bold text-red-500">
-                  Limite de vendedor atingido. Max: {discountType === "PERCENTAGE" ? "7%" : `R$ ${formatMoney(maxDiscountAllowed)}`}
+                  Limite de vendedor atingido. Max:{" "}
+                  {discountType === "PERCENTAGE"
+                    ? "7%"
+                    : `R$ ${formatMoney(maxDiscountAllowed)}`}
                 </p>
               ) : null}
             </div>
@@ -1806,15 +2495,23 @@ export default function NewProposalPage() {
           <div className="flex items-center gap-8">
             {finalDiscount > 0 ? (
               <div className="hidden text-zinc-400 md:block">
-                <p className="mb-1 text-xs font-medium uppercase tracking-wider">Subtotal</p>
-                <p className="text-xl line-through">R$ {formatMoney(subtotal)}</p>
+                <p className="mb-1 text-xs font-medium uppercase tracking-wider">
+                  Subtotal
+                </p>
+                <p className="text-xl line-through">
+                  R$ {formatMoney(subtotal)}
+                </p>
               </div>
             ) : null}
 
             {finalDiscount > 0 ? (
               <div className="rounded-lg bg-red-50 px-3 py-1 text-red-500">
-                <p className="mb-1 text-xs font-bold uppercase tracking-wider">Desconto</p>
-                <p className="text-lg font-bold">- R$ {formatMoney(finalDiscount)}</p>
+                <p className="mb-1 text-xs font-bold uppercase tracking-wider">
+                  Desconto
+                </p>
+                <p className="text-lg font-bold">
+                  - R$ {formatMoney(finalDiscount)}
+                </p>
               </div>
             ) : null}
 
@@ -1822,13 +2519,19 @@ export default function NewProposalPage() {
               <p className="mb-1 text-sm font-bold text-zinc-500">
                 {finalDiscount > 0 ? "Total final" : "Valor total"}
               </p>
-              <p className="text-3xl font-extrabold text-emerald-600">R$ {formatMoney(grandTotal)}</p>
+              <p className="text-3xl font-extrabold text-emerald-600">
+                R$ {formatMoney(grandTotal)}
+              </p>
             </div>
           </div>
 
           <button
             type="submit"
-            disabled={isSubmitting || !selectedClientId}
+            disabled={
+              isSubmitting ||
+              !selectedClientId ||
+              Boolean(selectedClient?.proposalCreationBlocked)
+            }
             className="rounded-lg bg-emerald-600 px-8 py-3 font-bold text-white shadow-lg transition-all hover:bg-emerald-500 disabled:opacity-50"
           >
             {isSubmitting ? "Gerando..." : "Salvar proposta"}

@@ -66,6 +66,11 @@ export default function EquipmentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [contractFilter, setContractFilter] = useState("ALL");
+  const [criticalityFilter, setCriticalityFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [ticketFilter, setTicketFilter] = useState("ALL");
   const [access, setAccess] = useState(() => getAccessFromToken());
 
   useEffect(() => {
@@ -98,9 +103,27 @@ export default function EquipmentsPage() {
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
-    if (!term) return equipments;
-    return equipments.filter((item) =>
-      [
+    return equipments.filter((item) => {
+      const contract = getPrimaryContract(item);
+      const hasContract = Boolean(contract);
+      const hasActiveContract =
+        contract?.status === "ACTIVE" || contract?.status === "RENEWAL";
+      const hasTickets = hasOpenTickets(item);
+
+      if (contractFilter === "CONTRACTED" && !hasContract) return false;
+      if (contractFilter === "NO_CONTRACT" && hasContract) return false;
+      if (contractFilter === "ACTIVE_CONTRACT" && !hasActiveContract) return false;
+      if (criticalityFilter !== "ALL" && item.criticality !== criticalityFilter) {
+        return false;
+      }
+      if (statusFilter !== "ALL" && item.operationalStatus !== statusFilter) {
+        return false;
+      }
+      if (ticketFilter === "OPEN" && !hasTickets) return false;
+      if (ticketFilter === "NONE" && hasTickets) return false;
+      if (!term) return true;
+
+      return [
         item.name,
         item.assetTag,
         item.serialNumber,
@@ -112,55 +135,53 @@ export default function EquipmentsPage() {
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
-        .includes(term),
-    );
-  }, [equipments, query]);
+        .includes(term);
+    });
+  }, [contractFilter, criticalityFilter, equipments, query, statusFilter, ticketFilter]);
+
+  const activeFilterCount = [
+    contractFilter !== "ALL",
+    criticalityFilter !== "ALL",
+    statusFilter !== "ALL",
+    ticketFilter !== "ALL",
+    Boolean(query.trim()),
+  ].filter(Boolean).length;
 
   const totals = useMemo(
     () => ({
       total: equipments.length,
       critical: equipments.filter((item) => item.criticality === "A").length,
       openTickets: equipments.reduce(
-        (sum, item) => sum + (item.serviceTickets?.length || 0),
+        (sum, item) => sum + countOpenTickets(item),
         0,
       ),
-      contracted: equipments.filter((item) => item.contractLinks?.[0]?.contract)
-        .length,
+      contracted: equipments.filter((item) => getPrimaryContract(item)).length,
     }),
     [equipments],
   );
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
-              Cadastro mestre tecnico
-            </p>
-            <h1 className="mt-2 text-3xl font-bold text-slate-950">
-              Equipamentos
-            </h1>
-            <p className="mt-1 max-w-3xl text-sm text-slate-500">
-              Geradores por cliente, contrato, manutencao, chamados e
-              prontuario tecnico.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {access.equipments.manageModels ? (
-              <Link href="/dashboard/equipments/models" className={SECONDARY_BUTTON}>
-                Modelos
-              </Link>
-            ) : null}
-            {access.equipments.create ? (
-              <Link href="/dashboard/equipments/new" className={PRIMARY_BUTTON}>
-                Novo equipamento
-              </Link>
-            ) : null}
-          </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold text-zinc-800">Equipamentos</h1>
+          <p className="mt-1 text-zinc-500">
+            Geradores por cliente, contrato, manutencao, chamados e prontuario tecnico.
+          </p>
         </div>
-      </header>
+        <div className="flex items-center gap-2">
+          {access.equipments.manageModels ? (
+            <Link href="/dashboard/equipments/models" className={SECONDARY_BUTTON}>
+              Modelos
+            </Link>
+          ) : null}
+          {access.equipments.create ? (
+            <Link href="/dashboard/equipments/new" className={PRIMARY_BUTTON}>
+              <span className="mr-2">+</span> Novo equipamento
+            </Link>
+          ) : null}
+        </div>
+      </div>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Metric label="Equipamentos" value={String(totals.total)} />
@@ -169,21 +190,102 @@ export default function EquipmentsPage() {
         <Metric label="Chamados abertos" value={String(totals.openTickets)} tone="amber" />
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar por nome, tag, serie, cliente, local ou modelo"
-            className="min-h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100 md:max-w-xl"
-          />
+      <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex items-center gap-2">
+          <label className="block flex-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+            Buscar equipamento
+          </label>
           <button
             type="button"
-            onClick={() => void loadEquipments()}
-            className={SECONDARY_BUTTON}
+            onClick={() => setShowFilters((prev) => !prev)}
+            className="rounded-lg border border-zinc-300 px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
           >
-            Atualizar
+            {showFilters ? "Fechar filtros" : "Filtros"}
           </button>
+        </div>
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Nome, tag, serie, cliente, local ou modelo..."
+          className="w-full rounded-lg border border-zinc-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+        />
+        {showFilters ? (
+          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-4">
+            <FilterSelect
+              label="Contrato"
+              value={contractFilter}
+              onChange={setContractFilter}
+              options={[
+                ["ALL", "Todos"],
+                ["ACTIVE_CONTRACT", "Contrato ativo"],
+                ["CONTRACTED", "Com contrato"],
+                ["NO_CONTRACT", "Sem contrato"],
+              ]}
+            />
+            <FilterSelect
+              label="Criticidade"
+              value={criticalityFilter}
+              onChange={setCriticalityFilter}
+              options={[
+                ["ALL", "Todas"],
+                ["A", "Criticidade A"],
+                ["B", "Criticidade B"],
+                ["C", "Criticidade C"],
+              ]}
+            />
+            <FilterSelect
+              label="Status"
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                ["ALL", "Todos"],
+                ["OPERATING", "Operando"],
+                ["IN_MAINTENANCE", "Em manutencao"],
+                ["STOPPED_BY_FAILURE", "Parado"],
+                ["DEACTIVATED", "Desativado"],
+              ]}
+            />
+            <FilterSelect
+              label="Chamados"
+              value={ticketFilter}
+              onChange={setTicketFilter}
+              options={[
+                ["ALL", "Todos"],
+                ["OPEN", "Com chamados"],
+                ["NONE", "Sem chamados"],
+              ]}
+            />
+          </div>
+        ) : null}
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-zinc-500">
+            {filtered.length} resultado(s)
+            {activeFilterCount ? ` | ${activeFilterCount} filtro(s) ativo(s)` : ""}
+          </p>
+          <div className="flex items-center gap-3">
+            {activeFilterCount ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  setContractFilter("ALL");
+                  setCriticalityFilter("ALL");
+                  setStatusFilter("ALL");
+                  setTicketFilter("ALL");
+                }}
+                className="text-xs font-semibold text-zinc-600 hover:text-blue-700 hover:underline"
+              >
+                Limpar filtros
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void loadEquipments()}
+              className="text-xs font-semibold text-zinc-600 hover:text-blue-700 hover:underline"
+            >
+              Atualizar
+            </button>
+          </div>
         </div>
       </section>
 
@@ -197,8 +299,9 @@ export default function EquipmentsPage() {
         {filtered.map((item) => {
           const lastOrder = item.orders?.[0];
           const nextPreventive = item.contractSchedules?.[0];
-          const contract = item.contractLinks?.[0]?.contract;
-          const openTickets = item.serviceTickets?.length || 0;
+          const contract = getPrimaryContract(item);
+          const openTickets = countOpenTickets(item);
+          const firstOpenTicket = getFirstOpenTicket(item);
 
           return (
             <article
@@ -283,10 +386,10 @@ export default function EquipmentsPage() {
                 <TimelineItem
                   label="Chamados"
                   value={openTickets ? `${openTickets} aberto(s)` : "Sem chamados"}
-                  helper={item.serviceTickets?.[0]?.title || "Nenhuma pendencia aberta"}
+                  helper={firstOpenTicket?.title || "Nenhuma pendencia aberta"}
                   href={
-                    item.serviceTickets?.[0]?.id
-                      ? `/dashboard/atendimento/${item.serviceTickets[0].id}`
+                    firstOpenTicket?.id
+                      ? `/dashboard/atendimento/${firstOpenTicket.id}`
                       : undefined
                   }
                 />
@@ -340,6 +443,35 @@ function Info({ label, value }: { label: string; value: string }) {
   );
 }
 
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<[string, string]>;
+}) {
+  return (
+    <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+      {label}
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-sm font-medium normal-case text-zinc-700"
+      >
+        {options.map(([optionValue, optionLabel]) => (
+          <option key={optionValue} value={optionValue}>
+            {optionLabel}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function TimelineItem({
   label,
   value,
@@ -360,6 +492,32 @@ function TimelineItem({
   );
 
   return href ? <Link href={href}>{content}</Link> : content;
+}
+
+function getPrimaryContract(item: EquipmentListItem) {
+  return item.contractLinks?.find((link) => link.contract)?.contract || null;
+}
+
+function countOpenTickets(item: EquipmentListItem) {
+  return (item.serviceTickets || []).filter((ticket) =>
+    isOpenTicketStatus(ticket.status),
+  ).length;
+}
+
+function hasOpenTickets(item: EquipmentListItem) {
+  return countOpenTickets(item) > 0;
+}
+
+function getFirstOpenTicket(item: EquipmentListItem) {
+  return (item.serviceTickets || []).find((ticket) =>
+    isOpenTicketStatus(ticket.status),
+  );
+}
+
+function isOpenTicketStatus(status?: string | null) {
+  return !["RESOLVED", "CLOSED", "CANCELED", "CONVERTED_TO_ORDER"].includes(
+    status || "",
+  );
 }
 
 function Badge({

@@ -17,6 +17,9 @@ import {
   PermissionAwareLink,
   RelatedEntityGrid,
 } from "../../components/OperationalLinks";
+import ContractRenewalPanel, {
+  type ContractRenewal,
+} from "../components/ContractRenewalPanel";
 
 type ContractStatus = "ACTIVE" | "SUSPENDED" | "CANCELED" | "RENEWAL";
 type Tone = "blue" | "emerald" | "amber" | "rose" | "slate";
@@ -66,6 +69,7 @@ type Contract = {
     generatedOrderId?: string | null;
     generator: { id?: string; name: string; serialNumber?: string | null };
   }>;
+  renewals: ContractRenewal[];
 };
 
 const PRIMARY_BUTTON =
@@ -271,25 +275,6 @@ export default function ContractDetailPage() {
         ]}
         actions={
           <>
-            {contract.sourceProposal ? (
-              <PermissionAwareLink
-                href={`/dashboard/proposals/${contract.sourceProposal.id}`}
-                permission="proposals.view"
-                className={SECONDARY_BUTTON}
-              >
-                Proposta {contract.sourceProposal.code}
-              </PermissionAwareLink>
-            ) : null}
-            <PermissionAwareLink href="/dashboard/contracts" permission="contracts.view" className={SECONDARY_BUTTON}>
-              Voltar para carteira
-            </PermissionAwareLink>
-            <PermissionAwareLink
-              href={`/dashboard/documents/contracts/${contract.id}`}
-              permission="contracts.view"
-              className={SECONDARY_BUTTON}
-            >
-              Documento
-            </PermissionAwareLink>
             <button
               type="button"
               onClick={() => void generateOrders()}
@@ -383,6 +368,13 @@ export default function ContractDetailPage() {
         </StatusBanner>
       ) : null}
 
+      <ContractRenewalPanel
+        contractId={contract.id}
+        contractCode={contract.code}
+        renewals={contract.renewals || []}
+        onChanged={load}
+      />
+
       <SectionCard
         eyebrow="Navegacao cruzada"
         title="Relacionamentos do contrato"
@@ -408,6 +400,14 @@ export default function ContractDetailPage() {
                   permission: "proposals.view",
                 }]
               : []),
+            {
+              label: `Documento ${contract.code}`,
+              description: "Versao documental pronta para impressao e compartilhamento.",
+              href: `/dashboard/documents/contracts/${contract.id}`,
+              badge: "Documento",
+              tone: "slate" as const,
+              permission: "contracts.view",
+            },
             ...contract.equipments.slice(0, 4).map((item) => ({
               label: item.generator.name,
               description: `Serie ${item.generator.serialNumber || "-"} - cobertura ${item.coverageAmount != null ? formatCurrency(Number(item.coverageAmount)) : "nao definida"}.`,

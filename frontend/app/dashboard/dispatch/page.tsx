@@ -209,6 +209,7 @@ export default function DispatchPage() {
   const [error, setError] = useState("");
   const [warnings, setWarnings] = useState<string[]>([]);
   const [approvalHintId, setApprovalHintId] = useState<string | null>(null);
+  const [prefillMessage, setPrefillMessage] = useState("");
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | OrderStatus>("ALL");
@@ -404,6 +405,32 @@ export default function DispatchPage() {
     void loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const proposalId = params.get("proposalId");
+    const title = params.get("title");
+    const description = params.get("description");
+    const generatorId = params.get("generatorId");
+    const orderType = params.get("type");
+    const priority = params.get("priority");
+
+    if (!proposalId && !title && !description && !generatorId) return;
+
+    setCreateForm((prev) => ({
+      ...prev,
+      title: title || prev.title,
+      description: description || prev.description,
+      generatorId: generatorId || prev.generatorId,
+      type: orderType && ORDER_TYPE_OPTIONS.includes(orderType) ? orderType : prev.type,
+      priority: priority && PRIORITY_LABEL[priority] ? priority : prev.priority,
+    }));
+    setPrefillMessage(
+      proposalId
+        ? "Dados importados da proposta ganha. Confira equipamento, prioridade e abra a O.S."
+        : "Dados iniciais importados para a abertura da O.S.",
+    );
+  }, []);
+
   function setApiError(message: string) {
     setError(message);
     setApprovalHintId(extractApprovalId(message));
@@ -470,6 +497,7 @@ export default function DispatchPage() {
 
       const created = (await res.json()) as DispatchMutationResponse;
       setCreateForm(EMPTY_CREATE_FORM);
+      setPrefillMessage("");
       applySuccess("O.S. criada e enviada para a fila de despacho.", created.dispatchWarnings);
       await loadData();
     } catch (createError: unknown) {
@@ -615,9 +643,6 @@ export default function DispatchPage() {
             <button type="button" onClick={() => void loadData()} className={SECONDARY_BUTTON}>
               Atualizar painel
             </button>
-            <Link href="/dashboard/orders" className={PRIMARY_BUTTON}>
-              Abrir carteira de O.S.
-            </Link>
           </>
         }
         aside={
@@ -649,6 +674,7 @@ export default function DispatchPage() {
       />
 
       {successMessage ? <StatusBanner tone="emerald">{successMessage}</StatusBanner> : null}
+      {prefillMessage ? <StatusBanner tone="blue">{prefillMessage}</StatusBanner> : null}
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
       {approvalHintId ? (
         <StatusBanner tone="amber">

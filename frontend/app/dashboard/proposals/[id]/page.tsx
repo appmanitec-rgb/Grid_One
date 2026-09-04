@@ -93,6 +93,8 @@ const SECONDARY_BUTTON =
   "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
 type Tone = "blue" | "emerald" | "amber" | "rose" | "slate";
 
+const OPERATIONAL_PROPOSAL_TYPES = new Set(["SERVICES", "PARTS_AND_SERVICES"]);
+
 export default function ProposalDetailPage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
@@ -185,6 +187,15 @@ export default function ProposalDetailPage() {
         router.push(`/dashboard/contracts/${data.contract.id}`);
         return true;
       }
+      if (
+        path === "client-approve" &&
+        !isClient &&
+        OPERATIONAL_PROPOSAL_TYPES.has(proposal.type) &&
+        data?.ordemDeServico?.id
+      ) {
+        router.push(`/dashboard/orders/${data.ordemDeServico.id}`);
+        return true;
+      }
       await load();
       setNotice("Ação executada com sucesso.");
       return true;
@@ -264,6 +275,9 @@ export default function ProposalDetailPage() {
   const installmentValue = remaining / installments;
   const flowStatusKey = statusToFlowStep(proposal.status);
   const flowCurrentIndex = FLOW_STEPS.findIndex((step) => step.key === flowStatusKey);
+  const isOperationalProposal = OPERATIONAL_PROPOSAL_TYPES.has(proposal.type);
+  const canOpenDispatchFromProposal =
+    proposal.status === "WON" && isOperationalProposal && Boolean(proposal.generator?.id) && !isClient;
 
   const flowActions: Array<{
     label: string;
@@ -401,7 +415,7 @@ export default function ProposalDetailPage() {
         ]}
         actions={
           <>
-            {proposal.status === "WON" && !proposal.generatedContract && !isClient ? (
+            {proposal.status === "WON" && proposal.type === "CONTRACT" && !proposal.generatedContract && !isClient ? (
               <ActionButton
                 busy={isBusy}
                 onClick={() => {
@@ -414,22 +428,15 @@ export default function ProposalDetailPage() {
                 Converter em contrato
               </ActionButton>
             ) : null}
-            {proposal.generatedContract && !isClient ? (
+            {canOpenDispatchFromProposal ? (
               <PermissionAwareLink
-                href={`/dashboard/contracts/${proposal.generatedContract.id}`}
-                permission="contracts.view"
+                href={buildProposalDispatchHref(proposal)}
+                permission="orders.create"
                 className={PRIMARY_BUTTON}
               >
-                Ver contrato {proposal.generatedContract.code}
+                Abrir O.S. no despacho
               </PermissionAwareLink>
             ) : null}
-            <PermissionAwareLink
-              href={`/dashboard/documents/proposals/${proposal.id}`}
-              permission="proposals.view"
-              className={SECONDARY_BUTTON}
-            >
-              Documento
-            </PermissionAwareLink>
             {!isClient ? (
               <ActionButton
                 busy={isBusy}
@@ -443,9 +450,6 @@ export default function ProposalDetailPage() {
                 Revisar proposta
               </ActionButton>
             ) : null}
-            <PermissionAwareLink href="/dashboard/proposals" permission="proposals.view" className={SECONDARY_BUTTON}>
-              Voltar para carteira
-            </PermissionAwareLink>
           </>
         }
         aside={
@@ -1024,6 +1028,26 @@ function opportunityStageLabel(stage: string) {
   };
 
   return map[stage] || stage;
+}
+
+function buildProposalDispatchHref(proposal: Proposal) {
+  const params = new URLSearchParams({
+    proposalId: proposal.id,
+    title: `Execucao da proposta ${proposal.code}`,
+    description: [
+      `Demanda originada da proposta ${proposal.code}.`,
+      proposal.client?.companyName ? `Cliente: ${proposal.client.companyName}.` : "",
+      proposal.generator?.name ? `Equipamento: ${proposal.generator.name}.` : "",
+      `Valor comercial: ${formatCurrency(Number(proposal.totalValue || 0))}.`,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    type: proposal.type === "SERVICES" ? "CORRECTIVE" : "INSTALLATION",
+    priority: "NORMAL",
+  });
+
+  if (proposal.generator?.id) params.set("generatorId", proposal.generator.id);
+  return `/dashboard/dispatch?${params.toString()}`;
 }
 
 function statusTone(status: string): Tone {

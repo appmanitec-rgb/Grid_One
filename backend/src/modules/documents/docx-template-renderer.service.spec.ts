@@ -122,6 +122,17 @@ describe('DocxTemplateRendererService', () => {
             total: 'R$ 100,00',
           },
         ],
+        parts: [
+          {
+            code: 'FLT-001',
+            description: 'Filtro de oleo',
+            sku: 'FLT-001',
+            quantity: '1',
+            unit: 'UN',
+            unitPrice: 'R$ 100,00',
+            total: 'R$ 100,00',
+          },
+        ],
         services: [
           {
             code: 'SERV-001',
@@ -161,6 +172,12 @@ describe('DocxTemplateRendererService', () => {
     expect(content).toContain('PROP-1');
     expect(content).toContain('Cliente Exemplo');
     expect(content).toContain('Filtro de oleo');
+    expect(content).toContain('PROPOSTA COMERCIAL');
+    expect(content).toContain('VALOR TOTAL DA PROPOSTA');
+    expect(content).toContain('Informações de CNPJ para faturamentos');
+    expect(content).toContain('word/media/image1.jpg');
+    expect(content).toContain('word/media/image2.png');
+    expect(content).not.toContain('Controle documental');
     expect(content).not.toContain('hourCost');
     expect(content).not.toContain('storageKey');
   });
@@ -180,5 +197,103 @@ describe('DocxTemplateRendererService', () => {
         },
       }),
     ).toThrow(BadRequestException);
+  });
+
+  it('renders the institutional contract DOCX with current system variables', () => {
+    const template = templates.loadInstitutional('contract');
+    const generated = renderer.render({
+      template,
+      fileName: 'contrato-CTR-1.docx',
+      context: {
+        company: {
+          name: 'MANITEC',
+          document: '00.000.000/0001-00',
+          street: 'Rua Teste',
+          addressNumber: '100',
+          city: 'Sao Paulo',
+          state: 'SP',
+          email: 'contratos@manitec.test',
+        },
+        client: {
+          id: 'CLI-1',
+          name: 'Cliente Contrato',
+          document: '11.111.111/0001-11',
+          street: 'Avenida Cliente',
+          city: 'Campinas',
+          state: 'SP',
+        },
+        contact: {
+          name: 'Contato Cliente',
+          email: 'cliente@example.test',
+          phone: '(19) 9999-9999',
+          mobile: '(19) 9888-8888',
+          role: 'Gerente',
+        },
+        consultant: {
+          name: 'Consultor MANITEC',
+          email: 'consultor@manitec.test',
+          phone: '(19) 0000-0000',
+        },
+        contract: {
+          number: 'CTR-1',
+          date: '22/07/2026',
+          startDate: '01/08/2026',
+          endDate: '31/07/2027',
+          recurringAmount: 'R$ 5.000,00',
+          dueDay: '10',
+          billingPeriod: 'mensal',
+          paymentMethod: 'Boleto',
+          validityDescription: '01/08/2026 a 31/07/2027',
+          renewalNotes: 'Renovacao mediante aceite.',
+          renewalNotice: '30 dias antes do termino',
+          maintenanceWindow: 'Horario comercial',
+          preventiveRecurrence: 'Mensal',
+          correctiveVisitAllowance: '2',
+          correctiveVisitAllowancePeriod: 'chamados mensais',
+          preventiveVisitSummary: 'Mensal',
+          responseTime: '4h',
+          partsCoverage: 'Pecas faturadas separadamente',
+          notes: 'Sem observacoes.',
+        },
+        commercialTerms: {
+          adjustmentIndex: 'IPCA',
+        },
+        equipment: {},
+        items: [
+          {
+            description: 'GMG Principal',
+            serialNumber: 'SN-001',
+            site: 'Matriz',
+            coverage: 'R$ 5.000,00',
+          },
+        ],
+        services: [
+          {
+            description: 'Manutencao preventiva mensal',
+            quantity: '1',
+            unit: 'contrato',
+            total: 'R$ 5.000,00',
+          },
+        ],
+        technicalScope: {},
+        signatures: {},
+        metadata: {
+          templateKey: 'contract/manitec-default-v1',
+          generatedAt: '2026-07-22T00:00:00.000Z',
+        },
+      },
+    });
+    const content = generated.buffer.toString('utf8');
+
+    expect(generated.buffer.subarray(0, 4).toString('ascii')).toBe(
+      'PK\u0003\u0004',
+    );
+    expect(content).toContain('CTR-1');
+    expect(content).toContain('Cliente Contrato');
+    expect(content).toContain('word/media/image1.png');
+    expect(content).toContain('word/media/image2.jpeg');
+    expect(content).not.toContain('Controle documental');
+    expect(content).not.toContain('!contratospx');
+    expect(content).not.toContain('^datacon');
   });
 });

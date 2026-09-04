@@ -317,28 +317,6 @@ export default function CashFlowPage() {
             tone: firstNegativeProjection ? "rose" : "emerald",
           },
         ]}
-        actions={
-          <>
-            <Link
-              href="/dashboard/finance/accounts-receivable"
-              className={PRIMARY_LINK}
-            >
-              Ver recebiveis
-            </Link>
-            <Link
-              href="/dashboard/finance/accounts-payable"
-              className={SECONDARY_LINK}
-            >
-              Ver pagaveis
-            </Link>
-            <Link
-              href="/dashboard/finance/bank-accounts"
-              className={SECONDARY_LINK}
-            >
-              Ver contas bancarias
-            </Link>
-          </>
-        }
         aside={
           <div className="space-y-3">
             <FieldBox>

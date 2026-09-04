@@ -13,6 +13,7 @@ export type AccessPolicy = {
     inventory: boolean;
     people: boolean;
     usersControl: boolean;
+    studio: boolean;
     tickets: boolean;
     serviceReports: boolean;
     technicianPortal: boolean;
@@ -154,6 +155,14 @@ export type AccessPolicy = {
   audit: {
     read: boolean;
   };
+  studio: {
+    access: boolean;
+    dataView: boolean;
+    dataEdit: boolean;
+    dataExport: boolean;
+    dataImport: boolean;
+    auditView: boolean;
+  };
 };
 
 export type AccessPages = AccessPolicy["pages"];
@@ -168,6 +177,7 @@ type AccessPolicyOverrides = {
 };
 
 const ACCESS_ROUTE_RULES: AccessRouteRule[] = [
+  { prefix: "/dashboard/developer", permission: "studio" },
   { prefix: "/dashboard/management", permission: "usersControl" },
   { prefix: "/dashboard/automation", permission: "usersControl" },
   { prefix: "/dashboard/documents", permission: "dashboard" },
@@ -219,6 +229,7 @@ export function getDefaultDashboardPath(access: AccessPolicy): string {
   if (pages.catalog) return "/dashboard/catalog";
   if (pages.inventory) return "/dashboard/inventory";
   if (pages.finance) return "/dashboard/finance/cash-flow";
+  if (pages.studio || access.studio.access) return "/dashboard/developer/data";
   if (pages.usersControl || access.users.manage) {
     return "/dashboard/management/users";
   }
@@ -239,6 +250,7 @@ const EMPTY_ACCESS_POLICY: AccessPolicy = {
     inventory: false,
     people: false,
     usersControl: false,
+    studio: false,
     tickets: false,
     serviceReports: false,
     technicianPortal: false,
@@ -359,6 +371,14 @@ const EMPTY_ACCESS_POLICY: AccessPolicy = {
   reports: { view: false, export: false },
   settings: { view: false, update: false, admin: false },
   audit: { read: false },
+  studio: {
+    access: false,
+    dataView: false,
+    dataEdit: false,
+    dataExport: false,
+    dataImport: false,
+    auditView: false,
+  },
 };
 
 export function defaultAccessByRole(role: string): AccessPolicy {
@@ -378,6 +398,7 @@ export function defaultAccessByRole(role: string): AccessPolicy {
         inventory: true,
         people: true,
         usersControl: true,
+        studio: true,
         tickets: true,
         serviceReports: true,
         technicianPortal: true,
@@ -481,6 +502,14 @@ export function defaultAccessByRole(role: string): AccessPolicy {
       reports: { view: true, export: true },
       settings: { view: true, update: true },
       audit: { read: true },
+      studio: {
+        access: true,
+        dataView: true,
+        dataEdit: false,
+        dataExport: true,
+        dataImport: false,
+        auditView: true,
+      },
     });
   }
 
@@ -855,6 +884,7 @@ function mergeAccessPolicy(
     reports: mergeSection(base.reports, overrides.reports),
     settings: mergeSection(base.settings, overrides.settings),
     audit: mergeSection(base.audit, overrides.audit),
+    studio: mergeSection(base.studio, overrides.studio),
   };
 }
 
@@ -897,6 +927,7 @@ function mapAccessPolicy(
     reports: mapSection(input.reports, mapper),
     settings: mapSection(input.settings, mapper),
     audit: mapSection(input.audit, mapper),
+    studio: mapSection(input.studio, mapper),
   };
 }
 
@@ -931,6 +962,7 @@ function normalizeAccessPolicy(access: AccessPolicy): AccessPolicy {
         access.purchaseOrders.view,
       people: access.pages.people || access.people.view,
       usersControl: access.pages.usersControl || access.users.manage,
+      studio: access.pages.studio || access.studio.access,
       tickets: access.pages.tickets || access.tickets.view,
       serviceReports: access.pages.serviceReports || access.serviceReports.view,
       technicianPortal:
@@ -972,6 +1004,11 @@ function normalizeAccessPolicy(access: AccessPolicy): AccessPolicy {
         access.serviceReports.manageDocuments ||
         access.serviceReports.manageShareLinks ||
         access.serviceReports.releaseToCustomer,
+    },
+    studio: {
+      ...access.studio,
+      dataView: access.studio.dataView || access.studio.access,
+      auditView: access.studio.auditView || access.audit.read,
     },
   };
 }

@@ -7,6 +7,9 @@
     "assets": [
       {
         "include": "templates/pdf/**/*"
+      },
+      {
+        "include": "templates/documents/**/*"
       }
     ]
   }

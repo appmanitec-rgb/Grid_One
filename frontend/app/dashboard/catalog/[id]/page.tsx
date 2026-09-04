@@ -18,6 +18,15 @@ type SupplierItem = {
   supplierPrice?: number | null;
   leadTimeDays?: number | null;
   isPrimary: boolean;
+  purchasePaymentTerm?: string | null;
+  purchaseTaxMode?: "AMOUNT" | "PERCENT" | null;
+  purchaseTaxPercent?: number | null;
+  purchaseTaxAmount?: number | null;
+  freightAmount?: number | null;
+  otherPurchaseCosts?: number | null;
+  priceValidFrom?: string | null;
+  priceValidUntil?: string | null;
+  priceNotes?: string | null;
   supplier: {
     id: string;
     companyName: string;
@@ -66,6 +75,61 @@ type PurchaseOrderItem = {
     totalAmount?: number | null;
     supplier: { id: string; companyName: string };
   };
+};
+
+type ProposalItem = {
+  id: string;
+  quantity: number;
+  unitPrice?: number | null;
+  totalPrice?: number | null;
+  proposal: {
+    id: string;
+    code: string;
+    status: string;
+    totalValue?: number | null;
+    createdAt: string;
+    client?: { id: string; companyName: string } | null;
+  };
+};
+
+type PriceRevision = {
+  id: string;
+  previousCostPrice?: number | null;
+  previousBasePrice?: number | null;
+  purchaseInvoiceValue: number;
+  purchaseTaxMode?: "AMOUNT" | "PERCENT" | null;
+  purchaseTaxPercent?: number | null;
+  purchaseTaxAmount: number;
+  freightAmount: number;
+  otherPurchaseCosts: number;
+  calculatedPurchaseCost: number;
+  salesTaxPercent: number;
+  commissionPercent: number;
+  profitMarginPercent: number;
+  operationalCostPercent: number;
+  finalSalePrice: number;
+  validFrom?: string | null;
+  validUntil?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  supplier?: { id: string; companyName: string } | null;
+  createdBy?: { id: string; name?: string | null; email?: string | null } | null;
+};
+
+type CatalogOffer = {
+  id: string;
+  status: string;
+  version: number;
+  quoteNumber?: string | null;
+  supplierSku?: string | null;
+  effectiveUnitCost?: number | null;
+  effectiveTotalCost?: number | null;
+  leadTimeDays?: number | null;
+  paymentTerm?: string | null;
+  validUntil?: string | null;
+  isPreferred?: boolean | null;
+  preferenceReason?: string | null;
+  supplier: { id: string; companyName: string };
 };
 
 type OrderMaterial = {
@@ -144,6 +208,9 @@ type Item = {
   inventoryBalances?: InventoryBalance[];
   inventoryMovements?: InventoryMovement[];
   purchaseOrderItems?: PurchaseOrderItem[];
+  proposalItems?: ProposalItem[];
+  priceRevisions?: PriceRevision[];
+  supplierOffers?: CatalogOffer[];
   maintenanceOrderMaterials?: OrderMaterial[];
   generatorBaseItems?: GeneratorBaseItem[];
   operationalSummary?: {
@@ -170,7 +237,7 @@ type Item = {
   };
 };
 
-type TabKey = "summary" | "traceability" | "suppliers" | "technical";
+type TabKey = "summary" | "pricing" | "traceability" | "suppliers" | "technical";
 
 export default function CatalogItemDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -315,6 +382,7 @@ export default function CatalogItemDetailPage() {
 
       <div className="flex flex-wrap gap-2">
         <TabButton label="Resumo" value="summary" active={activeTab} onClick={setActiveTab} />
+        <TabButton label="Precos" value="pricing" active={activeTab} onClick={setActiveTab} />
         <TabButton label="Rastreabilidade" value="traceability" active={activeTab} onClick={setActiveTab} />
         <TabButton label="Fornecedores" value="suppliers" active={activeTab} onClick={setActiveTab} />
         <TabButton label="Tecnico/Fiscal" value="technical" active={activeTab} onClick={setActiveTab} />
@@ -371,6 +439,50 @@ export default function CatalogItemDetailPage() {
               )}
             </div>
           </section>
+        </div>
+      ) : null}
+
+      {activeTab === "pricing" ? (
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          <TraceSection title="Ofertas e cotacoes vigentes" empty="Nenhuma oferta registrada para este item.">
+            {(item.supplierOffers || []).map((offer) => (
+              <TraceRow
+                key={offer.id}
+                title={`${offer.supplier.companyName}${offer.isPreferred ? " | Preferencial" : ""}`}
+                subtitle={`${offer.quoteNumber || `v${offer.version}`} | ${offer.status} | Validade ${formatDate(offer.validUntil)} | ${offer.paymentTerm || "Pagamento nao definido"}`}
+                value={`${formatCurrency(offer.effectiveUnitCost)} / un.`}
+                extraHref={`/dashboard/suppliers/${offer.supplier.id}`}
+                extraLabel="Fornecedor"
+              />
+            ))}
+          </TraceSection>
+
+          <TraceSection title="Historico de revisoes de preco" empty="Nenhuma revisao de preco registrada.">
+            {(item.priceRevisions || []).map((revision) => (
+              <TraceRow
+                key={revision.id}
+                title={`${formatCurrency(revision.finalSalePrice)} - ${revision.supplier?.companyName || "Fornecedor nao informado"}`}
+                subtitle={`${formatDate(revision.createdAt)} | Custo ${formatCurrency(revision.calculatedPurchaseCost)} | Validade ${formatDate(revision.validFrom)} ate ${formatDate(revision.validUntil)}`}
+                value={`M ${formatNumber(revision.profitMarginPercent)}%`}
+                extraHref={revision.supplier?.id ? `/dashboard/suppliers/${revision.supplier.id}` : undefined}
+                extraLabel="Fornecedor"
+              />
+            ))}
+          </TraceSection>
+
+          <TraceSection title="Historico de vendas" empty="Nenhuma proposta utilizou este item ainda.">
+            {(item.proposalItems || []).map((entry) => (
+              <TraceRow
+                key={entry.id}
+                title={entry.proposal.code}
+                subtitle={`${entry.proposal.status} | ${entry.proposal.client?.companyName || "Cliente nao informado"} | ${formatDate(entry.proposal.createdAt)}`}
+                value={`${formatNumber(entry.quantity)} x ${formatCurrency(entry.unitPrice)} = ${formatCurrency(entry.totalPrice)}`}
+                href={`/dashboard/proposals/${entry.proposal.id}`}
+                extraHref={entry.proposal.client?.id ? `/dashboard/clients/${entry.proposal.client.id}` : undefined}
+                extraLabel="Cliente"
+              />
+            ))}
+          </TraceSection>
         </div>
       ) : null}
 
@@ -451,8 +563,15 @@ export default function CatalogItemDetailPage() {
                   <Info label="SKU fornecedor" value={supplierItem.supplierSku || "-"} />
                   <Info label="Lead time" value={supplierItem.leadTimeDays != null ? `${supplierItem.leadTimeDays} dia(s)` : "-"} />
                   <Info label="Preco" value={supplierItem.supplierPrice == null ? "Restrito" : formatCurrency(supplierItem.supplierPrice)} />
-                  <Info label="Pagamento" value={supplierItem.supplier.paymentTerm || "-"} />
+                  <Info label="Pagamento" value={supplierItem.purchasePaymentTerm || supplierItem.supplier.paymentTerm || "-"} />
+                  <Info label="Imposto compra" value={formatPurchaseTax(supplierItem)} />
+                  <Info label="Validade" value={`${formatDate(supplierItem.priceValidFrom)} ate ${formatDate(supplierItem.priceValidUntil)}`} />
                 </div>
+                {supplierItem.priceNotes ? (
+                  <p className="mt-3 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-600">
+                    {supplierItem.priceNotes}
+                  </p>
+                ) : null}
               </article>
             ))}
             {(item.supplierItems || []).length === 0 ? (
@@ -668,6 +787,17 @@ function formatCurrency(value: number | string | null | undefined) {
 function formatDate(value?: string | null) {
   if (!value) return "-";
   return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(new Date(value));
+}
+
+function formatPurchaseTax(item: {
+  purchaseTaxMode?: "AMOUNT" | "PERCENT" | null;
+  purchaseTaxPercent?: number | null;
+  purchaseTaxAmount?: number | null;
+}) {
+  if (item.purchaseTaxMode === "PERCENT") {
+    return `${formatNumber(item.purchaseTaxPercent)}%`;
+  }
+  return formatCurrency(item.purchaseTaxAmount);
 }
 
 function movementLabel(value: string) {

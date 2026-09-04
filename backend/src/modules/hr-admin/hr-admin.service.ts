@@ -8,8 +8,10 @@ import {
   CommissionStatus,
   FleetVehicleStatus,
   HrAssetStatus,
+  InventoryMovementType,
   Prisma,
   UserRole,
+  WarehouseType,
 } from '@prisma/client';
 import { DatabaseService } from 'src/database/database.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
@@ -548,27 +550,70 @@ export class HrAdminService {
   }
 
   assignHrAsset(dto: AssignHrAssetDto) {
-    return this.prisma.hrAssetAssignment.create({
-      data: {
-        userId: dto.userId,
-        catalogItemId: dto.catalogItemId,
-        assetType: dto.assetType,
-        title: dto.title,
-        caCode: dto.caCode,
-        deliveredAt: new Date(dto.deliveredAt),
-        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
-        signedTermUrl: dto.signedTermUrl,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const assignment = await tx.hrAssetAssignment.create({
+        data: {
+          userId: dto.userId,
+          catalogItemId: dto.catalogItemId,
+          assetType: dto.assetType,
+          title: dto.title,
+          caCode: dto.caCode,
+          deliveredAt: new Date(dto.deliveredAt),
+          expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
+          signedTermUrl: dto.signedTermUrl,
+        },
+      });
+
+      if (dto.catalogItemId) {
+        await this.decrementMainStockForHrAsset(
+          tx,
+          dto.catalogItemId,
+          assignment.id,
+          dto.title,
+        );
+      }
+
+      return assignment;
     });
   }
 
   updateHrAssetStatus(id: string, status: HrAssetStatus) {
-    return this.prisma.hrAssetAssignment.update({
-      where: { id },
-      data: {
-        status,
-        returnedAt: status === HrAssetStatus.RETURNED ? new Date() : undefined,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const current = await tx.hrAssetAssignment.findUnique({ where: { id } });
+      if (!current) throw new NotFoundException('Item de RH nao encontrado.');
+
+      if (
+        current.status === HrAssetStatus.RETURNED &&
+        status !== HrAssetStatus.RETURNED
+      ) {
+        throw new BadRequestException(
+          'Item ja devolvido. Registre uma nova entrega para nova retirada.',
+        );
+      }
+
+      const updated = await tx.hrAssetAssignment.update({
+        where: { id },
+        data: {
+          status,
+          returnedAt:
+            status === HrAssetStatus.RETURNED ? new Date() : undefined,
+        },
+      });
+
+      if (
+        status === HrAssetStatus.RETURNED &&
+        current.status !== HrAssetStatus.RETURNED &&
+        current.catalogItemId
+      ) {
+        await this.incrementMainStockForHrAsset(
+          tx,
+          current.catalogItemId,
+          current.id,
+          current.title,
+        );
+      }
+
+      return updated;
     });
   }
 
@@ -687,6 +732,121 @@ export class HrAdminService {
         allocation: updatedAlloc,
         blockedForLongTrips: shouldBlock,
       };
+    });
+  }
+
+  private async ensureMainWarehouse(tx: Prisma.TransactionClient) {
+    const existing = await tx.warehouse.findFirst({
+      where: { type: WarehouseType.MAIN },
+    });
+    if (existing) return existing;
+
+    return tx.warehouse.create({
+      data: {
+        code: 'MATRIZ',
+        name: 'Almoxarifado Matriz',
+        type: WarehouseType.MAIN,
+      },
+    });
+  }
+
+  private async decrementMainStockForHrAsset(
+    tx: Prisma.TransactionClient,
+    catalogItemId: string,
+    assignmentId: string,
+    title: string,
+  ) {
+    const warehouse = await this.ensureMainWarehouse(tx);
+    const balance = await tx.inventoryBalance.findUnique({
+      where: {
+        warehouseId_catalogItemId: {
+          warehouseId: warehouse.id,
+          catalogItemId,
+        },
+      },
+    });
+    const available =
+      Number(balance?.physicalQty || 0) - Number(balance?.reservedQty || 0);
+
+    if (!balance || available < 1) {
+      throw new BadRequestException(
+        'Estoque disponivel insuficiente para registrar a saida do item.',
+      );
+    }
+
+    await tx.inventoryBalance.update({
+      where: { id: balance.id },
+      data: { physicalQty: { decrement: 1 } },
+    });
+
+    await tx.inventoryMovement.create({
+      data: {
+        movementType: InventoryMovementType.OUT,
+        warehouseId: warehouse.id,
+        catalogItemId,
+        quantity: -1,
+        referenceType: 'HR_ASSET_ASSIGNMENT',
+        referenceId: assignmentId,
+        note: `Saida para tecnico: ${title}`,
+      },
+    });
+
+    await this.syncCatalogStockCurrent(tx, catalogItemId);
+  }
+
+  private async incrementMainStockForHrAsset(
+    tx: Prisma.TransactionClient,
+    catalogItemId: string,
+    assignmentId: string,
+    title: string,
+  ) {
+    const warehouse = await this.ensureMainWarehouse(tx);
+
+    await tx.inventoryBalance.upsert({
+      where: {
+        warehouseId_catalogItemId: {
+          warehouseId: warehouse.id,
+          catalogItemId,
+        },
+      },
+      update: { physicalQty: { increment: 1 } },
+      create: {
+        warehouseId: warehouse.id,
+        catalogItemId,
+        physicalQty: 1,
+        reservedQty: 0,
+        minQty: 0,
+        maxQty: 0,
+      },
+    });
+
+    await tx.inventoryMovement.create({
+      data: {
+        movementType: InventoryMovementType.IN,
+        warehouseId: warehouse.id,
+        catalogItemId,
+        quantity: 1,
+        referenceType: 'HR_ASSET_RETURN',
+        referenceId: assignmentId,
+        note: `Devolucao de tecnico: ${title}`,
+      },
+    });
+
+    await this.syncCatalogStockCurrent(tx, catalogItemId);
+  }
+
+  private async syncCatalogStockCurrent(
+    tx: Prisma.TransactionClient,
+    catalogItemId: string,
+  ) {
+    const agg = await tx.inventoryBalance.aggregate({
+      where: { catalogItemId },
+      _sum: { physicalQty: true },
+    });
+
+    await tx.catalogItem.update({
+      where: { id: catalogItemId },
+      data: { stockCurrent: Number(agg._sum.physicalQty || 0) },
     });
   }
 }

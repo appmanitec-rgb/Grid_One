@@ -24,6 +24,7 @@ export type InstitutionalDocumentContext = {
   scopeItems?: Array<Record<string, unknown>>;
   deliverables?: Array<Record<string, unknown>>;
   exclusions?: Array<Record<string, unknown>>;
+  parts?: Array<Record<string, unknown>>;
   services?: Array<Record<string, unknown>>;
   proposal?: Record<string, unknown>;
   contract?: Record<string, unknown>;
@@ -93,6 +94,14 @@ export class InstitutionalDocumentService {
       deliveryTerm: payload.document?.deliveryLeadTimeDays
         ? `${payload.document.deliveryLeadTimeDays} dia(s)`
         : '-',
+      deliveryLeadTimeDays: this.safe(
+        payload.document?.deliveryLeadTimeDays,
+        '-',
+      ),
+      executionLeadTimeDays: this.safe(
+        payload.document?.deliveryLeadTimeDays,
+        '-',
+      ),
       warranty: 'Garantia conforme condicoes comerciais e fabricante.',
       exclusions:
         'Obras civis, infraestrutura externa e itens nao descritos no escopo.',
@@ -117,14 +126,49 @@ export class InstitutionalDocumentService {
     const equipment = this.equipment(payload.generator);
     const items = this.records(payload.items).map(
       (item: AnyRecord, index: number) => ({
+        kind: this.safe(item.kind, 'OTHER'),
         code: this.safe(item.catalogItem?.sku, `ITEM-${index + 1}`),
-        description: this.safe(item.catalogItem?.name, `Item ${index + 1}`),
+        description: this.safe(
+          item.description || item.catalogItem?.name,
+          `Item ${index + 1}`,
+        ),
         sku: this.safe(item.catalogItem?.sku, '-'),
-        quantity: this.formatQuantity(item.quantity),
-        unit: this.safe(item.catalogItem?.unit, 'un'),
+        quantity: this.formatQuantity(item.hours ?? item.quantity),
+        unit:
+          item.hours != null ? 'h' : this.safe(item.catalogItem?.unit, 'un'),
         unitPrice: this.formatCurrency(item.unitPrice),
+        discountPercent: this.formatPercent(item.discountPercent),
         total: this.formatCurrency(item.totalPrice),
       }),
+    );
+    const parts = items.filter(
+      (item) => !String(item.kind).toUpperCase().includes('SERVICE'),
+    );
+    const services = items.filter((item) =>
+      String(item.kind).toUpperCase().includes('SERVICE'),
+    );
+    proposal.laborTotal = this.formatCurrency(
+      this.records(payload.items)
+        .filter((item) => String(item.kind).toUpperCase().includes('SERVICE'))
+        .reduce((total, item) => total + Number(item.totalPrice || 0), 0),
+    );
+    proposal.materialsTotal = this.formatCurrency(
+      this.records(payload.items)
+        .filter((item) => !String(item.kind).toUpperCase().includes('SERVICE'))
+        .reduce((total, item) => total + Number(item.totalPrice || 0), 0),
+    );
+    proposal.discountTotal = this.formatCurrency(
+      this.records(payload.items).reduce(
+        (total, item) =>
+          total +
+          Math.max(
+            0,
+            Number(item.unitPrice || 0) *
+              Number(item.hours ?? item.quantity ?? 0) -
+              Number(item.totalPrice || 0),
+          ),
+        Number(payload.document?.discount || 0),
+      ),
     );
     const seller = payload.seller || payload.user || {};
     const scopeItems = this.textItems(
@@ -149,6 +193,7 @@ export class InstitutionalDocumentService {
       },
       equipment,
       items,
+      parts,
       commercialTerms: {
         payment: proposal.paymentTerms,
         freight: proposal.freight,
@@ -211,7 +256,7 @@ export class InstitutionalDocumentService {
         { description: 'Registro dos itens e condicoes comerciais aprovadas.' },
       ],
       exclusions,
-      services: items,
+      services,
       metadata: this.metadata(templateKey, payload.document?.id),
       proposal,
     };
@@ -223,6 +268,8 @@ export class InstitutionalDocumentService {
   ): InstitutionalDocumentContext {
     const company = this.company(payload.company);
     const client = this.client(payload.client);
+    const generation = payload.generationOptions || {};
+    const createdBy = payload.createdByUser || {};
     const contract = {
       number: this.safe(payload.document?.code),
       title: this.safe(payload.document?.title, 'Contrato de manutencao'),
@@ -232,15 +279,113 @@ export class InstitutionalDocumentService {
       endDate: this.formatDate(payload.document?.endDate),
       recurringAmount: this.formatCurrency(payload.document?.recurringAmount),
       dueDay: this.safe(payload.document?.dueDay, '-'),
-      preventiveRecurrence: this.safe(
+      billingPeriod: this.safe(generation.billingPeriod, 'mensalidade'),
+      paymentMethod: this.safe(generation.paymentMethod, 'boleto bancário'),
+      paymentDetails: this.safe(
+        generation.paymentDetails,
+        'Os dados de cobrança serão encaminhados ao contato financeiro cadastrado.',
+      ),
+      billingIssueRule: this.safe(
+        generation.billingIssueRule,
+        'até o quinto dia útil de cada competência',
+      ),
+      preventiveRecurrence: this.preventiveRecurrenceLabel(
         payload.document?.preventiveRecurrence,
-        '-',
       ),
       responseTime: payload.document?.responseTimeHours
         ? `${payload.document.responseTimeHours}h`
         : '-',
-      partsCoverage: this.safe(payload.document?.partsCoverage, '-'),
+      partsCoverage: this.partsCoverageLabel(payload.document?.partsCoverage),
       notes: this.safe(payload.document?.notes, '-'),
+      validityDescription: `${this.formatDate(
+        payload.document?.startDate,
+      )} a ${this.formatDate(payload.document?.endDate)}`,
+      renewalNotes: this.safe(
+        generation.renewalNotes,
+        'mediante acordo escrito entre as partes, sem renovação automática',
+      ),
+      renewalNotice: payload.document?.alertDays
+        ? `${payload.document.alertDays} dia(s) antes do termino`
+        : '-',
+      maintenanceWindow: this.safe(
+        generation.maintenanceWindow,
+        'dias úteis, em horário comercial, mediante agendamento',
+      ),
+      correctiveVisitAllowance: this.safe(
+        payload.document?.correctiveVisitAllowance,
+        '0',
+      ),
+      correctiveVisitAllowancePeriod: `${this.safe(
+        payload.document?.correctiveVisitAllowance,
+        '0',
+      )} chamado(s) por mês, não cumulativo(s)`,
+      preventiveVisitSummary: this.preventiveRecurrenceLabel(
+        payload.document?.preventiveRecurrence,
+      ),
+      emergencyChannel: this.safe(
+        generation.emergencyChannel,
+        'central de atendimento MANITEC informada ao cliente',
+      ),
+      fuelManagement: payload.document?.includesFuelManagement
+        ? 'incluída conforme rotinas operacionais cadastradas'
+        : 'não incluída',
+      adjustmentBaseMonth: payload.document?.adjustmentBaseMonth
+        ? `mês ${payload.document.adjustmentBaseMonth}`
+        : 'aniversário do contrato',
+      extraCallPolicy: this.safe(
+        generation.extraCallPolicy,
+        'serão objeto de orçamento prévio, incluindo mão de obra, peças e deslocamento aplicáveis',
+      ),
+      cancellationRule: this.safe(
+        generation.cancellationRule,
+        'mediante comunicação escrita com antecedência mínima de 30 dias',
+      ),
+      contractorObligations: this.safe(
+        generation.contractorObligations,
+        [
+          'a) disponibilizar profissionais capacitados e identificados;',
+          'b) utilizar ferramental e instrumentos adequados;',
+          'c) registrar os serviços executados em relatório ou ordem de serviço;',
+          'd) comunicar riscos, falhas relevantes e necessidades de intervenção adicional;',
+          'e) cumprir as normas técnicas e de segurança aplicáveis ao escopo contratado.',
+        ].join('\n'),
+      ),
+      clientObligations: this.safe(
+        generation.clientObligations,
+        [
+          'a) garantir acesso seguro aos equipamentos e às instalações;',
+          'b) disponibilizar responsável para acompanhamento quando necessário;',
+          'c) informar alterações, falhas e intervenções realizadas por terceiros;',
+          'd) manter condições mínimas de segurança, iluminação e circulação no local;',
+          'e) efetuar os pagamentos nos prazos contratados.',
+        ].join('\n'),
+      ),
+      exclusions: this.safe(
+        generation.exclusions,
+        [
+          'Não estão incluídos, salvo previsão expressa: peças e consumíveis;',
+          'retífica de motores, rebobinamento de alternadores e reparos estruturais;',
+          'obras civis, adequações elétricas externas e alterações de infraestrutura;',
+          'danos causados por operação inadequada, sinistros ou intervenção de terceiros;',
+          'serviços fora dos equipamentos e locais identificados neste contrato.',
+        ].join('\n'),
+      ),
+      additionalClauses: this.safe(
+        generation.additionalClauses,
+        this.safe(payload.document?.notes, 'não há condições adicionais'),
+      ),
+      legalVenue: this.safe(
+        generation.legalVenue,
+        this.safe(payload.company?.city, 'Indaiatuba/SP'),
+      ),
+      signaturePlace: this.safe(
+        generation.signaturePlace,
+        this.safe(payload.company?.city, 'Indaiatuba/SP'),
+      ),
+      preventiveChecklist:
+        generation.includePreventiveChecklist === false
+          ? 'O roteiro técnico detalhado não integra esta emissão.'
+          : this.preventiveChecklist(),
     };
     const equipments = this.records(payload.equipments).map(
       (item: AnyRecord) => ({
@@ -252,6 +397,25 @@ export class InstitutionalDocumentService {
           : contract.recurringAmount,
       }),
     );
+    const contractServices = this.records(payload.sourceProposal?.items).map(
+      (item: AnyRecord, index: number) => ({
+        description: this.safe(
+          item.description || item.catalogItem?.name,
+          `Item ${index + 1}`,
+        ),
+        quantity: this.formatQuantity(item.quantity),
+        unit: this.safe(item.catalogItem?.unit, 'un'),
+        total: this.formatCurrency(item.totalPrice),
+      }),
+    );
+    if (!contractServices.length) {
+      contractServices.push({
+        description: contract.title,
+        quantity: '1',
+        unit: 'contrato',
+        total: contract.recurringAmount,
+      });
+    }
 
     return {
       company,
@@ -266,6 +430,7 @@ export class InstitutionalDocumentService {
       },
       equipment: equipments[0] || this.equipment(null),
       items: equipments,
+      services: contractServices,
       commercialTerms: {
         recurringAmount: contract.recurringAmount,
         dueDay: contract.dueDay,
@@ -277,7 +442,24 @@ export class InstitutionalDocumentService {
         partsCoverage: contract.partsCoverage,
         notes: contract.notes,
       },
-      signatures: this.defaultSignatures(),
+      consultant: {
+        name: this.safe(createdBy.name, 'Responsável MANITEC'),
+        email: this.safe(createdBy.email || company.email, '-'),
+        phone: this.safe(company.phone, '-'),
+        role: 'Responsável pelo contrato',
+      },
+      signatures: {
+        company: company.name,
+        companySigner: this.safe(
+          generation.companySigner,
+          this.safe(createdBy.name, 'Representante autorizado'),
+        ),
+        client: client.name,
+        clientSigner: this.safe(
+          generation.clientSigner,
+          this.contact(payload.client).name,
+        ),
+      },
       metadata: this.metadata(templateKey, payload.document?.id),
       contract,
     };
@@ -401,6 +583,10 @@ export class InstitutionalDocumentService {
       document: this.safe(company?.cnpj, '-'),
       stateRegistration: this.safe(company?.stateRegistration, '-'),
       municipalRegistration: this.safe(company?.municipalRegistration, '-'),
+      street: this.safe(company?.address, '-'),
+      addressNumber: this.safe(company?.addressNumber, '-'),
+      district: this.safe(company?.district, '-'),
+      zipCode: this.safe(company?.zipCode, '-'),
       address: this.join([
         company?.address,
         company?.addressNumber,
@@ -428,25 +614,46 @@ export class InstitutionalDocumentService {
   }
 
   private client(client?: AnyRecord | null) {
+    const primaryAddress = this.primaryClientAddress(client);
+    const primaryContact = this.primaryClientContact(client);
+
     return {
+      id: this.safe(client?.id, '-'),
       name: this.safe(client?.tradeName || client?.companyName, '-'),
+      companyName: this.safe(client?.companyName, '-'),
+      tradeName: this.safe(client?.tradeName, '-'),
       document: this.safe(client?.cnpj, '-'),
       stateRegistration: this.safe(client?.stateRegistration, '-'),
       municipalRegistration: this.safe(client?.municipalRegistration, '-'),
-      contactName: this.safe(client?.contactName, '-'),
-      phone: this.safe(client?.phone, '-'),
-      email: this.safe(client?.email, '-'),
-      address: this.join([client?.address, client?.city, client?.state]),
-      city: this.safe(client?.city, '-'),
-      state: this.safe(client?.state, '-'),
+      contactName: this.safe(primaryContact?.name || client?.contactName, '-'),
+      phone: this.safe(primaryContact?.phone || client?.phone, '-'),
+      email: this.safe(primaryContact?.email || client?.email, '-'),
+      street: this.safe(primaryAddress?.street || client?.address, '-'),
+      addressNumber: this.safe(primaryAddress?.number, '-'),
+      district: this.safe(primaryAddress?.district, '-'),
+      zipCode: this.safe(primaryAddress?.zipCode, '-'),
+      address: this.join([
+        primaryAddress?.street || client?.address,
+        primaryAddress?.number,
+        primaryAddress?.district,
+        primaryAddress?.city || client?.city,
+        primaryAddress?.state || client?.state,
+        primaryAddress?.zipCode,
+      ]),
+      city: this.safe(primaryAddress?.city || client?.city, '-'),
+      state: this.safe(primaryAddress?.state || client?.state, '-'),
     };
   }
 
   private contact(client?: AnyRecord | null) {
+    const primaryContact = this.primaryClientContact(client);
+
     return {
-      name: this.safe(client?.contactName, '-'),
-      email: this.safe(client?.email, '-'),
-      phone: this.safe(client?.phone, '-'),
+      name: this.safe(primaryContact?.name || client?.contactName, '-'),
+      email: this.safe(primaryContact?.email || client?.email, '-'),
+      phone: this.safe(primaryContact?.phone || client?.phone, '-'),
+      mobile: this.safe(primaryContact?.mobile, '-'),
+      role: this.safe(primaryContact?.role, '-'),
     };
   }
 
@@ -462,8 +669,10 @@ export class InstitutionalDocumentService {
       manufacturer: this.safe(generator?.brand || generator?.model?.brand, '-'),
       engineManufacturer: this.safe(generator?.engineBrand, '-'),
       engineModel: this.safe(generator?.engineModelName, '-'),
+      engineSerialNumber: this.safe(generator?.engineSerialNumber, '-'),
       alternatorManufacturer: this.safe(generator?.alternatorBrand, '-'),
       alternatorModel: this.safe(generator?.alternatorModelName, '-'),
+      alternatorSerialNumber: this.safe(generator?.alternatorSerialNumber, '-'),
       power: generator?.power ? `${generator.power} kVA` : '-',
       hourMeter:
         generator?.hourMeter === null || generator?.hourMeter === undefined
@@ -496,12 +705,51 @@ export class InstitutionalDocumentService {
     };
   }
 
+  private preventiveRecurrenceLabel(value: unknown) {
+    const labels: Record<string, string> = {
+      MONTHLY: 'mensal',
+      BIMONTHLY: 'bimestral',
+      QUARTERLY: 'trimestral',
+      SEMIANNUAL: 'semestral',
+      ANNUAL: 'anual',
+    };
+    const key = this.safe(value, '-');
+    return labels[key] || key;
+  }
+
+  private partsCoverageLabel(value: unknown) {
+    const labels: Record<string, string> = {
+      INCLUDED: 'incluídas na mensalidade, nos limites expressamente descritos',
+      BILLED_SEPARATELY: 'faturadas separadamente após orçamento e aprovação',
+    };
+    const key = this.safe(value, '-');
+    return labels[key] || key;
+  }
+
+  private preventiveChecklist() {
+    return [
+      'MOTOR E COMBUSTÍVEL',
+      'Verificar níveis, vazamentos, mangueiras, tubulações, filtros e condições do tanque de serviço.',
+      'Verificar óleo lubrificante, respiro do cárter, juntas, bujões e indicação de troca conforme fabricante.',
+      'ARREFECIMENTO',
+      'Verificar nível e condição do fluido, radiador ou intercambiador, mangueiras, conexões, bomba d’água, ventilador e correias.',
+      'GERADOR E SISTEMA ELÉTRICO',
+      'Verificar conservação, limpeza, ventilação, temperatura, vibração, acoplamento e aperto de terminais de força e comando.',
+      'PARTIDA, BATERIAS E COMANDO',
+      'Verificar baterias, carregador, cabos, terminais, motor de partida, sensores, alarmes e funcionamento do painel de comando.',
+      'TESTES E REGISTROS',
+      'Realizar teste funcional compatível com as condições do local, registrar horímetro, anomalias, recomendações e evidências do atendimento.',
+      'A execução de atividades que exijam desligamento, carga, insumos ou recursos especiais dependerá de autorização e condições seguras no local.',
+    ].join('\n');
+  }
+
   private metadata(templateKey: string, documentId?: unknown) {
     return {
       templateKey,
       generatedAt: new Date().toISOString(),
       source: 'server-side',
       documentId: this.safe(documentId, '-'),
+      sourceId: this.safe(documentId, '-'),
       format: 'DOCX',
     };
   }
@@ -511,6 +759,12 @@ export class InstitutionalDocumentService {
       style: 'currency',
       currency: 'BRL',
     }).format(Number(value || 0));
+  }
+
+  private formatPercent(value?: number | string | null) {
+    return `${new Intl.NumberFormat('pt-BR', {
+      maximumFractionDigits: 2,
+    }).format(Number(value || 0))}%`;
   }
 
   private formatDate(value?: Date | string | null) {
@@ -570,6 +824,25 @@ export class InstitutionalDocumentService {
     return value.filter(
       (item): item is AnyRecord =>
         Boolean(item) && typeof item === 'object' && !Array.isArray(item),
+    );
+  }
+
+  private primaryClientAddress(client?: AnyRecord | null) {
+    const addresses = this.records(client?.addresses);
+    return (
+      addresses.find((address) => address.type === 'BILLING') ||
+      addresses.find((address) => address.type === 'INSTALLATION') ||
+      addresses[0] ||
+      null
+    );
+  }
+
+  private primaryClientContact(client?: AnyRecord | null) {
+    const contacts = this.records(client?.contacts);
+    return (
+      contacts.find((contact) => contact.status === 'ACTIVE') ||
+      contacts[0] ||
+      null
     );
   }
 

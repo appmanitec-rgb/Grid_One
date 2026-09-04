@@ -302,6 +302,12 @@ export default function ClientProfilePage() {
               permission: "clients.update",
             },
             {
+              label: "Nova oportunidade",
+              href: `/dashboard/opportunities?clientId=${client.id}`,
+              tone: "blue",
+              permission: "clients.view",
+            },
+            {
               label: "Nova proposta",
               href: `/dashboard/proposals/new?clientId=${client.id}`,
               tone: "emerald",

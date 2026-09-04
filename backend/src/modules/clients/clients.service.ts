@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -96,7 +97,17 @@ export class ClientsService {
       : ClientPersonTypeDto.LEGAL_ENTITY;
   }
 
-  async create(data: CreateClientDto, actorUserId?: string) {
+  async create(
+    data: CreateClientDto,
+    actorUserId?: string,
+    allowGeneratorCreation = false,
+  ) {
+    if (data.newGenerators?.length && !allowGeneratorCreation) {
+      throw new ForbiddenException(
+        'Use o fluxo de cadastro completo para incluir novos equipamentos.',
+      );
+    }
+
     const normalizedDocument = this.normalizeDocument(data.cnpj);
     const personType =
       data.personType ?? this.inferPersonType(normalizedDocument);
@@ -143,6 +154,13 @@ export class ClientsService {
           creditLimit: data.creditLimit,
           priceTableCode: data.priceTableCode,
           isDelinquent: data.isDelinquent,
+          proposalCreationBlocked: data.proposalCreationBlocked,
+          proposalBlockReason: data.proposalCreationBlocked
+            ? data.proposalBlockReason?.trim() || null
+            : null,
+          blockedPaymentTerms: this.normalizePaymentTerms(
+            data.blockedPaymentTerms,
+          ),
           withholdsInss: data.withholdsInss,
           withholdsIss: data.withholdsIss,
           salesOwnerId: data.salesOwnerId,
@@ -189,6 +207,35 @@ export class ClientsService {
           createdClient.id,
           idsToAttach,
           actorUserId,
+        );
+      }
+
+      for (const generator of data.newGenerators ?? []) {
+        const name = generator.model?.trim()
+          ? `${generator.name.trim()} - ${generator.model.trim()}`
+          : generator.name.trim();
+        const createdGenerator = await tx.generator.create({
+          data: {
+            name,
+            brand: generator.brand.trim(),
+            serialNumber: generator.serialNumber?.trim() || undefined,
+            power: generator.power,
+            clientId: createdClient.id,
+            createdByUserId: actorUserId,
+          },
+        });
+
+        await this.createAuditLog(
+          tx,
+          createdClient.id,
+          'GENERATOR_CREATED',
+          actorUserId,
+          `Equipamento cadastrado com o cliente: ${name}`,
+          {
+            generatorId: createdGenerator.id,
+            generatorName: name,
+            serialNumber: createdGenerator.serialNumber,
+          },
         );
       }
 
@@ -273,6 +320,13 @@ export class ClientsService {
         contactName: true,
         city: true,
         state: true,
+        paymentTermDefault: true,
+        proposalCreationBlocked: true,
+        proposalBlockReason: true,
+        blockedPaymentTerms: true,
+        _count: {
+          select: { proposals: true },
+        },
       },
       orderBy: { companyName: 'asc' },
       take: limit,
@@ -285,6 +339,9 @@ export class ClientsService {
       include: {
         addresses: true,
         contacts: true,
+        _count: {
+          select: { proposals: true },
+        },
         generators: {
           include: {
             createdByUser: {
@@ -468,6 +525,17 @@ export class ClientsService {
             creditLimit: data.creditLimit,
             priceTableCode: data.priceTableCode,
             isDelinquent: data.isDelinquent,
+            proposalCreationBlocked: data.proposalCreationBlocked,
+            proposalBlockReason:
+              data.proposalCreationBlocked === false
+                ? null
+                : data.proposalBlockReason !== undefined
+                  ? data.proposalBlockReason.trim() || null
+                  : undefined,
+            blockedPaymentTerms:
+              data.blockedPaymentTerms !== undefined
+                ? this.normalizePaymentTerms(data.blockedPaymentTerms)
+                : undefined,
             withholdsInss: data.withholdsInss,
             withholdsIss: data.withholdsIss,
             salesOwnerId: data.salesOwnerId,
@@ -539,6 +607,12 @@ export class ClientsService {
           changedParts.push('limite de credito');
         if (data.isDelinquent !== undefined)
           changedParts.push('status de inadimplencia');
+        if (data.proposalCreationBlocked !== undefined)
+          changedParts.push('bloqueio de novas propostas');
+        if (data.proposalBlockReason !== undefined)
+          changedParts.push('motivo do bloqueio comercial');
+        if (data.blockedPaymentTerms !== undefined)
+          changedParts.push('condicoes de pagamento bloqueadas');
         if (data.withholdsInss !== undefined) changedParts.push('INSS');
         if (data.withholdsIss !== undefined) changedParts.push('ISS');
         if (idsToAttach.length > 0) changedParts.push('vinculo de maquinas');
@@ -568,6 +642,12 @@ export class ClientsService {
   async remove(id: string) {
     await this.findOne(id);
     return this.database.client.delete({ where: { id } });
+  }
+
+  private normalizePaymentTerms(values?: string[]) {
+    return Array.from(
+      new Set((values ?? []).map((value) => value.trim()).filter(Boolean)),
+    );
   }
 
   private parseLookupLimit(value?: string | number) {

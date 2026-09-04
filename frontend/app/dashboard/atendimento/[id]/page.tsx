@@ -28,6 +28,7 @@ import {
 import {
   OperationalBreadcrumb,
   PermissionAwareLink,
+  RelatedEntityGrid,
 } from "../../components/OperationalLinks";
 
 type GeneratorOption = {
@@ -239,53 +240,33 @@ export default function InternalTicketDetailPage() {
             tone: ticket.isResolutionOverdue ? "rose" : "emerald",
           },
         ]}
-        actions={
-          <>
-            <PermissionAwareLink href="/dashboard/atendimento" permission="tickets.view" className={SECONDARY_BUTTON}>
-              Voltar
-            </PermissionAwareLink>
-            {ticket.client?.id ? (
-              <PermissionAwareLink
-                href={`/dashboard/clients/${ticket.client.id}`}
-                permission="clients.view"
-                className={SECONDARY_BUTTON}
-              >
-                Abrir cliente
-              </PermissionAwareLink>
-            ) : null}
-            {ticket.generator?.id ? (
-              <PermissionAwareLink
-                href={`/dashboard/equipments/${ticket.generator.id}`}
-                permission="equipments.view"
-                className={SECONDARY_BUTTON}
-              >
-                Abrir equipamento
-              </PermissionAwareLink>
-            ) : null}
-            {ticket.contract?.id ? (
-              <PermissionAwareLink
-                href={`/dashboard/contracts/${ticket.contract.id}`}
-                permission="contracts.view"
-                className={SECONDARY_BUTTON}
-              >
-                Abrir contrato
-              </PermissionAwareLink>
-            ) : null}
-            {ticket.maintenanceOrder ? (
-              <PermissionAwareLink
-                href={`/dashboard/orders/${ticket.maintenanceOrder.id}`}
-                permission="orders.view"
-                className={PRIMARY_BUTTON}
-              >
-                Abrir OS vinculada
-              </PermissionAwareLink>
-            ) : null}
-          </>
-        }
       />
 
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
       {success ? <StatusBanner tone="emerald">{success}</StatusBanner> : null}
+
+      <SectionCard
+        eyebrow="Navegacao cruzada"
+        title="Relacionamentos do chamado"
+        description="Cadastros e documentos relacionados ficam reunidos aqui, sem competir com as acoes operacionais."
+      >
+        <RelatedEntityGrid
+          items={[
+            ...(ticket.client?.id
+              ? [{ label: ticket.client.tradeName || ticket.client.companyName, description: "Cliente solicitante.", href: `/dashboard/clients/${ticket.client.id}`, badge: "Cliente", tone: "blue" as const, permission: "clients.view" }]
+              : []),
+            ...(ticket.generator?.id
+              ? [{ label: ticket.generator.name || "Equipamento do chamado", description: "Equipamento relacionado ao chamado.", href: `/dashboard/equipments/${ticket.generator.id}`, badge: "Equipamento", tone: "slate" as const, permission: "equipments.view" }]
+              : []),
+            ...(ticket.contract?.id
+              ? [{ label: ticket.contract.code, description: "Contrato de cobertura do atendimento.", href: `/dashboard/contracts/${ticket.contract.id}`, badge: "Contrato", tone: "emerald" as const, permission: "contracts.view" }]
+              : []),
+            ...(ticket.maintenanceOrder
+              ? [{ label: ticket.maintenanceOrder.title || "O.S. vinculada", description: "O.S. gerada a partir deste chamado.", href: `/dashboard/orders/${ticket.maintenanceOrder.id}`, badge: "O.S.", tone: "amber" as const, permission: "orders.view" }]
+              : []),
+          ]}
+        />
+      </SectionCard>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="space-y-5">

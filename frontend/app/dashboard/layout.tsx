@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import TopBar from "./components/TopBar";
+import SessionHeartbeat from "../SessionHeartbeat";
+import DashboardTableSorting from "./components/DashboardTableSorting";
 import SidebarNavigation, {
   SidebarAccess,
 } from "./components/SidebarNavigation";
@@ -52,6 +54,7 @@ export default function DashboardLayout({
     inventory: false,
     people: false,
     usersControl: false,
+    studio: false,
     tickets: false,
     serviceReports: false,
     technicianPortal: false,
@@ -79,6 +82,7 @@ export default function DashboardLayout({
         setVisiblePages({
           ...(access.pages as VisiblePages),
           usersControl: access.pages.usersControl || access.users.manage,
+          studio: access.pages.studio || access.studio.access,
         });
         setAccessReady(true);
       } catch {
@@ -143,6 +147,7 @@ export default function DashboardLayout({
         setVisiblePages({
           ...(access.pages as VisiblePages),
           usersControl: access.pages.usersControl || access.users.manage,
+          studio: access.pages.studio || access.studio.access,
         });
       } catch {
         clearAuthSession();
@@ -327,6 +332,13 @@ export default function DashboardLayout({
         icon: "AC",
         enabled: visiblePages.usersControl,
       },
+      {
+        href: "/dashboard/developer/data",
+        label: "Manitec Studio",
+        mobileLabel: "Studio",
+        icon: "ST",
+        enabled: visiblePages.studio,
+      },
     ],
     [currentRole, visiblePages],
   );
@@ -356,6 +368,8 @@ export default function DashboardLayout({
 
   return (
     <div className="dashboard-shell relative flex h-screen overflow-hidden bg-transparent text-zinc-900">
+      <SessionHeartbeat source="DASHBOARD" />
+      <DashboardTableSorting />
       <SidebarNavigation
         pathname={pathname}
         collapsed={isSidebarCollapsed}
@@ -366,8 +380,6 @@ export default function DashboardLayout({
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <TopBar
-          onExpandSidebar={() => setIsSidebarCollapsed(false)}
-          canExpandSidebar={isSidebarCollapsed}
           appearanceTheme={appearanceTheme}
           onChangeAppearanceTheme={handleThemeChange}
         />

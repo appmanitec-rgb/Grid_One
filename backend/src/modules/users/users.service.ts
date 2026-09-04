@@ -83,6 +83,7 @@ export class UsersService {
 
   async create(createUserDto: CreateUserDto, actorUserId?: string) {
     const normalizedEmail = normalizeEmail(createUserDto.email);
+    const technicianProfile = this.prepareTechnicianProfile(createUserDto);
     const userExists = await this.prisma.user.findFirst({
       where: {
         email: {
@@ -96,6 +97,18 @@ export class UsersService {
       throw new BadRequestException('Este e-mail ja esta cadastrado.');
     }
 
+    if (technicianProfile) {
+      const cpfOwner = await this.prisma.technician.findUnique({
+        where: { cpf: technicianProfile.cpf },
+        select: { id: true },
+      });
+      if (cpfOwner) {
+        throw new BadRequestException(
+          'Este CPF ja esta vinculado a outro tecnico.',
+        );
+      }
+    }
+
     await this.assertCanManageSensitiveUserFields(createUserDto, actorUserId);
     await this.validateManager(createUserDto.managerId, undefined);
     const linkedClientId = await this.validateLinkedClientAccess(
@@ -106,7 +119,12 @@ export class UsersService {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(createUserDto.password, salt);
 
-    const { accessPolicy, role, managerId, kpiTargetJson } = createUserDto;
+    const {
+      accessPolicy,
+      role,
+      managerId,
+      kpiTargetJson,
+    } = createUserDto;
     const userData = { ...createUserDto } as Partial<CreateUserDto>;
     delete userData.password;
     delete userData.accessPolicy;
@@ -114,11 +132,16 @@ export class UsersService {
     delete userData.managerId;
     delete userData.kpiTargetJson;
     delete userData.linkedClientId;
+    delete userData.technicianProfile;
 
     const createData: Prisma.UserUncheckedCreateInput = {
       ...(userData as Omit<
         CreateUserDto,
-        'password' | 'accessPolicy' | 'role' | 'managerId'
+        | 'password'
+        | 'accessPolicy'
+        | 'role'
+        | 'managerId'
+        | 'technicianProfile'
       >),
       email: normalizedEmail,
       role,
@@ -132,18 +155,34 @@ export class UsersService {
       passwordHash: hashedPassword,
     };
 
-    const created = await this.prisma.user.create({
-      data: createData,
-      select: userPublicSelect,
-    });
+    const created = await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: createData,
+        select: userPublicSelect,
+      });
 
-    await this.auditLogsService.record({
-      domain: AuditDomain.USERS,
-      entityType: 'USER',
-      entityId: created.id,
-      action: 'CREATE',
-      actorUserId,
-      afterPayload: created as unknown as Prisma.InputJsonValue,
+      if (technicianProfile) {
+        await tx.technician.create({
+          data: {
+            userId: user.id,
+            ...technicianProfile,
+          },
+        });
+      }
+
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.USERS,
+          entityType: 'USER',
+          entityId: user.id,
+          action: 'CREATE',
+          actorUserId,
+          afterPayload: user as unknown as Prisma.InputJsonValue,
+        },
+        tx,
+      );
+
+      return user;
     });
 
     return this.withManager(created);
@@ -908,6 +947,41 @@ export class UsersService {
     if (!manager || !manager.isActive) {
       throw new BadRequestException('Gestor direto invalido.');
     }
+  }
+
+  private prepareTechnicianProfile(createUserDto: CreateUserDto) {
+    const profile = createUserDto.technicianProfile;
+
+    if (createUserDto.role !== UserRole.TECHNICIAN) {
+      if (profile) {
+        throw new BadRequestException(
+          'O perfil tecnico so pode ser informado para usuarios tecnicos.',
+        );
+      }
+      return null;
+    }
+
+    if (!profile) {
+      throw new BadRequestException(
+        'Informe CPF e telefone para concluir o cadastro do tecnico.',
+      );
+    }
+
+    const cpf = profile.cpf.replace(/\D/g, '');
+    if (cpf.length !== 11) {
+      throw new BadRequestException('Informe um CPF com 11 digitos.');
+    }
+
+    const phone = profile.phone.trim();
+    if (!phone) {
+      throw new BadRequestException('Informe o telefone do tecnico.');
+    }
+
+    const skills = Array.from(
+      new Set(profile.skills.map((skill) => skill.trim()).filter(Boolean)),
+    );
+
+    return { cpf, phone, skills };
   }
 
   private async assertCanManageSensitiveUserFields(

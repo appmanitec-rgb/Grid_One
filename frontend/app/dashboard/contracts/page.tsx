@@ -471,6 +471,14 @@ function ContractCard({
             Abrir proposta de origem
           </Link>
         ) : null}
+        {contract.status === "RENEWAL" || expiringSoon ? (
+          <Link
+            href={`/dashboard/proposals/new?clientId=${contract.client.id}&renewalContractId=${contract.id}`}
+            className="inline-flex text-sm font-semibold text-amber-700 transition hover:text-amber-800 hover:underline"
+          >
+            Criar proposta de renovacao
+          </Link>
+        ) : null}
       </div>
     </article>
   );

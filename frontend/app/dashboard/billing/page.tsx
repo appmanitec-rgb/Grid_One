@@ -104,6 +104,7 @@ export default function BillingPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState("");
   const [error, setError] = useState("");
+  const [targetOrderId, setTargetOrderId] = useState("");
 
   const [query, setQuery] = useState("");
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<
@@ -179,6 +180,11 @@ export default function BillingPage() {
     void loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setTargetOrderId(params.get("orderId") || "");
+  }, []);
+
   const receivableByInvoiceKey = useMemo(() => {
     const map = new Map<string, Receivable>();
     for (const receivable of receivables) {
@@ -249,8 +255,14 @@ export default function BillingPage() {
       orders
         .filter((order) => order.status === "COMPLETED")
         .filter((order) => !order.contract)
-        .filter((order) => !receivableByOrderId.has(order.id)),
-    [orders, receivableByOrderId],
+        .filter((order) => !receivableByOrderId.has(order.id))
+        .sort((a, b) => {
+          if (!targetOrderId) return 0;
+          if (a.id === targetOrderId) return -1;
+          if (b.id === targetOrderId) return 1;
+          return 0;
+        }),
+    [orders, receivableByOrderId, targetOrderId],
   );
 
   const receivableHighlights = useMemo(() => {
@@ -485,6 +497,11 @@ export default function BillingPage() {
 
       {successMessage ? (
         <StatusBanner tone="emerald">{successMessage}</StatusBanner>
+      ) : null}
+      {targetOrderId ? (
+        <StatusBanner tone="blue">
+          O.S. selecionada a partir da execucao concluida. Ela aparece primeiro na lista quando ainda nao possui titulo financeiro.
+        </StatusBanner>
       ) : null}
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
 
