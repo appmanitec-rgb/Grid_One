@@ -29,6 +29,9 @@ import {
   StatusBanner,
   TextInput,
 } from "../components/DashboardPageKit";
+import ListPagination, {
+  useListPagination,
+} from "../components/ListPagination";
 
 const PRIMARY_BUTTON =
   "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800";
@@ -158,6 +161,10 @@ export default function NotificationsPage() {
       );
     });
   }, [categoryFilter, inbox?.items, priorityFilter, query]);
+  const { paginatedItems, paginationProps } = useListPagination(
+    filteredItems,
+    `${query}|${categoryFilter}|${priorityFilter}`,
+  );
 
   const stats = useMemo(
     () => [
@@ -296,7 +303,8 @@ export default function NotificationsPage() {
             />
           ) : (
             <div className="space-y-3">
-              {filteredItems.map((item) => (
+              <ListPagination {...paginationProps} />
+              {paginatedItems.map((item) => (
                 <NotificationCard key={item.id} item={item} />
               ))}
             </div>

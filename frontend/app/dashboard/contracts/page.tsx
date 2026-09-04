@@ -14,6 +14,9 @@ import {
   StatusBanner,
   TextInput,
 } from "../components/DashboardPageKit";
+import ListPagination, {
+  useListPagination,
+} from "../components/ListPagination";
 
 type ContractStatus = "ACTIVE" | "SUSPENDED" | "CANCELED" | "RENEWAL";
 type Tone = "blue" | "emerald" | "amber" | "rose" | "slate";
@@ -101,6 +104,10 @@ export default function ContractsPage() {
       );
     });
   }, [items, query, statusFilter]);
+  const { paginatedItems, paginationProps } = useListPagination(
+    filteredItems,
+    `${query}|${statusFilter}`,
+  );
 
   const stats = useMemo(() => {
     const active = items.filter((contract) => contract.status === "ACTIVE").length;
@@ -351,7 +358,8 @@ export default function ContractsPage() {
 
         {!loading && filteredItems.length > 0 ? (
           <div className="space-y-3">
-            {filteredItems.map((item) => (
+            <ListPagination {...paginationProps} />
+            {paginatedItems.map((item) => (
               <ContractCard
                 key={item.id}
                 contract={item}

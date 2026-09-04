@@ -22,6 +22,9 @@ import {
   StatusBanner,
   TextInput,
 } from "../components/DashboardPageKit";
+import ListPagination, {
+  useListPagination,
+} from "../components/ListPagination";
 
 const PRIMARY_BUTTON =
   "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800";
@@ -107,6 +110,10 @@ export default function DocumentsPage() {
       );
     });
   }, [allItems, kindFilter, query]);
+  const { paginatedItems, paginationProps } = useListPagination(
+    filteredItems,
+    `${query}|${kindFilter}`,
+  );
 
   const summary = hub?.summary || {
     total: 0,
@@ -198,10 +205,13 @@ export default function DocumentsPage() {
             description="Ajuste a busca ou aguarde novas movimentacoes na operacao."
           />
         ) : (
-          <div className="grid gap-4 xl:grid-cols-2">
-            {filteredItems.map((item) => (
-              <DocumentCard key={`${item.kind}-${item.id}`} item={item} />
-            ))}
+          <div className="space-y-4">
+            <ListPagination {...paginationProps} />
+            <div className="grid gap-4 xl:grid-cols-2">
+              {paginatedItems.map((item) => (
+                <DocumentCard key={`${item.kind}-${item.id}`} item={item} />
+              ))}
+            </div>
           </div>
         )}
       </SectionCard>

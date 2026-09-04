@@ -24,6 +24,9 @@ import {
   TextAreaInput,
   TextInput,
 } from "../components/DashboardPageKit";
+import ListPagination, {
+  useListPagination,
+} from "../components/ListPagination";
 
 const PRIMARY_BUTTON =
   "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
@@ -101,6 +104,8 @@ export default function ServiceReportsPage() {
         .includes(normalizedQuery);
     });
   }, [query, reports, statusFilter]);
+  const { paginatedItems: paginatedReports, paginationProps } =
+    useListPagination(filteredReports, `${query}|${statusFilter}`);
 
   const stats = useMemo(() => {
     const released = reports.filter(
@@ -294,8 +299,14 @@ export default function ServiceReportsPage() {
           <EmptyState text="Nenhum laudo encontrado." />
         ) : null}
 
+        {!loading && filteredReports.length > 0 ? (
+          <div className="mb-4">
+            <ListPagination {...paginationProps} />
+          </div>
+        ) : null}
+
         <div className="grid gap-3">
-          {filteredReports.map((report) => (
+          {paginatedReports.map((report) => (
             <Link
               key={report.id}
               href={`/dashboard/relatorios-tecnicos/${report.id}`}

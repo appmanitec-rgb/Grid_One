@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import TopBar from "./components/TopBar";
 import SessionHeartbeat from "../SessionHeartbeat";
 import DashboardTableSorting from "./components/DashboardTableSorting";
+import DashboardTablePagination from "./components/DashboardTablePagination";
 import SidebarNavigation, {
   SidebarAccess,
 } from "./components/SidebarNavigation";
@@ -370,6 +371,7 @@ export default function DashboardLayout({
     <div className="dashboard-shell relative flex h-screen overflow-hidden bg-transparent text-zinc-900">
       <SessionHeartbeat source="DASHBOARD" />
       <DashboardTableSorting />
+      <DashboardTablePagination />
       <SidebarNavigation
         pathname={pathname}
         collapsed={isSidebarCollapsed}

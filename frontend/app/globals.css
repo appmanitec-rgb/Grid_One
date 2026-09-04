@@ -662,6 +662,72 @@ h3 {
   opacity: 1;
 }
 
+.dashboard-table-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid rgb(226 232 240);
+  background: rgb(255 255 255 / 0.96);
+  color: rgb(71 85 105);
+}
+
+.dashboard-table-pagination-summary,
+.dashboard-table-pagination-label,
+.dashboard-table-pagination-page {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.dashboard-table-pagination-actions,
+.dashboard-table-pagination-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dashboard-table-pagination-select {
+  min-width: 4.25rem;
+  border: 1px solid rgb(203 213 225);
+  border-radius: 0.5rem;
+  background: white;
+  padding: 0.45rem 0.6rem;
+  color: rgb(30 41 59);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.dashboard-table-pagination-page {
+  min-width: 4.5rem;
+  text-align: center;
+}
+
+.dashboard-table-pagination-button {
+  display: inline-flex;
+  width: 2.25rem;
+  height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgb(203 213 225);
+  border-radius: 0.5rem;
+  background: white;
+  color: rgb(51 65 85);
+  font-size: 1.125rem;
+  font-weight: 800;
+  transition: background-color 150ms ease;
+}
+
+.dashboard-table-pagination-button:hover:not(:disabled) {
+  background: rgb(248 250 252);
+}
+
+.dashboard-table-pagination-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
 @media print {
   body {
     background: #ffffff !important;
@@ -670,6 +736,8 @@ h3 {
   .dashboard-sidebar,
   .dashboard-topbar,
   .dashboard-table-sort-button,
+  .dashboard-table-pagination,
+  .dashboard-list-pagination,
   .glass-surface,
   .document-print-toolbar {
     display: none !important;

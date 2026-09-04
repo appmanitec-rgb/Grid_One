@@ -14,6 +14,9 @@ import {
   StatusBanner,
   TextInput,
 } from "../components/DashboardPageKit";
+import ListPagination, {
+  useListPagination,
+} from "../components/ListPagination";
 
 type Tone = "blue" | "emerald" | "amber" | "rose" | "slate";
 type OrderStatus = "OPEN" | "IN_PROGRESS" | "COMPLETED" | "CANCELED";
@@ -113,6 +116,8 @@ export default function OrdersPage() {
       );
     });
   }, [orders, query, statusFilter]);
+  const { paginatedItems: paginatedOrders, paginationProps } =
+    useListPagination(filteredOrders, `${query}|${statusFilter}`);
 
   const stats = useMemo(() => {
     const open = orders.filter((order) => order.status === "OPEN").length;
@@ -249,7 +254,8 @@ export default function OrdersPage() {
 
         {!loading && filteredOrders.length > 0 ? (
           <div className="space-y-3">
-            {filteredOrders.map((order) => (
+            <ListPagination {...paginationProps} />
+            {paginatedOrders.map((order) => (
               <OrderCard key={order.id} order={order} />
             ))}
           </div>

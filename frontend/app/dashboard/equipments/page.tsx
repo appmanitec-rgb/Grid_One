@@ -5,6 +5,9 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
 import { getAccessFromToken } from "@/lib/access";
+import ListPagination, {
+  useListPagination,
+} from "../components/ListPagination";
 
 type EquipmentListItem = {
   id: string;
@@ -146,6 +149,10 @@ export default function EquipmentsPage() {
     ticketFilter !== "ALL",
     Boolean(query.trim()),
   ].filter(Boolean).length;
+  const { paginatedItems, paginationProps } = useListPagination(
+    filtered,
+    [query, contractFilter, criticalityFilter, statusFilter, ticketFilter].join("|"),
+  );
 
   const totals = useMemo(
     () => ({
@@ -295,8 +302,12 @@ export default function EquipmentsPage() {
         <State text="Nenhum equipamento encontrado para os filtros atuais." />
       ) : null}
 
+      {!loading && !error && filtered.length > 0 ? (
+        <ListPagination {...paginationProps} />
+      ) : null}
+
       <section className="grid gap-4 xl:grid-cols-2">
-        {filtered.map((item) => {
+        {paginatedItems.map((item) => {
           const lastOrder = item.orders?.[0];
           const nextPreventive = item.contractSchedules?.[0];
           const contract = getPrimaryContract(item);

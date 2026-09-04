@@ -24,6 +24,9 @@ import {
   StatusBanner,
   TextInput,
 } from "../components/DashboardPageKit";
+import ListPagination, {
+  useListPagination,
+} from "../components/ListPagination";
 
 const SECONDARY_BUTTON =
   "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50";
@@ -127,6 +130,10 @@ export default function DeliveriesPage() {
         .some((value) => value!.toLowerCase().includes(term));
     });
   }, [channelFilter, history?.items, query]);
+  const { paginatedItems, paginationProps } = useListPagination(
+    filteredItems,
+    `${query}|${channelFilter}`,
+  );
 
   const summary = history?.summary || {
     total: 0,
@@ -222,7 +229,8 @@ export default function DeliveriesPage() {
           />
         ) : (
           <div className="space-y-3">
-            {filteredItems.map((item) => (
+            <ListPagination {...paginationProps} />
+            {paginatedItems.map((item) => (
               <article
                 key={item.id}
                 className="rounded-[24px] border border-slate-200 bg-white/92 p-4 shadow-[0_22px_48px_-38px_rgba(15,23,42,0.24)]"

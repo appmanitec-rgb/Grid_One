@@ -26,6 +26,9 @@ import {
   TextAreaInput,
   TextInput,
 } from "../components/DashboardPageKit";
+import ListPagination, {
+  useListPagination,
+} from "../components/ListPagination";
 
 type ClientOption = {
   id: string;
@@ -142,6 +145,11 @@ export default function InternalTicketsPage() {
       );
     });
   }, [tickets, statusFilter, priorityFilter, overdueOnly, query]);
+  const { paginatedItems: paginatedTickets, paginationProps } =
+    useListPagination(
+      filteredTickets,
+      `${query}|${statusFilter}|${priorityFilter}|${overdueOnly}`,
+    );
 
   const stats = useMemo(() => {
     const active = tickets.filter(
@@ -288,7 +296,10 @@ export default function InternalTicketsPage() {
                 Nenhum chamado encontrado para os filtros atuais.
               </FieldBox>
             ) : null}
-            {filteredTickets.map((ticket) => (
+            {!loading && filteredTickets.length > 0 ? (
+              <ListPagination {...paginationProps} />
+            ) : null}
+            {paginatedTickets.map((ticket) => (
               <Link
                 key={ticket.id}
                 href={`/dashboard/atendimento/${ticket.id}`}
