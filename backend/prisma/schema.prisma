@@ -41,6 +41,7 @@ enum SkillLevel {
 
 enum ApprovalType {
   BUDGET_DISCOUNT
+  GENERATOR_PROPOSAL
   RVT_SIGNOFF
 }
 
@@ -105,6 +106,25 @@ enum ItemType {
   SERVICE
 }
 
+enum CommercialGeneratorFuel {
+  DIESEL
+  NATURAL_GAS
+  LPG
+}
+
+enum CommercialGeneratorConstruction {
+  OPEN
+  CANOPIED
+  SOUND_ATTENUATED
+}
+
+enum CommercialGeneratorAvailability {
+  IN_STOCK
+  AVAILABLE_TO_ORDER
+  ON_REQUEST
+  UNAVAILABLE
+}
+
 enum CatalogIdentifierType {
   INTERNAL_SKU
   MANUFACTURER_PART_NUMBER
@@ -135,6 +155,7 @@ enum ProposalType {
   SERVICES
   PARTS_AND_SERVICES
   CONTRACT
+  GENERATOR_SALE
 }
 
 enum ProposalItemKind {
@@ -171,6 +192,11 @@ enum ProposalStatus {
   SENT
   APPROVED
   REJECTED
+}
+
+enum ProposalOrigin {
+  MANITEC
+  EXTERNAL
 }
 
 enum SalesOpportunityStage {
@@ -1305,7 +1331,8 @@ model Generator {
   currentSite   Site?           @relation(fields: [currentSiteId], references: [id], onDelete: SetNull)
   createdByUser User?           @relation("GeneratorCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
-  proposals         Proposal[]
+  proposals         Proposal[] @relation("ProposalInstalledGenerator")
+  sourceSaleProposals Proposal[] @relation("ProposalPostSaleGenerator")
   clientId          String
   client            Client                       @relation(fields: [clientId], references: [id])
   orders            MaintenanceOrder[]
@@ -1395,11 +1422,94 @@ model CatalogItem {
   purchaseOrderItems        PurchaseOrderItem[]
   hrAssetAssignments        HrAssetAssignment[]
   priceRevisions            CatalogPriceRevision[]
+  commercialGenerator       CommercialGenerator?
 
   @@index([skuAreaId])
   @@index([skuFamilyId])
   @@index([skuApplicationId])
   @@map("catalog_items")
+}
+
+/// Catalogo mestre de equipamentos novos comercializados pela Manitec.
+/// Nao representa um ativo instalado e nunca deve ser usado no lugar de Generator.
+model CommercialGenerator {
+  id                    String                          @id @default(uuid())
+  internalCode          String                          @unique
+  manufacturer          String                          @default("Generac")
+  line                  String?
+  model                 String
+  shortDescription      String?
+  isActive              Boolean                         @default(true)
+  standbyPowerKw        Float?
+  standbyPowerKva       Float?
+  primePowerKw          Float?
+  primePowerKva         Float?
+  continuousPowerKw     Float?
+  continuousPowerKva    Float?
+  powerFactor           Float                           @default(0.8)
+  frequencyHz           Int                             @default(60)
+  availableVoltages     String[]                        @default([])
+  availablePhaseConfigs String[]                        @default([])
+  fuelType              CommercialGeneratorFuel
+  construction          CommercialGeneratorConstruction
+  supportsIndoor        Boolean                         @default(false)
+  supportsOutdoor       Boolean                         @default(true)
+  availability          CommercialGeneratorAvailability @default(ON_REQUEST)
+  stockQuantity         Int                             @default(0)
+  leadTimeDays          Int?
+  currency              String                          @default("BRL")
+  costPrice             Float                           @default(0)
+  basePrice             Float                           @default(0)
+  suggestedPrice        Float                           @default(0)
+  minimumPrice          Float                           @default(0)
+  taxPercentage         Float                           @default(0)
+  engineDescription     String?
+  alternatorDescription String?
+  controllerDescription String?
+  enclosureDescription  String?
+  standardAccessories   String?
+  commercialNotes       String?
+  technicalNotes        String?
+  catalogItemId         String?                         @unique
+  catalogItem           CatalogItem?                    @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  proposals             Proposal[]
+  createdAt             DateTime                        @default(now())
+  updatedAt             DateTime                        @updatedAt
+
+  @@index([isActive, availability])
+  @@index([fuelType, construction])
+  @@index([standbyPowerKw])
+  @@map("commercial_generators")
+}
+
+/// Politicas versionadas que orientam o futuro pre-dimensionamento comercial.
+model CommercialSizingPolicy {
+  id                             String   @id @default(uuid())
+  name                           String
+  version                        Int      @default(1)
+  isDefault                      Boolean  @default(false)
+  isActive                       Boolean  @default(true)
+  defaultPowerFactor             Float    @default(0.8)
+  standardMarginPercent          Float    @default(20)
+  resistiveMarginPercent         Float    @default(15)
+  motorsMarginPercent            Float    @default(30)
+  pumpsMarginPercent             Float    @default(30)
+  airConditioningMarginPercent   Float    @default(30)
+  elevatorsMarginPercent         Float    @default(35)
+  electronicsMarginPercent       Float    @default(20)
+  mixedLoadMarginPercent         Float    @default(25)
+  unknownLoadMarginPercent       Float    @default(30)
+  idealReserveMinPercent         Float    @default(10)
+  idealReserveMaxPercent         Float    @default(35)
+  engineeringReviewAboveKw       Float?
+  requireEngineeringSpecialLoads Boolean  @default(true)
+  notes                          String?
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+
+  @@unique([name, version])
+  @@index([isActive, isDefault])
+  @@map("commercial_sizing_policies")
 }
 
 model CatalogSkuArea {
@@ -1770,6 +1880,7 @@ model Proposal {
   code                     String         @unique
   status                   ProposalStatus @default(DRAFT)
   type                     ProposalType
+  origin                   ProposalOrigin @default(MANITEC)
   totalValue               Float          @default(0)
   validUntil               DateTime?
   baseSequence             Int?
@@ -1804,7 +1915,24 @@ model Proposal {
   salesOpportunity   SalesOpportunity? @relation(fields: [salesOpportunityId], references: [id], onDelete: SetNull)
 
   generatorId String?
-  generator   Generator? @relation(fields: [generatorId], references: [id])
+  generator   Generator? @relation("ProposalInstalledGenerator", fields: [generatorId], references: [id])
+
+  commercialGeneratorId String?
+  commercialGenerator   CommercialGenerator? @relation(fields: [commercialGeneratorId], references: [id], onDelete: SetNull)
+  sizingSnapshot        Json?
+  commercialSnapshot    Json?
+
+  externalReference              String?
+  externalCurrency               String? @default("BRL")
+  externalDocumentStorageKey     String?
+  externalDocumentFileName       String?
+  externalDocumentMimeType       String?
+  externalDocumentSizeBytes      Int?
+  externalDocumentChecksumSha256 String?
+
+  postSaleGeneratorId String?
+  postSaleGenerator   Generator? @relation("ProposalPostSaleGenerator", fields: [postSaleGeneratorId], references: [id], onDelete: SetNull)
+  postSaleConvertedAt DateTime?
 
   userId                 String
   user                   User   @relation(fields: [userId], references: [id])

@@ -9,9 +9,14 @@ import {
   Post,
   Query,
   Req,
+  Res,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
+import type { Response } from 'express';
 import { RequireAccessPolicy } from '../auth/access-policy.decorator';
 import { AccessPolicyGuard } from '../auth/access-policy.guard';
 import { AuthGuard } from '../auth/auth.guard';
@@ -20,6 +25,7 @@ import {
   QuickProposalGeneratorDto,
 } from './dto/create-proposal.dto';
 import { UpdateProposalDto } from './dto/update-proposal.dto';
+import { ConvertGeneratorPostSaleDto } from './dto/convert-generator-post-sale.dto';
 import { ProposalsService } from './proposals.service';
 
 @Controller('proposals')
@@ -162,6 +168,60 @@ export class ProposalsController {
     } catch (error: any) {
       throw new BadRequestException(error.message);
     }
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('proposals.update')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 20 * 1024 * 1024 } }),
+  )
+  @Post(':id/external-document')
+  uploadExternalDocument(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @UploadedFile()
+    file?: {
+      originalname?: string;
+      mimetype?: string;
+      size?: number;
+      buffer?: Buffer;
+    },
+  ) {
+    const userId = (req['user'] as any)?.sub as string | undefined;
+    return this.proposalsService.uploadExternalDocument(id, file, userId);
+  }
+
+  @RequireAccessPolicy('proposals.view')
+  @Get(':id/external-document')
+  async downloadExternalDocument(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const userId = (req['user'] as any)?.sub as string | undefined;
+    const file = await this.proposalsService.downloadExternalDocument(
+      id,
+      userId,
+    );
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader('Content-Length', String(file.buffer.length));
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(file.fileName)}`,
+    );
+    return res.send(file.buffer);
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('proposals.update')
+  @Post(':id/convert-post-sale')
+  convertGeneratorPostSale(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Body() dto: ConvertGeneratorPostSaleDto,
+  ) {
+    const userId = (req['user'] as any)?.sub as string | undefined;
+    return this.proposalsService.convertGeneratorPostSale(id, dto, userId);
   }
 
   @UseGuards(AuthGuard)

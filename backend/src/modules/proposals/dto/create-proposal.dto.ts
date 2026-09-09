@@ -1,6 +1,7 @@
 import {
   ProposalHourType,
   ProposalItemKind,
+  ProposalOrigin,
   ProposalTechnicianType,
   ProposalType,
 } from '@prisma/client';
@@ -15,6 +16,7 @@ import {
   IsInt,
   IsBoolean,
   IsDateString,
+  IsObject,
   ArrayMinSize,
   Max,
   Min,
@@ -77,12 +79,32 @@ export class CreateProposalDto {
   @IsOptional()
   generatorId?: string;
 
+  @IsUUID()
+  @IsOptional()
+  commercialGeneratorId?: string;
+
+  @IsObject()
+  @IsOptional()
+  sizingSnapshot?: Record<string, unknown>;
+
   @IsString()
   @IsOptional()
   userId?: string;
 
   @IsEnum(ProposalType)
   type!: ProposalType;
+
+  @IsEnum(ProposalOrigin)
+  @IsOptional()
+  origin?: ProposalOrigin;
+
+  @IsString()
+  @IsOptional()
+  externalReference?: string;
+
+  @IsString()
+  @IsOptional()
+  externalCurrency?: string;
 
   // 🔴 NOVOS CAMPOS COMERCIAIS LIBERADOS
   @IsString()

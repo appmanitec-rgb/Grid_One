@@ -38,11 +38,21 @@ type ProposalListItem = {
   code: string;
   status: string;
   totalValue?: number | null;
+  type: string;
+  origin?: "MANITEC" | "EXTERNAL";
+  externalReference?: string | null;
+  externalCurrency?: string | null;
+  postSaleGeneratorId?: string | null;
   client?: { companyName?: string | null } | null;
   generator?: { name?: string | null } | null;
+  commercialGenerator?: {
+    model?: string | null;
+    internalCode?: string | null;
+  } | null;
 };
 
 type ViewMode = "list" | "kanban";
+type ProposalCategory = "ALL" | "GENERATORS" | "PARTS_SERVICES" | "CONTRACTS";
 type Tone = "blue" | "emerald" | "amber" | "rose" | "slate";
 
 type FlowColumnSummary = {
@@ -53,8 +63,6 @@ type FlowColumnSummary = {
   totalValue: number;
 };
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800";
 const SECONDARY_BUTTON =
   "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50";
 
@@ -68,6 +76,7 @@ export default function ProposalsPage() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [movingId, setMovingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [category, setCategory] = useState<ProposalCategory>("ALL");
   const [kanbanStatusFilter, setKanbanStatusFilter] = useState("ALL");
   const [dropTarget, setDropTarget] = useState<string | null>(null);
 
@@ -116,9 +125,24 @@ export default function ProposalsPage() {
   }, [handleUnauthorized]);
 
   useEffect(() => {
-    const saved = localStorage.getItem("manitec_view_proposals") as ViewMode | null;
+    const saved = localStorage.getItem(
+      "manitec_view_proposals",
+    ) as ViewMode | null;
     if (saved === "list" || saved === "kanban") {
       setViewMode(saved);
+    }
+  }, []);
+
+  useEffect(() => {
+    const requestedCategory = new URLSearchParams(window.location.search).get(
+      "category",
+    );
+    if (
+      requestedCategory === "GENERATORS" ||
+      requestedCategory === "PARTS_SERVICES" ||
+      requestedCategory === "CONTRACTS"
+    ) {
+      setCategory(requestedCategory);
     }
   }, []);
 
@@ -138,7 +162,9 @@ export default function ProposalsPage() {
 
   async function moveProposalToStatus(proposalId: string, nextStatus: string) {
     if (isClient) {
-      setError("O portal do cliente movimenta propostas apenas pela tela de detalhe.");
+      setError(
+        "O portal do cliente movimenta propostas apenas pela tela de detalhe.",
+      );
       setNotice("");
       return;
     }
@@ -164,7 +190,9 @@ export default function ProposalsPage() {
     setNotice("");
     setProposals((prev) =>
       prev.map((proposal) =>
-        proposal.id === proposalId ? { ...proposal, status: nextStatus } : proposal,
+        proposal.id === proposalId
+          ? { ...proposal, status: nextStatus }
+          : proposal,
       ),
     );
 
@@ -179,7 +207,9 @@ export default function ProposalsPage() {
 
       if (await handleUnauthorized(res)) return;
       if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, "Falha ao mover proposta."));
+        throw new Error(
+          await readApiErrorMessage(res, "Falha ao mover proposta."),
+        );
       }
 
       setNotice(
@@ -203,6 +233,9 @@ export default function ProposalsPage() {
     const term = query.trim().toLowerCase();
 
     return proposals.filter((proposal) => {
+      if (category !== "ALL" && proposalCategory(proposal.type) !== category) {
+        return false;
+      }
       const proposalStep = statusToFlowStep(proposal.status);
       if (
         viewMode === "kanban" &&
@@ -217,16 +250,38 @@ export default function ProposalsPage() {
         proposal.code.toLowerCase().includes(term) ||
         (proposal.client?.companyName || "").toLowerCase().includes(term) ||
         (proposal.generator?.name || "").toLowerCase().includes(term) ||
+        (proposal.commercialGenerator?.model || "")
+          .toLowerCase()
+          .includes(term) ||
         statusLabel(proposal.status).toLowerCase().includes(term)
       );
     });
-  }, [kanbanStatusFilter, proposals, query, viewMode]);
+  }, [category, kanbanStatusFilter, proposals, query, viewMode]);
+
+  const categoryCounts = useMemo(
+    () => ({
+      ALL: proposals.length,
+      GENERATORS: proposals.filter(
+        (proposal) => proposalCategory(proposal.type) === "GENERATORS",
+      ).length,
+      PARTS_SERVICES: proposals.filter(
+        (proposal) => proposalCategory(proposal.type) === "PARTS_SERVICES",
+      ).length,
+      CONTRACTS: proposals.filter(
+        (proposal) => proposalCategory(proposal.type) === "CONTRACTS",
+      ).length,
+    }),
+    [proposals],
+  );
 
   const flowColumns = useMemo(
     () => buildFlowColumns(filteredProposals),
     [filteredProposals],
   );
-  const portfolioColumns = useMemo(() => buildFlowColumns(proposals), [proposals]);
+  const portfolioColumns = useMemo(
+    () => buildFlowColumns(proposals),
+    [proposals],
+  );
 
   const draggingProposal = useMemo(
     () => proposals.find((proposal) => proposal.id === draggingId) || null,
@@ -320,11 +375,6 @@ export default function ProposalsPage() {
             >
               Atualizar carteira
             </button>
-            {!isClient ? (
-              <Link href="/dashboard/proposals/new" className={PRIMARY_BUTTON}>
-                Nova proposta
-              </Link>
-            ) : null}
           </>
         }
         asideLayout="stacked"
@@ -336,8 +386,8 @@ export default function ProposalsPage() {
                   Pulso do modulo
                 </p>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Diretoria e cliente concentram as etapas mais sensiveis. A leitura abaixo
-                  ajuda a antecipar gargalos sem entulhar a tela.
+                  Diretoria e cliente concentram as etapas mais sensiveis. A
+                  leitura abaixo ajuda a antecipar gargalos sem entulhar a tela.
                 </p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -356,15 +406,18 @@ export default function ProposalsPage() {
               </div>
               {isAdmin ? (
                 <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-900">
-                  Modo admin ativo: a movimentacao no kanban aceita override manual de etapa.
+                  Modo admin ativo: a movimentacao no kanban aceita override
+                  manual de etapa.
                 </div>
               ) : isClient ? (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
-                  O portal concentra leitura e decisao final. Para aprovar ou recusar, abra a proposta.
+                  O portal concentra leitura e decisao final. Para aprovar ou
+                  recusar, abra a proposta.
                 </div>
               ) : (
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">
-                  Usuarios comuns seguem apenas as transicoes permitidas do fluxo comercial.
+                  Usuarios comuns seguem apenas as transicoes permitidas do
+                  fluxo comercial.
                 </div>
               )}
             </div>
@@ -372,8 +425,74 @@ export default function ProposalsPage() {
         }
       />
 
+      {!isClient ? (
+        <SectionCard
+          eyebrow="Nova proposta"
+          title="Escolha o tipo de proposta"
+          description="Abra o fluxo comercial adequado para esta nova oportunidade."
+          className="p-4 sm:p-5"
+        >
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <Link
+              href="/dashboard/proposals/new/generator"
+              className={SECONDARY_BUTTON}
+            >
+              Proposta de gerador
+            </Link>
+            <Link
+              href="/dashboard/proposals/new?proposalType=CONTRACT"
+              className={SECONDARY_BUTTON}
+            >
+              Proposta de contrato
+            </Link>
+            <Link href="/dashboard/proposals/new" className={SECONDARY_BUTTON}>
+              Proposta de peças e serviços
+            </Link>
+            <Link
+              href="/dashboard/proposals/new/external"
+              className={SECONDARY_BUTTON}
+            >
+              Proposta externa
+            </Link>
+          </div>
+        </SectionCard>
+      ) : null}
+
       {notice ? <StatusBanner tone="emerald">{notice}</StatusBanner> : null}
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
+
+      <SectionCard
+        eyebrow="Carteiras comerciais"
+        title="Tipos de proposta"
+        description="Cada carteira usa seu fluxo de criacao, preservando a proposta atual de pecas e servicos."
+      >
+        <div className="grid gap-3 md:grid-cols-4">
+          <CategoryButton
+            label="Todas"
+            count={categoryCounts.ALL}
+            active={category === "ALL"}
+            onClick={() => setCategory("ALL")}
+          />
+          <CategoryButton
+            label="Geradores"
+            count={categoryCounts.GENERATORS}
+            active={category === "GENERATORS"}
+            onClick={() => setCategory("GENERATORS")}
+          />
+          <CategoryButton
+            label="Pecas e servicos"
+            count={categoryCounts.PARTS_SERVICES}
+            active={category === "PARTS_SERVICES"}
+            onClick={() => setCategory("PARTS_SERVICES")}
+          />
+          <CategoryButton
+            label="Contratos"
+            count={categoryCounts.CONTRACTS}
+            active={category === "CONTRACTS"}
+            onClick={() => setCategory("CONTRACTS")}
+          />
+        </div>
+      </SectionCard>
 
       <SectionCard
         eyebrow="Radar do funil"
@@ -406,7 +525,9 @@ export default function ProposalsPage() {
       </SectionCard>
 
       <SectionCard
-        eyebrow={viewMode === "list" ? "Vista de carteira" : "Vista de operacao"}
+        eyebrow={
+          viewMode === "list" ? "Vista de carteira" : "Vista de operacao"
+        }
         title={
           viewMode === "list"
             ? isClient
@@ -492,10 +613,18 @@ export default function ProposalsPage() {
                         Leitura da operacao
                       </p>
                       <p className="mt-2 text-sm leading-6 text-slate-600">
-                        Encoste nas laterais do quadro para andar horizontalmente. Cada coluna tem rolagem propria para evitar listas longas.
+                        Encoste nas laterais do quadro para andar
+                        horizontalmente. Cada coluna tem rolagem propria para
+                        evitar listas longas.
                       </p>
                     </div>
-                    <DataPill tone={query.trim() || kanbanStatusFilter !== "ALL" ? "blue" : "emerald"}>
+                    <DataPill
+                      tone={
+                        query.trim() || kanbanStatusFilter !== "ALL"
+                          ? "blue"
+                          : "emerald"
+                      }
+                    >
                       {filteredProposals.length} resultado(s)
                     </DataPill>
                   </div>
@@ -526,105 +655,117 @@ export default function ProposalsPage() {
               </div>
 
               <DashboardKanban ariaLabel="Kanban comercial de propostas">
-                  {flowColumns.map((column) => {
-                    const canReceiveDrop = draggingProposal
-                      ? isAdmin || canMoveForward(draggingProposal.status, column.key)
-                      : false;
+                {flowColumns.map((column) => {
+                  const canReceiveDrop = draggingProposal
+                    ? isAdmin ||
+                      canMoveForward(draggingProposal.status, column.key)
+                    : false;
 
-                    return (
-                      <section
-                        key={column.key}
-                        onDragOver={(event) => {
-                          if (!canReceiveDrop) return;
-                          event.preventDefault();
-                          setDropTarget(column.key);
-                        }}
-                        onDragLeave={() =>
-                          setDropTarget((prev) => (prev === column.key ? null : prev))
+                  return (
+                    <section
+                      key={column.key}
+                      onDragOver={(event) => {
+                        if (!canReceiveDrop) return;
+                        event.preventDefault();
+                        setDropTarget(column.key);
+                      }}
+                      onDragLeave={() =>
+                        setDropTarget((prev) =>
+                          prev === column.key ? null : prev,
+                        )
+                      }
+                      onDrop={(event) => {
+                        if (!canReceiveDrop) return;
+                        event.preventDefault();
+                        const proposalId =
+                          event.dataTransfer.getData("text/proposal-id") ||
+                          draggingId;
+
+                        if (proposalId) {
+                          void moveProposalToStatus(proposalId, column.key);
                         }
-                        onDrop={(event) => {
-                          if (!canReceiveDrop) return;
-                          event.preventDefault();
-                          const proposalId =
-                            event.dataTransfer.getData("text/proposal-id") || draggingId;
-
-                          if (proposalId) {
-                            void moveProposalToStatus(proposalId, column.key);
-                          }
-                        }}
-                        className={`dashboard-kanban-column flex min-w-[320px] snap-start flex-col rounded-[28px] border p-4 transition ${
-                          dropTarget === column.key
-                            ? "border-sky-400 bg-sky-50 shadow-[0_0_0_3px_rgba(14,165,233,0.16)]"
-                            : canReceiveDrop
-                              ? "border-emerald-300 bg-emerald-50/40 shadow-[0_22px_55px_-42px_rgba(16,185,129,0.45)]"
-                              : "border-slate-200 bg-white/90 shadow-[0_22px_55px_-42px_rgba(15,31,50,0.32)]"
-                        }`}
+                      }}
+                      className={`dashboard-kanban-column flex min-w-[320px] snap-start flex-col rounded-[28px] border p-4 transition ${
+                        dropTarget === column.key
+                          ? "border-sky-400 bg-sky-50 shadow-[0_0_0_3px_rgba(14,165,233,0.16)]"
+                          : canReceiveDrop
+                            ? "border-emerald-300 bg-emerald-50/40 shadow-[0_22px_55px_-42px_rgba(16,185,129,0.45)]"
+                            : "border-slate-200 bg-white/90 shadow-[0_22px_55px_-42px_rgba(15,31,50,0.32)]"
+                      }`}
+                    >
+                      <div
+                        className={`rounded-[24px] border border-white/60 bg-gradient-to-r ${column.tone} px-4 py-4`}
                       >
-                        <div
-                          className={`rounded-[24px] border border-white/60 bg-gradient-to-r ${column.tone} px-4 py-4`}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-600">
-                                {column.label}
-                              </p>
-                              <p className="mt-2 text-2xl font-bold text-slate-950">
-                                {column.items.length}
-                              </p>
-                            </div>
-                            <DataPill tone={statusTone(column.key)}>
-                              {formatCurrency(column.totalValue)}
-                            </DataPill>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-600">
+                              {column.label}
+                            </p>
+                            <p className="mt-2 text-2xl font-bold text-slate-950">
+                              {column.items.length}
+                            </p>
                           </div>
+                          <DataPill tone={statusTone(column.key)}>
+                            {formatCurrency(column.totalValue)}
+                          </DataPill>
                         </div>
+                      </div>
 
-                        <div className="dashboard-kanban-column-scroll mt-4 space-y-3 pr-1">
-                          {column.items.map((proposal) => (
-                            <KanbanProposalCard
-                              key={proposal.id}
-                              proposal={proposal}
-                              disabled={Boolean(movingId)}
-                              onDragStart={(event) => {
-                                if (movingId) return;
+                      <div className="dashboard-kanban-column-scroll mt-4 space-y-3 pr-1">
+                        {column.items.map((proposal) => (
+                          <KanbanProposalCard
+                            key={proposal.id}
+                            proposal={proposal}
+                            disabled={Boolean(movingId)}
+                            onDragStart={(event) => {
+                              if (movingId) return;
 
-                                setDraggingId(proposal.id);
-                                event.dataTransfer.setData("text/proposal-id", proposal.id);
-                                event.dataTransfer.effectAllowed = "move";
+                              setDraggingId(proposal.id);
+                              event.dataTransfer.setData(
+                                "text/proposal-id",
+                                proposal.id,
+                              );
+                              event.dataTransfer.effectAllowed = "move";
 
-                                const ghost = document.createElement("div");
-                                ghost.style.padding = "10px 12px";
-                                ghost.style.borderRadius = "14px";
-                                ghost.style.background = "#ffffff";
-                                ghost.style.border = "1px solid #dbe3ee";
-                                ghost.style.boxShadow = "0 18px 36px rgba(15,31,50,0.18)";
-                                ghost.style.fontSize = "12px";
-                                ghost.style.fontWeight = "700";
-                                ghost.style.color = "#0f172a";
-                                ghost.innerText = `${proposal.code} - ${proposal.client?.companyName || "Sem cliente"}`;
-                                document.body.appendChild(ghost);
-                                event.dataTransfer.setDragImage(ghost, 20, 20);
-                                requestAnimationFrame(() => {
-                                  if (document.body.contains(ghost)) {
-                                    document.body.removeChild(ghost);
-                                  }
-                                });
-                              }}
-                              onDragEnd={() => {
-                                setDraggingId(null);
-                                setDropTarget(null);
-                              }}
-                            />
-                          ))}
+                              const ghost = document.createElement("div");
+                              ghost.style.padding = "10px 12px";
+                              ghost.style.borderRadius = "14px";
+                              ghost.style.background = "#ffffff";
+                              ghost.style.border = "1px solid #dbe3ee";
+                              ghost.style.boxShadow =
+                                "0 18px 36px rgba(15,31,50,0.18)";
+                              ghost.style.fontSize = "12px";
+                              ghost.style.fontWeight = "700";
+                              ghost.style.color = "#0f172a";
+                              ghost.innerText = `${proposal.code} - ${proposal.client?.companyName || "Sem cliente"}`;
+                              document.body.appendChild(ghost);
+                              event.dataTransfer.setDragImage(ghost, 20, 20);
+                              requestAnimationFrame(() => {
+                                if (document.body.contains(ghost)) {
+                                  document.body.removeChild(ghost);
+                                }
+                              });
+                            }}
+                            onDragEnd={() => {
+                              setDraggingId(null);
+                              setDropTarget(null);
+                            }}
+                          />
+                        ))}
 
-                          {column.items.length === 0 ? (
-                            <EmptyDropZone
-                              blocked={Boolean(draggingProposal) && !canReceiveDrop && !isAdmin}
-                            />
-                          ) : null}
-                        </div>
-                      </section>
-                    );
-                  })}
+                        {column.items.length === 0 ? (
+                          <EmptyDropZone
+                            blocked={
+                              Boolean(draggingProposal) &&
+                              !canReceiveDrop &&
+                              !isAdmin
+                            }
+                          />
+                        ) : null}
+                      </div>
+                    </section>
+                  );
+                })}
               </DashboardKanban>
             </div>
           ) : (
@@ -659,6 +800,35 @@ function ViewModeButton({
       }`}
     >
       {children}
+    </button>
+  );
+}
+
+function CategoryButton({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-2xl border px-4 py-4 text-left transition ${
+        active
+          ? "border-sky-400 bg-sky-50 text-sky-950 ring-2 ring-sky-100"
+          : "border-slate-200 bg-white text-slate-700 hover:border-sky-200"
+      }`}
+    >
+      <span className="block text-xs font-bold uppercase tracking-[0.14em]">
+        {label}
+      </span>
+      <span className="mt-2 block text-2xl font-black">{count}</span>
     </button>
   );
 }
@@ -706,7 +876,9 @@ function FlowSummaryCard({
         </p>
         <DataPill tone={tone}>{count} itens</DataPill>
       </div>
-      <p className="mt-3 text-2xl font-bold text-slate-950">{formatCurrency(value)}</p>
+      <p className="mt-3 text-2xl font-bold text-slate-950">
+        {formatCurrency(value)}
+      </p>
       <p className="mt-2 text-xs leading-5 text-slate-600">
         Valor acumulado para esta etapa do fluxo.
       </p>
@@ -724,7 +896,18 @@ function ProposalPortfolioCard({ proposal }: { proposal: ProposalListItem }) {
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-lg font-bold text-slate-950">{proposal.code}</p>
-            <DataPill tone={statusToneValue}>{statusLabel(proposal.status)}</DataPill>
+            <DataPill tone={statusToneValue}>
+              {statusLabel(proposal.status)}
+            </DataPill>
+            <DataPill tone="blue">{proposalTypeLabel(proposal.type)}</DataPill>
+            <DataPill tone={proposal.origin === "EXTERNAL" ? "amber" : "slate"}>
+              {proposal.origin === "EXTERNAL" ? "Externa" : "Manitec"}
+            </DataPill>
+            {proposal.type === "GENERATOR_SALE" &&
+            proposal.status === "WON" &&
+            !proposal.postSaleGeneratorId ? (
+              <DataPill tone="amber">Pós-venda pendente</DataPill>
+            ) : null}
             {proposal.status !== step ? (
               <DataPill tone="amber">Retorno para diretoria</DataPill>
             ) : null}
@@ -733,7 +916,7 @@ function ProposalPortfolioCard({ proposal }: { proposal: ProposalListItem }) {
             {proposal.client?.companyName || "Sem cliente vinculado"}
           </p>
           <p className="text-sm text-slate-500">
-            Equipamento: {proposal.generator?.name || "Sem equipamento vinculado"}
+            Equipamento: {proposalEquipmentLabel(proposal)}
           </p>
         </div>
 
@@ -743,7 +926,10 @@ function ProposalPortfolioCard({ proposal }: { proposal: ProposalListItem }) {
               Valor total
             </p>
             <p className="mt-1 text-2xl font-bold text-slate-950">
-              {formatCurrency(Number(proposal.totalValue || 0))}
+              {formatCurrency(
+                Number(proposal.totalValue || 0),
+                proposal.externalCurrency || "BRL",
+              )}
             </p>
           </div>
           <Link
@@ -768,7 +954,11 @@ function ProposalPortfolioCard({ proposal }: { proposal: ProposalListItem }) {
         />
         <MiniPortfolioInfo
           label="Acompanhamento"
-          value={proposal.client?.companyName ? "Cliente vinculado" : "Revisar cadastro"}
+          value={
+            proposal.client?.companyName
+              ? "Cliente vinculado"
+              : "Revisar cadastro"
+          }
           helper="Base usada para comunicacao e proposta."
         />
       </div>
@@ -839,7 +1029,9 @@ function KanbanProposalCard({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       className={`rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-[0_22px_40px_-34px_rgba(15,31,50,0.34)] transition hover:border-sky-300 hover:bg-sky-50/35 ${
-        disabled ? "cursor-not-allowed opacity-60" : "cursor-grab active:cursor-grabbing"
+        disabled
+          ? "cursor-not-allowed opacity-60"
+          : "cursor-grab active:cursor-grabbing"
       }`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -860,7 +1052,7 @@ function KanbanProposalCard({
             Equipamento
           </p>
           <p className="mt-2 text-sm text-slate-800">
-            {proposal.generator?.name || "Sem equipamento"}
+            {proposalEquipmentLabel(proposal)}
           </p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-3">
@@ -868,7 +1060,10 @@ function KanbanProposalCard({
             Valor
           </p>
           <p className="mt-2 text-lg font-bold text-slate-950">
-            {formatCurrency(Number(proposal.totalValue || 0))}
+            {formatCurrency(
+              Number(proposal.totalValue || 0),
+              proposal.externalCurrency || "BRL",
+            )}
           </p>
         </div>
       </div>
@@ -888,7 +1083,9 @@ function EmptyDropZone({ blocked }: { blocked: boolean }) {
   return (
     <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/85 px-4 py-8 text-center">
       <p className="text-sm font-semibold text-slate-700">
-        {blocked ? "Transicao bloqueada para esta proposta" : "Coluna pronta para receber"}
+        {blocked
+          ? "Transicao bloqueada para esta proposta"
+          : "Coluna pronta para receber"}
       </p>
       <p className="mt-2 text-sm leading-6 text-slate-500">
         {blocked
@@ -916,6 +1113,27 @@ function buildFlowColumns(proposals: ProposalListItem[]): FlowColumnSummary[] {
   });
 }
 
+function proposalCategory(type: string): ProposalCategory {
+  if (type === "GENERATOR_SALE") return "GENERATORS";
+  if (type === "CONTRACT") return "CONTRACTS";
+  return "PARTS_SERVICES";
+}
+
+function proposalTypeLabel(type: string) {
+  if (type === "GENERATOR_SALE") return "Gerador";
+  if (type === "CONTRACT") return "Contrato";
+  if (type === "PARTS") return "Pecas";
+  if (type === "SERVICES") return "Servicos";
+  return "Pecas e servicos";
+}
+
+function proposalEquipmentLabel(proposal: ProposalListItem) {
+  if (proposal.commercialGenerator?.model) {
+    return `Generac ${proposal.commercialGenerator.model}`;
+  }
+  return proposal.generator?.name || "Sem equipamento vinculado";
+}
+
 function stepLabel(step: string) {
   return KANBAN_COLUMNS.find((column) => column.key === step)?.label || step;
 }
@@ -930,10 +1148,10 @@ function statusTone(status: string): Tone {
   return "slate";
 }
 
-function formatCurrency(value: number) {
+function formatCurrency(value: number, currency = "BRL") {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
-    currency: "BRL",
+    currency,
     maximumFractionDigits: 2,
   }).format(value);
 }

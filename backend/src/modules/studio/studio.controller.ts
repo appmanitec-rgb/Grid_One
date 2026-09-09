@@ -40,10 +40,7 @@ export class StudioController {
   ) {}
 
   @Post('utilization/heartbeat')
-  heartbeat(
-    @Body() body: StudioHeartbeatDto,
-    @Req() req: AuthRequest,
-  ) {
+  heartbeat(@Body() body: StudioHeartbeatDto, @Req() req: AuthRequest) {
     return this.studioUtilizationService.heartbeat(req.user ?? {}, body, {
       ip: req.ip,
       userAgent: req.headers['user-agent'],
@@ -53,7 +50,9 @@ export class StudioController {
   @Get('utilization')
   @RequireAccessPolicy('studio.access', 'studio.auditView')
   utilization(@Query('days') days?: string) {
-    return this.studioUtilizationService.overview(days ? Number(days) : undefined);
+    return this.studioUtilizationService.overview(
+      days ? Number(days) : undefined,
+    );
   }
 
   @Get('history')
@@ -81,6 +80,12 @@ export class StudioController {
     @Req() req: AuthRequest,
   ) {
     return this.studioService.updateRecord(resource, id, body, req.user ?? {});
+  }
+
+  @Get('data/:resource')
+  @RequireAccessPolicy('studio.access', 'studio.dataView')
+  listRecords(@Param('resource') resource: string) {
+    return this.studioService.listRecords(resource);
   }
 
   @Post('imports/preview')

@@ -3,6 +3,7 @@ import {
   AccountsReceivableStatus,
   ProposalHourType,
   ProposalItemKind,
+  ProposalOrigin,
   ProposalStatus,
   ProposalTechnicianType,
   ProposalType,
@@ -11,11 +12,17 @@ import {
 import { DatabaseService } from '../../database/database.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { FileStorageService } from '../file-storage/file-storage.service';
 import { ProposalsService } from './proposals.service';
 
 describe('ProposalsService', () => {
   let service: ProposalsService;
   let auditLogsService: { record: jest.Mock };
+  let approvalsService: {
+    create: jest.Mock;
+    approve: jest.Mock;
+    reject: jest.Mock;
+  };
   let db: {
     proposal: {
       findMany: jest.Mock;
@@ -58,6 +65,7 @@ describe('ProposalsService', () => {
       create: jest.Mock;
       updateMany: jest.Mock;
     };
+    commercialGenerator: { findFirst: jest.Mock };
     $executeRawUnsafe: jest.Mock;
     $transaction: jest.Mock;
   };
@@ -135,10 +143,18 @@ describe('ProposalsService', () => {
         create: jest.fn(),
         updateMany: jest.fn(),
       },
+      commercialGenerator: {
+        findFirst: jest.fn(),
+      },
       $executeRawUnsafe: jest.fn().mockResolvedValue(1),
       $transaction: jest.fn((cb: (tx: typeof db) => unknown) => cb(db)),
     };
     auditLogsService = { record: jest.fn() };
+    approvalsService = {
+      create: jest.fn(),
+      approve: jest.fn(),
+      reject: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -146,13 +162,19 @@ describe('ProposalsService', () => {
         { provide: DatabaseService, useValue: db },
         {
           provide: ApprovalsService,
-          useValue: {
-            create: jest.fn(),
-          },
+          useValue: approvalsService,
         },
         {
           provide: AuditLogsService,
           useValue: auditLogsService,
+        },
+        {
+          provide: FileStorageService,
+          useValue: {
+            saveDocumentFile: jest.fn(),
+            load: jest.fn(),
+            remove: jest.fn(),
+          },
         },
       ],
     }).compile();
@@ -162,6 +184,200 @@ describe('ProposalsService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it('requires an active commercial generator for generator sale proposals', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      role: UserRole.ADMIN,
+      linkedClientId: null,
+    });
+    db.salesOpportunity.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.create(
+        {
+          clientId: 'client-1',
+          userId: 'seller-1',
+          type: ProposalType.GENERATOR_SALE,
+          items: [],
+        },
+        'admin-1',
+      ),
+    ).rejects.toThrow('Selecione um gerador Generac ativo');
+
+    expect(db.proposal.create).not.toHaveBeenCalled();
+  });
+
+  it('never accepts an installed client generator in a generator sale proposal', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      role: UserRole.ADMIN,
+      linkedClientId: null,
+    });
+    db.salesOpportunity.findUnique.mockResolvedValue(null);
+    db.generator.findUnique.mockResolvedValue({
+      id: 'installed-generator-1',
+      clientId: 'client-1',
+    });
+    db.commercialGenerator.findFirst.mockResolvedValue({
+      id: 'commercial-generator-1',
+    });
+
+    await expect(
+      service.create(
+        {
+          clientId: 'client-1',
+          userId: 'seller-1',
+          type: ProposalType.GENERATOR_SALE,
+          generatorId: 'installed-generator-1',
+          commercialGeneratorId: 'commercial-generator-1',
+          items: [],
+        },
+        'admin-1',
+      ),
+    ).rejects.toThrow('equipamento instalado no cliente');
+
+    expect(db.proposal.create).not.toHaveBeenCalled();
+  });
+
+  it('registers an external generator proposal without mixing it with the Manitec catalog', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      role: UserRole.ADMIN,
+      linkedClientId: null,
+    });
+    db.salesOpportunity.findUnique.mockResolvedValue(null);
+    db.user.findFirst.mockResolvedValue({ id: 'seller-1' });
+    db.catalogItem.findMany.mockResolvedValue([]);
+    db.proposal.findMany.mockResolvedValue([]);
+    db.proposal.create.mockResolvedValue({ id: 'proposal-external' });
+    db.proposal.findUnique.mockResolvedValue({ id: 'proposal-external' });
+
+    await service.create(
+      {
+        clientId: 'client-1',
+        userId: 'seller-1',
+        type: ProposalType.GENERATOR_SALE,
+        origin: ProposalOrigin.EXTERNAL,
+        externalReference: 'EXT-53390',
+        externalCurrency: 'USD',
+        items: [
+          {
+            kind: ProposalItemKind.OTHER,
+            description: 'Proposta externa EXT-53390',
+            quantity: 1,
+            unitPrice: 50000,
+          },
+        ],
+      },
+      'admin-1',
+    );
+
+    expect(db.commercialGenerator.findFirst).not.toHaveBeenCalled();
+    expect(db.proposal.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          origin: ProposalOrigin.EXTERNAL,
+          externalReference: 'EXT-53390',
+          externalCurrency: 'USD',
+          commercialGeneratorId: undefined,
+          commercialSnapshot: expect.objectContaining({
+            version: 1,
+            origin: ProposalOrigin.EXTERNAL,
+            totals: expect.objectContaining({ total: 50000 }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('opens a centralized board approval when a generator proposal is submitted', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'seller-1',
+      role: UserRole.SALES,
+      linkedClientId: null,
+    });
+    db.proposal.findUnique.mockResolvedValue({
+      id: 'proposal-1',
+      code: 'PROP-0001',
+      clientId: 'client-1',
+      paymentTerm: null,
+      salesOpportunityId: null,
+      status: ProposalStatus.DRAFT,
+      type: ProposalType.GENERATOR_SALE,
+      origin: ProposalOrigin.MANITEC,
+      totalValue: 90000,
+      requestedDiscountPercent: null,
+    });
+    db.proposal.update.mockResolvedValue({
+      id: 'proposal-1',
+      status: ProposalStatus.BOARD_REVIEW,
+    });
+
+    await service.submitForBoardReview('proposal-1', 'seller-1');
+
+    expect(approvalsService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'GENERATOR_PROPOSAL',
+        entityType: 'PROPOSAL',
+        entityId: 'proposal-1',
+        requesterUserId: 'seller-1',
+      }),
+    );
+  });
+
+  it('converts a won generator sale into a separate post-sale equipment record', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      role: UserRole.ADMIN,
+      linkedClientId: null,
+    });
+    db.proposal.findUnique.mockResolvedValue({
+      id: 'proposal-1',
+      code: 'PROP-0001',
+      clientId: 'client-1',
+      userId: 'seller-1',
+      type: ProposalType.GENERATOR_SALE,
+      status: ProposalStatus.WON,
+      postSaleGenerator: null,
+      commercialGenerator: {
+        manufacturer: 'Generac',
+        model: 'G0071720',
+        standbyPowerKw: 10,
+        availableVoltages: ['220 V'],
+        powerFactor: 0.8,
+        frequencyHz: 60,
+        fuelType: 'NATURAL_GAS',
+      },
+    });
+    db.generator.create.mockResolvedValue({
+      id: 'installed-1',
+      name: 'Gerador cliente 01',
+    });
+
+    const result = await service.convertGeneratorPostSale(
+      'proposal-1',
+      { name: 'Gerador cliente 01', serialNumber: 'SN-001' },
+      'admin-1',
+    );
+
+    expect(db.generator.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          brand: 'Generac',
+          clientId: 'client-1',
+          power: 10,
+          operationalStatus: 'DEACTIVATED',
+        }),
+      }),
+    );
+    expect(db.proposal.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ postSaleGeneratorId: 'installed-1' }),
+      }),
+    );
+    expect(result.generator.id).toBe('installed-1');
   });
 
   it('blocks proposal creation when seller is not active sales user', async () => {

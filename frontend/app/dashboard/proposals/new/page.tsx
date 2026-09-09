@@ -269,6 +269,9 @@ function SearchableSelect({
 export default function NewProposalPage() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [proposalFormType, setProposalFormType] = useState<
+    "PARTS_AND_SERVICES" | "CONTRACT"
+  >("PARTS_AND_SERVICES");
   const USER_ROLE = "NORMAL" as string;
   const [feedback, setFeedback] = useState<{
     kind: "success" | "error";
@@ -419,6 +422,11 @@ export default function NewProposalPage() {
     const clientIdFromUrl = params.get("clientId");
     const opportunityIdFromUrl = params.get("opportunityId");
     const renewalContractIdFromUrl = params.get("renewalContractId");
+    const proposalTypeFromUrl = params.get("proposalType");
+
+    if (proposalTypeFromUrl === "CONTRACT" || renewalContractIdFromUrl) {
+      setProposalFormType("CONTRACT");
+    }
 
     if (clientIdFromUrl) setSelectedClientId(clientIdFromUrl);
     if (renewalContractIdFromUrl) {
@@ -1162,7 +1170,7 @@ export default function NewProposalPage() {
       salesOpportunityId: linkedOpportunity?.id || undefined,
       generatorId: selectedEquipmentId || undefined,
       userId: selectedSellerId,
-      type: "PARTS_AND_SERVICES",
+      type: proposalFormType,
       scope,
       freight,
       validUntil: validUntil || undefined,
@@ -1227,7 +1235,11 @@ export default function NewProposalPage() {
     <div className="mx-auto max-w-6xl p-8 pb-10">
       <div className="mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-zinc-800">Nova Proposta</h1>
+          <h1 className="text-3xl font-bold text-zinc-800">
+            {proposalFormType === "CONTRACT"
+              ? "Nova Proposta de Contrato"
+              : "Nova Proposta de Pecas e Servicos"}
+          </h1>
           <p className="mt-1 text-zinc-500">
             Monte itens, condicoes comerciais e pagamento com simulacao de
             entrada e parcelas.

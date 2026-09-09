@@ -957,7 +957,7 @@ export default function OpportunitiesPage() {
                       ) : null}
                       <div className="mt-3 flex flex-wrap gap-2">
                         <Link
-                          href={`/dashboard/proposals/new?opportunityId=${item.id}`}
+                          href={proposalHrefForOpportunity(item)}
                           className="inline-flex rounded-md bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-sky-500"
                         >
                           {(item.proposals || []).length > 0 ? "Nova proposta vinculada" : "Gerar proposta"}
@@ -999,6 +999,20 @@ export default function OpportunitiesPage() {
       </section>
     </div>
   );
+}
+
+function proposalHrefForOpportunity(opportunity: Opportunity) {
+  if (opportunity.opportunityType === "GENERATOR_SALE") {
+    return `/dashboard/proposals/new/generator?opportunityId=${opportunity.id}`;
+  }
+  if (
+    opportunity.opportunityType === "MAINTENANCE_CONTRACT" ||
+    opportunity.opportunityType === "CONTRACT_RENEWAL" ||
+    opportunity.opportunityType === "CONTRACT_EXPANSION"
+  ) {
+    return `/dashboard/proposals/new?opportunityId=${opportunity.id}&proposalType=CONTRACT`;
+  }
+  return `/dashboard/proposals/new?opportunityId=${opportunity.id}`;
 }
 
 function MiniMetric({ label, value }: { label: string; value: string }) {

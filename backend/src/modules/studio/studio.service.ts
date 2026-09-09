@@ -6,6 +6,9 @@ import {
 } from '@nestjs/common';
 import {
   AuditDomain,
+  CommercialGeneratorAvailability,
+  CommercialGeneratorConstruction,
+  CommercialGeneratorFuel,
   ItemType,
   ManufacturerType,
   Prisma,
@@ -23,8 +26,13 @@ type StudioResourceDefinition = {
   entityType: string;
   domain: AuditDomain;
   resourcePermission: string;
-  editableFields: Record<string, 'string' | 'number' | 'boolean' | 'enum'>;
+  editableFields: Record<
+    string,
+    'string' | 'stringList' | 'number' | 'boolean' | 'enum'
+  >;
   enums?: Record<string, string[]>;
+  list?: (tx: Prisma.TransactionClient) => Promise<any[]>;
+  validate?: (data: Record<string, unknown>, creating: boolean) => void;
   create?: (
     tx: Prisma.TransactionClient,
     data: Record<string, unknown>,
@@ -430,6 +438,141 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
     update: (tx, id, data) =>
       tx.catalogPricingPolicy.update({ where: { id }, data }),
   },
+  commercialGenerators: {
+    entityType: 'CommercialGenerator',
+    domain: AuditDomain.OPPORTUNITIES,
+    resourcePermission: 'catalog.update',
+    editableFields: {
+      internalCode: 'string',
+      line: 'string',
+      model: 'string',
+      shortDescription: 'string',
+      isActive: 'boolean',
+      standbyPowerKw: 'number',
+      standbyPowerKva: 'number',
+      primePowerKw: 'number',
+      primePowerKva: 'number',
+      continuousPowerKw: 'number',
+      continuousPowerKva: 'number',
+      powerFactor: 'number',
+      frequencyHz: 'number',
+      availableVoltages: 'stringList',
+      availablePhaseConfigs: 'stringList',
+      fuelType: 'enum',
+      construction: 'enum',
+      supportsIndoor: 'boolean',
+      supportsOutdoor: 'boolean',
+      availability: 'enum',
+      stockQuantity: 'number',
+      leadTimeDays: 'number',
+      currency: 'string',
+      costPrice: 'number',
+      basePrice: 'number',
+      suggestedPrice: 'number',
+      minimumPrice: 'number',
+      taxPercentage: 'number',
+      engineDescription: 'string',
+      alternatorDescription: 'string',
+      controllerDescription: 'string',
+      enclosureDescription: 'string',
+      standardAccessories: 'string',
+      commercialNotes: 'string',
+      technicalNotes: 'string',
+    },
+    enums: {
+      fuelType: Object.values(CommercialGeneratorFuel),
+      construction: Object.values(CommercialGeneratorConstruction),
+      availability: Object.values(CommercialGeneratorAvailability),
+    },
+    list: (tx) =>
+      tx.commercialGenerator.findMany({
+        orderBy: [
+          { isActive: 'desc' },
+          { standbyPowerKw: 'asc' },
+          { model: 'asc' },
+        ],
+      }),
+    validate: validateCommercialGenerator,
+    create: (tx, data) =>
+      tx.commercialGenerator.create({
+        data: {
+          ...data,
+          internalCode: String(data.internalCode).toUpperCase(),
+          manufacturer: 'Generac',
+        } as Prisma.CommercialGeneratorUncheckedCreateInput,
+      }),
+    findUnique: (tx, id) =>
+      tx.commercialGenerator.findUnique({ where: { id } }),
+    update: (tx, id, data) =>
+      tx.commercialGenerator.update({
+        where: { id },
+        data: {
+          ...data,
+          ...('internalCode' in data
+            ? { internalCode: String(data.internalCode).toUpperCase() }
+            : {}),
+          manufacturer: 'Generac',
+        } as Prisma.CommercialGeneratorUncheckedUpdateInput,
+      }),
+  },
+  commercialSizingPolicies: {
+    entityType: 'CommercialSizingPolicy',
+    domain: AuditDomain.OPPORTUNITIES,
+    resourcePermission: 'catalog.update',
+    editableFields: {
+      name: 'string',
+      version: 'number',
+      isDefault: 'boolean',
+      isActive: 'boolean',
+      defaultPowerFactor: 'number',
+      standardMarginPercent: 'number',
+      resistiveMarginPercent: 'number',
+      motorsMarginPercent: 'number',
+      pumpsMarginPercent: 'number',
+      airConditioningMarginPercent: 'number',
+      elevatorsMarginPercent: 'number',
+      electronicsMarginPercent: 'number',
+      mixedLoadMarginPercent: 'number',
+      unknownLoadMarginPercent: 'number',
+      idealReserveMinPercent: 'number',
+      idealReserveMaxPercent: 'number',
+      engineeringReviewAboveKw: 'number',
+      requireEngineeringSpecialLoads: 'boolean',
+      notes: 'string',
+    },
+    list: (tx) =>
+      tx.commercialSizingPolicy.findMany({
+        orderBy: [
+          { isActive: 'desc' },
+          { isDefault: 'desc' },
+          { name: 'asc' },
+          { version: 'desc' },
+        ],
+      }),
+    validate: validateCommercialSizingPolicy,
+    create: async (tx, data) => {
+      if (data.isDefault === true && data.isActive !== false) {
+        await tx.commercialSizingPolicy.updateMany({
+          where: { isDefault: true, isActive: true },
+          data: { isDefault: false },
+        });
+      }
+      return tx.commercialSizingPolicy.create({
+        data: data as Prisma.CommercialSizingPolicyUncheckedCreateInput,
+      });
+    },
+    findUnique: (tx, id) =>
+      tx.commercialSizingPolicy.findUnique({ where: { id } }),
+    update: async (tx, id, data) => {
+      if (data.isDefault === true && data.isActive !== false) {
+        await tx.commercialSizingPolicy.updateMany({
+          where: { id: { not: id }, isDefault: true, isActive: true },
+          data: { isDefault: false },
+        });
+      }
+      return tx.commercialSizingPolicy.update({ where: { id }, data });
+    },
+  },
   ...Object.fromEntries(
     Object.entries(CONTROL_OPTION_TYPES).map(([key, config]) => [
       key,
@@ -456,6 +599,14 @@ export class StudioService {
     });
   }
 
+  async listRecords(resource: string) {
+    const definition = DEFINITIONS[resource];
+    if (!definition?.list) {
+      throw new NotFoundException('Recurso nao possui listagem pelo Studio.');
+    }
+    return this.prisma.$transaction((tx) => definition.list!(tx));
+  }
+
   async createRecord(
     resource: string,
     patch: Record<string, unknown>,
@@ -473,6 +624,7 @@ export class StudioService {
       throw new BadRequestException('Nenhum campo editavel foi informado.');
     }
     this.assertRequiredControlOptionFields(resource, data, true);
+    definition.validate?.(data, true);
 
     return this.prisma.$transaction(async (tx) => {
       const after = await definition.create!(tx, data);
@@ -520,6 +672,7 @@ export class StudioService {
       throw new BadRequestException('Nenhum campo editavel foi informado.');
     }
     this.assertRequiredControlOptionFields(resource, data, false);
+    definition.validate?.(data, false);
 
     return this.prisma.$transaction(async (tx) => {
       const before = await definition.findUnique(tx, id);
@@ -594,6 +747,22 @@ export class StudioService {
         data[key] = typeof value === 'string' ? value.trim() || null : value;
         continue;
       }
+      if (type === 'stringList') {
+        if (Array.isArray(value)) {
+          data[key] = value
+            .map((item) => (typeof item === 'string' ? item.trim() : ''))
+            .filter(Boolean);
+          continue;
+        }
+        if (typeof value !== 'string' && value !== null) {
+          throw new BadRequestException(`Lista invalida: ${key}.`);
+        }
+        data[key] = (value ?? '')
+          .split(/[;,]/)
+          .map((item) => item.trim())
+          .filter(Boolean);
+        continue;
+      }
       if (type === 'number') {
         if (value === null || value === '') {
           data[key] = null;
@@ -649,5 +818,122 @@ export class StudioService {
       picked[key] = record?.[key];
     }
     return picked;
+  }
+}
+
+function validateCommercialGenerator(
+  data: Record<string, unknown>,
+  creating: boolean,
+) {
+  const internalCode =
+    typeof data.internalCode === 'string' ? data.internalCode : '';
+  const model = typeof data.model === 'string' ? data.model : '';
+  if ((creating || 'internalCode' in data) && !internalCode.trim()) {
+    throw new BadRequestException('Codigo interno e obrigatorio.');
+  }
+  if ((creating || 'model' in data) && !model.trim()) {
+    throw new BadRequestException('Modelo Generac e obrigatorio.');
+  }
+  if (creating && !data.fuelType) {
+    throw new BadRequestException('Combustivel e obrigatorio.');
+  }
+  if (creating && !data.construction) {
+    throw new BadRequestException('Construcao e obrigatoria.');
+  }
+
+  const isActive = data.isActive !== false;
+  const hasStandbyPower =
+    Number(data.standbyPowerKw || 0) > 0 ||
+    Number(data.standbyPowerKva || 0) > 0;
+  if (creating && isActive && !hasStandbyPower) {
+    throw new BadRequestException(
+      'Informe a potencia stand-by em kW ou kVA para ativar o gerador.',
+    );
+  }
+
+  const nonNegativeFields = [
+    'standbyPowerKw',
+    'standbyPowerKva',
+    'primePowerKw',
+    'primePowerKva',
+    'continuousPowerKw',
+    'continuousPowerKva',
+    'stockQuantity',
+    'leadTimeDays',
+    'costPrice',
+    'basePrice',
+    'suggestedPrice',
+    'minimumPrice',
+    'taxPercentage',
+  ];
+  for (const field of nonNegativeFields) {
+    if (
+      data[field] !== null &&
+      data[field] !== undefined &&
+      Number(data[field]) < 0
+    ) {
+      throw new BadRequestException(`${field} nao pode ser negativo.`);
+    }
+  }
+  if (
+    'powerFactor' in data &&
+    (Number(data.powerFactor) <= 0 || Number(data.powerFactor) > 1)
+  ) {
+    throw new BadRequestException(
+      'Fator de potencia deve ser maior que 0 e menor ou igual a 1.',
+    );
+  }
+  if ('taxPercentage' in data && Number(data.taxPercentage) > 100) {
+    throw new BadRequestException('Imposto deve ficar entre 0 e 100%.');
+  }
+  for (const field of ['frequencyHz', 'stockQuantity', 'leadTimeDays']) {
+    if (
+      data[field] !== null &&
+      data[field] !== undefined &&
+      !Number.isInteger(Number(data[field]))
+    ) {
+      throw new BadRequestException(`${field} deve ser um numero inteiro.`);
+    }
+  }
+}
+
+function validateCommercialSizingPolicy(
+  data: Record<string, unknown>,
+  creating: boolean,
+) {
+  const name = typeof data.name === 'string' ? data.name : '';
+  if ((creating || 'name' in data) && !name.trim()) {
+    throw new BadRequestException('Nome da politica e obrigatorio.');
+  }
+  if (
+    'version' in data &&
+    (!Number.isInteger(Number(data.version)) || Number(data.version) < 1)
+  ) {
+    throw new BadRequestException('Versao deve ser maior ou igual a 1.');
+  }
+  if (
+    'defaultPowerFactor' in data &&
+    (Number(data.defaultPowerFactor) <= 0 ||
+      Number(data.defaultPowerFactor) > 1)
+  ) {
+    throw new BadRequestException(
+      'Fator de potencia padrao deve ser maior que 0 e menor ou igual a 1.',
+    );
+  }
+  for (const [field, value] of Object.entries(data)) {
+    if (
+      (field.endsWith('Percent') || field === 'engineeringReviewAboveKw') &&
+      value !== null &&
+      Number(value) < 0
+    ) {
+      throw new BadRequestException(`${field} nao pode ser negativo.`);
+    }
+  }
+  const min = data.idealReserveMinPercent;
+  const max = data.idealReserveMaxPercent;
+  if (min !== undefined && max !== undefined && Number(max) < Number(min)) {
+    throw new BadRequestException(
+      'Reserva maxima nao pode ser menor que a reserva minima.',
+    );
   }
 }

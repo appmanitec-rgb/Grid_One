@@ -37,6 +37,7 @@ import { TechnicianWorkModule } from './modules/technician-work/technician-work.
 import { StudioModule } from './modules/studio/studio.module';
 import { ManufacturersModule } from './modules/manufacturers/manufacturers.module';
 import { OperationalCostsModule } from './modules/operational-costs/operational-costs.module';
+import { CommercialSizingModule } from './modules/commercial-sizing/commercial-sizing.module';
 
 @Module({
   imports: [
@@ -85,6 +86,7 @@ import { OperationalCostsModule } from './modules/operational-costs/operational-
     StudioModule,
     ManufacturersModule,
     OperationalCostsModule,
+    CommercialSizingModule,
   ],
   controllers: [],
   providers: [

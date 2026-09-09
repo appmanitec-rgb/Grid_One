@@ -11,6 +11,7 @@ import {
   ContractStatus,
   OrderStatus,
   ProposalStatus,
+  ProposalType,
   TicketPriority,
   TicketStatus,
   UserRole,
@@ -115,6 +116,7 @@ export class NotificationsService {
     const [
       approvals,
       proposalAlerts,
+      postSaleAlerts,
       proposalUpdates,
       contractAlerts,
       orderAlerts,
@@ -124,6 +126,9 @@ export class NotificationsService {
       this.fetchPendingApprovals(input.id, input.role),
       input.access.pages.proposals
         ? this.fetchInternalProposalAlerts(input.id, input.role)
+        : Promise.resolve([]),
+      input.access.pages.proposals
+        ? this.fetchGeneratorPostSaleAlerts()
         : Promise.resolve([]),
       input.access.pages.proposals && input.role !== UserRole.ADMIN
         ? this.fetchProposalUpdates(input.id)
@@ -146,6 +151,9 @@ export class NotificationsService {
       ...approvals.map((approval) => this.mapApprovalNotification(approval)),
       ...proposalAlerts.map((proposal) =>
         this.mapInternalProposalNotification(proposal, input.role),
+      ),
+      ...postSaleAlerts.map((proposal) =>
+        this.mapGeneratorPostSaleNotification(proposal),
       ),
       ...proposalUpdates.map((movement) =>
         this.mapProposalUpdateNotification(movement),
@@ -423,6 +431,22 @@ export class NotificationsService {
     });
   }
 
+  private async fetchGeneratorPostSaleAlerts() {
+    return this.prisma.proposal.findMany({
+      where: {
+        type: ProposalType.GENERATOR_SALE,
+        status: ProposalStatus.WON,
+        postSaleGeneratorId: null,
+      },
+      include: {
+        client: { select: { companyName: true, tradeName: true } },
+        commercialGenerator: { select: { manufacturer: true, model: true } },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 8,
+    });
+  }
+
   private async fetchContractAlerts() {
     return this.prisma.serviceContract.findMany({
       where: {
@@ -576,11 +600,13 @@ export class NotificationsService {
           : '/dashboard/dispatch';
 
     const title =
-      approval.type === ApprovalType.BUDGET_DISCOUNT
-        ? 'Aprovacao de desconto pendente'
-        : approval.entityType === 'MAINTENANCE_ORDER_ASSIGNMENT'
-          ? 'Override de despacho pendente'
-          : 'Relatorio tecnico aguardando aprovacao';
+      approval.type === ApprovalType.GENERATOR_PROPOSAL
+        ? 'Proposta de gerador aguardando diretoria'
+        : approval.type === ApprovalType.BUDGET_DISCOUNT
+          ? 'Aprovacao de desconto pendente'
+          : approval.entityType === 'MAINTENANCE_ORDER_ASSIGNMENT'
+            ? 'Override de despacho pendente'
+            : 'Relatorio tecnico aguardando aprovacao';
 
     return {
       id: `approval:${approval.id}`,
@@ -597,6 +623,33 @@ export class NotificationsService {
       priority: 'high',
       statusLabel: 'Pendente',
       actionLabel: 'Revisar',
+    };
+  }
+
+  private mapGeneratorPostSaleNotification(proposal: {
+    id: string;
+    code: string;
+    updatedAt: Date;
+    client: { companyName: string; tradeName: string | null };
+    commercialGenerator: { manufacturer: string; model: string } | null;
+  }): NotificationItem {
+    const clientName = proposal.client.tradeName || proposal.client.companyName;
+    const equipment = proposal.commercialGenerator
+      ? `${proposal.commercialGenerator.manufacturer} ${proposal.commercialGenerator.model}`
+      : 'gerador da proposta externa';
+    return {
+      id: `generator-post-sale:${proposal.id}`,
+      category: 'proposal',
+      title: 'Venda aguardando conversao para pos-venda',
+      message: `${proposal.code} de ${clientName}: criar o pre-cadastro operacional de ${equipment}.`,
+      createdAt: proposal.updatedAt.toISOString(),
+      href: `/dashboard/proposals/${proposal.id}`,
+      entityType: 'PROPOSAL',
+      entityId: proposal.id,
+      tone: 'emerald',
+      priority: 'high',
+      statusLabel: 'Pos-venda pendente',
+      actionLabel: 'Converter venda',
     };
   }
 

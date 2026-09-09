@@ -189,6 +189,46 @@ export class ApprovalsService {
     reason?: string,
   ) {
     if (
+      approval.type === ApprovalType.GENERATOR_PROPOSAL &&
+      approval.entityType === 'PROPOSAL'
+    ) {
+      const proposal = await this.prisma.proposal.findUnique({
+        where: { id: approval.entityId },
+        select: { id: true, status: true },
+      });
+      if (!proposal) return;
+
+      const nextStatus =
+        status === ApprovalStatus.APPROVED
+          ? ProposalStatus.CLIENT_REVIEW
+          : ProposalStatus.REVISION_REQUIRED;
+      await this.prisma.$transaction(async (tx) => {
+        await tx.proposal.update({
+          where: { id: proposal.id },
+          data: { status: nextStatus },
+        });
+        await tx.proposalMovement.create({
+          data: {
+            proposalId: proposal.id,
+            actorUserId,
+            action:
+              status === ApprovalStatus.APPROVED
+                ? 'GENERATOR_PROPOSAL_APPROVED'
+                : 'GENERATOR_PROPOSAL_REJECTED',
+            note:
+              reason ||
+              (status === ApprovalStatus.APPROVED
+                ? 'Diretoria liberou a proposta de gerador para o cliente.'
+                : 'Diretoria solicitou revisao da proposta de gerador.'),
+            fromStatus: proposal.status,
+            toStatus: nextStatus,
+          },
+        });
+      });
+      return;
+    }
+
+    if (
       approval.type === ApprovalType.BUDGET_DISCOUNT &&
       approval.entityType === 'PROPOSAL'
     ) {

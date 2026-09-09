@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { ADMIN_STATUS_OPTIONS, FLOW_STEPS, statusLabel, statusToFlowStep } from "../flow";
+import {
+  ADMIN_STATUS_OPTIONS,
+  FLOW_STEPS,
+  statusLabel,
+  statusToFlowStep,
+} from "../flow";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
 import {
   clearAuthSession,
@@ -33,6 +38,14 @@ type Proposal = {
   code: string;
   status: string;
   type: string;
+  origin?: "MANITEC" | "EXTERNAL";
+  externalReference?: string | null;
+  externalCurrency?: string | null;
+  externalDocumentFileName?: string | null;
+  postSaleGeneratorId?: string | null;
+  postSaleGenerator?: { id: string; name: string } | null;
+  postSaleConvertedAt?: string | null;
+  commercialSnapshot?: { version?: number; capturedAt?: string } | null;
   totalValue: number;
   validUntil?: string | null;
   paymentTerm?: string | null;
@@ -46,9 +59,20 @@ type Proposal = {
   requestedDiscountPercent?: number | null;
   requestedDiscountReason?: string | null;
   parentProposal?: { id: string; code: string } | null;
-  revisions?: Array<{ id: string; code: string; status: string; createdAt: string }>;
+  revisions?: Array<{
+    id: string;
+    code: string;
+    status: string;
+    createdAt: string;
+  }>;
   client?: { id: string; companyName: string } | null;
   generator?: { id: string; name: string } | null;
+  commercialGenerator?: {
+    id: string;
+    manufacturer: string;
+    model: string;
+    standbyPowerKva: number;
+  } | null;
   salesOpportunity?: {
     id: string;
     title: string;
@@ -106,6 +130,9 @@ export default function ProposalDetailPage() {
   const [showDiscountForm, setShowDiscountForm] = useState(false);
   const [discountPercentInput, setDiscountPercentInput] = useState("10");
   const [discountReason, setDiscountReason] = useState("");
+  const [showPostSaleForm, setShowPostSaleForm] = useState(false);
+  const [postSaleName, setPostSaleName] = useState("");
+  const [postSaleSerial, setPostSaleSerial] = useState("");
 
   const tokenPayload = useMemo(() => {
     const token = getStoredAccessToken();
@@ -129,11 +156,16 @@ export default function ProposalDetailPage() {
   const load = useCallback(async () => {
     if (!id) return;
     try {
-      const res = await apiFetch(apiUrl(`/proposals/${id}`), { cache: "no-store" });
+      const res = await apiFetch(apiUrl(`/proposals/${id}`), {
+        cache: "no-store",
+      });
       if (await handleUnauthorized(res)) return;
       if (!res.ok) {
         throw new Error(
-          await readApiErrorMessage(res, "Não foi possível carregar a proposta."),
+          await readApiErrorMessage(
+            res,
+            "Não foi possível carregar a proposta.",
+          ),
         );
       }
       setProposal(await res.json());
@@ -256,6 +288,80 @@ export default function ProposalDetailPage() {
     }
   }
 
+  async function downloadExternalDocument() {
+    if (!proposal) return;
+    setError("");
+    try {
+      const response = await apiFetch(
+        `/proposals/${proposal.id}/external-document`,
+      );
+      if (!response.ok)
+        throw new Error(
+          await readApiErrorMessage(
+            response,
+            "Falha ao baixar documento externo.",
+          ),
+        );
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download =
+        proposal.externalDocumentFileName || `proposta-${proposal.code}`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (downloadError: unknown) {
+      setError(
+        downloadError instanceof Error
+          ? downloadError.message
+          : "Falha ao baixar documento externo.",
+      );
+    }
+  }
+
+  async function convertToPostSale() {
+    if (!proposal || !postSaleName.trim()) {
+      setError("Informe o nome que identificara o equipamento no pos-venda.");
+      return;
+    }
+    setIsBusy(true);
+    setError("");
+    try {
+      const response = await apiFetch(
+        `/proposals/${proposal.id}/convert-post-sale`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: postSaleName.trim(),
+            serialNumber: postSaleSerial.trim() || undefined,
+          }),
+        },
+      );
+      if (!response.ok)
+        throw new Error(
+          await readApiErrorMessage(
+            response,
+            "Falha ao converter venda para o pos-venda.",
+          ),
+        );
+      const result = (await response.json()) as { generator?: { id: string } };
+      if (result.generator?.id) {
+        router.push(`/dashboard/equipments/${result.generator.id}`);
+        return;
+      }
+      await load();
+    } catch (conversionError: unknown) {
+      setError(
+        conversionError instanceof Error
+          ? conversionError.message
+          : "Falha ao converter venda para o pos-venda.",
+      );
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
   if (!proposal) {
     return (
       <div className="space-y-4">
@@ -269,15 +375,21 @@ export default function ProposalDetailPage() {
   }
 
   const proposalItems = proposal.items ?? [];
+  const proposalCurrency = proposal.externalCurrency || "BRL";
   const downPayment = Number(proposal.downPaymentAmount || 0);
   const installments = Math.max(1, Number(proposal.installmentCount || 1));
   const remaining = Math.max(0, Number(proposal.totalValue || 0) - downPayment);
   const installmentValue = remaining / installments;
   const flowStatusKey = statusToFlowStep(proposal.status);
-  const flowCurrentIndex = FLOW_STEPS.findIndex((step) => step.key === flowStatusKey);
+  const flowCurrentIndex = FLOW_STEPS.findIndex(
+    (step) => step.key === flowStatusKey,
+  );
   const isOperationalProposal = OPERATIONAL_PROPOSAL_TYPES.has(proposal.type);
   const canOpenDispatchFromProposal =
-    proposal.status === "WON" && isOperationalProposal && Boolean(proposal.generator?.id) && !isClient;
+    proposal.status === "WON" &&
+    isOperationalProposal &&
+    Boolean(proposal.generator?.id) &&
+    !isClient;
 
   const flowActions: Array<{
     label: string;
@@ -373,7 +485,10 @@ export default function ProposalDetailPage() {
       <OperationalBreadcrumb
         items={[
           { label: "Dashboard", href: "/dashboard" },
-          { label: isClient ? "Portal" : "Propostas", href: "/dashboard/proposals" },
+          {
+            label: isClient ? "Portal" : "Propostas",
+            href: "/dashboard/proposals",
+          },
           { label: `Proposta ${proposal.code}` },
         ]}
       />
@@ -390,20 +505,25 @@ export default function ProposalDetailPage() {
         stats={[
           {
             label: "Valor total",
-            value: formatCurrency(Number(proposal.totalValue || 0)),
+            value: formatCurrency(
+              Number(proposal.totalValue || 0),
+              proposalCurrency,
+            ),
             helper: "Montante total desta proposta.",
             tone: statusTone(proposal.status),
           },
           {
             label: "Validade",
-            value: proposal.validUntil ? formatDate(proposal.validUntil) : "Sem data",
+            value: proposal.validUntil
+              ? formatDate(proposal.validUntil)
+              : "Sem data",
             helper: "Prazo comercial vigente.",
             tone: "slate",
           },
           {
             label: "Parcelamento",
             value: `${installments}x`,
-            helper: `${formatCurrency(installmentValue)} por parcela.`,
+            helper: `${formatCurrency(installmentValue, proposalCurrency)} por parcela.`,
             tone: "blue",
           },
           {
@@ -415,11 +535,38 @@ export default function ProposalDetailPage() {
         ]}
         actions={
           <>
-            {proposal.status === "WON" && proposal.type === "CONTRACT" && !proposal.generatedContract && !isClient ? (
+            {proposal.origin === "EXTERNAL" &&
+            proposal.externalDocumentFileName ? (
+              <ActionButton
+                busy={isBusy}
+                onClick={() => void downloadExternalDocument()}
+              >
+                Baixar documento externo
+              </ActionButton>
+            ) : null}
+            {proposal.status === "WON" &&
+            proposal.type === "GENERATOR_SALE" &&
+            !proposal.postSaleGeneratorId &&
+            !isClient ? (
+              <ActionButton
+                busy={isBusy}
+                onClick={() => setShowPostSaleForm((current) => !current)}
+              >
+                Converter para pós-venda
+              </ActionButton>
+            ) : null}
+            {proposal.status === "WON" &&
+            proposal.type === "CONTRACT" &&
+            !proposal.generatedContract &&
+            !isClient ? (
               <ActionButton
                 busy={isBusy}
                 onClick={() => {
-                  if (!window.confirm("Converter esta proposta ganha em contrato?")) {
+                  if (
+                    !window.confirm(
+                      "Converter esta proposta ganha em contrato?",
+                    )
+                  ) {
                     return;
                   }
                   void runAction("convert-contract");
@@ -441,7 +588,9 @@ export default function ProposalDetailPage() {
               <ActionButton
                 busy={isBusy}
                 onClick={() => {
-                  if (!window.confirm("Criar uma nova revisão desta proposta?")) {
+                  if (
+                    !window.confirm("Criar uma nova revisão desta proposta?")
+                  ) {
                     return;
                   }
                   void runAction("revise", undefined, true);
@@ -475,7 +624,7 @@ export default function ProposalDetailPage() {
             />
             <MiniInfo
               label="Equipamento"
-              value={proposal.generator?.name || "Não vinculado"}
+              value={proposalEquipmentLabel(proposal)}
               helper="Ativo ou conjunto técnico associado."
             />
             <MiniInfo
@@ -489,6 +638,38 @@ export default function ProposalDetailPage() {
       {notice ? <StatusBanner tone="emerald">{notice}</StatusBanner> : null}
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
 
+      {showPostSaleForm && proposal.type === "GENERATOR_SALE" ? (
+        <SectionCard
+          eyebrow="Conversao pos-venda"
+          title="Criar pre-cadastro do equipamento vendido"
+          description="O ativo nasce separado do catalogo comercial e permanece inativo ate a instalacao ou entrega tecnica."
+        >
+          <div className="grid gap-4 md:grid-cols-2">
+            <FormField label="Nome do equipamento">
+              <TextInput
+                value={postSaleName}
+                onChange={(event) => setPostSaleName(event.target.value)}
+                placeholder={`Gerador ${proposal.commercialGenerator?.model || proposal.externalReference || proposal.code}`}
+              />
+            </FormField>
+            <FormField label="Numero de serie (opcional)">
+              <TextInput
+                value={postSaleSerial}
+                onChange={(event) => setPostSaleSerial(event.target.value)}
+              />
+            </FormField>
+          </div>
+          <button
+            type="button"
+            disabled={isBusy}
+            onClick={() => void convertToPostSale()}
+            className={`${PRIMARY_BUTTON} mt-5`}
+          >
+            Criar pre-cadastro e abrir equipamento
+          </button>
+        </SectionCard>
+      ) : null}
+
       <SectionCard
         eyebrow="Navegacao cruzada"
         title="Relacionamentos da proposta"
@@ -497,44 +678,52 @@ export default function ProposalDetailPage() {
         <RelatedEntityGrid
           items={[
             ...(proposal.client
-              ? [{
-                  label: proposal.client.companyName,
-                  description: "Cliente vinculado a proposta.",
-                  href: `/dashboard/clients/${proposal.client.id}`,
-                  badge: "Cliente",
-                  tone: "blue" as const,
-                  permission: "clients.view",
-                }]
+              ? [
+                  {
+                    label: proposal.client.companyName,
+                    description: "Cliente vinculado a proposta.",
+                    href: `/dashboard/clients/${proposal.client.id}`,
+                    badge: "Cliente",
+                    tone: "blue" as const,
+                    permission: "clients.view",
+                  },
+                ]
               : []),
             ...(proposal.generator
-              ? [{
-                  label: proposal.generator.name,
-                  description: "Equipamento associado a proposta.",
-                  href: `/dashboard/equipments/${proposal.generator.id}`,
-                  badge: "Equipamento",
-                  tone: "slate" as const,
-                  permission: "equipments.view",
-                }]
+              ? [
+                  {
+                    label: proposal.generator.name,
+                    description: "Equipamento associado a proposta.",
+                    href: `/dashboard/equipments/${proposal.generator.id}`,
+                    badge: "Equipamento",
+                    tone: "slate" as const,
+                    permission: "equipments.view",
+                  },
+                ]
               : []),
             ...(proposal.salesOpportunity && !isClient
-              ? [{
-                  label: proposal.salesOpportunity.title,
-                  description: `Etapa CRM: ${opportunityStageLabel(proposal.salesOpportunity.stage)}.`,
-                  href: `/dashboard/opportunities?opportunityId=${proposal.salesOpportunity.id}`,
-                  badge: "Oportunidade",
-                  tone: "amber" as const,
-                  permission: "proposals.view",
-                }]
+              ? [
+                  {
+                    label: proposal.salesOpportunity.title,
+                    description: `Etapa CRM: ${opportunityStageLabel(proposal.salesOpportunity.stage)}.`,
+                    href: `/dashboard/opportunities?opportunityId=${proposal.salesOpportunity.id}`,
+                    badge: "Oportunidade",
+                    tone: "amber" as const,
+                    permission: "proposals.view",
+                  },
+                ]
               : []),
             ...(proposal.generatedContract && !isClient
-              ? [{
-                  label: proposal.generatedContract.code,
-                  description: `Contrato ${statusLabel(proposal.generatedContract.status)}.`,
-                  href: `/dashboard/contracts/${proposal.generatedContract.id}`,
-                  badge: "Contrato",
-                  tone: "emerald" as const,
-                  permission: "contracts.view",
-                }]
+              ? [
+                  {
+                    label: proposal.generatedContract.code,
+                    description: `Contrato ${statusLabel(proposal.generatedContract.status)}.`,
+                    href: `/dashboard/contracts/${proposal.generatedContract.id}`,
+                    badge: "Contrato",
+                    tone: "emerald" as const,
+                    permission: "contracts.view",
+                  },
+                ]
               : []),
             {
               label: `Documento ${proposal.code}`,
@@ -577,8 +766,8 @@ export default function ProposalDetailPage() {
           }
         >
           <InlineMessage>
-            O modulo deixa claro quando a proposta nasceu do CRM para manter o contexto da
-            negociação conectado ao restante da trilha comercial.
+            O modulo deixa claro quando a proposta nasceu do CRM para manter o
+            contexto da negociação conectado ao restante da trilha comercial.
           </InlineMessage>
         </SectionCard>
       ) : null}
@@ -633,7 +822,10 @@ export default function ProposalDetailPage() {
                 busy={isBusy}
                 tone={action.tone}
                 onClick={() => {
-                  if (action.confirmText && !window.confirm(action.confirmText)) {
+                  if (
+                    action.confirmText &&
+                    !window.confirm(action.confirmText)
+                  ) {
                     return;
                   }
                   void action.run();
@@ -658,7 +850,9 @@ export default function ProposalDetailPage() {
                   min="0.01"
                   step="0.01"
                   value={discountPercentInput}
-                  onChange={(event) => setDiscountPercentInput(event.target.value)}
+                  onChange={(event) =>
+                    setDiscountPercentInput(event.target.value)
+                  }
                   className="border-amber-200 bg-white"
                 />
               </FormField>
@@ -697,8 +891,8 @@ export default function ProposalDetailPage() {
               </div>
             </div>
             <p className="mt-3 text-sm leading-6 text-amber-900">
-              Descontos dentro da alçada do usuário podem ser liberados automaticamente.
-              Acima do limite, o pedido segue para aprovação.
+              Descontos dentro da alçada do usuário podem ser liberados
+              automaticamente. Acima do limite, o pedido segue para aprovação.
             </p>
           </div>
         ) : null}
@@ -741,7 +935,9 @@ export default function ProposalDetailPage() {
       {proposal.requestedDiscountPercent ? (
         <StatusBanner tone="amber">
           Desconto solicitado: {proposal.requestedDiscountPercent.toFixed(2)}%
-          {proposal.requestedDiscountReason ? ` - ${proposal.requestedDiscountReason}` : ""}
+          {proposal.requestedDiscountReason
+            ? ` - ${proposal.requestedDiscountReason}`
+            : ""}
         </StatusBanner>
       ) : null}
 
@@ -751,11 +947,38 @@ export default function ProposalDetailPage() {
         description="Contexto essencial para decidir, revisar ou converter em contrato."
       >
         <div className="grid gap-3 md:grid-cols-3">
-          <Info label="Status" value={statusLabel(proposal.status)} tone={statusTone(proposal.status)} />
-          <Info label="Tipo" value={proposal.type} />
-          <Info label="Valor total" value={formatCurrency(Number(proposal.totalValue || 0))} tone="emerald" />
+          <Info
+            label="Status"
+            value={statusLabel(proposal.status)}
+            tone={statusTone(proposal.status)}
+          />
+          <Info label="Tipo" value={proposalTypeLabel(proposal.type)} />
+          <Info
+            label="Origem"
+            value={proposal.origin === "EXTERNAL" ? "Externa" : "Manitec"}
+          />
+          {proposal.externalReference ? (
+            <Info
+              label="Referencia externa"
+              value={proposal.externalReference}
+            />
+          ) : null}
+          {proposal.commercialSnapshot?.capturedAt ? (
+            <Info
+              label="Snapshot comercial"
+              value={`v${proposal.commercialSnapshot.version || 1} · ${formatDateTime(proposal.commercialSnapshot.capturedAt)}`}
+            />
+          ) : null}
+          <Info
+            label="Valor total"
+            value={formatCurrency(
+              Number(proposal.totalValue || 0),
+              proposalCurrency,
+            )}
+            tone="emerald"
+          />
           <Info label="Cliente" value={proposal.client?.companyName || "-"} />
-          <Info label="Equipamento" value={proposal.generator?.name || "-"} />
+          <Info label="Equipamento" value={proposalEquipmentLabel(proposal)} />
           <Info label="Criado por" value={proposal.user?.name || "-"} />
         </div>
       </SectionCard>
@@ -766,14 +989,52 @@ export default function ProposalDetailPage() {
         description="Base financeira e logística que sustenta esta negociação."
       >
         <div className="grid gap-3 md:grid-cols-3">
-          <Info label="Validade" value={proposal.validUntil ? formatDate(proposal.validUntil) : "-"} />
-          <Info label="Condição de pagamento" value={proposal.paymentTerm || "-"} />
-          <Info label="Prazo de entrega (dias)" value={proposal.deliveryLeadTimeDays != null ? String(proposal.deliveryLeadTimeDays) : "-"} />
-          <Info label="Primeiro vencimento" value={proposal.firstDueDate ? formatDate(proposal.firstDueDate) : "-"} />
-          <Info label="Intervalo parcelas (dias)" value={proposal.installmentIntervalDays != null ? String(proposal.installmentIntervalDays) : "-"} />
-          <Info label="Parcelamento" value={`${installments}x de ${formatCurrency(installmentValue)}`} />
-          <Info label="Entrada" value={proposal.hasDownPayment ? formatCurrency(downPayment) : "Sem entrada"} />
-          <Info label="Saldo após entrada" value={formatCurrency(remaining)} />
+          <Info
+            label="Validade"
+            value={proposal.validUntil ? formatDate(proposal.validUntil) : "-"}
+          />
+          <Info
+            label="Condição de pagamento"
+            value={proposal.paymentTerm || "-"}
+          />
+          <Info
+            label="Prazo de entrega (dias)"
+            value={
+              proposal.deliveryLeadTimeDays != null
+                ? String(proposal.deliveryLeadTimeDays)
+                : "-"
+            }
+          />
+          <Info
+            label="Primeiro vencimento"
+            value={
+              proposal.firstDueDate ? formatDate(proposal.firstDueDate) : "-"
+            }
+          />
+          <Info
+            label="Intervalo parcelas (dias)"
+            value={
+              proposal.installmentIntervalDays != null
+                ? String(proposal.installmentIntervalDays)
+                : "-"
+            }
+          />
+          <Info
+            label="Parcelamento"
+            value={`${installments}x de ${formatCurrency(installmentValue, proposalCurrency)}`}
+          />
+          <Info
+            label="Entrada"
+            value={
+              proposal.hasDownPayment
+                ? formatCurrency(downPayment, proposalCurrency)
+                : "Sem entrada"
+            }
+          />
+          <Info
+            label="Saldo após entrada"
+            value={formatCurrency(remaining, proposalCurrency)}
+          />
         </div>
       </SectionCard>
 
@@ -815,8 +1076,11 @@ export default function ProposalDetailPage() {
                     </p>
                     {item.kind === "HOURLY_SERVICE" ? (
                       <p className="mt-1 text-xs text-slate-500">
-                        {item.hourType || "Hora"} | {item.technicianType || "Tecnico"}
-                        {item.discountPercent ? ` | desconto ${item.discountPercent}%` : ""}
+                        {item.hourType || "Hora"} |{" "}
+                        {item.technicianType || "Tecnico"}
+                        {item.discountPercent
+                          ? ` | desconto ${item.discountPercent}%`
+                          : ""}
                       </p>
                     ) : null}
                   </td>
@@ -826,10 +1090,16 @@ export default function ProposalDetailPage() {
                       : item.quantity}
                   </td>
                   <td className="px-3 py-3 text-slate-600">
-                    {formatCurrency(Number(item.unitPrice || 0))}
+                    {formatCurrency(
+                      Number(item.unitPrice || 0),
+                      proposalCurrency,
+                    )}
                   </td>
                   <td className="px-3 py-3 font-semibold text-slate-900">
-                    {formatCurrency(Number(item.totalPrice || 0))}
+                    {formatCurrency(
+                      Number(item.totalPrice || 0),
+                      proposalCurrency,
+                    )}
                   </td>
                 </tr>
               ))}
@@ -851,7 +1121,7 @@ export default function ProposalDetailPage() {
         title="Revisões da proposta"
         description="Novas rodadas comerciais associadas a este histórico."
       >
-        {(!proposal.revisions || proposal.revisions.length === 0) ? (
+        {!proposal.revisions || proposal.revisions.length === 0 ? (
           <EmptyState
             title="Sem revisões"
             description="Novas rodadas de proposta aparecerão aqui."
@@ -866,12 +1136,16 @@ export default function ProposalDetailPage() {
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-slate-900">{r.code}</p>
+                    <p className="text-sm font-semibold text-slate-900">
+                      {r.code}
+                    </p>
                     <p className="mt-1 text-xs text-slate-500">
                       {formatDateTime(r.createdAt)}
                     </p>
                   </div>
-                  <DataPill tone={statusTone(r.status)}>{statusLabel(r.status)}</DataPill>
+                  <DataPill tone={statusTone(r.status)}>
+                    {statusLabel(r.status)}
+                  </DataPill>
                 </div>
               </Link>
             ))}
@@ -884,7 +1158,7 @@ export default function ProposalDetailPage() {
         title="Movimentações registradas"
         description="Linha do tempo das ações aplicadas nesta proposta."
       >
-        {(!proposal.movements || proposal.movements.length === 0) ? (
+        {!proposal.movements || proposal.movements.length === 0 ? (
           <EmptyState
             title="Sem movimentações registradas"
             description="A trilha operacional aparecerá aqui conforme o fluxo evoluir."
@@ -902,12 +1176,17 @@ export default function ProposalDetailPage() {
                       {m.action} - {statusLabel(m.toStatus)}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
-                      {m.actorUser?.name || "Sistema"} em {formatDateTime(m.createdAt)}
+                      {m.actorUser?.name || "Sistema"} em{" "}
+                      {formatDateTime(m.createdAt)}
                     </p>
                   </div>
-                  <DataPill tone={statusTone(m.toStatus)}>{statusLabel(m.toStatus)}</DataPill>
+                  <DataPill tone={statusTone(m.toStatus)}>
+                    {statusLabel(m.toStatus)}
+                  </DataPill>
                 </div>
-                {m.note ? <p className="mt-3 text-sm text-slate-700">{m.note}</p> : null}
+                {m.note ? (
+                  <p className="mt-3 text-sm text-slate-700">{m.note}</p>
+                ) : null}
               </div>
             ))}
           </div>
@@ -992,7 +1271,9 @@ function Info({
       <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
         {label}
       </p>
-      <p className="mt-3 break-words text-sm font-medium text-slate-800">{value}</p>
+      <p className="mt-3 break-words text-sm font-medium text-slate-800">
+        {value}
+      </p>
     </div>
   );
 }
@@ -1036,8 +1317,12 @@ function buildProposalDispatchHref(proposal: Proposal) {
     title: `Execucao da proposta ${proposal.code}`,
     description: [
       `Demanda originada da proposta ${proposal.code}.`,
-      proposal.client?.companyName ? `Cliente: ${proposal.client.companyName}.` : "",
-      proposal.generator?.name ? `Equipamento: ${proposal.generator.name}.` : "",
+      proposal.client?.companyName
+        ? `Cliente: ${proposal.client.companyName}.`
+        : "",
+      proposal.generator?.name
+        ? `Equipamento: ${proposal.generator.name}.`
+        : "",
       `Valor comercial: ${formatCurrency(Number(proposal.totalValue || 0))}.`,
     ]
       .filter(Boolean)
@@ -1050,6 +1335,24 @@ function buildProposalDispatchHref(proposal: Proposal) {
   return `/dashboard/dispatch?${params.toString()}`;
 }
 
+function proposalEquipmentLabel(proposal: Proposal) {
+  if (proposal.commercialGenerator) {
+    return `${proposal.commercialGenerator.manufacturer} ${proposal.commercialGenerator.model} - ${proposal.commercialGenerator.standbyPowerKva} kVA`;
+  }
+  return proposal.generator?.name || "Não vinculado";
+}
+
+function proposalTypeLabel(type: string) {
+  const labels: Record<string, string> = {
+    GENERATOR_SALE: "Venda de gerador",
+    PARTS: "Peças",
+    SERVICES: "Serviços",
+    PARTS_AND_SERVICES: "Peças e serviços",
+    CONTRACT: "Contrato",
+  };
+  return labels[type] || type;
+}
+
 function statusTone(status: string): Tone {
   const flowStep = statusToFlowStep(status);
 
@@ -1060,10 +1363,10 @@ function statusTone(status: string): Tone {
   return "slate";
 }
 
-function formatCurrency(value: number) {
+function formatCurrency(value: number, currency = "BRL") {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
-    currency: "BRL",
+    currency,
     maximumFractionDigits: 2,
   }).format(value);
 }

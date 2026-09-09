@@ -734,7 +734,7 @@ describe('ServiceReportsService', () => {
       id: 'link-1',
       reportId: 'report-1',
       revokedAt: null,
-      expiresAt: new Date('2026-08-01T00:00:00.000Z'),
+      expiresAt: new Date('2099-08-01T00:00:00.000Z'),
       allowPdfDownload: false,
       allowEvidenceDownload: false,
       report: makeReleasedReport({ generatedDocument: makeDocument() }),

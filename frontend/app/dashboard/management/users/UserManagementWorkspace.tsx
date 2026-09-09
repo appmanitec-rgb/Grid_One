@@ -115,7 +115,7 @@ type PresenceRow = {
 
 type PendingApprovalRow = {
   id: string;
-  type: "BUDGET_DISCOUNT" | "RVT_SIGNOFF";
+  type: "BUDGET_DISCOUNT" | "GENERATOR_PROPOSAL" | "RVT_SIGNOFF";
   entityType: string;
   entityId: string;
   createdAt: string;
@@ -282,6 +282,7 @@ const AVAILABILITY_LABELS: Record<UserAvailabilityStatus, string> = {
 };
 const APPROVAL_LABELS: Record<PendingApprovalRow["type"], string> = {
   BUDGET_DISCOUNT: "Desconto especial",
+  GENERATOR_PROPOSAL: "Proposta de gerador",
   RVT_SIGNOFF: "Aprovacao tecnica",
 };
 const AUDIT_LABELS: Record<AuditDomain, string> = {
@@ -559,8 +560,9 @@ export function UserManagementWorkspace({
   const [certifications, setCertifications] = useState<UserCertificationRow[]>(
     [],
   );
-  const [certificationForm, setCertificationForm] =
-    useState<CertificationForm>(EMPTY_CERTIFICATION_FORM);
+  const [certificationForm, setCertificationForm] = useState<CertificationForm>(
+    EMPTY_CERTIFICATION_FORM,
+  );
   const [certificationsLoading, setCertificationsLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [policy, setPolicy] = useState<AccessPolicy>(
@@ -1789,9 +1791,7 @@ function WorkflowCard({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-slate-950">{title}</p>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            {description}
-          </p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
         </div>
         <DataPill tone={tone}>{metric}</DataPill>
       </div>
@@ -1929,7 +1929,9 @@ function UserDocumentsSection({
         <div className="space-y-3">
           <MiniInfo
             label="Usuarios internos"
-            value={String(users.filter((user) => user.role !== "CLIENT").length)}
+            value={String(
+              users.filter((user) => user.role !== "CLIENT").length,
+            )}
             helper="Contas internas que podem ter documentacao tecnica."
             tone="slate"
           />
@@ -2109,10 +2111,7 @@ function ProvisioningCard({
                   ))}
                 </SelectInput>
               </FormField>
-              <FormField
-                label="Especialidades"
-                hint="Separe por virgulas"
-              >
+              <FormField label="Especialidades" hint="Separe por virgulas">
                 <TextInput
                   value={newUser.technicianSkills}
                   onChange={(event) =>
@@ -3360,8 +3359,8 @@ function UserEditorCard({
                 Acesso e senha
               </p>
               <p className="mt-1 text-xs leading-5 text-slate-500">
-                A senha atual nao fica visivel no sistema. Para alterar,
-                defina uma nova senha e salve o cadastro.
+                A senha atual nao fica visivel no sistema. Para alterar, defina
+                uma nova senha e salve o cadastro.
               </p>
             </div>
             <FormField label="Nova senha" hint="Opcional; minimo 6 caracteres">
@@ -3505,8 +3504,7 @@ function UserEditorCard({
               <div className="space-y-3">
                 {certifications.map((certification) => {
                   const expiresInDays = daysUntil(certification.validUntil);
-                  const tone: Tone =
-                    expiresInDays <= 30 ? "rose" : "emerald";
+                  const tone: Tone = expiresInDays <= 30 ? "rose" : "emerald";
                   const notes =
                     certification.metadata &&
                     typeof certification.metadata.notes === "string"
@@ -3524,11 +3522,7 @@ function UserEditorCard({
                             {certification.code}
                           </p>
                           <p className="mt-1 text-xs text-slate-500">
-                            {
-                              CERTIFICATION_SCOPE_LABELS[
-                                certification.scope
-                              ]
-                            }{" "}
+                            {CERTIFICATION_SCOPE_LABELS[certification.scope]}{" "}
                             {certification.issuer
                               ? `- ${certification.issuer}`
                               : ""}
@@ -3542,9 +3536,7 @@ function UserEditorCard({
                             </p>
                           ) : null}
                         </div>
-                        <DataPill tone={tone}>
-                          {expiresInDays} dia(s)
-                        </DataPill>
+                        <DataPill tone={tone}>{expiresInDays} dia(s)</DataPill>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <button

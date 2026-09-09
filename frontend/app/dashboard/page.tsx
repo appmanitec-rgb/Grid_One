@@ -31,6 +31,8 @@ type Proposal = {
   id: string;
   code: string;
   status: string;
+  type?: string;
+  postSaleGeneratorId?: string | null;
   totalValue: number;
   client?: { companyName: string } | null;
   user?: { name: string } | null;
@@ -228,13 +230,23 @@ export default function DashboardPage() {
   );
 
   const stats = useMemo(() => {
-    const won = proposals.filter((proposal) => proposal.status === "WON").length;
-    const lost = proposals.filter((proposal) => proposal.status === "LOST").length;
+    const won = proposals.filter(
+      (proposal) => proposal.status === "WON",
+    ).length;
+    const lost = proposals.filter(
+      (proposal) => proposal.status === "LOST",
+    ).length;
     const openOrders = orders.filter(
       (order) => order.status === "OPEN" || order.status === "IN_PROGRESS",
     ).length;
     const discountQueue = proposals.filter(
       (proposal) => proposal.status === "DISCOUNT_REVIEW",
+    ).length;
+    const postSaleQueue = proposals.filter(
+      (proposal) =>
+        proposal.type === "GENERATOR_SALE" &&
+        proposal.status === "WON" &&
+        !proposal.postSaleGeneratorId,
     ).length;
     const active = proposals.filter(
       (proposal) => proposal.status !== "WON" && proposal.status !== "LOST",
@@ -248,6 +260,7 @@ export default function DashboardPage() {
       lost,
       openOrders,
       discountQueue,
+      postSaleQueue,
       active,
       conversion,
     };
@@ -257,7 +270,8 @@ export default function DashboardPage() {
     () =>
       proposals.reduce(
         (sum, proposal) =>
-          sum + (Number.isFinite(proposal.totalValue) ? proposal.totalValue : 0),
+          sum +
+          (Number.isFinite(proposal.totalValue) ? proposal.totalValue : 0),
         0,
       ),
     [proposals],
@@ -278,7 +292,10 @@ export default function DashboardPage() {
     const term = pipelineQuery.trim().toLowerCase();
 
     return proposals.filter((proposal) => {
-      if (pipelineStatusFilter !== "ALL" && proposal.status !== pipelineStatusFilter) {
+      if (
+        pipelineStatusFilter !== "ALL" &&
+        proposal.status !== pipelineStatusFilter
+      ) {
         return false;
       }
       if (!term) return true;
@@ -287,7 +304,10 @@ export default function DashboardPage() {
         proposal.code.toLowerCase().includes(term) ||
         (proposal.client?.companyName || "").toLowerCase().includes(term) ||
         (proposal.user?.name || "").toLowerCase().includes(term) ||
-        (PIPELINE_COLUMNS.find((column) => column.key === proposal.status)?.label || "")
+        (
+          PIPELINE_COLUMNS.find((column) => column.key === proposal.status)
+            ?.label || ""
+        )
           .toLowerCase()
           .includes(term)
       );
@@ -298,8 +318,12 @@ export default function DashboardPage() {
     () =>
       PIPELINE_COLUMNS.map((column) => ({
         ...column,
-        total: filteredPipelineProposals.filter((proposal) => proposal.status === column.key).length,
-        items: filteredPipelineProposals.filter((proposal) => proposal.status === column.key),
+        total: filteredPipelineProposals.filter(
+          (proposal) => proposal.status === column.key,
+        ).length,
+        items: filteredPipelineProposals.filter(
+          (proposal) => proposal.status === column.key,
+        ),
       })),
     [filteredPipelineProposals],
   );
@@ -441,20 +465,25 @@ export default function DashboardPage() {
       setAdminUsers([]);
 
       try {
-        const [proposalsResult, ordersResult, updatesResult, boardResult, usersResult] =
-          await Promise.allSettled([
-            apiFetch("/proposals", { cache: "no-store" }),
-            apiFetch("/maintenance-orders", { cache: "no-store" }),
-            apiFetch("/proposals/my/updates", { cache: "no-store" }),
-            isBoard
-              ? apiFetch("/proposals/board/pending", {
-                  cache: "no-store",
-                })
-              : Promise.resolve(new Response(null, { status: 204 })),
-            canManageUsers
-              ? apiFetch("/users", { cache: "no-store" })
-              : Promise.resolve(new Response(null, { status: 204 })),
-          ]);
+        const [
+          proposalsResult,
+          ordersResult,
+          updatesResult,
+          boardResult,
+          usersResult,
+        ] = await Promise.allSettled([
+          apiFetch("/proposals", { cache: "no-store" }),
+          apiFetch("/maintenance-orders", { cache: "no-store" }),
+          apiFetch("/proposals/my/updates", { cache: "no-store" }),
+          isBoard
+            ? apiFetch("/proposals/board/pending", {
+                cache: "no-store",
+              })
+            : Promise.resolve(new Response(null, { status: 204 })),
+          canManageUsers
+            ? apiFetch("/users", { cache: "no-store" })
+            : Promise.resolve(new Response(null, { status: 204 })),
+        ]);
 
         const responses = [
           proposalsResult,
@@ -473,7 +502,10 @@ export default function DashboardPage() {
           return;
         }
 
-        if (proposalsResult.status === "fulfilled" && proposalsResult.value.ok) {
+        if (
+          proposalsResult.status === "fulfilled" &&
+          proposalsResult.value.ok
+        ) {
           setProposals((await proposalsResult.value.json()) as Proposal[]);
         }
         if (ordersResult.status === "fulfilled" && ordersResult.value.ok) {
@@ -482,7 +514,11 @@ export default function DashboardPage() {
         if (updatesResult.status === "fulfilled" && updatesResult.value.ok) {
           setMyUpdates((await updatesResult.value.json()) as Movement[]);
         }
-        if (isBoard && boardResult.status === "fulfilled" && boardResult.value.ok) {
+        if (
+          isBoard &&
+          boardResult.status === "fulfilled" &&
+          boardResult.value.ok
+        ) {
           setBoardPending((await boardResult.value.json()) as Proposal[]);
         }
         if (
@@ -524,7 +560,9 @@ export default function DashboardPage() {
         );
       }
     })().catch(() => {
-      setApiWarning("Falha ao carregar o dashboard. Verifique a conexão com a API.");
+      setApiWarning(
+        "Falha ao carregar o dashboard. Verifique a conexão com a API.",
+      );
     });
   }, [hydrated, isBoard, canManageUsers, router]);
 
@@ -535,7 +573,9 @@ export default function DashboardPage() {
     const snapshot = proposals;
     setProposals((prev) =>
       prev.map((proposal) =>
-        proposal.id === proposalId ? { ...proposal, status: nextStatus } : proposal,
+        proposal.id === proposalId
+          ? { ...proposal, status: nextStatus }
+          : proposal,
       ),
     );
 
@@ -587,7 +627,9 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6 pb-10">
-      {apiWarning ? <StatusBanner tone="amber">{apiWarning}</StatusBanner> : null}
+      {apiWarning ? (
+        <StatusBanner tone="amber">{apiWarning}</StatusBanner>
+      ) : null}
       {uiNotice ? <StatusBanner tone="emerald">{uiNotice}</StatusBanner> : null}
 
       <PageHero
@@ -666,7 +708,7 @@ export default function DashboardPage() {
           eyebrow="Hoje"
           title="Prioridades"
           description="Fila do dia."
-          summary={`Ativas ${stats.active}  |  Desconto ${stats.discountQueue}  |  O.S. ${stats.openOrders}`}
+          summary={`Ativas ${stats.active}  |  Aprovações ${boardPending.length}  |  Pós-venda ${stats.postSaleQueue}`}
         >
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(260px,0.9fr)]">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -685,11 +727,7 @@ export default function DashboardPage() {
               <PriorityCard
                 title={isBoard ? "Board" : "Atualizacoes"}
                 value={String(isBoard ? boardPending.length : myUpdates.length)}
-                subtitle={
-                  isBoard
-                    ? "aguardando decisao"
-                    : "novos registros"
-                }
+                subtitle={isBoard ? "aguardando decisao" : "novos registros"}
                 tone={isBoard ? "rose" : "slate"}
               />
               <PriorityCard
@@ -697,6 +735,12 @@ export default function DashboardPage() {
                 value={String(stats.openOrders)}
                 subtitle="em andamento"
                 tone="emerald"
+              />
+              <PriorityCard
+                title="Pós-venda"
+                value={String(stats.postSaleQueue)}
+                subtitle="geradores para converter"
+                tone="amber"
               />
             </div>
 
@@ -772,25 +816,45 @@ export default function DashboardPage() {
         <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
           <ProcessPathCard
             title="Venda avulsa"
-            steps={["Oportunidade", "Proposta ganha", "O.S. / despacho", "Faturamento recebido"]}
+            steps={[
+              "Oportunidade",
+              "Proposta ganha",
+              "O.S. / despacho",
+              "Faturamento recebido",
+            ]}
             href="/dashboard/opportunities"
             tone="emerald"
           />
           <ProcessPathCard
             title="Contrato recorrente"
-            steps={["Proposta aprovada", "Contrato", "Preventivas", "Faturas / recebiveis"]}
+            steps={[
+              "Proposta aprovada",
+              "Contrato",
+              "Preventivas",
+              "Faturas / recebiveis",
+            ]}
             href="/dashboard/contracts"
             tone="blue"
           />
           <ProcessPathCard
             title="Execucao tecnica"
-            steps={["O.S. aberta", "Tecnico alocado", "Relatorio", "O.S. faturada"]}
+            steps={[
+              "O.S. aberta",
+              "Tecnico alocado",
+              "Relatorio",
+              "O.S. faturada",
+            ]}
             href="/dashboard/dispatch"
             tone="amber"
           />
           <ProcessPathCard
             title="Reposicao"
-            steps={["Estoque baixo", "Pedido de compra", "Recebimento", "Saldo atualizado"]}
+            steps={[
+              "Estoque baixo",
+              "Pedido de compra",
+              "Recebimento",
+              "Saldo atualizado",
+            ]}
             href="/dashboard/inventory"
             tone="rose"
           />
@@ -816,7 +880,9 @@ export default function DashboardPage() {
               />
               <select
                 value={pipelineStatusFilter}
-                onChange={(event) => setPipelineStatusFilter(event.target.value)}
+                onChange={(event) =>
+                  setPipelineStatusFilter(event.target.value)
+                }
                 className="h-10 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
               >
                 <option value="ALL">Todas as etapas</option>
@@ -830,7 +896,10 @@ export default function DashboardPage() {
                 .filter((column) => column.total > 0)
                 .slice(0, 3)
                 .map((column) => (
-                  <DataPill key={column.key} tone={STAGE_STYLES[column.key].tone}>
+                  <DataPill
+                    key={column.key}
+                    tone={STAGE_STYLES[column.key].tone}
+                  >
                     {column.label}: {column.total}
                   </DataPill>
                 ))}
@@ -840,25 +909,32 @@ export default function DashboardPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm leading-6 text-slate-600">
-                Arraste entre etapas, pesquise acima ou encoste nas laterais para rolar.
+                Arraste entre etapas, pesquise acima ou encoste nas laterais
+                para rolar.
               </p>
-              <DataPill tone={pipelineQuery.trim() || pipelineStatusFilter !== "ALL" ? "blue" : "emerald"}>
+              <DataPill
+                tone={
+                  pipelineQuery.trim() || pipelineStatusFilter !== "ALL"
+                    ? "blue"
+                    : "emerald"
+                }
+              >
                 {filteredPipelineProposals.length} resultado(s)
               </DataPill>
             </div>
 
             <DashboardKanban ariaLabel="Kanban de propostas por etapa">
-                {pipelineCounts.map((column) => (
-                  <PipelineColumnCard
-                    key={column.key}
-                    column={column}
-                    draggingId={draggingId}
-                    dropTarget={dropTarget}
-                    onDragStart={(proposalId) => setDraggingId(proposalId)}
-                    onDragTargetChange={setDropTarget}
-                    onMove={moveProposalToStatus}
-                  />
-                ))}
+              {pipelineCounts.map((column) => (
+                <PipelineColumnCard
+                  key={column.key}
+                  column={column}
+                  draggingId={draggingId}
+                  dropTarget={dropTarget}
+                  onDragStart={(proposalId) => setDraggingId(proposalId)}
+                  onDragTargetChange={setDropTarget}
+                  onMove={moveProposalToStatus}
+                />
+              ))}
             </DashboardKanban>
           </div>
         </DashboardSection>
@@ -1026,7 +1102,9 @@ function QuickActionCard({
           <p className="text-sm font-bold text-slate-950">{title}</p>
           <p className="mt-1 text-sm text-slate-600">{subtitle}</p>
         </div>
-        <span className={`mt-1 h-3 w-3 rounded-full ${style.accent} shadow-[0_0_0_6px_rgba(255,255,255,0.45)]`} />
+        <span
+          className={`mt-1 h-3 w-3 rounded-full ${style.accent} shadow-[0_0_0_6px_rgba(255,255,255,0.45)]`}
+        />
       </div>
       <span
         className={`mt-4 inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.16em] ${style.badge}`}
@@ -1060,7 +1138,9 @@ function ProcessPathCard({
       <div className="mt-4 space-y-2">
         {steps.map((step, index) => (
           <div key={`${title}-${step}`} className="flex items-center gap-2">
-            <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${style.badge}`}>
+            <span
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${style.badge}`}
+            >
               {index + 1}
             </span>
             <p className="text-sm font-medium text-slate-700">{step}</p>
@@ -1100,11 +1180,14 @@ function PipelineColumnCard({
         onDragTargetChange(column.key);
       }}
       onDragLeave={() =>
-        onDragTargetChange((current) => (current === column.key ? null : current))
+        onDragTargetChange((current) =>
+          current === column.key ? null : current,
+        )
       }
       onDrop={(event) => {
         event.preventDefault();
-        const proposalId = event.dataTransfer.getData("text/proposal-id") || draggingId;
+        const proposalId =
+          event.dataTransfer.getData("text/proposal-id") || draggingId;
         if (proposalId) void onMove(proposalId, column.key);
       }}
       className={`dashboard-kanban-column flex min-w-[292px] snap-start flex-col rounded-[24px] border p-4 transition ${
@@ -1139,7 +1222,9 @@ function PipelineColumnCard({
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate text-sm font-bold text-slate-950">{item.code}</p>
+                <p className="truncate text-sm font-bold text-slate-950">
+                  {item.code}
+                </p>
                 <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-600">
                   {item.client?.companyName || "Sem cliente vinculado"}
                 </p>
@@ -1260,7 +1345,9 @@ function UpdatesFeedCard({
       actions={<PanelToggleButton collapsed={collapsed} onClick={onToggle} />}
     >
       {collapsed ? (
-        <CollapsedSectionSummary summary={`${updates.length} atualização(ões)`} />
+        <CollapsedSectionSummary
+          summary={`${updates.length} atualização(ões)`}
+        />
       ) : (
         <div className="space-y-3">
           {updates.length === 0 ? (
@@ -1289,7 +1376,9 @@ function UpdatesFeedCard({
                   </span>
                 </div>
                 {update.note ? (
-                  <p className="mt-3 text-sm leading-6 text-slate-700">{update.note}</p>
+                  <p className="mt-3 text-sm leading-6 text-slate-700">
+                    {update.note}
+                  </p>
                 ) : null}
                 <p className="mt-3 text-xs text-slate-500">
                   {new Date(update.createdAt).toLocaleString("pt-BR")}
@@ -1383,7 +1472,9 @@ function GovernanceSnapshotCard({
                     <p className="truncate text-sm font-semibold text-slate-900">
                       {user.name}
                     </p>
-                    <p className="truncate text-xs text-slate-500">{user.email}</p>
+                    <p className="truncate text-xs text-slate-500">
+                      {user.email}
+                    </p>
                   </div>
                   <span
                     className={`ml-3 rounded-full px-2.5 py-1 text-[11px] font-bold ${

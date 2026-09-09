@@ -7,19 +7,23 @@ import {
 } from '@nestjs/common';
 import {
   AccountsReceivableStatus,
+  ApprovalStatus,
   ApprovalType,
   AuditDomain,
   BillingAdjustmentIndex,
   CommissionRuleTrigger,
   CommissionStatus,
+  CommercialGenerator,
   ContractInvoiceStatus,
   ContractStatus,
   CostCenterEntryType,
+  GeneratorOperationalStatus,
   PartsCoverageType,
   PreventiveRecurrence,
   Prisma,
   ProposalHourType,
   ProposalItemKind,
+  ProposalOrigin,
   ProposalStatus,
   ProposalTechnicianType,
   ProposalType,
@@ -30,11 +34,34 @@ import {
 import { DatabaseService } from '../../database/database.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { FileStorageService } from '../file-storage/file-storage.service';
 import {
   CreateProposalDto,
   QuickProposalGeneratorDto,
 } from './dto/create-proposal.dto';
 import { UpdateProposalDto } from './dto/update-proposal.dto';
+import { ConvertGeneratorPostSaleDto } from './dto/convert-generator-post-sale.dto';
+
+const COMMERCIAL_GENERATOR_PROPOSAL_SELECT = {
+  id: true,
+  internalCode: true,
+  manufacturer: true,
+  line: true,
+  model: true,
+  shortDescription: true,
+  standbyPowerKw: true,
+  standbyPowerKva: true,
+  primePowerKw: true,
+  primePowerKva: true,
+  frequencyHz: true,
+  availableVoltages: true,
+  availablePhaseConfigs: true,
+  fuelType: true,
+  construction: true,
+  availability: true,
+  leadTimeDays: true,
+  currency: true,
+} as const;
 
 @Injectable()
 export class ProposalsService {
@@ -58,10 +85,22 @@ export class ProposalsService {
     private readonly prisma: DatabaseService,
     private readonly approvalsService: ApprovalsService,
     private readonly auditLogsService: AuditLogsService,
+    private readonly fileStorageService: FileStorageService,
   ) {}
 
   async create(createProposalDto: CreateProposalDto, actorUserId?: string) {
     await this.assertInternalActor(actorUserId);
+    const origin = createProposalDto.origin ?? ProposalOrigin.MANITEC;
+
+    if (
+      origin === ProposalOrigin.EXTERNAL &&
+      (createProposalDto.commercialGeneratorId ||
+        createProposalDto.sizingSnapshot)
+    ) {
+      throw new BadRequestException(
+        'Proposta externa nao utiliza dimensionamento ou catalogo comercial da Manitec.',
+      );
+    }
 
     return this.prisma.$transaction(async (tx) => {
       const linkedOpportunity = createProposalDto.salesOpportunityId
@@ -101,6 +140,49 @@ export class ProposalsService {
         createProposalDto.generatorId,
         createProposalDto.clientId,
       );
+      const commercialGenerator = createProposalDto.commercialGeneratorId
+        ? await tx.commercialGenerator.findFirst({
+            where: {
+              id: createProposalDto.commercialGeneratorId,
+              isActive: true,
+            },
+          })
+        : null;
+      if (
+        createProposalDto.type === ProposalType.GENERATOR_SALE &&
+        origin === ProposalOrigin.MANITEC &&
+        !commercialGenerator
+      ) {
+        throw new BadRequestException(
+          'Selecione um gerador Generac ativo do catalogo comercial.',
+        );
+      }
+      if (
+        createProposalDto.type === ProposalType.GENERATOR_SALE &&
+        createProposalDto.generatorId
+      ) {
+        throw new BadRequestException(
+          'Venda de gerador nao pode usar um equipamento instalado no cliente.',
+        );
+      }
+      if (
+        createProposalDto.type !== ProposalType.GENERATOR_SALE &&
+        createProposalDto.commercialGeneratorId
+      ) {
+        throw new BadRequestException(
+          'Gerador comercial so pode ser vinculado a proposta de venda de gerador.',
+        );
+      }
+      if (
+        linkedOpportunity &&
+        createProposalDto.type === ProposalType.GENERATOR_SALE &&
+        linkedOpportunity.opportunityType !==
+          SalesOpportunityType.GENERATOR_SALE
+      ) {
+        throw new BadRequestException(
+          'A oportunidade vinculada nao e do tipo venda de gerador.',
+        );
+      }
 
       const sellerUserId =
         linkedOpportunity?.assignedSellerId ?? createProposalDto.userId;
@@ -140,8 +222,25 @@ export class ProposalsService {
           clientId: createProposalDto.clientId,
           salesOpportunityId: linkedOpportunity?.id,
           generatorId: createProposalDto.generatorId,
+          commercialGeneratorId: commercialGenerator?.id,
+          sizingSnapshot: createProposalDto.sizingSnapshot as
+            | Prisma.InputJsonValue
+            | undefined,
+          commercialSnapshot: this.buildCommercialSnapshot({
+            origin,
+            dto: createProposalDto,
+            generator: commercialGenerator,
+            items: normalizedItems,
+            subtotal,
+            discountValue,
+            calculatedTotal,
+          }),
           userId: sellerUserId,
           type: createProposalDto.type,
+          origin,
+          externalReference: createProposalDto.externalReference?.trim(),
+          externalCurrency:
+            createProposalDto.externalCurrency?.trim().toUpperCase() || 'BRL',
           totalValue: calculatedTotal,
           validUntil: createProposalDto.validUntil
             ? new Date(createProposalDto.validUntil)
@@ -224,6 +323,10 @@ export class ProposalsService {
         where: { id: proposal.id },
         include: {
           client: true,
+          commercialGenerator: {
+            select: COMMERCIAL_GENERATOR_PROPOSAL_SELECT,
+          },
+          postSaleGenerator: { select: { id: true, name: true } },
           items: { include: { catalogItem: true } },
           salesOpportunity: {
             select: {
@@ -290,6 +393,17 @@ export class ProposalsService {
           clientId: source.clientId,
           salesOpportunityId: source.salesOpportunityId,
           generatorId: source.generatorId,
+          commercialGeneratorId: source.commercialGeneratorId,
+          sizingSnapshot: source.sizingSnapshot ?? undefined,
+          commercialSnapshot: source.commercialSnapshot ?? undefined,
+          origin: source.origin,
+          externalReference: source.externalReference,
+          externalCurrency: source.externalCurrency,
+          externalDocumentStorageKey: source.externalDocumentStorageKey,
+          externalDocumentFileName: source.externalDocumentFileName,
+          externalDocumentMimeType: source.externalDocumentMimeType,
+          externalDocumentSizeBytes: source.externalDocumentSizeBytes,
+          externalDocumentChecksumSha256: source.externalDocumentChecksumSha256,
           userId: source.userId,
           parentProposalId: source.id,
           items: {
@@ -342,13 +456,25 @@ export class ProposalsService {
       proposal.id,
     );
 
-    return this.changeStatus(
+    const updated = await this.changeStatus(
       id,
       ProposalStatus.BOARD_REVIEW,
       actorUserId,
       'SUBMIT_BOARD_REVIEW',
       'Encaminhada para analise da diretoria.',
     );
+
+    if (proposal.type === ProposalType.GENERATOR_SALE && actorUserId) {
+      await this.approvalsService.create({
+        type: ApprovalType.GENERATOR_PROPOSAL,
+        entityType: 'PROPOSAL',
+        entityId: proposal.id,
+        requesterUserId: actorUserId,
+        requestNote: this.buildGeneratorApprovalNote(proposal),
+      });
+    }
+
+    return updated;
   }
 
   async boardApprove(id: string, actorUserId?: string) {
@@ -365,6 +491,26 @@ export class ProposalsService {
       proposal.id,
     );
 
+    if (proposal.type === ProposalType.GENERATOR_SALE && actorUserId) {
+      const pendingApproval = await this.prisma.approvalRequest.findFirst({
+        where: {
+          type: ApprovalType.GENERATOR_PROPOSAL,
+          entityType: 'PROPOSAL',
+          entityId: proposal.id,
+          status: ApprovalStatus.PENDING,
+        },
+        select: { id: true },
+      });
+      if (pendingApproval) {
+        await this.approvalsService.approve(
+          pendingApproval.id,
+          actorUserId,
+          'Proposta de gerador liberada pela diretoria.',
+        );
+        return this.requireProposal(id, actorUserId);
+      }
+    }
+
     return this.changeStatus(
       id,
       ProposalStatus.CLIENT_REVIEW,
@@ -379,6 +525,26 @@ export class ProposalsService {
     const proposal = await this.requireProposal(id, actorUserId);
     if (proposal.status !== ProposalStatus.BOARD_REVIEW) {
       throw new Error('A proposta precisa estar em analise da diretoria.');
+    }
+
+    if (proposal.type === ProposalType.GENERATOR_SALE && actorUserId) {
+      const pendingApproval = await this.prisma.approvalRequest.findFirst({
+        where: {
+          type: ApprovalType.GENERATOR_PROPOSAL,
+          entityType: 'PROPOSAL',
+          entityId: proposal.id,
+          status: ApprovalStatus.PENDING,
+        },
+        select: { id: true },
+      });
+      if (pendingApproval) {
+        await this.approvalsService.reject(
+          pendingApproval.id,
+          actorUserId,
+          note || 'Ajustes solicitados pela diretoria.',
+        );
+        return this.requireProposal(id, actorUserId);
+      }
     }
 
     return this.changeStatus(
@@ -884,7 +1050,7 @@ export class ProposalsService {
 
   async findAll(actorUserId?: string) {
     const scope = await this.getActorScope(actorUserId);
-    return this.prisma.proposal.findMany({
+    const proposals = await this.prisma.proposal.findMany({
       where:
         scope?.role === UserRole.CLIENT
           ? { clientId: this.requireLinkedClientId(scope) }
@@ -893,6 +1059,10 @@ export class ProposalsService {
         items: true,
         client: true,
         generator: true,
+        commercialGenerator: {
+          select: COMMERCIAL_GENERATOR_PROPOSAL_SELECT,
+        },
+        postSaleGenerator: { select: { id: true, name: true } },
         salesOpportunity: {
           select: {
             id: true,
@@ -905,6 +1075,9 @@ export class ProposalsService {
       },
       orderBy: { createdAt: 'desc' },
     });
+    return scope?.role === UserRole.CLIENT
+      ? proposals.map((proposal) => this.redactProposalForClient(proposal))
+      : proposals;
   }
 
   async findOne(id: string, actorUserId?: string) {
@@ -916,6 +1089,10 @@ export class ProposalsService {
         },
         client: true,
         generator: true,
+        commercialGenerator: {
+          select: COMMERCIAL_GENERATOR_PROPOSAL_SELECT,
+        },
+        postSaleGenerator: { select: { id: true, name: true } },
         salesOpportunity: {
           select: {
             id: true,
@@ -954,7 +1131,211 @@ export class ProposalsService {
     }
 
     await this.assertProposalScope(proposal.clientId, actorUserId);
-    return proposal;
+    const scope = await this.getActorScope(actorUserId);
+    return scope?.role === UserRole.CLIENT
+      ? this.redactProposalForClient(proposal)
+      : proposal;
+  }
+
+  async uploadExternalDocument(
+    id: string,
+    file:
+      | {
+          originalname?: string;
+          mimetype?: string;
+          size?: number;
+          buffer?: Buffer;
+        }
+      | undefined,
+    actorUserId?: string,
+  ) {
+    await this.assertInternalActor(actorUserId);
+    const proposal = await this.requireProposal(id, actorUserId);
+    if (proposal.origin !== ProposalOrigin.EXTERNAL) {
+      throw new BadRequestException(
+        'Anexo externo so pode ser enviado para proposta de origem externa.',
+      );
+    }
+    if (
+      !file?.buffer ||
+      (file.mimetype !== 'application/pdf' &&
+        file.mimetype !==
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    ) {
+      throw new BadRequestException('Envie um arquivo PDF ou DOCX valido.');
+    }
+
+    const stored = await this.fileStorageService.saveDocumentFile(
+      'external-proposals',
+      file.originalname || `proposta-externa-${proposal.code}.pdf`,
+      file.buffer,
+      file.mimetype,
+    );
+    const previousStorageKey = proposal.externalDocumentStorageKey;
+    const updated = await this.prisma.proposal.update({
+      where: { id },
+      data: {
+        externalDocumentStorageKey: stored.storageKey,
+        externalDocumentFileName: stored.fileName,
+        externalDocumentMimeType: stored.mimeType,
+        externalDocumentSizeBytes: stored.sizeBytes,
+        externalDocumentChecksumSha256: stored.checksumSha256,
+      },
+    });
+
+    if (previousStorageKey && previousStorageKey !== stored.storageKey) {
+      await this.fileStorageService
+        .remove(previousStorageKey)
+        .catch(() => undefined);
+    }
+    await this.createMovement(
+      this.prisma,
+      id,
+      actorUserId,
+      'EXTERNAL_DOCUMENT_ATTACHED',
+      proposal.status,
+      proposal.status,
+      `Documento externo anexado: ${stored.fileName}.`,
+    );
+    await this.auditLogsService.record({
+      domain: AuditDomain.PROPOSALS,
+      entityType: 'PROPOSAL',
+      entityId: id,
+      action: 'EXTERNAL_DOCUMENT_ATTACHED',
+      actorUserId,
+      afterPayload: {
+        fileName: stored.fileName,
+        mimeType: stored.mimeType,
+        sizeBytes: stored.sizeBytes,
+        checksumSha256: stored.checksumSha256,
+      },
+    });
+    return updated;
+  }
+
+  async downloadExternalDocument(id: string, actorUserId?: string) {
+    const proposal = await this.requireProposal(id, actorUserId);
+    if (
+      proposal.origin !== ProposalOrigin.EXTERNAL ||
+      !proposal.externalDocumentStorageKey ||
+      !proposal.externalDocumentFileName ||
+      !proposal.externalDocumentMimeType ||
+      !proposal.externalDocumentSizeBytes ||
+      !proposal.externalDocumentChecksumSha256
+    ) {
+      throw new NotFoundException('Documento externo nao encontrado.');
+    }
+    return this.fileStorageService.load(proposal.externalDocumentStorageKey, {
+      fileName: proposal.externalDocumentFileName,
+      mimeType: proposal.externalDocumentMimeType,
+      sizeBytes: proposal.externalDocumentSizeBytes,
+      checksumSha256: proposal.externalDocumentChecksumSha256,
+    });
+  }
+
+  async convertGeneratorPostSale(
+    id: string,
+    dto: ConvertGeneratorPostSaleDto,
+    actorUserId?: string,
+  ) {
+    await this.assertInternalActor(actorUserId);
+    return this.prisma.$transaction(async (tx) => {
+      const proposal = await tx.proposal.findUnique({
+        where: { id },
+        include: {
+          commercialGenerator: true,
+          postSaleGenerator: { select: { id: true, name: true } },
+        },
+      });
+      if (!proposal) throw new NotFoundException('Proposta nao encontrada.');
+      if (
+        proposal.type !== ProposalType.GENERATOR_SALE ||
+        proposal.status !== ProposalStatus.WON
+      ) {
+        throw new BadRequestException(
+          'Somente uma proposta ganha de gerador pode seguir para o pos-venda.',
+        );
+      }
+      if (proposal.postSaleGenerator) {
+        return {
+          message: 'Equipamento de pos-venda ja havia sido criado.',
+          generator: proposal.postSaleGenerator,
+        };
+      }
+      if (dto.currentSiteId) {
+        const site = await tx.site.findUnique({
+          where: { id: dto.currentSiteId },
+          select: { id: true, clientId: true },
+        });
+        if (!site || site.clientId !== proposal.clientId) {
+          throw new BadRequestException(
+            'O local selecionado nao pertence ao cliente da proposta.',
+          );
+        }
+      }
+
+      const catalogGenerator = proposal.commercialGenerator;
+      const generator = await tx.generator.create({
+        data: {
+          name: dto.name.trim(),
+          brand: catalogGenerator?.manufacturer || 'Generac',
+          serialNumber: dto.serialNumber?.trim() || null,
+          power: Number(catalogGenerator?.standbyPowerKw ?? dto.powerKw ?? 0),
+          assetTag: dto.assetTag?.trim() || null,
+          installationSite: dto.installationSite?.trim() || null,
+          operationalStatus: GeneratorOperationalStatus.DEACTIVATED,
+          application:
+            'Venda de gerador - aguardando instalacao/comissionamento',
+          notes: `Pre-cadastro gerado pela proposta ${proposal.code}. Ativar apos entrega tecnica.`,
+          voltage:
+            dto.voltage?.trim() ||
+            catalogGenerator?.availableVoltages?.join(', ') ||
+            null,
+          powerFactor: catalogGenerator?.powerFactor ?? null,
+          frequencyHz: catalogGenerator?.frequencyHz ?? null,
+          fuelType: catalogGenerator?.fuelType ?? null,
+          engineBrand: catalogGenerator?.manufacturer || 'Generac',
+          engineModelName: catalogGenerator?.model || null,
+          clientId: proposal.clientId,
+          currentSiteId: dto.currentSiteId,
+          createdByUserId: actorUserId ?? proposal.userId,
+        },
+      });
+      await tx.proposal.update({
+        where: { id: proposal.id },
+        data: {
+          postSaleGeneratorId: generator.id,
+          postSaleConvertedAt: new Date(),
+        },
+      });
+      await this.createMovement(
+        tx,
+        proposal.id,
+        actorUserId,
+        'CONVERT_TO_POST_SALE',
+        proposal.status,
+        proposal.status,
+        `Pre-cadastro de pos-venda criado: ${generator.name}.`,
+      );
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.PROPOSALS,
+          entityType: 'PROPOSAL',
+          entityId: proposal.id,
+          action: 'CONVERT_TO_POST_SALE',
+          actorUserId,
+          afterPayload: {
+            generatorId: generator.id,
+            generatorName: generator.name,
+          },
+        },
+        tx,
+      );
+      return {
+        message: 'Venda convertida para o pre-cadastro de pos-venda.',
+        generator,
+      };
+    });
   }
 
   async getBoardPending(actorUserId?: string) {
@@ -1073,6 +1454,66 @@ export class ProposalsService {
         updateProposalDto.generatorId ?? current.generatorId,
         updateProposalDto.clientId ?? current.clientId,
       );
+
+      if (
+        updateProposalDto.type !== undefined ||
+        updateProposalDto.origin !== undefined ||
+        updateProposalDto.generatorId !== undefined ||
+        updateProposalDto.commercialGeneratorId !== undefined
+      ) {
+        const nextType = updateProposalDto.type ?? current.type;
+        const nextOrigin = updateProposalDto.origin ?? current.origin;
+        const nextInstalledGeneratorId =
+          updateProposalDto.generatorId ?? current.generatorId;
+        const nextCommercialGeneratorId =
+          updateProposalDto.commercialGeneratorId ??
+          current.commercialGeneratorId;
+
+        if (
+          nextOrigin === ProposalOrigin.EXTERNAL &&
+          (nextCommercialGeneratorId || current.sizingSnapshot)
+        ) {
+          throw new BadRequestException(
+            'Proposta externa nao utiliza dimensionamento ou catalogo comercial da Manitec.',
+          );
+        }
+
+        if (
+          nextType === ProposalType.GENERATOR_SALE &&
+          nextInstalledGeneratorId
+        ) {
+          throw new BadRequestException(
+            'Venda de gerador nao pode usar um equipamento instalado no cliente.',
+          );
+        }
+
+        if (
+          nextType === ProposalType.GENERATOR_SALE &&
+          nextOrigin === ProposalOrigin.MANITEC
+        ) {
+          if (!nextCommercialGeneratorId) {
+            throw new BadRequestException(
+              'Selecione um gerador Generac ativo do catalogo comercial.',
+            );
+          }
+          const commercialGenerator = await tx.commercialGenerator.findFirst({
+            where: { id: nextCommercialGeneratorId, isActive: true },
+            select: { id: true },
+          });
+          if (!commercialGenerator) {
+            throw new BadRequestException(
+              'Selecione um gerador Generac ativo do catalogo comercial.',
+            );
+          }
+        } else if (
+          nextType !== ProposalType.GENERATOR_SALE &&
+          nextCommercialGeneratorId
+        ) {
+          throw new BadRequestException(
+            'Gerador comercial so pode ser vinculado a proposta de venda de gerador.',
+          );
+        }
+      }
 
       const updated = await tx.proposal.update({
         where: { id },
@@ -1550,6 +1991,122 @@ export class ProposalsService {
         );
       }
     }
+  }
+
+  private buildCommercialSnapshot(input: {
+    origin: ProposalOrigin;
+    dto: CreateProposalDto;
+    generator: CommercialGenerator | null;
+    items: Array<{
+      kind: ProposalItemKind;
+      description: string | null;
+      catalogItemId: string | undefined;
+      quantity: number;
+      hours: number | null;
+      unitPrice: number;
+      discountPercent: number;
+      hourType: ProposalHourType | null;
+      technicianType: ProposalTechnicianType | null;
+      totalPrice: number;
+    }>;
+    subtotal: number;
+    discountValue: number;
+    calculatedTotal: number;
+  }): Prisma.InputJsonValue {
+    const generator = input.generator
+      ? {
+          id: input.generator.id,
+          internalCode: input.generator.internalCode,
+          manufacturer: input.generator.manufacturer,
+          line: input.generator.line,
+          model: input.generator.model,
+          shortDescription: input.generator.shortDescription,
+          standbyPowerKw: input.generator.standbyPowerKw,
+          standbyPowerKva: input.generator.standbyPowerKva,
+          primePowerKw: input.generator.primePowerKw,
+          primePowerKva: input.generator.primePowerKva,
+          powerFactor: input.generator.powerFactor,
+          frequencyHz: input.generator.frequencyHz,
+          availableVoltages: input.generator.availableVoltages,
+          availablePhaseConfigs: input.generator.availablePhaseConfigs,
+          fuelType: input.generator.fuelType,
+          construction: input.generator.construction,
+          availability: input.generator.availability,
+          stockQuantity: input.generator.stockQuantity,
+          leadTimeDays: input.generator.leadTimeDays,
+          currency: input.generator.currency,
+          basePrice: input.generator.basePrice,
+          suggestedPrice: input.generator.suggestedPrice,
+          minimumPrice: input.generator.minimumPrice,
+          taxPercentage: input.generator.taxPercentage,
+          engineDescription: input.generator.engineDescription,
+          alternatorDescription: input.generator.alternatorDescription,
+          controllerDescription: input.generator.controllerDescription,
+          enclosureDescription: input.generator.enclosureDescription,
+          standardAccessories: input.generator.standardAccessories,
+        }
+      : null;
+
+    return {
+      version: 1,
+      capturedAt: new Date().toISOString(),
+      origin: input.origin,
+      external:
+        input.origin === ProposalOrigin.EXTERNAL
+          ? {
+              reference: input.dto.externalReference || null,
+              currency: input.dto.externalCurrency || 'BRL',
+            }
+          : null,
+      generator,
+      sizing: input.dto.sizingSnapshot || null,
+      items: input.items.map((item) => ({ ...item })),
+      commercialTerms: {
+        scope: input.dto.scope || null,
+        freight: input.dto.freight || 'FOB',
+        validUntil: input.dto.validUntil || null,
+        paymentTerm: input.dto.paymentTerm || null,
+        deliveryLeadTimeDays: input.dto.deliveryLeadTimeDays ?? null,
+        paymentDetails: input.dto.paymentDetails || null,
+        hasDownPayment: Boolean(input.dto.hasDownPayment),
+        downPaymentAmount: input.dto.downPaymentAmount ?? null,
+        installmentCount: input.dto.installmentCount ?? null,
+        installmentIntervalDays: input.dto.installmentIntervalDays ?? 30,
+        firstDueDate: input.dto.firstDueDate || null,
+      },
+      totals: {
+        subtotal: input.subtotal,
+        discount: input.discountValue,
+        total: input.calculatedTotal,
+      },
+    } as Prisma.InputJsonObject;
+  }
+
+  private buildGeneratorApprovalNote(proposal: {
+    code: string;
+    origin: ProposalOrigin;
+    totalValue: number;
+    requestedDiscountPercent: number | null;
+  }) {
+    const discount = Number(proposal.requestedDiscountPercent || 0);
+    return [
+      `Proposta de gerador ${proposal.code}.`,
+      `Origem: ${proposal.origin === ProposalOrigin.EXTERNAL ? 'Externa' : 'Manitec'}.`,
+      `Valor total: R$ ${Number(proposal.totalValue || 0).toFixed(2)}.`,
+      discount > 0 ? `Desconto solicitado: ${discount.toFixed(2)}%.` : '',
+      'Validar equipamento, margem, condicoes comerciais e snapshot antes da liberacao ao cliente.',
+    ]
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  private redactProposalForClient<T extends object>(proposal: T) {
+    const sanitized = { ...proposal } as Record<string, unknown>;
+    delete sanitized.internalNotes;
+    delete sanitized.commercialSnapshot;
+    delete sanitized.externalDocumentStorageKey;
+    delete sanitized.externalDocumentChecksumSha256;
+    return sanitized;
   }
 
   private normalizeOpportunityType(input?: string) {
