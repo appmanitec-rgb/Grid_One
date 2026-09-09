@@ -464,8 +464,8 @@ export class CatalogsService {
       throw new BadRequestException('Informe um codigo valido.');
     }
 
-    const possibleDuplicates =
-      await this.prisma.catalogItemIdentifier.findMany({
+    const possibleDuplicates = await this.prisma.catalogItemIdentifier.findMany(
+      {
         where: {
           normalizedCode,
           isActive: true,
@@ -477,7 +477,8 @@ export class CatalogsService {
           manufacturer: { select: { id: true, name: true } },
         },
         take: 5,
-      });
+      },
+    );
 
     const validFrom = dto.validFrom ? new Date(dto.validFrom) : null;
     const validUntil = dto.validUntil ? new Date(dto.validUntil) : null;
@@ -745,12 +746,17 @@ export class CatalogsService {
     });
 
     if (dto.isPreferred) {
-      await this.setPreferredOffer(id, result.id, {
-        reason:
-          dto.preferenceReason ||
-          'Oferta preferencial definida no cadastro da cotacao.',
-        applyToReplacementCost: true,
-      }, actor);
+      await this.setPreferredOffer(
+        id,
+        result.id,
+        {
+          reason:
+            dto.preferenceReason ||
+            'Oferta preferencial definida no cadastro da cotacao.',
+          applyToReplacementCost: true,
+        },
+        actor,
+      );
     }
 
     const offer = await this.prisma.catalogSupplierOffer.findUnique({
@@ -866,27 +872,57 @@ export class CatalogsService {
     });
     if (!supplier) throw new NotFoundException('Fornecedor nao encontrado.');
 
-    const purchaseInvoiceValue = this.nonNegative(dto.purchaseInvoiceValue, 'valor de compra');
-    const purchaseTaxMode = dto.purchaseTaxMode === 'PERCENT' ? 'PERCENT' : 'AMOUNT';
-    const purchaseTaxPercent = this.nonNegative(dto.purchaseTaxPercent, 'percentual de imposto de compra');
+    const purchaseInvoiceValue = this.nonNegative(
+      dto.purchaseInvoiceValue,
+      'valor de compra',
+    );
+    const purchaseTaxMode =
+      dto.purchaseTaxMode === 'PERCENT' ? 'PERCENT' : 'AMOUNT';
+    const purchaseTaxPercent = this.nonNegative(
+      dto.purchaseTaxPercent,
+      'percentual de imposto de compra',
+    );
     const purchaseTaxAmount =
       purchaseTaxMode === 'PERCENT'
         ? Number((purchaseInvoiceValue * (purchaseTaxPercent / 100)).toFixed(2))
         : this.nonNegative(dto.purchaseTaxAmount, 'imposto de compra');
     const freightAmount = this.nonNegative(dto.freightAmount, 'frete');
-    const otherPurchaseCosts = this.nonNegative(dto.otherPurchaseCosts, 'outros custos');
-    const salesTaxPercent = this.nonNegative(dto.salesTaxPercent, 'impostos de venda');
-    const commissionPercent = this.nonNegative(dto.commissionPercent, 'comissao');
-    const profitMarginPercent = this.nonNegative(dto.profitMarginPercent, 'margem');
-    const operationalCostPercent = this.nonNegative(dto.operationalCostPercent, 'custos operacionais');
+    const otherPurchaseCosts = this.nonNegative(
+      dto.otherPurchaseCosts,
+      'outros custos',
+    );
+    const salesTaxPercent = this.nonNegative(
+      dto.salesTaxPercent,
+      'impostos de venda',
+    );
+    const commissionPercent = this.nonNegative(
+      dto.commissionPercent,
+      'comissao',
+    );
+    const profitMarginPercent = this.nonNegative(
+      dto.profitMarginPercent,
+      'margem',
+    );
+    const operationalCostPercent = this.nonNegative(
+      dto.operationalCostPercent,
+      'custos operacionais',
+    );
     const calculatedPurchaseCost =
-      purchaseInvoiceValue + purchaseTaxAmount + freightAmount + otherPurchaseCosts;
+      purchaseInvoiceValue +
+      purchaseTaxAmount +
+      freightAmount +
+      otherPurchaseCosts;
     const markupPercent =
-      salesTaxPercent + commissionPercent + profitMarginPercent + operationalCostPercent;
+      salesTaxPercent +
+      commissionPercent +
+      profitMarginPercent +
+      operationalCostPercent;
     const finalSalePrice =
       dto.finalSalePrice != null
         ? this.nonNegative(dto.finalSalePrice, 'preco final')
-        : Number((calculatedPurchaseCost * (1 + markupPercent / 100)).toFixed(2));
+        : Number(
+            (calculatedPurchaseCost * (1 + markupPercent / 100)).toFixed(2),
+          );
     const validFrom = dto.validFrom ? new Date(dto.validFrom) : null;
     const validUntil = dto.validUntil ? new Date(dto.validUntil) : null;
 
@@ -1167,17 +1203,16 @@ export class CatalogsService {
     return `${String(number).padStart(9, '0')}${suffix}`;
   }
 
-  private async nextGeneratedSku(
-    tx: Prisma.TransactionClient,
-    suffix: string,
-  ) {
+  private async nextGeneratedSku(tx: Prisma.TransactionClient, suffix: string) {
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const rows = await tx.$queryRaw<Array<{ nextval: number }>>`
         SELECT nextval('catalog_sku_number_seq')::integer AS "nextval"
       `;
       const skuNumber = Number(rows[0]?.nextval);
       if (!Number.isFinite(skuNumber)) {
-        throw new BadRequestException('Nao foi possivel gerar o numero do SKU.');
+        throw new BadRequestException(
+          'Nao foi possivel gerar o numero do SKU.',
+        );
       }
       const sku = this.composeSku(skuNumber, suffix);
       const existing = await tx.catalogItem.findUnique({ where: { sku } });
@@ -1227,7 +1262,8 @@ export class CatalogsService {
             source: 'sku_anterior',
             isPrimary: false,
             isActive: true,
-            notes: 'Codigo preservado automaticamente apos reclassificacao do SKU.',
+            notes:
+              'Codigo preservado automaticamente apos reclassificacao do SKU.',
           },
         });
       }
@@ -1481,7 +1517,9 @@ export class CatalogsService {
       skuApplication: { select: { id: true, code: true, name: true } },
       identifiers: {
         include: {
-          supplier: { select: { id: true, companyName: true, tradeName: true } },
+          supplier: {
+            select: { id: true, companyName: true, tradeName: true },
+          },
           manufacturer: { select: { id: true, name: true, type: true } },
         },
         orderBy: [
@@ -1726,7 +1764,7 @@ export class CatalogsService {
       supplierOffers?: Array<{
         id: string;
         supplierId: string;
-        status?: CatalogOfferStatus | string;
+        status?: string;
         isPreferred?: boolean | null;
         effectiveUnitCost?: number | string | null;
         validUntil?: Date | string | null;

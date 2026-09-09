@@ -244,10 +244,7 @@ export class DocxTemplateRendererService {
 </w:document>`;
   }
 
-  private renderDocxTemplateFile(
-    path: string,
-    context: RenderContext,
-  ) {
+  private renderDocxTemplateFile(path: string, context: RenderContext) {
     const files = this.unzip(readFileSync(path)).map((file) => {
       if (!WORD_TEXT_XML_PATTERN.test(file.path)) return file;
 

@@ -155,16 +155,7 @@ export class DocumentTemplateService {
   private sourceTemplateBasePaths(type: 'pdf' | 'documents') {
     return [
       resolve(process.cwd(), 'backend', 'src', 'templates', type),
-      resolve(
-        __dirname,
-        '..',
-        '..',
-        '..',
-        '..',
-        'src',
-        'templates',
-        type,
-      ),
+      resolve(__dirname, '..', '..', '..', '..', 'src', 'templates', type),
     ];
   }
 

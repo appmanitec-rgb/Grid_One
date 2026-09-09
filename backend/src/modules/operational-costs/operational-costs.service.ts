@@ -37,6 +37,50 @@ type DimensionRow = CostMetrics & {
   name: string;
 };
 
+type OperationalOrder = {
+  id: string;
+  title: string;
+  status: string;
+  type: string;
+  openedAt: Date;
+  finishedAt: Date | null;
+  laborHours: unknown;
+  costCenterId: string | null;
+  generator: {
+    id: string;
+    name: string;
+    client: {
+      id: string;
+      companyName: string;
+      tradeName: string | null;
+    };
+  };
+  contract: {
+    id: string;
+    code: string;
+    title: string | null;
+  } | null;
+  technician: {
+    user: { id: string; name: string; hourCost: unknown };
+  } | null;
+  materials: Array<{
+    id: string;
+    quantity: unknown;
+    unitCost: unknown;
+    appliedAt: Date | null;
+    catalogItem: { id: string; name: string; sku: string | null };
+  }>;
+  timeEntries: Array<{
+    transitMinutes: unknown;
+    workMinutes: unknown;
+    extraMinutes: unknown;
+    nightMinutes: unknown;
+    user: { hourCost: unknown };
+  }>;
+  receivableEntries: Array<{ netAmount: unknown; paidAmount: unknown }>;
+  commissions: Array<{ amount: unknown }>;
+};
+
 const metricKeys: Array<keyof CostMetrics> = [
   'orders',
   'hours',
@@ -269,7 +313,8 @@ export class OperationalCostsService {
         commissionByCenter.get(center.id) ?? 0,
         receivedByCenter.get(center.id) ?? 0,
       );
-      const client = center.client ?? center.contract?.client ?? center.generator?.client;
+      const client =
+        center.client ?? center.contract?.client ?? center.generator?.client;
       return {
         id: center.id,
         code: center.code,
@@ -319,7 +364,12 @@ export class OperationalCostsService {
     const contracts = new Map<string, DimensionRow>();
     for (const center of centerRows) {
       if (center.client) {
-        this.addDimension(clients, center.client.id, center.client.name, center);
+        this.addDimension(
+          clients,
+          center.client.id,
+          center.client.name,
+          center,
+        );
       }
       if (center.contract) {
         this.addDimension(
@@ -333,12 +383,7 @@ export class OperationalCostsService {
     }
     for (const order of orderRows) {
       if (order.costCenterId && centerIds.has(order.costCenterId)) continue;
-      this.addDimension(
-        clients,
-        order.client.id,
-        order.client.name,
-        order,
-      );
+      this.addDimension(clients, order.client.id, order.client.name, order);
       if (order.contract) {
         this.addDimension(
           contracts,
@@ -373,7 +418,7 @@ export class OperationalCostsService {
     };
   }
 
-  private orderMetrics(order: any) {
+  private orderMetrics(order: OperationalOrder) {
     let hours = 0;
     let transitHours = 0;
     let laborCost = 0;
@@ -395,22 +440,22 @@ export class OperationalCostsService {
     }
 
     const materialCost = order.materials
-      .filter((material: any) => material.appliedAt)
+      .filter((material) => material.appliedAt)
       .reduce(
-        (sum: number, material: any) =>
+        (sum, material) =>
           sum + Number(material.quantity) * Number(material.unitCost ?? 0),
         0,
       );
     const revenue = order.receivableEntries.reduce(
-      (sum: number, row: any) => sum + Number(row.netAmount),
+      (sum, row) => sum + Number(row.netAmount),
       0,
     );
     const receivedRevenue = order.receivableEntries.reduce(
-      (sum: number, row: any) => sum + Number(row.paidAmount),
+      (sum, row) => sum + Number(row.paidAmount),
       0,
     );
     const commissionCost = order.commissions.reduce(
-      (sum: number, row: any) => sum + Number(row.amount),
+      (sum, row) => sum + Number(row.amount),
       0,
     );
     const metrics = this.emptyMetrics();
@@ -436,7 +481,8 @@ export class OperationalCostsService {
       client: {
         id: order.generator.client.id,
         name:
-          order.generator.client.tradeName || order.generator.client.companyName,
+          order.generator.client.tradeName ||
+          order.generator.client.companyName,
       },
       generator: { id: order.generator.id, name: order.generator.name },
       technician: order.technician?.user
@@ -450,15 +496,14 @@ export class OperationalCostsService {
           }
         : null,
       materials: order.materials
-        .filter((material: any) => material.appliedAt)
-        .map((material: any) => ({
+        .filter((material) => material.appliedAt)
+        .map((material) => ({
           id: material.id,
           name: material.catalogItem.name,
           sku: material.catalogItem.sku,
           quantity: Number(material.quantity),
           unitCost: Number(material.unitCost ?? 0),
-          totalCost:
-            Number(material.quantity) * Number(material.unitCost ?? 0),
+          totalCost: Number(material.quantity) * Number(material.unitCost ?? 0),
         })),
       ...metrics,
     };
@@ -572,7 +617,9 @@ export class OperationalCostsService {
       throw new BadRequestException('Periodo de custos invalido.');
     }
     if (start > end) {
-      throw new BadRequestException('A data inicial deve ser anterior a final.');
+      throw new BadRequestException(
+        'A data inicial deve ser anterior a final.',
+      );
     }
     return { from: start, to: end };
   }

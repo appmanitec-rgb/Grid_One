@@ -1,5 +1,11 @@
 import { ManufacturerType } from '@prisma/client';
-import { IsBoolean, IsEmail, IsEnum, IsOptional, IsString } from 'class-validator';
+import {
+  IsBoolean,
+  IsEmail,
+  IsEnum,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class UpdateManufacturerDto {
   @IsString()

@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { DatabaseService } from '../../database/database.service';
 import { StudioService } from './studio.service';
 
 describe('StudioService commercial delivery 01', () => {
@@ -22,13 +23,13 @@ describe('StudioService commercial delivery 01', () => {
       systemAuditLog: { create: jest.fn() },
     };
     const prisma = {
-      $transaction: jest.fn(async (callback: (client: typeof tx) => unknown) =>
-        callback(tx),
+      $transaction: jest.fn((callback: (client: typeof tx) => unknown) =>
+        Promise.resolve(callback(tx)),
       ),
     };
     return {
       tx,
-      service: new StudioService(prisma as any),
+      service: new StudioService(prisma as unknown as DatabaseService),
     };
   }
 

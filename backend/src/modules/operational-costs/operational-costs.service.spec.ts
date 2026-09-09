@@ -100,24 +100,57 @@ describe('OperationalCostsService', () => {
         },
         generator: null,
         entries: [
-          { entryType: 'REVENUE', sourceType: 'ACCOUNTS_RECEIVABLE', sourceId: 'ar-1', amount: 500 },
-          { entryType: 'COST', sourceType: 'TIME_ENTRY', sourceId: 'time-1', amount: 100 },
-          { entryType: 'COST', sourceType: 'MAINTENANCE_ORDER_MATERIAL', sourceId: 'material-1', amount: 100 },
-          { entryType: 'EXPENSE', sourceType: 'ACCOUNTS_PAYABLE', sourceId: 'ap-1', amount: 50 },
-          { entryType: 'EXPENSE', sourceType: 'MANUAL', sourceId: 'manual-1', amount: 25 },
+          {
+            entryType: 'REVENUE',
+            sourceType: 'ACCOUNTS_RECEIVABLE',
+            sourceId: 'ar-1',
+            amount: 500,
+          },
+          {
+            entryType: 'COST',
+            sourceType: 'TIME_ENTRY',
+            sourceId: 'time-1',
+            amount: 100,
+          },
+          {
+            entryType: 'COST',
+            sourceType: 'MAINTENANCE_ORDER_MATERIAL',
+            sourceId: 'material-1',
+            amount: 100,
+          },
+          {
+            entryType: 'EXPENSE',
+            sourceType: 'ACCOUNTS_PAYABLE',
+            sourceId: 'ap-1',
+            amount: 50,
+          },
+          {
+            entryType: 'EXPENSE',
+            sourceType: 'MANUAL',
+            sourceId: 'manual-1',
+            amount: 25,
+          },
         ],
       },
     ]);
     database.commissionEntry.findMany.mockResolvedValue([
       {
-        id: 'commission-1', amount: 25, contractId: 'contract-1',
+        id: 'commission-1',
+        amount: 25,
+        contractId: 'contract-1',
         maintenanceOrderId: 'order-1',
         maintenanceOrder: { costCenterId: 'center-1' },
         contract: { costCenterId: 'center-1' },
       },
     ]);
     database.accountsReceivable.findMany.mockResolvedValue([
-      { id: 'ar-1', costCenterId: 'center-1', maintenanceOrderId: 'order-1', netAmount: 500, paidAmount: 300 },
+      {
+        id: 'ar-1',
+        costCenterId: 'center-1',
+        maintenanceOrderId: 'order-1',
+        netAmount: 500,
+        paidAmount: 300,
+      },
     ]);
     database.purchaseOrder.aggregate.mockResolvedValue({
       _count: { _all: 2 },

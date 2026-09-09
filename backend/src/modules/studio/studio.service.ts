@@ -146,10 +146,8 @@ function controlOptionDefinition(
         data: {
           group: config.group,
           type: config.type,
-          code: String(data.code || '')
-            .trim()
-            .toUpperCase(),
-          name: String(data.name || '').trim(),
+          code: studioString(data.code).trim().toUpperCase(),
+          name: studioString(data.name).trim(),
           description:
             typeof data.description === 'string'
               ? data.description.trim() || null
@@ -324,7 +322,7 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
       ],
     },
     create: (tx, data) => {
-      const name = String(data.name || '').trim();
+      const name = studioString(data.name).trim();
       if (!name) {
         throw new BadRequestException('Nome do fabricante e obrigatorio.');
       }
@@ -397,7 +395,7 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
       ],
     },
     create: (tx, data) => {
-      const name = String(data.name || '').trim();
+      const name = studioString(data.name).trim();
       if (!name) {
         throw new BadRequestException(
           'Nome da politica de preco e obrigatorio.',
@@ -785,10 +783,11 @@ export class StudioService {
           data[key] = null;
           continue;
         }
-        if (!allowed.includes(String(value))) {
+        const enumValue = studioString(value);
+        if (!allowed.includes(enumValue)) {
           throw new BadRequestException(`Valor invalido para ${key}.`);
         }
-        data[key] = String(value);
+        data[key] = enumValue;
       }
     }
 
@@ -801,10 +800,10 @@ export class StudioService {
     requireAll: boolean,
   ) {
     if (!(resource in CONTROL_OPTION_TYPES)) return;
-    if ((requireAll || 'code' in data) && !String(data.code || '').trim()) {
+    if ((requireAll || 'code' in data) && !studioString(data.code).trim()) {
       throw new BadRequestException('Codigo e obrigatorio.');
     }
-    if ((requireAll || 'name' in data) && !String(data.name || '').trim()) {
+    if ((requireAll || 'name' in data) && !studioString(data.name).trim()) {
       throw new BadRequestException('Nome e obrigatorio.');
     }
   }
@@ -819,6 +818,18 @@ export class StudioService {
     }
     return picked;
   }
+}
+
+function studioString(value: unknown) {
+  if (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint'
+  ) {
+    return String(value);
+  }
+  return '';
 }
 
 function validateCommercialGenerator(

@@ -78,7 +78,13 @@ const SUPPLIER_IMPORT_DEFINITION: ImportDefinition = {
     {
       key: 'companyName',
       label: 'Razao Social',
-      aliases: ['razao social', 'razão social', 'empresa', 'fornecedor', 'nome'],
+      aliases: [
+        'razao social',
+        'razão social',
+        'empresa',
+        'fornecedor',
+        'nome',
+      ],
       required: true,
       normalize: normalizeText,
     },
@@ -95,7 +101,7 @@ const SUPPLIER_IMPORT_DEFINITION: ImportDefinition = {
       required: true,
       normalize: normalizeDigits,
       validate: (value) => {
-        const cnpj = String(value || '');
+        const cnpj = primitiveString(value);
         if (!isValidCnpj(cnpj)) {
           return [
             {
@@ -115,9 +121,15 @@ const SUPPLIER_IMPORT_DEFINITION: ImportDefinition = {
       normalize: (value) => normalizeText(value)?.toLowerCase() ?? null,
       validate: (value) => {
         if (!value) return [];
-        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value))
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(primitiveString(value))
           ? []
-          : [{ code: 'INVALID_EMAIL', field: 'email', message: 'E-mail invalido.' }];
+          : [
+              {
+                code: 'INVALID_EMAIL',
+                field: 'email',
+                message: 'E-mail invalido.',
+              },
+            ];
       },
     },
     {
@@ -146,12 +158,18 @@ const SUPPLIER_IMPORT_DEFINITION: ImportDefinition = {
       key: 'state',
       label: 'Estado',
       aliases: ['estado', 'uf'],
-      normalize: (value) => normalizeText(value)?.toUpperCase().slice(0, 2) ?? null,
+      normalize: (value) =>
+        normalizeText(value)?.toUpperCase().slice(0, 2) ?? null,
     },
     {
       key: 'paymentTerm',
       label: 'Condicao de Pagamento',
-      aliases: ['condicao pagamento', 'condição pagamento', 'pagamento', 'prazo'],
+      aliases: [
+        'condicao pagamento',
+        'condição pagamento',
+        'pagamento',
+        'prazo',
+      ],
       normalize: normalizeText,
     },
   ],
@@ -213,7 +231,7 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
       required: true,
       normalize: normalizeDigits,
       validate: (value) => {
-        const document = String(value || '');
+        const document = primitiveString(value);
         if (!isValidBrazilDocument(document)) {
           return [
             {
@@ -245,14 +263,20 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
               {
                 code: 'MISSING_PHONE',
                 field: 'phone',
-                message: 'Telefone ausente. O cadastro sera criado com telefone padrao.',
+                message:
+                  'Telefone ausente. O cadastro sera criado com telefone padrao.',
               },
             ],
     },
     {
       key: 'address',
       label: 'Endereco resumido',
-      aliases: ['endereco', 'endereÃ§o', 'endereco completo', 'endereÃ§o completo'],
+      aliases: [
+        'endereco',
+        'endereÃ§o',
+        'endereco completo',
+        'endereÃ§o completo',
+      ],
       normalize: normalizeText,
     },
     {
@@ -263,7 +287,13 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
       validate: (value, row) =>
         value || row.billingCity || row.installationCity
           ? []
-          : [{ code: 'MISSING_CITY', field: 'city', message: 'Cidade obrigatoria.' }],
+          : [
+              {
+                code: 'MISSING_CITY',
+                field: 'city',
+                message: 'Cidade obrigatoria.',
+              },
+            ],
     },
     {
       key: 'state',
@@ -273,7 +303,13 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
       validate: (value, row) =>
         value || row.billingState || row.installationState
           ? []
-          : [{ code: 'MISSING_STATE', field: 'state', message: 'UF obrigatoria.' }],
+          : [
+              {
+                code: 'MISSING_STATE',
+                field: 'state',
+                message: 'UF obrigatoria.',
+              },
+            ],
     },
     {
       key: 'stateRegistration',
@@ -297,7 +333,12 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
     {
       key: 'preferences',
       label: 'Preferencias',
-      aliases: ['preferencias', 'preferÃªncias', 'observacoes', 'observaÃ§Ãµes'],
+      aliases: [
+        'preferencias',
+        'preferÃªncias',
+        'observacoes',
+        'observaÃ§Ãµes',
+      ],
       normalize: normalizeText,
     },
     {
@@ -309,13 +350,23 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
     {
       key: 'personType',
       label: 'Pessoa',
-      aliases: ['pessoa', 'tipo pessoa', 'fisica juridica', 'fÃ­sica jurÃ­dica'],
+      aliases: [
+        'pessoa',
+        'tipo pessoa',
+        'fisica juridica',
+        'fÃ­sica jurÃ­dica',
+      ],
       normalize: normalizePersonType,
     },
     {
       key: 'paymentTermDefault',
       label: 'Condicao Padrao',
-      aliases: ['condicao pagamento', 'condiÃ§Ã£o pagamento', 'pagamento', 'prazo'],
+      aliases: [
+        'condicao pagamento',
+        'condiÃ§Ã£o pagamento',
+        'pagamento',
+        'prazo',
+      ],
       normalize: normalizeText,
     },
     {
@@ -362,11 +413,17 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
     return new Set(clients.map((client) => client.cnpj));
   },
   createRecord: (tx, data) => {
-    const city = String(
-      data.city || data.billingCity || data.installationCity || '',
+    const city = (
+      nullableString(data.city) ||
+      nullableString(data.billingCity) ||
+      nullableString(data.installationCity) ||
+      ''
     ).trim();
-    const state = String(
-      data.state || data.billingState || data.installationState || '',
+    const state = (
+      nullableString(data.state) ||
+      nullableString(data.billingState) ||
+      nullableString(data.installationState) ||
+      ''
     )
       .trim()
       .toUpperCase()
@@ -377,7 +434,13 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
       nullableString(data.contact01Mobile) ||
       '-';
     const addresses = [
-      buildClientAddress(data, 'billing', ClientAddressType.BILLING, city, state),
+      buildClientAddress(
+        data,
+        'billing',
+        ClientAddressType.BILLING,
+        city,
+        state,
+      ),
       buildClientAddress(
         data,
         'installation',
@@ -385,10 +448,14 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
         city,
         state,
       ),
-    ].filter((address): address is NonNullable<typeof address> => Boolean(address));
+    ].filter((address): address is NonNullable<typeof address> =>
+      Boolean(address),
+    );
     const contacts = [1, 2, 3]
       .map((index) => buildClientContact(data, index))
-      .filter((contact): contact is NonNullable<typeof contact> => Boolean(contact));
+      .filter((contact): contact is NonNullable<typeof contact> =>
+        Boolean(contact),
+      );
 
     return tx.client.create({
       data: {
@@ -405,7 +472,8 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
         cnae: nullableString(data.cnae),
         segment: nullableString(data.segment),
         preferences: nullableString(data.preferences),
-        clientType: (data.clientType as ClientType | undefined) ?? ClientType.NO_CONTRACT,
+        clientType:
+          (data.clientType as ClientType | undefined) ?? ClientType.NO_CONTRACT,
         personType:
           (data.personType as ClientPersonType | undefined) ??
           ClientPersonType.LEGAL_ENTITY,
@@ -442,7 +510,11 @@ export class StudioImportService {
     }
 
     const parsedRows = parseCsv(input.csv);
-    const analyzed = await this.analyzeRows(definition, parsedRows, input.columnMapping);
+    const analyzed = await this.analyzeRows(
+      definition,
+      parsedRows,
+      input.columnMapping,
+    );
     const summary = summarizeRows(analyzed);
 
     const batch = await this.prisma.$transaction(async (tx) => {
@@ -497,7 +569,9 @@ export class StudioImportService {
     });
     if (!batch) throw new NotFoundException('Importacao nao encontrada.');
     if (batch.status !== StudioImportBatchStatus.PREVIEW) {
-      throw new BadRequestException('Esta importacao nao esta pronta para executar.');
+      throw new BadRequestException(
+        'Esta importacao nao esta pronta para executar.',
+      );
     }
 
     const definition = this.getDefinition(batch.resource);
@@ -527,7 +601,7 @@ export class StudioImportService {
 
       let createdRows = 0;
       let failedRows = 0;
-      let skippedRows = analyzed.filter(
+      const skippedRows = analyzed.filter(
         (row) =>
           row.status === StudioImportRowStatus.DUPLICATE ||
           row.status === StudioImportRowStatus.INVALID,
@@ -594,8 +668,9 @@ export class StudioImportService {
         data: {
           status: finalStatus,
           totalRows: analyzed.length,
-          validRows: analyzed.filter((row) => row.status === StudioImportRowStatus.VALID)
-            .length,
+          validRows: analyzed.filter(
+            (row) => row.status === StudioImportRowStatus.VALID,
+          ).length,
           warningRows: analyzed.filter(
             (row) => row.status === StudioImportRowStatus.WARNING,
           ).length,
@@ -654,7 +729,11 @@ export class StudioImportService {
     const normalizedRows = parsedRows
       .filter((row) => !isEmptyRow(row.rawData))
       .map((row) => {
-        const normalizedData = normalizeRow(definition, row.rawData, columnMapping);
+        const normalizedData = normalizeRow(
+          definition,
+          row.rawData,
+          columnMapping,
+        );
         const errors = validateRequired(definition, normalizedData);
         const warnings: ImportIssue[] = [];
 
@@ -679,14 +758,16 @@ export class StudioImportService {
 
     const seen = new Set<string>();
     const uniqueValues = normalizedRows
-      .map((row) => String(row.normalizedData[definition.uniqueField] || ''))
+      .map((row) => primitiveString(row.normalizedData[definition.uniqueField]))
       .filter(Boolean);
     const existing = await this.prisma.$transaction((tx) =>
       definition.findDuplicates(tx, uniqueValues),
     );
 
     return normalizedRows.map((row) => {
-      const uniqueValue = String(row.normalizedData[definition.uniqueField] || '');
+      const uniqueValue = primitiveString(
+        row.normalizedData[definition.uniqueField],
+      );
       const errors = [...row.errors];
       const warnings = [...row.warnings];
 
@@ -701,14 +782,13 @@ export class StudioImportService {
         seen.add(uniqueValue);
       }
 
-      const status =
-        errors.some((issue) => issue.code === 'DUPLICATE_RECORD')
-          ? StudioImportRowStatus.DUPLICATE
-          : errors.length > 0
-            ? StudioImportRowStatus.INVALID
-            : warnings.length > 0
-              ? StudioImportRowStatus.WARNING
-              : StudioImportRowStatus.VALID;
+      const status = errors.some((issue) => issue.code === 'DUPLICATE_RECORD')
+        ? StudioImportRowStatus.DUPLICATE
+        : errors.length > 0
+          ? StudioImportRowStatus.INVALID
+          : warnings.length > 0
+            ? StudioImportRowStatus.WARNING
+            : StudioImportRowStatus.VALID;
 
       return { ...row, errors, warnings, status };
     });
@@ -717,7 +797,9 @@ export class StudioImportService {
   private getDefinition(resource: string) {
     const definition = IMPORT_DEFINITIONS[resource];
     if (!definition) {
-      throw new NotFoundException('Importador nao registrado para este recurso.');
+      throw new NotFoundException(
+        'Importador nao registrado para este recurso.',
+      );
     }
     return definition;
   }
@@ -729,7 +811,9 @@ export class StudioImportService {
         'Seu perfil nao possui permissao para importar pelo Studio.',
       );
     }
-    if (!hasPermission(actor.accessPolicy, definition.resourceCreatePermission)) {
+    if (
+      !hasPermission(actor.accessPolicy, definition.resourceCreatePermission)
+    ) {
       throw new ForbiddenException(
         'Seu perfil nao possui permissao para criar registros deste recurso.',
       );
@@ -737,7 +821,10 @@ export class StudioImportService {
   }
 }
 
-function hasPermission(accessPolicy: Record<string, any> | undefined, permission: string) {
+function hasPermission(
+  accessPolicy: Record<string, any> | undefined,
+  permission: string,
+) {
   const [sectionKey, actionKey] = permission.split('.');
   return accessPolicy?.[sectionKey]?.[actionKey] === true;
 }
@@ -764,7 +851,7 @@ function normalizeRow(
           .map(comparableHeader)
           .includes(candidate.comparable),
       )?.original;
-    const rawValue = header ? rawData[header] ?? '' : '';
+    const rawValue = header ? (rawData[header] ?? '') : '';
     normalized[field.key] = field.normalize
       ? field.normalize(rawValue)
       : normalizeText(rawValue);
@@ -773,12 +860,15 @@ function normalizeRow(
   return normalized;
 }
 
-function validateRequired(definition: ImportDefinition, row: Record<string, unknown>) {
+function validateRequired(
+  definition: ImportDefinition,
+  row: Record<string, unknown>,
+) {
   const errors: ImportIssue[] = [];
   for (const field of definition.fields) {
     if (!field.required) continue;
     const value = row[field.key];
-    if (value === null || value === undefined || String(value).trim() === '') {
+    if (primitiveString(value).trim() === '') {
       errors.push({
         code: 'REQUIRED_FIELD',
         field: field.key,
@@ -798,30 +888,40 @@ function summarizeRows(
 ) {
   return {
     total: rows.length,
-    valid: rows.filter((row) => row.status === StudioImportRowStatus.VALID).length,
+    valid: rows.filter((row) => row.status === StudioImportRowStatus.VALID)
+      .length,
     warnings: rows.filter((row) => row.status === StudioImportRowStatus.WARNING)
       .length,
     invalid: rows.filter((row) => row.status === StudioImportRowStatus.INVALID)
       .length,
-    duplicates: rows.filter((row) => row.status === StudioImportRowStatus.DUPLICATE)
-      .length,
+    duplicates: rows.filter(
+      (row) => row.status === StudioImportRowStatus.DUPLICATE,
+    ).length,
   };
 }
 
 function parseCsv(text: string) {
-  const clean = String(text || '').replace(/^\uFEFF/, '').trim();
+  const clean = String(text || '')
+    .replace(/^\uFEFF/, '')
+    .trim();
   if (!clean) throw new BadRequestException('CSV vazio.');
   const lines = clean.split(/\r?\n/).filter((line) => line.trim());
   const delimiter = detectDelimiter(lines[0]);
-  const headers = splitCsvLine(lines[0], delimiter).map((header) => header.trim());
-  if (headers.length === 0) throw new BadRequestException('Cabecalho do CSV ausente.');
+  const headers = splitCsvLine(lines[0], delimiter).map((header) =>
+    header.trim(),
+  );
+  if (headers.length === 0)
+    throw new BadRequestException('Cabecalho do CSV ausente.');
 
   return lines.slice(1).map((line, index) => {
     const values = splitCsvLine(line, delimiter);
-    const rawData = headers.reduce<Record<string, string>>((row, header, headerIndex) => {
-      row[header] = values[headerIndex]?.trim() ?? '';
-      return row;
-    }, {});
+    const rawData = headers.reduce<Record<string, string>>(
+      (row, header, headerIndex) => {
+        row[header] = values[headerIndex]?.trim() ?? '';
+        return row;
+      },
+      {},
+    );
     return { rowNumber: index + 2, rawData };
   });
 }
@@ -934,7 +1034,7 @@ function normalizePersonType(value: string) {
 function validateOptionalEmail(field: string) {
   return (value: unknown) => {
     if (!value) return [];
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value))
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(primitiveString(value))
       ? []
       : [{ code: 'INVALID_EMAIL', field, message: 'E-mail invalido.' }];
   };
@@ -960,7 +1060,11 @@ function clientAddressFields(
     {
       key: `${prefix}Number`,
       label: `Numero ${label}`,
-      aliases: [`numero ${aliasPrefix}`, `n ${aliasPrefix}`, `${aliasPrefix} numero`],
+      aliases: [
+        `numero ${aliasPrefix}`,
+        `n ${aliasPrefix}`,
+        `${aliasPrefix} numero`,
+      ],
       normalize: normalizeText,
     },
     {
@@ -972,7 +1076,11 @@ function clientAddressFields(
     {
       key: `${prefix}District`,
       label: `Bairro ${label}`,
-      aliases: [`bairro ${aliasPrefix}`, `${aliasPrefix} bairro`, `lote ${aliasPrefix}`],
+      aliases: [
+        `bairro ${aliasPrefix}`,
+        `${aliasPrefix} bairro`,
+        `lote ${aliasPrefix}`,
+      ],
       normalize: normalizeText,
     },
     {
@@ -990,7 +1098,11 @@ function clientAddressFields(
     {
       key: `${prefix}State`,
       label: `UF ${label}`,
-      aliases: [`uf ${aliasPrefix}`, `estado ${aliasPrefix}`, `${aliasPrefix} uf`],
+      aliases: [
+        `uf ${aliasPrefix}`,
+        `estado ${aliasPrefix}`,
+        `${aliasPrefix} uf`,
+      ],
       normalize: normalizeUf,
     },
   ];
@@ -1002,7 +1114,11 @@ function clientContactFields(index: 1 | 2 | 3): ImportFieldDefinition[] {
     {
       key: `contact${padded}Name`,
       label: `Contato ${padded}`,
-      aliases: [`contato ${padded}`, `nome contato ${padded}`, `contato ${index}`],
+      aliases: [
+        `contato ${padded}`,
+        `nome contato ${padded}`,
+        `contato ${index}`,
+      ],
       normalize: normalizeText,
     },
     {
@@ -1014,7 +1130,11 @@ function clientContactFields(index: 1 | 2 | 3): ImportFieldDefinition[] {
     {
       key: `contact${padded}Phone`,
       label: `Telefone ${padded}`,
-      aliases: [`telefone ${padded}`, `tel ${padded}`, `telefone contato ${padded}`],
+      aliases: [
+        `telefone ${padded}`,
+        `tel ${padded}`,
+        `telefone contato ${padded}`,
+      ],
       normalize: normalizeText,
     },
     {
@@ -1026,7 +1146,11 @@ function clientContactFields(index: 1 | 2 | 3): ImportFieldDefinition[] {
     {
       key: `contact${padded}Email`,
       label: `E-mail ${padded}`,
-      aliases: [`email ${padded}`, `e-mail ${padded}`, `email contato ${padded}`],
+      aliases: [
+        `email ${padded}`,
+        `e-mail ${padded}`,
+        `email contato ${padded}`,
+      ],
       normalize: (value) => normalizeText(value)?.toLowerCase() ?? null,
       validate: validateOptionalEmail(`contact${padded}Email`),
     },
@@ -1072,13 +1196,27 @@ function buildClientContact(data: Record<string, unknown>, index: number) {
 }
 
 function nullableString(value: unknown) {
-  const text = String(value ?? '').trim();
+  const text = primitiveString(value).trim();
   return text || undefined;
+}
+
+function primitiveString(value: unknown) {
+  if (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint'
+  ) {
+    return String(value);
+  }
+  return '';
 }
 
 function isValidBrazilDocument(value: string) {
   const digits = normalizeDigits(value);
-  return (digits.length === 11 || digits.length === 14) && !/^(\d)\1+$/.test(digits);
+  return (
+    (digits.length === 11 || digits.length === 14) && !/^(\d)\1+$/.test(digits)
+  );
 }
 
 function isValidCnpj(value: string) {
@@ -1094,7 +1232,13 @@ function isValidCnpj(value: string) {
     return rest < 2 ? 0 : 11 - rest;
   };
 
-  const first = calculateDigit(cnpj.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
-  const second = calculateDigit(cnpj.slice(0, 13), [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  const first = calculateDigit(
+    cnpj.slice(0, 12),
+    [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2],
+  );
+  const second = calculateDigit(
+    cnpj.slice(0, 13),
+    [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2],
+  );
   return first === Number(cnpj[12]) && second === Number(cnpj[13]);
 }

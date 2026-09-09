@@ -56,7 +56,9 @@ export class StudioUtilizationService {
   }
 
   async overview(inputDays?: number) {
-    const days = [7, 14, 30].includes(Number(inputDays)) ? Number(inputDays) : 14;
+    const days = [7, 14, 30].includes(Number(inputDays))
+      ? Number(inputDays)
+      : 14;
     const now = new Date();
     const onlineSince = new Date(now.getTime() - 5 * 60_000);
     const periodStart = new Date(now.getTime() - days * 86_400_000);
@@ -137,9 +139,15 @@ export class StudioUtilizationService {
 
     const userIds = new Set<string>();
     sessions.forEach((item) => userIds.add(item.userId));
-    actionGroups.forEach((item) => item.actorUserId && userIds.add(item.actorUserId));
-    documentGroups.forEach((item) => item.createdByUserId && userIds.add(item.createdByUserId));
-    evidenceGroups.forEach((item) => item.uploadedByUserId && userIds.add(item.uploadedByUserId));
+    actionGroups.forEach(
+      (item) => item.actorUserId && userIds.add(item.actorUserId),
+    );
+    documentGroups.forEach(
+      (item) => item.createdByUserId && userIds.add(item.createdByUserId),
+    );
+    evidenceGroups.forEach(
+      (item) => item.uploadedByUserId && userIds.add(item.uploadedByUserId),
+    );
     const users = userIds.size
       ? await this.prisma.user.findMany({
           where: { id: { in: [...userIds] } },
@@ -191,10 +199,13 @@ export class StudioUtilizationService {
           role: user.role,
           department: user.department,
           company:
-            user.linkedClient?.tradeName || user.linkedClient?.companyName || null,
+            user.linkedClient?.tradeName ||
+            user.linkedClient?.companyName ||
+            null,
           online: currentSessions.length > 0,
           sessions: currentSessions.length,
-          visibleSessions: currentSessions.filter((item) => item.visible).length,
+          visibleSessions: currentSessions.filter((item) => item.visible)
+            .length,
           currentPath: currentSessions[0]?.currentPath || null,
           lastSeenAt: currentSessions[0]?.lastSeenAt.toISOString() || null,
           actions: actionsByUser.get(user.id) || 0,
@@ -229,15 +240,25 @@ export class StudioUtilizationService {
         onlineUsers: new Set(sessions.map((item) => item.userId)).size,
         onlineSessions: sessions.length,
         internalOnline: new Set(
-          sessions.filter((item) => item.user.role !== UserRole.CLIENT).map((item) => item.userId),
+          sessions
+            .filter((item) => item.user.role !== UserRole.CLIENT)
+            .map((item) => item.userId),
         ).size,
         clientOnline: new Set(
-          sessions.filter((item) => item.user.role === UserRole.CLIENT).map((item) => item.userId),
+          sessions
+            .filter((item) => item.user.role === UserRole.CLIENT)
+            .map((item) => item.userId),
         ).size,
         registeredInternal,
         registeredClients,
-        actions: actionGroups.reduce((total, item) => total + item._count._all, 0),
-        attributedStorageBytes: userRows.reduce((total, item) => total + item.storageBytes, 0),
+        actions: actionGroups.reduce(
+          (total, item) => total + item._count._all,
+          0,
+        ),
+        attributedStorageBytes: userRows.reduce(
+          (total, item) => total + item.storageBytes,
+          0,
+        ),
       },
       server: {
         uptimeSeconds: Math.round(process.uptime()),
@@ -250,7 +271,10 @@ export class StudioUtilizationService {
         systemMemoryTotalBytes: systemMemoryTotal,
         systemMemoryUsedBytes: systemMemoryTotal - systemMemoryFree,
         systemMemoryPercent: Number(
-          (((systemMemoryTotal - systemMemoryFree) / systemMemoryTotal) * 100).toFixed(1),
+          (
+            ((systemMemoryTotal - systemMemoryFree) / systemMemoryTotal) *
+            100
+          ).toFixed(1),
         ),
         databaseBytes: Number(databaseSizeRows[0]?.bytes || 0),
         storage,
@@ -262,7 +286,8 @@ export class StudioUtilizationService {
       })),
       users: userRows,
       notes: {
-        online: 'Uma sessao e considerada conectada quando envia atividade nos ultimos 5 minutos.',
+        online:
+          'Uma sessao e considerada conectada quando envia atividade nos ultimos 5 minutos.',
         memory:
           'RAM por usuario e uma estimativa proporcional das sessoes ativas. Node.js, banco e cache compartilham memoria entre todos.',
         storage:
@@ -276,7 +301,10 @@ export class StudioUtilizationService {
     const nextAt = process.hrtime.bigint();
     const elapsedMicros = Number(nextAt - this.previousCpuAt) / 1000;
     const usedMicros =
-      nextCpu.user - this.previousCpu.user + nextCpu.system - this.previousCpu.system;
+      nextCpu.user -
+      this.previousCpu.user +
+      nextCpu.system -
+      this.previousCpu.system;
     this.previousCpu = nextCpu;
     this.previousCpuAt = nextAt;
     if (elapsedMicros <= 0) return 0;
@@ -295,9 +323,17 @@ export class StudioUtilizationService {
   }
 
   private async storageStatus() {
-    const driver = (this.config.get<string>('FILE_STORAGE_DRIVER') || 'local').toLowerCase();
+    const driver = (
+      this.config.get<string>('FILE_STORAGE_DRIVER') || 'local'
+    ).toLowerCase();
     if (driver !== 'local') {
-      return { driver, external: true, usedBytes: null, diskTotalBytes: null, diskFreeBytes: null };
+      return {
+        driver,
+        external: true,
+        usedBytes: null,
+        diskTotalBytes: null,
+        diskFreeBytes: null,
+      };
     }
     const root = resolve(
       this.config.get<string>('FILE_STORAGE_LOCAL_PATH') ||
@@ -317,7 +353,13 @@ export class StudioUtilizationService {
         diskFreeBytes: fileSystem.bavail * fileSystem.bsize,
       };
     } catch {
-      return { driver, external: false, usedBytes: null, diskTotalBytes: null, diskFreeBytes: null };
+      return {
+        driver,
+        external: false,
+        usedBytes: null,
+        diskTotalBytes: null,
+        diskFreeBytes: null,
+      };
     }
   }
 

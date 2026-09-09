@@ -119,12 +119,7 @@ export class UsersService {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(createUserDto.password, salt);
 
-    const {
-      accessPolicy,
-      role,
-      managerId,
-      kpiTargetJson,
-    } = createUserDto;
+    const { accessPolicy, role, managerId, kpiTargetJson } = createUserDto;
     const userData = { ...createUserDto } as Partial<CreateUserDto>;
     delete userData.password;
     delete userData.accessPolicy;
@@ -137,11 +132,7 @@ export class UsersService {
     const createData: Prisma.UserUncheckedCreateInput = {
       ...(userData as Omit<
         CreateUserDto,
-        | 'password'
-        | 'accessPolicy'
-        | 'role'
-        | 'managerId'
-        | 'technicianProfile'
+        'password' | 'accessPolicy' | 'role' | 'managerId' | 'technicianProfile'
       >),
       email: normalizedEmail,
       role,

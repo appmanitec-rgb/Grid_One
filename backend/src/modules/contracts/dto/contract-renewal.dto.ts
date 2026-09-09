@@ -1,7 +1,4 @@
-import {
-  ContractRenewalStatus,
-  PartsCoverageType,
-} from '@prisma/client';
+import { ContractRenewalStatus, PartsCoverageType } from '@prisma/client';
 import {
   IsDateString,
   IsEnum,

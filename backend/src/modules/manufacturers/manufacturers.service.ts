@@ -30,8 +30,11 @@ export class ManufacturersService {
   }
 
   async findOne(id: string) {
-    const manufacturer = await this.prisma.manufacturer.findUnique({ where: { id } });
-    if (!manufacturer) throw new NotFoundException('Fabricante nao encontrado.');
+    const manufacturer = await this.prisma.manufacturer.findUnique({
+      where: { id },
+    });
+    if (!manufacturer)
+      throw new NotFoundException('Fabricante nao encontrado.');
     return manufacturer;
   }
 
@@ -39,7 +42,8 @@ export class ManufacturersService {
     const current = await this.findOne(id);
     const data = this.normalizeInput(dto, false);
     const nextName = (data.name as string | undefined) ?? current.name;
-    const nextType = (data.type as ManufacturerType | undefined) ?? current.type;
+    const nextType =
+      (data.type as ManufacturerType | undefined) ?? current.type;
 
     await this.assertUnique(nextName, nextType, id);
 
@@ -57,8 +61,13 @@ export class ManufacturersService {
     });
   }
 
-  private async assertUnique(name: string, type: ManufacturerType, ignoredId?: string) {
-    if (!name) throw new BadRequestException('Nome do fabricante e obrigatorio.');
+  private async assertUnique(
+    name: string,
+    type: ManufacturerType,
+    ignoredId?: string,
+  ) {
+    if (!name)
+      throw new BadRequestException('Nome do fabricante e obrigatorio.');
 
     const exists = await this.prisma.manufacturer.findUnique({
       where: { type_name: { type, name } },
@@ -73,21 +82,29 @@ export class ManufacturersService {
   private normalizeInput(
     dto: CreateManufacturerDto | UpdateManufacturerDto,
     requireName: boolean,
-  ): Prisma.ManufacturerUncheckedCreateInput | Prisma.ManufacturerUncheckedUpdateInput {
+  ):
+    | Prisma.ManufacturerUncheckedCreateInput
+    | Prisma.ManufacturerUncheckedUpdateInput {
     const name = dto.name?.trim();
-    if (requireName && !name) throw new BadRequestException('Nome do fabricante e obrigatorio.');
+    if (requireName && !name)
+      throw new BadRequestException('Nome do fabricante e obrigatorio.');
 
     const data: Record<string, unknown> = {};
     if (dto.name !== undefined) data.name = name || null;
     if (dto.type !== undefined) data.type = dto.type;
     if (dto.country !== undefined) data.country = dto.country?.trim() || null;
     if (dto.website !== undefined) data.website = dto.website?.trim() || null;
-    if (dto.supportPhone !== undefined) data.supportPhone = dto.supportPhone?.trim() || null;
-    if (dto.supportEmail !== undefined) data.supportEmail = dto.supportEmail?.trim() || null;
+    if (dto.supportPhone !== undefined)
+      data.supportPhone = dto.supportPhone?.trim() || null;
+    if (dto.supportEmail !== undefined)
+      data.supportEmail = dto.supportEmail?.trim() || null;
     if (dto.notes !== undefined) data.notes = dto.notes?.trim() || null;
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
-    if (requireName && data.type === undefined) data.type = ManufacturerType.OTHER;
+    if (requireName && data.type === undefined)
+      data.type = ManufacturerType.OTHER;
 
-    return data as Prisma.ManufacturerUncheckedCreateInput | Prisma.ManufacturerUncheckedUpdateInput;
+    return data as
+      | Prisma.ManufacturerUncheckedCreateInput
+      | Prisma.ManufacturerUncheckedUpdateInput;
   }
 }
