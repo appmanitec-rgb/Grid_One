@@ -1,12 +1,21 @@
 "use client";
 
-import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
 import { getAccessFromToken } from "@/lib/access";
 import { loadControlOptions, optionLabel, type ControlOption } from "@/lib/control-options";
+import { CatalogSearchField, type CatalogSearchItem } from "../../components/CatalogSearchField";
+import { confirmDeletion } from "@/lib/confirm-action";
 
-type ServiceGroup = "TOF" | "TM" | "TB" | "TMA" | "OUTROS";
+type ServiceGroup =
+  | "TBC"
+  | "TOF"
+  | "TROCA_MANGUEIRAS"
+  | "ARREFECIMENTO"
+  | "TM"
+  | "TB"
+  | "TMA"
+  | "OUTROS";
 type MaintenanceCategory =
   | "OIL"
   | "FILTER"
@@ -20,7 +29,7 @@ type MaintenanceCategory =
   | "OTHER";
 type IntervalUnit = "DAYS" | "MONTHS" | "YEARS";
 
-type CatalogItem = { id: string; name: string; type: string; basePrice: number };
+type CatalogItem = CatalogSearchItem & { type?: string | null; basePrice?: number | null };
 type ManufacturerRow = {
   id: string;
   name: string;
@@ -101,7 +110,16 @@ type ModelForm = {
   >;
 };
 
-const GROUPS: ServiceGroup[] = ["TOF", "TM", "TB", "TMA", "OUTROS"];
+const GROUPS: Array<{ value: ServiceGroup; label: string }> = [
+  { value: "TBC", label: "TBC - bateria e carregador" },
+  { value: "TOF", label: "TOF - troca de oleo e filtros" },
+  { value: "TROCA_MANGUEIRAS", label: "Troca de mangueiras" },
+  { value: "ARREFECIMENTO", label: "Sistema de arrefecimento" },
+  { value: "TM", label: "TM" },
+  { value: "TB", label: "TB" },
+  { value: "TMA", label: "TMA" },
+  { value: "OUTROS", label: "Outros" },
+];
 const CATEGORY_OPTIONS: Array<{ value: MaintenanceCategory; label: string }> = [
   { value: "OIL", label: "Oleo" },
   { value: "FILTER", label: "Filtro" },
@@ -235,14 +253,26 @@ export default function EquipmentModelsPage() {
   async function load() {
     setLoading(true);
     try {
-      const [catalogRes, modelsRes, manufacturersRes, options] = await Promise.all([
-        apiFetch("/catalogs"),
+      const [modelsRes, manufacturersRes, options] = await Promise.all([
         apiFetch("/generators/models"),
         apiFetch("/manufacturers"),
         loadControlOptions(["EQUIPMENT_APPLICATION", "MAINTENANCE_TEMPLATE_CATEGORY"]),
       ]);
-      if (catalogRes.ok) setCatalog((await catalogRes.json()) as CatalogItem[]);
-      if (modelsRes.ok) setModels((await modelsRes.json()) as ModelRow[]);
+      if (modelsRes.ok) {
+        const payload = (await modelsRes.json()) as ModelRow[];
+        setModels(payload);
+        setCatalog(
+          Array.from(
+            new Map(
+              payload
+                .flatMap((model) => model.baseItems || [])
+                .map((item) => item.catalogItem)
+                .filter(Boolean)
+                .map((item) => [item.id, item]),
+            ).values(),
+          ),
+        );
+      }
       if (manufacturersRes.ok) {
         const payload = (await manufacturersRes.json()) as ManufacturerRow[];
         setManufacturers(
@@ -300,6 +330,7 @@ export default function EquipmentModelsPage() {
   }
 
   function removeBaseItem(index: number) {
+    if (!confirmDeletion("este item base do modelo")) return;
     updateForm({ baseItems: form.baseItems.filter((_, i) => i !== index) });
   }
 
@@ -338,6 +369,7 @@ export default function EquipmentModelsPage() {
     const item = form.maintenanceTemplates[index];
     if (!item) return;
     if (!item.id) {
+      if (!confirmDeletion("esta recomendacao de manutencao")) return;
       updateForm({
         maintenanceTemplates: form.maintenanceTemplates.filter((_, i) => i !== index),
       });
@@ -355,6 +387,16 @@ export default function EquipmentModelsPage() {
       const detail = res.ok ? ((await res.json()) as ModelRow) : model;
       setEditingId(detail.id);
       setForm(toForm(detail));
+      setCatalog((current) =>
+        Array.from(
+          new Map(
+            [
+              ...current,
+              ...(detail.baseItems || []).map((item) => item.catalogItem),
+            ].map((item) => [item.id, item]),
+          ).values(),
+        ),
+      );
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
       setEditingId(model.id);
@@ -445,11 +487,6 @@ export default function EquipmentModelsPage() {
       setSaving(false);
     }
   }
-
-  const catalogOptions = useMemo(
-    () => [...catalog].sort((a, b) => a.name.localeCompare(b.name)),
-    [catalog],
-  );
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
@@ -657,14 +694,17 @@ export default function EquipmentModelsPage() {
               <div className="space-y-2">
                 {form.baseItems.map((item, idx) => (
                   <div key={idx} className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 p-3 md:grid-cols-4">
-                    <select value={item.catalogItemId} onChange={(e) => updateBaseItem(idx, { catalogItemId: e.target.value })} className={INPUT_CLASS}>
-                      <option value="">Item de catalogo</option>
-                      {catalogOptions.map((opt) => (
-                        <option key={opt.id} value={opt.id}>{opt.name}</option>
-                      ))}
-                    </select>
+                    <CatalogSearchField
+                      value={item.catalogItemId}
+                      selectedItem={catalog.find((candidate) => candidate.id === item.catalogItemId)}
+                      onChange={(catalogItemId, selected) => {
+                        updateBaseItem(idx, { catalogItemId });
+                        if (selected) setCatalog((current) => current.some((candidate) => candidate.id === selected.id) ? current : [...current, selected]);
+                      }}
+                      placeholder="Buscar item no catalogo"
+                    />
                     <select value={item.serviceGroup} onChange={(e) => updateBaseItem(idx, { serviceGroup: e.target.value as ServiceGroup })} className={INPUT_CLASS}>
-                      {GROUPS.map((group) => <option key={group} value={group}>{group}</option>)}
+                      {GROUPS.map((group) => <option key={group.value} value={group.value}>{group.label}</option>)}
                     </select>
                     <input type="number" min={1} value={item.defaultQuantity} onChange={(e) => updateBaseItem(idx, { defaultQuantity: Number(e.target.value || 1) })} className={INPUT_CLASS} />
                     <button type="button" onClick={() => removeBaseItem(idx)} className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 font-semibold text-red-700 hover:bg-red-100">
@@ -764,7 +804,7 @@ export default function EquipmentModelsPage() {
                             onClick={() => void startEdit(model)}
                             className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
                           >
-                            Editar
+                            Abrir cadastro
                           </button>
                         ) : (
                           <span className="text-xs text-slate-500">Somente leitura</span>

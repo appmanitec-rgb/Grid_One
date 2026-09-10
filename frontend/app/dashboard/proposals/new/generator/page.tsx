@@ -11,6 +11,10 @@ import {
   SectionCard,
   StatusBanner,
 } from "../../../components/DashboardPageKit";
+import OperationalExpensesEditor, {
+  operationalExpensesTotal,
+  type OperationalExpenseSelection,
+} from "../../OperationalExpensesEditor";
 
 type ClientOption = {
   id: string;
@@ -161,6 +165,9 @@ export default function GeneratorProposalWizardPage() {
   const [discountPercent, setDiscountPercent] = useState("0");
   const [externalNotes, setExternalNotes] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
+  const [operationalExpenses, setOperationalExpenses] = useState<
+    OperationalExpenseSelection[]
+  >([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -275,7 +282,7 @@ export default function GeneratorProposalWizardPage() {
     [inspectionId, linkedOpportunity],
   );
 
-  const subtotal = useMemo(() => {
+  const itemsSubtotal = useMemo(() => {
     const generatorTotal =
       Number(generatorQuantity || 0) *
       Number(selectedGenerator?.commercialPrice || 0);
@@ -287,6 +294,8 @@ export default function GeneratorProposalWizardPage() {
         generatorTotal,
       );
   }, [additionalItems, generatorQuantity, selectedGenerator]);
+  const expensesTotal = operationalExpensesTotal(operationalExpenses);
+  const subtotal = itemsSubtotal + expensesTotal;
   const discountValue = subtotal * Math.min(100, Math.max(0, Number(discountPercent || 0))) / 100;
   const total = subtotal - discountValue;
 
@@ -481,6 +490,12 @@ export default function GeneratorProposalWizardPage() {
           internalNotes: internalNotes || undefined,
           externalNotes: externalNotes || undefined,
           discount: discountValue,
+          operationalExpenses: operationalExpenses
+            .filter((item) => item.quantity > 0)
+            .map((item) => ({
+              expenseType: item.expenseType,
+              quantity: item.quantity,
+            })),
           items,
         }),
       });
@@ -679,6 +694,12 @@ export default function GeneratorProposalWizardPage() {
             <Field label="Observacoes para o cliente"><textarea className={INPUT_CLASS} rows={4} value={externalNotes} onChange={(event) => setExternalNotes(event.target.value)} /></Field>
             <Field label="Observacoes internas"><textarea className={INPUT_CLASS} rows={4} value={internalNotes} onChange={(event) => setInternalNotes(event.target.value)} /></Field>
           </div>
+          <div className="mt-6">
+            <OperationalExpensesEditor
+              value={operationalExpenses}
+              onChange={setOperationalExpenses}
+            />
+          </div>
         </SectionCard>
       ) : null}
 
@@ -692,6 +713,7 @@ export default function GeneratorProposalWizardPage() {
             <Summary label="Instalacao" value={includeInstallation ? "Incluida" : "Nao incluida"} />
             <Summary label="Pagamento" value={paymentTerm} />
             <Summary label="Prazo" value={deliveryLeadTimeDays || String(selectedGenerator?.leadTimeDays ?? "Sob consulta")} />
+            <Summary label="Despesas operacionais" value={money(expensesTotal)} />
             <Summary label="Valor final" value={money(total)} />
           </div>
           {recommendation?.requiresEngineeringReview ? <div className="mt-5"><StatusBanner tone="amber">A proposta sera criada em rascunho com recomendacao de validacao tecnica.</StatusBanner></div> : null}

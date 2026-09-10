@@ -47,6 +47,15 @@ type Proposal = {
   postSaleConvertedAt?: string | null;
   commercialSnapshot?: { version?: number; capturedAt?: string } | null;
   totalValue: number;
+  operationalExpensesTotal?: number | null;
+  operationalExpenses?: Array<{
+    expenseType: string;
+    label: string;
+    unitLabel: string;
+    quantity: number;
+    unitPrice: number;
+    total: number;
+  }>;
   validUntil?: string | null;
   paymentTerm?: string | null;
   deliveryLeadTimeDays?: number | null;
@@ -1115,6 +1124,54 @@ export default function ProposalDetailPage() {
           ) : null}
         </div>
       </SectionCard>
+
+      {!isClient && proposal.operationalExpenses?.length ? (
+        <SectionCard
+          eyebrow="Uso interno"
+          title="Despesas operacionais"
+          description="Composicao completa congelada nesta proposta. O cliente recebe apenas o total e os tipos marcados."
+        >
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[620px] text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-slate-500">
+                  <th className="px-3 py-3 font-semibold">Despesa</th>
+                  <th className="px-3 py-3 font-semibold">Quantidade</th>
+                  <th className="px-3 py-3 font-semibold">Tarifa</th>
+                  <th className="px-3 py-3 font-semibold">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {proposal.operationalExpenses.map((expense) => (
+                  <tr
+                    key={expense.expenseType}
+                    className="border-b border-slate-100"
+                  >
+                    <td className="px-3 py-3 font-medium text-slate-800">
+                      {expense.label}
+                    </td>
+                    <td className="px-3 py-3 text-slate-600">
+                      {Number(expense.quantity).toLocaleString("pt-BR")} {expense.unitLabel}
+                    </td>
+                    <td className="px-3 py-3 text-slate-600">
+                      {formatCurrency(expense.unitPrice, proposalCurrency)}
+                    </td>
+                    <td className="px-3 py-3 font-semibold text-slate-900">
+                      {formatCurrency(expense.total, proposalCurrency)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="mt-4 text-right font-bold text-slate-950">
+              Despesas operacionais: {formatCurrency(
+                Number(proposal.operationalExpensesTotal || 0),
+                proposalCurrency,
+              )}
+            </p>
+          </div>
+        </SectionCard>
+      ) : null}
 
       <SectionCard
         eyebrow="Relacionamentos"

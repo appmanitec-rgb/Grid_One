@@ -9,6 +9,8 @@ import {
   OperationalBreadcrumb,
   PermissionAwareLink,
 } from "../../components/OperationalLinks";
+import { CatalogSearchField } from "../../components/CatalogSearchField";
+import { confirmDeletion } from "@/lib/confirm-action";
 
 type Equipment = {
   id: string;
@@ -124,12 +126,34 @@ type Equipment = {
     id: string;
     serviceGroup: string;
     quantity: number;
+    sourceModelBaseItemId?: string | null;
+    sourceModelDefaultQuantity?: number | null;
+    isCustomized?: boolean;
+    lastSyncedAt?: string | null;
     catalogItem?: { id: string; name: string; sku?: string | null } | null;
   }>;
 };
 
 type EditForm = Record<string, string>;
-type TabKey = "resumo" | "historico" | "editar";
+type TabKey = "resumo" | "historico" | "itens" | "editar";
+type CatalogItemOption = {
+  id: string;
+  name: string;
+  sku?: string | null;
+  type?: string | null;
+};
+type BaseItemDraft = NonNullable<Equipment["baseItems"]>[number];
+
+const SERVICE_GROUP_OPTIONS = [
+  ["TBC", "TBC - bateria e carregador"],
+  ["TOF", "TOF - troca de oleo e filtros"],
+  ["TROCA_MANGUEIRAS", "Troca de mangueiras"],
+  ["ARREFECIMENTO", "Sistema de arrefecimento"],
+  ["TM", "TM"],
+  ["TB", "TB"],
+  ["TMA", "TMA"],
+  ["OUTROS", "Outros"],
+] as const;
 
 const TEXT_FIELDS = [
   "name",
@@ -196,6 +220,15 @@ export default function EquipmentDetailPage() {
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [catalog, setCatalog] = useState<CatalogItemOption[]>([]);
+  const [baseItems, setBaseItems] = useState<BaseItemDraft[]>([]);
+  const [newBaseItem, setNewBaseItem] = useState({
+    catalogItemId: "",
+    serviceGroup: "TOF",
+    quantity: "1",
+  });
+  const [savingBaseItems, setSavingBaseItems] = useState(false);
+  const [syncingBaseItems, setSyncingBaseItems] = useState(false);
   const [access, setAccess] = useState(() => getAccessFromToken());
 
   useEffect(() => {
@@ -221,6 +254,7 @@ export default function EquipmentDetailPage() {
       const payload = (await res.json()) as Equipment;
       setEquipment(payload);
       setForm(formFromEquipment(payload));
+      setBaseItems(payload.baseItems || []);
     } catch (loadError: unknown) {
       setError(
         loadError instanceof Error
@@ -229,6 +263,99 @@ export default function EquipmentDetailPage() {
       );
     } finally {
       setLoading(false);
+    }
+  }
+
+  function addMachineBaseItem() {
+    const selected = catalog.find((item) => item.id === newBaseItem.catalogItemId);
+    if (!selected) {
+      setError("Selecione um item do catalogo.");
+      return;
+    }
+    if (
+      baseItems.some(
+        (item) =>
+          item.catalogItem?.id === selected.id &&
+          item.serviceGroup === newBaseItem.serviceGroup,
+      )
+    ) {
+      setError("Este item ja esta cadastrado neste tipo de manutencao.");
+      return;
+    }
+    setError("");
+    setBaseItems((current) => [
+      ...current,
+      {
+        id: `new-${selected.id}-${newBaseItem.serviceGroup}`,
+        serviceGroup: newBaseItem.serviceGroup,
+        quantity: Math.max(1, Number(newBaseItem.quantity || 1)),
+        catalogItem: selected,
+        sourceModelBaseItemId: null,
+        isCustomized: false,
+      },
+    ]);
+    setNewBaseItem((current) => ({ ...current, catalogItemId: "", quantity: "1" }));
+  }
+
+  async function saveMachineBaseItems() {
+    if (!equipment || !canEdit) return;
+    setSavingBaseItems(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await apiFetch(`/generators/${equipment.id}/base-items`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: baseItems.map((item) => ({
+            catalogItemId: item.catalogItem?.id,
+            serviceGroup: item.serviceGroup,
+            quantity: Math.max(1, Number(item.quantity || 1)),
+          })),
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(await readApiErrorMessage(res, "Nao foi possivel salvar os itens da maquina."));
+      }
+      setNotice("Itens exclusivos da maquina salvos com sucesso.");
+      await loadEquipment();
+      setTab("itens");
+    } catch (saveError: unknown) {
+      setError(saveError instanceof Error ? saveError.message : "Erro ao salvar itens da maquina.");
+    } finally {
+      setSavingBaseItems(false);
+    }
+  }
+
+  async function syncMachineBaseItems() {
+    if (!equipment || !canEdit) return;
+    setSyncingBaseItems(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await apiFetch(`/generators/${equipment.id}/apply-model-base-items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ detailed: true }),
+      });
+      if (!res.ok) {
+        throw new Error(await readApiErrorMessage(res, "Nao foi possivel atualizar pelo modelo."));
+      }
+      const payload = (await res.json()) as {
+        summary?: { added?: number; updated?: number; preserved?: number; conflicts?: number };
+      };
+      const summary = payload.summary;
+      setNotice(
+        summary
+          ? `Modelo sincronizado: ${summary.added || 0} novo(s), ${summary.updated || 0} atualizado(s), ${summary.preserved || 0} personalizado(s) preservado(s) e ${summary.conflicts || 0} conflito(s) ignorado(s).`
+          : "Itens do modelo sincronizados.",
+      );
+      await loadEquipment();
+      setTab("itens");
+    } catch (syncError: unknown) {
+      setError(syncError instanceof Error ? syncError.message : "Erro ao sincronizar itens do modelo.");
+    } finally {
+      setSyncingBaseItems(false);
     }
   }
 
@@ -344,6 +471,9 @@ export default function EquipmentDetailPage() {
         </TabButton>
         <TabButton active={tab === "historico"} onClick={() => setTab("historico")}>
           Historico e links
+        </TabButton>
+        <TabButton active={tab === "itens"} onClick={() => setTab("itens")}>
+          Itens de manutencao
         </TabButton>
         {canEdit ? (
           <TabButton active={tab === "editar"} onClick={() => setTab("editar")}>
@@ -589,6 +719,129 @@ export default function EquipmentDetailPage() {
                 ))}
               </RelatedList>
             </Panel>
+          </section>
+        </div>
+      ) : null}
+
+      {tab === "itens" ? (
+        <div className="space-y-5">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-950">Itens desta maquina</h2>
+                <p className="mt-1 max-w-3xl text-sm text-slate-500">
+                  A lista pertence ao gerador instalado. Itens vindos do modelo mantem a origem;
+                  quantidades personalizadas e itens manuais nao sao apagados pela sincronizacao.
+                </p>
+              </div>
+              {canEdit ? (
+                <button
+                  type="button"
+                  onClick={() => void syncMachineBaseItems()}
+                  disabled={syncingBaseItems || !equipment.model?.id}
+                  className={SECONDARY_BUTTON}
+                >
+                  {syncingBaseItems ? "Atualizando..." : "Atualizar itens do modelo"}
+                </button>
+              ) : null}
+            </div>
+            {!equipment.model?.id ? (
+              <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                Vincule um modelo ao equipamento para importar recomendacoes. Os itens manuais continuam disponiveis.
+              </p>
+            ) : null}
+          </section>
+
+          {canEdit ? (
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="text-lg font-bold text-slate-950">Adicionar item exclusivo</h2>
+              <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_280px_110px_auto]">
+                <CatalogSearchField
+                  value={newBaseItem.catalogItemId}
+                  selectedItem={catalog.find((item) => item.id === newBaseItem.catalogItemId)}
+                  onChange={(catalogItemId, selected) => {
+                    setNewBaseItem((current) => ({ ...current, catalogItemId }));
+                    if (selected) setCatalog((current) => current.some((item) => item.id === selected.id) ? current : [...current, selected]);
+                  }}
+                  placeholder="Buscar no catalogo geral"
+                />
+                <select
+                  value={newBaseItem.serviceGroup}
+                  onChange={(event) => setNewBaseItem((current) => ({ ...current, serviceGroup: event.target.value }))}
+                  className={INPUT_CLASS}
+                >
+                  {SERVICE_GROUP_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+                <input
+                  type="number"
+                  min="1"
+                  value={newBaseItem.quantity}
+                  onChange={(event) => setNewBaseItem((current) => ({ ...current, quantity: event.target.value }))}
+                  aria-label="Quantidade do novo item"
+                  className={INPUT_CLASS}
+                />
+                <button type="button" onClick={addMachineBaseItem} className={PRIMARY_BUTTON}>
+                  Adicionar
+                </button>
+              </div>
+            </section>
+          ) : null}
+
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            {baseItems.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-slate-300 p-5 text-sm text-slate-500">
+                Nenhum item cadastrado para esta maquina.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {baseItems.map((item, index) => (
+                  <div key={item.id} className="grid gap-3 rounded-xl border border-slate-200 p-4 md:grid-cols-[minmax(0,1fr)_270px_100px_auto] md:items-center">
+                    <div>
+                      <p className="font-bold text-slate-900">{item.catalogItem?.name || "Item do catalogo"}</p>
+                      <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                        <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">{item.catalogItem?.sku || "Sem SKU"}</span>
+                        <span className={item.sourceModelBaseItemId ? "rounded-full bg-sky-50 px-2 py-1 font-semibold text-sky-700" : "rounded-full bg-violet-50 px-2 py-1 font-semibold text-violet-700"}>
+                          {item.sourceModelBaseItemId ? "Origem: modelo" : "Exclusivo da maquina"}
+                        </span>
+                        {item.isCustomized ? <span className="rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700">Quantidade personalizada</span> : null}
+                      </div>
+                    </div>
+                    <select
+                      value={item.serviceGroup}
+                      disabled={!canEdit}
+                      onChange={(event) => setBaseItems((current) => current.map((candidate, itemIndex) => itemIndex === index ? { ...candidate, serviceGroup: event.target.value } : candidate))}
+                      className={INPUT_CLASS}
+                    >
+                      {SERVICE_GROUP_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </select>
+                    <input
+                      type="number"
+                      min="1"
+                      value={item.quantity}
+                      disabled={!canEdit}
+                      aria-label={`Quantidade de ${item.catalogItem?.name || "item"}`}
+                      onChange={(event) => setBaseItems((current) => current.map((candidate, itemIndex) => itemIndex === index ? { ...candidate, quantity: Math.max(1, Number(event.target.value || 1)) } : candidate))}
+                      className={INPUT_CLASS}
+                    />
+                    {canEdit ? (
+                      <button type="button" onClick={() => {
+                        if (!confirmDeletion("este item da maquina")) return;
+                        setBaseItems((current) => current.filter((_, itemIndex) => itemIndex !== index));
+                      }} className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100">
+                        Remover
+                      </button>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            )}
+            {canEdit ? (
+              <div className="mt-5 flex justify-end">
+                <button type="button" onClick={() => void saveMachineBaseItems()} disabled={savingBaseItems} className={PRIMARY_BUTTON}>
+                  {savingBaseItems ? "Salvando..." : "Salvar itens da maquina"}
+                </button>
+              </div>
+            ) : null}
           </section>
         </div>
       ) : null}

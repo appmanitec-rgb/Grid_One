@@ -239,13 +239,8 @@ export default function CatalogPage() {
                     {hydrated && canViewCosts && <td className="p-4 text-zinc-700">{item.profitMargin != null ? `${Number(item.profitMargin).toFixed(2)}%` : "-"}</td>}
                     <td className="p-4 text-right">
                       <Link href={`/dashboard/catalog/${item.id}`} className="text-sm font-semibold text-zinc-600 hover:text-zinc-900 hover:underline">
-                        Abrir
+                        Abrir cadastro
                       </Link>
-                      {hydrated && canManageItems && (
-                        <Link href={`/dashboard/catalog/new?editItemId=${item.id}`} className="text-sm font-semibold text-emerald-600 hover:text-emerald-700 hover:underline ml-4">
-                          Editar
-                        </Link>
-                      )}
                     </td>
                   </tr>
                 );

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
+import { confirmDeletion } from "@/lib/confirm-action";
 import {
   loadControlOptions,
   optionLabel,
@@ -209,8 +210,10 @@ export default function NewClientPage() {
 
   const addContact = () =>
     setContacts((prev) => [...prev, { ...emptyContact }]);
-  const removeContact = (index: number) =>
+  const removeContact = (index: number) => {
+    if (!confirmDeletion("este contato")) return;
     setContacts((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const updateMachine = (
     index: number,
@@ -226,8 +229,10 @@ export default function NewClientPage() {
 
   const addMachine = () =>
     setMachines((prev) => [...prev, { ...emptyMachine }]);
-  const removeMachine = (index: number) =>
+  const removeMachine = (index: number) => {
+    if (!confirmDeletion("esta maquina")) return;
     setMachines((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const toggleExistingGenerator = (generatorId: string, checked: boolean) => {
     setSelectedExistingGeneratorIds((prev) => {

@@ -572,10 +572,14 @@ export class DocxTemplateRendererService {
       this.professionalTotalsTable([
         ['Serviços e mão de obra', value('proposal.laborTotal')],
         ['Materiais e peças', value('proposal.materialsTotal')],
-        ['Despesas', value('proposal.expensesTotal')],
+        ['Despesas operacionais', value('proposal.expensesTotal')],
         ['Descontos', value('proposal.discountTotal')],
         ['Valor total da proposta', value('proposal.total')],
       ]),
+      this.professionalLabeledParagraph(
+        'Composição',
+        value('proposal.expensesComposition'),
+      ),
       this.professionalSectionHeading('Condições comerciais'),
       this.professionalInfoRows([
         ['Condição de pagamento', value('proposal.paymentTerms')],

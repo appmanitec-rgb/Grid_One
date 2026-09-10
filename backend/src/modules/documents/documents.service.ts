@@ -304,6 +304,8 @@ export class DocumentsService {
         firstDueDate: proposal.firstDueDate?.toISOString() || null,
         externalNotes: proposal.externalNotes,
         discount: proposal.discount,
+        operationalExpenses: proposal.operationalExpenses,
+        operationalExpensesTotal: proposal.operationalExpensesTotal,
         generatedContract: proposal.generatedContract,
       },
       client: proposal.client,

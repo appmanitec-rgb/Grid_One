@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { getAccessFromToken } from "@/lib/access";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
+import { confirmDeletion } from "@/lib/confirm-action";
 import {
   DataPill,
   EmptyState,
@@ -300,6 +301,7 @@ export default function DocumentationPage() {
 
   async function deleteCertification(certificationId: string) {
     if (!selectedUser) return;
+    if (!confirmDeletion("esta documentacao")) return;
 
     setSaving(true);
     setError("");

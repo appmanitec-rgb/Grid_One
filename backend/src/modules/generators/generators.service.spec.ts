@@ -1,6 +1,7 @@
 import {
   MaintenanceIntervalUnit,
   MaintenanceTemplateCategory,
+  ServiceGroup,
 } from '@prisma/client';
 import { GeneratorsService } from './generators.service';
 
@@ -23,9 +24,18 @@ describe('GeneratorsService', () => {
       update: jest.Mock;
     };
     modelBaseItem: {
+      create: jest.Mock;
       createMany: jest.Mock;
+      delete: jest.Mock;
       deleteMany: jest.Mock;
       findMany: jest.Mock;
+      update: jest.Mock;
+    };
+    generatorBaseItem: {
+      create: jest.Mock;
+      delete: jest.Mock;
+      findMany: jest.Mock;
+      update: jest.Mock;
     };
     site: { findUnique: jest.Mock };
     generator: {
@@ -56,9 +66,18 @@ describe('GeneratorsService', () => {
         update: jest.fn(),
       },
       modelBaseItem: {
+        create: jest.fn(),
         createMany: jest.fn(),
+        delete: jest.fn(),
         deleteMany: jest.fn(),
         findMany: jest.fn(),
+        update: jest.fn(),
+      },
+      generatorBaseItem: {
+        create: jest.fn(),
+        delete: jest.fn(),
+        findMany: jest.fn(),
+        update: jest.fn(),
       },
       site: { findUnique: jest.fn() },
       generator: {
@@ -292,5 +311,114 @@ describe('GeneratorsService', () => {
       service.updateModel('model-1', { name: 'Modelo duplicado' }),
     ).rejects.toThrow('Ja existe um modelo com este nome.');
     expect(db.generatorModel.update).not.toHaveBeenCalled();
+  });
+
+  it('updates model base items without recreating stable records', async () => {
+    db.generatorModel.findUnique.mockResolvedValue({ id: 'model-1' });
+    db.catalogItem.findMany.mockResolvedValue([{ id: 'catalog-1' }]);
+    db.modelBaseItem.findMany
+      .mockResolvedValueOnce([
+        {
+          id: 'base-1',
+          modelId: 'model-1',
+          catalogItemId: 'catalog-1',
+          serviceGroup: ServiceGroup.TOF,
+          defaultQuantity: 1,
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
+    await service.upsertModelBaseItems('model-1', [
+      {
+        catalogItemId: 'catalog-1',
+        serviceGroup: ServiceGroup.TOF,
+        defaultQuantity: 2,
+      },
+    ]);
+
+    expect(db.modelBaseItem.update).toHaveBeenCalledWith({
+      where: { id: 'base-1' },
+      data: { defaultQuantity: 2 },
+    });
+    expect(db.modelBaseItem.deleteMany).not.toHaveBeenCalled();
+    expect(db.modelBaseItem.create).not.toHaveBeenCalled();
+  });
+
+  it('synchronizes new model items while preserving machine customizations', async () => {
+    db.generator.findUnique.mockResolvedValue({
+      id: 'generator-1',
+      modelId: 'model-1',
+    });
+    db.modelBaseItem.findMany.mockResolvedValue([
+      {
+        id: 'model-item-custom',
+        catalogItemId: 'catalog-custom',
+        serviceGroup: ServiceGroup.TOF,
+        defaultQuantity: 1,
+      },
+      {
+        id: 'model-item-conflict',
+        catalogItemId: 'catalog-manual',
+        serviceGroup: ServiceGroup.TOF,
+        defaultQuantity: 1,
+      },
+      {
+        id: 'model-item-new',
+        catalogItemId: 'catalog-new',
+        serviceGroup: ServiceGroup.TBC,
+        defaultQuantity: 2,
+      },
+    ]);
+    db.generatorBaseItem.findMany
+      .mockResolvedValueOnce([
+        {
+          id: 'machine-custom',
+          generatorId: 'generator-1',
+          catalogItemId: 'catalog-custom',
+          serviceGroup: ServiceGroup.TOF,
+          quantity: 4,
+          sourceModelBaseItemId: 'model-item-custom',
+          sourceModelDefaultQuantity: 1,
+          isCustomized: true,
+        },
+        {
+          id: 'machine-manual',
+          generatorId: 'generator-1',
+          catalogItemId: 'catalog-manual',
+          serviceGroup: ServiceGroup.TOF,
+          quantity: 3,
+          sourceModelBaseItemId: null,
+          sourceModelDefaultQuantity: null,
+          isCustomized: false,
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const result = await service.applyModelBaseItems(
+      'generator-1',
+      false,
+      true,
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        summary: {
+          added: 1,
+          updated: 0,
+          preserved: 1,
+          conflicts: 1,
+        },
+      }),
+    );
+    expect(db.generatorBaseItem.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        generatorId: 'generator-1',
+        catalogItemId: 'catalog-new',
+        serviceGroup: ServiceGroup.TBC,
+        quantity: 2,
+        sourceModelBaseItemId: 'model-item-new',
+      }),
+    });
+    expect(db.generatorBaseItem.delete).not.toHaveBeenCalled();
   });
 });

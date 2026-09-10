@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   AccountsReceivableStatus,
+  OperationalExpenseType,
   ProposalHourType,
   ProposalItemKind,
   ProposalOrigin,
@@ -66,6 +67,7 @@ describe('ProposalsService', () => {
       updateMany: jest.Mock;
     };
     commercialGenerator: { findFirst: jest.Mock };
+    operationalExpenseRate: { findMany: jest.Mock };
     $executeRawUnsafe: jest.Mock;
     $transaction: jest.Mock;
   };
@@ -145,6 +147,9 @@ describe('ProposalsService', () => {
       },
       commercialGenerator: {
         findFirst: jest.fn(),
+      },
+      operationalExpenseRate: {
+        findMany: jest.fn(),
       },
       $executeRawUnsafe: jest.fn().mockResolvedValue(1),
       $transaction: jest.fn((cb: (tx: typeof db) => unknown) => cb(db)),
@@ -286,6 +291,82 @@ describe('ProposalsService', () => {
             version: 1,
             origin: ProposalOrigin.EXTERNAL,
             totals: expect.objectContaining({ total: 50000 }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('calculates operational expenses from Studio rates and stores a complete snapshot', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      role: UserRole.ADMIN,
+      linkedClientId: null,
+    });
+    db.salesOpportunity.findUnique.mockResolvedValue(null);
+    db.user.findFirst.mockResolvedValue({ id: 'seller-1' });
+    db.catalogItem.findMany.mockResolvedValue([]);
+    db.operationalExpenseRate.findMany.mockResolvedValue([
+      {
+        expenseType: OperationalExpenseType.DISPLACEMENT,
+        label: 'Deslocamento',
+        unitLabel: 'km',
+        unitPrice: 2.5,
+      },
+      {
+        expenseType: OperationalExpenseType.MEAL,
+        label: 'Alimentacao',
+        unitLabel: 'refeicao',
+        unitPrice: 45,
+      },
+    ]);
+    db.proposal.findMany.mockResolvedValue([]);
+    db.proposal.create.mockResolvedValue({ id: 'proposal-expenses' });
+    db.proposal.findUnique.mockResolvedValue({ id: 'proposal-expenses' });
+
+    await service.create(
+      {
+        clientId: 'client-1',
+        userId: 'seller-1',
+        type: ProposalType.SERVICES,
+        items: [
+          {
+            kind: ProposalItemKind.OTHER,
+            description: 'Servico',
+            quantity: 1,
+            unitPrice: 1000,
+          },
+        ],
+        operationalExpenses: [
+          {
+            expenseType: OperationalExpenseType.DISPLACEMENT,
+            quantity: 100,
+          },
+          { expenseType: OperationalExpenseType.MEAL, quantity: 2 },
+        ],
+      },
+      'admin-1',
+    );
+
+    expect(db.proposal.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          operationalExpensesTotal: 340,
+          totalValue: 1340,
+          operationalExpenses: expect.arrayContaining([
+            expect.objectContaining({
+              expenseType: OperationalExpenseType.DISPLACEMENT,
+              quantity: 100,
+              unitPrice: 2.5,
+              total: 250,
+            }),
+          ]),
+          commercialSnapshot: expect.objectContaining({
+            totals: expect.objectContaining({
+              itemsSubtotal: 1000,
+              operationalExpenses: 340,
+              total: 1340,
+            }),
           }),
         }),
       }),

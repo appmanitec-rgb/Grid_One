@@ -5,6 +5,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
 import { loadControlOptions, type ControlOption } from "@/lib/control-options";
+import { confirmDeletion } from "@/lib/confirm-action";
+import OperationalExpensesEditor, {
+  operationalExpensesTotal,
+  type OperationalExpenseSelection,
+} from "../OperationalExpensesEditor";
 
 type CatalogItem = {
   id: string;
@@ -85,6 +90,17 @@ type RowItem = {
   catalogItemId: string;
   quantity: string;
   unitPrice: string;
+  origin?: "MACHINE" | "GENERAL";
+};
+
+type MachineBaseItem = {
+  id: string;
+  catalogItemId: string;
+  serviceGroup: string;
+  quantity: number;
+  sourceModelBaseItemId?: string | null;
+  isCustomized?: boolean;
+  catalogItem?: CatalogItem | null;
 };
 
 type HourlyItem = {
@@ -180,6 +196,20 @@ function joinScopeTexts(texts: string[]) {
     new Set(texts.map((text) => text.trim()).filter(Boolean)),
   );
   return unique.map((text) => `- ${text.replace(/^-+\s*/, "")}`).join("\n");
+}
+
+function mergeCatalogOptions(
+  current: CatalogItem[],
+  rows: RowItem[],
+  machineItems: MachineBaseItem[],
+) {
+  const wantedIds = new Set(rows.map((row) => row.catalogItemId));
+  const additions = machineItems
+    .filter((item) => wantedIds.has(item.catalogItemId) && item.catalogItem)
+    .map((item) => item.catalogItem as CatalogItem);
+  return Array.from(
+    new Map([...current, ...additions].map((item) => [item.id, item])).values(),
+  );
 }
 
 function defaultHourlyDiscount(hourType: string) {
@@ -331,11 +361,16 @@ export default function NewProposalPage() {
   const [sellerLookupLoading, setSellerLookupLoading] = useState(false);
   const [serviceType, setServiceType] = useState("");
   const [loadingBaseItems, setLoadingBaseItems] = useState(false);
+  const [machineBaseItems, setMachineBaseItems] = useState<MachineBaseItem[]>([]);
+  const [selectedMachineBaseItemIds, setSelectedMachineBaseItemIds] = useState<string[]>([]);
 
   const [parts, setParts] = useState<RowItem[]>([]);
   const [labor, setLabor] = useState<RowItem[]>([]);
   const [hourlyServices, setHourlyServices] = useState<HourlyItem[]>([]);
   const [otherItems, setOtherItems] = useState<OtherItem[]>([]);
+  const [operationalExpenses, setOperationalExpenses] = useState<
+    OperationalExpenseSelection[]
+  >([]);
 
   const [scope, setScope] = useState("");
   const [selectedScopeTemplateIds, setSelectedScopeTemplateIds] = useState<
@@ -644,18 +679,30 @@ export default function NewProposalPage() {
   const addPart = () =>
     setParts((prev) => [
       ...prev,
-      { catalogItemId: "", quantity: "1", unitPrice: "" },
+      { catalogItemId: "", quantity: "1", unitPrice: "", origin: "GENERAL" },
     ]);
-  const removePart = (index: number) =>
+  const removePart = (index: number) => {
+    if (!confirmDeletion("esta peca da proposta")) return;
     setParts((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const updatePart = (index: number, field: keyof RowItem, value: string) => {
     setParts((prev) => {
+      if (
+        field === "catalogItemId" &&
+        value &&
+        (prev.some((item, itemIndex) => itemIndex !== index && item.catalogItemId === value) ||
+          labor.some((item) => item.catalogItemId === value))
+      ) {
+        setFeedback({ kind: "error", text: "Este item ja foi incluido na proposta." });
+        return prev;
+      }
       const copy = [...prev];
       copy[index] = { ...copy[index], [field]: value };
       if (field === "catalogItemId") {
         const itemInfo = partOptions.find((i) => i.id === value);
         copy[index].unitPrice = String(itemInfo?.basePrice ?? "");
+        copy[index].origin = "GENERAL";
       }
       return copy;
     });
@@ -664,18 +711,30 @@ export default function NewProposalPage() {
   const addLabor = () =>
     setLabor((prev) => [
       ...prev,
-      { catalogItemId: "", quantity: "1", unitPrice: "" },
+      { catalogItemId: "", quantity: "1", unitPrice: "", origin: "GENERAL" },
     ]);
-  const removeLabor = (index: number) =>
+  const removeLabor = (index: number) => {
+    if (!confirmDeletion("este servico da proposta")) return;
     setLabor((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const updateLabor = (index: number, field: keyof RowItem, value: string) => {
     setLabor((prev) => {
+      if (
+        field === "catalogItemId" &&
+        value &&
+        (prev.some((item, itemIndex) => itemIndex !== index && item.catalogItemId === value) ||
+          parts.some((item) => item.catalogItemId === value))
+      ) {
+        setFeedback({ kind: "error", text: "Este item ja foi incluido na proposta." });
+        return prev;
+      }
       const copy = [...prev];
       copy[index] = { ...copy[index], [field]: value };
       if (field === "catalogItemId") {
         const itemInfo = serviceOptions.find((i) => i.id === value);
         copy[index].unitPrice = String(itemInfo?.basePrice ?? "");
+        copy[index].origin = "GENERAL";
       }
       return copy;
     });
@@ -708,8 +767,10 @@ export default function NewProposalPage() {
         discountPercent: "0",
       },
     ]);
-  const removeHourlyService = (index: number) =>
+  const removeHourlyService = (index: number) => {
+    if (!confirmDeletion("este servico por hora")) return;
     setHourlyServices((prev) => prev.filter((_, i) => i !== index));
+  };
   const updateHourlyService = (
     index: number,
     field: keyof HourlyItem,
@@ -730,8 +791,10 @@ export default function NewProposalPage() {
       ...prev,
       { description: "", quantity: "1", unitPrice: "" },
     ]);
-  const removeOtherItem = (index: number) =>
+  const removeOtherItem = (index: number) => {
+    if (!confirmDeletion("este item adicional")) return;
     setOtherItems((prev) => prev.filter((_, i) => i !== index));
+  };
   const updateOtherItem = (
     index: number,
     field: keyof OtherItem,
@@ -958,74 +1021,82 @@ export default function NewProposalPage() {
     setScope(next);
   }
 
-  const addItemsFromEquipmentBase = async () => {
-    if (!selectedEquipmentId) {
-      setFeedback({ kind: "error", text: "Selecione um equipamento." });
-      return;
-    }
-    if (!serviceType) {
-      setFeedback({ kind: "error", text: "Selecione o tipo de servico." });
-      return;
-    }
+  useEffect(() => {
+    let cancelled = false;
+    setMachineBaseItems([]);
+    setSelectedMachineBaseItemIds([]);
+    if (!selectedEquipmentId || !serviceType) return;
 
     setLoadingBaseItems(true);
-    setFeedback(null);
-    try {
-      const res = await apiFetch(
-        apiUrl(
-          `/generators/${selectedEquipmentId}/base-items?group=${serviceType}`,
-        ),
-        {},
-      );
-
-      if (!res.ok) {
-        throw new Error(
-          await readApiErrorMessage(res, "Falha ao buscar itens base."),
-        );
-      }
-
-      const baseItems = await res.json();
-      if (!Array.isArray(baseItems) || baseItems.length === 0) {
-        setFeedback({
-          kind: "error",
-          text: "Nenhum item base encontrado para este grupo.",
-        });
-        return;
-      }
-
-      const toPart = baseItems
-        .filter((item: any) => item.catalogItem?.type !== "SERVICE")
-        .map((item: any) => ({
-          catalogItemId: item.catalogItemId,
-          quantity: String(item.quantity ?? 1),
-          unitPrice: String(item.catalogItem?.basePrice ?? 0),
-        }));
-
-      const toLabor = baseItems
-        .filter((item: any) => item.catalogItem?.type === "SERVICE")
-        .map((item: any) => ({
-          catalogItemId: item.catalogItemId,
-          quantity: String(item.quantity ?? 1),
-          unitPrice: String(item.catalogItem?.basePrice ?? 0),
-        }));
-
-      setParts((prev) => [...prev, ...toPart]);
-      setLabor((prev) => [...prev, ...toLabor]);
-      setFeedback({
-        kind: "success",
-        text: `Itens base adicionados: ${baseItems.length}.`,
+    void apiFetch(
+      apiUrl(`/generators/${selectedEquipmentId}/base-items?group=${serviceType}`),
+      { cache: "no-store" },
+    )
+      .then(async (res) => {
+        if (!res.ok) {
+          throw new Error(await readApiErrorMessage(res, "Falha ao buscar itens da maquina."));
+        }
+        const payload = (await res.json()) as MachineBaseItem[];
+        if (cancelled) return;
+        setMachineBaseItems(payload);
+        setSelectedMachineBaseItemIds(payload.map((item) => item.id));
+      })
+      .catch((loadError: unknown) => {
+        if (!cancelled) {
+          setFeedback({
+            kind: "error",
+            text: loadError instanceof Error ? loadError.message : "Erro ao carregar itens da maquina.",
+          });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingBaseItems(false);
       });
-    } catch (error: unknown) {
-      setFeedback({
-        kind: "error",
-        text:
-          error instanceof Error
-            ? error.message
-            : "Erro ao adicionar itens base.",
-      });
-    } finally {
-      setLoadingBaseItems(false);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedEquipmentId, serviceType]);
+
+  const addItemsFromEquipmentBase = () => {
+    const selectedItems = machineBaseItems.filter((item) =>
+      selectedMachineBaseItemIds.includes(item.id),
+    );
+    if (selectedItems.length === 0) {
+      setFeedback({ kind: "error", text: "Selecione ao menos um item da maquina." });
+      return;
     }
+
+    const existingIds = new Set(
+      [...parts, ...labor].map((item) => item.catalogItemId).filter(Boolean),
+    );
+    const uniqueItems = selectedItems.filter((item) => !existingIds.has(item.catalogItemId));
+    const duplicates = selectedItems.length - uniqueItems.length;
+    const toPart: RowItem[] = uniqueItems
+      .filter((item) => item.catalogItem?.type !== "SERVICE")
+      .map((item) => ({
+        catalogItemId: item.catalogItemId,
+        quantity: String(item.quantity ?? 1),
+        unitPrice: String(item.catalogItem?.basePrice ?? 0),
+        origin: "MACHINE",
+      }));
+    const toLabor: RowItem[] = uniqueItems
+      .filter((item) => item.catalogItem?.type === "SERVICE")
+      .map((item) => ({
+        catalogItemId: item.catalogItemId,
+        quantity: String(item.quantity ?? 1),
+        unitPrice: String(item.catalogItem?.basePrice ?? 0),
+        origin: "MACHINE",
+      }));
+
+    setPartOptions((current) => mergeCatalogOptions(current, toPart, machineBaseItems));
+    setServiceOptions((current) => mergeCatalogOptions(current, toLabor, machineBaseItems));
+    setParts((current) => [...current, ...toPart]);
+    setLabor((current) => [...current, ...toLabor]);
+    setFeedback({
+      kind: "success",
+      text: `${uniqueItems.length} item(ns) da maquina adicionado(s)${duplicates ? `; ${duplicates} duplicado(s) ignorado(s)` : ""}.`,
+    });
   };
 
   const partsTotal = useMemo(
@@ -1067,7 +1138,9 @@ export default function NewProposalPage() {
       ),
     [otherItems],
   );
-  const subtotal = partsTotal + laborTotal + hourlyTotal + otherTotal;
+  const expensesTotal = operationalExpensesTotal(operationalExpenses);
+  const subtotal =
+    partsTotal + laborTotal + hourlyTotal + otherTotal + expensesTotal;
 
   const maxDiscountAllowed = USER_ROLE === "ADMIN" ? subtotal : subtotal * 0.07;
 
@@ -1189,6 +1262,12 @@ export default function NewProposalPage() {
       internalNotes,
       externalNotes,
       discount: finalDiscount,
+      operationalExpenses: operationalExpenses
+        .filter((item) => item.quantity > 0)
+        .map((item) => ({
+          expenseType: item.expenseType,
+          quantity: item.quantity,
+        })),
       items: allItems,
     };
 
@@ -1599,11 +1678,14 @@ export default function NewProposalPage() {
                 className="w-full rounded-lg border border-zinc-300 bg-white p-2.5 font-semibold text-emerald-700 disabled:bg-zinc-100"
               >
                 <option value="">Selecione</option>
-                <option value="TOF">TOF</option>
+                <option value="TBC">TBC - bateria e carregador</option>
+                <option value="TOF">TOF - troca de oleo e filtros</option>
+                <option value="TROCA_MANGUEIRAS">Troca de mangueiras</option>
+                <option value="ARREFECIMENTO">Sistema de arrefecimento</option>
                 <option value="TM">TM</option>
                 <option value="TB">TB</option>
                 <option value="TMA">TMA</option>
-                <option value="OUTROS">OUTROS</option>
+                <option value="OUTROS">Outros</option>
               </select>
             </div>
           </div>
@@ -1839,25 +1921,57 @@ export default function NewProposalPage() {
             </div>
           ) : null}
 
-          <div className="mt-3">
-            <button
-              type="button"
-              onClick={addItemsFromEquipmentBase}
-              disabled={
-                !selectedEquipmentId || !serviceType || loadingBaseItems
-              }
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loadingBaseItems
-                ? "Carregando base..."
-                : "Adicionar itens da base"}
-            </button>
-          </div>
+          {selectedEquipmentId && serviceType ? (
+            <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold text-sky-950">Itens cadastrados nesta maquina</p>
+                  <p className="text-xs text-sky-700">Escolha o que deve entrar na proposta. Duplicidades serao ignoradas.</p>
+                </div>
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-sky-700">
+                  Origem: maquina instalada
+                </span>
+              </div>
+              {loadingBaseItems ? (
+                <p className="mt-3 text-sm text-sky-700">Carregando itens...</p>
+              ) : machineBaseItems.length === 0 ? (
+                <p className="mt-3 rounded-md bg-white p-3 text-sm text-zinc-500">Nenhum item cadastrado para este tipo de manutencao.</p>
+              ) : (
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                  {machineBaseItems.map((item) => (
+                    <label key={item.id} className="flex cursor-pointer items-start gap-3 rounded-md border border-sky-100 bg-white p-3">
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={selectedMachineBaseItemIds.includes(item.id)}
+                        onChange={(event) => setSelectedMachineBaseItemIds((current) => event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))}
+                      />
+                      <span>
+                        <span className="block text-sm font-semibold text-zinc-800">{item.catalogItem?.name || "Item do catalogo"}</span>
+                        <span className="block text-xs text-zinc-500">Qtd. {item.quantity} {item.isCustomized ? "| personalizada" : item.sourceModelBaseItemId ? "| herdada do modelo" : "| exclusiva da maquina"}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={addItemsFromEquipmentBase}
+                disabled={loadingBaseItems || selectedMachineBaseItemIds.length === 0}
+                className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Adicionar selecionados
+              </button>
+            </div>
+          ) : null}
         </div>
 
         <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
           <div className="mb-4 flex items-center justify-between border-b pb-2">
-            <h2 className="text-lg font-bold text-zinc-800">2. Pecas</h2>
+            <div>
+              <h2 className="text-lg font-bold text-zinc-800">2. Pecas</h2>
+              <p className="text-xs text-zinc-500">Itens adicionais usam a base geral do sistema.</p>
+            </div>
             <button
               type="button"
               onClick={addPart}
@@ -1880,7 +1994,7 @@ export default function NewProposalPage() {
             >
               <div className="min-w-[250px] flex-1">
                 <label className="mb-1 block text-xs font-medium text-zinc-500">
-                  Buscar peca
+                  Buscar peca {part.origin === "MACHINE" ? "| origem: maquina" : "| origem: base geral"}
                 </label>
                 <SearchableSelect
                   items={partOptions}
@@ -1927,9 +2041,10 @@ export default function NewProposalPage() {
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
           <div className="mb-4 flex items-center justify-between border-b pb-2">
-            <h2 className="text-lg font-bold text-zinc-800">
-              3. Mao de obra / servicos
-            </h2>
+            <div>
+              <h2 className="text-lg font-bold text-zinc-800">3. Mao de obra / servicos</h2>
+              <p className="text-xs text-zinc-500">Servicos adicionais usam a base geral do sistema.</p>
+            </div>
             <button
               type="button"
               onClick={addLabor}
@@ -1952,7 +2067,7 @@ export default function NewProposalPage() {
             >
               <div className="min-w-[250px] flex-1">
                 <label className="mb-1 block text-xs font-medium text-zinc-500">
-                  Buscar servico
+                  Buscar servico {lab.origin === "MACHINE" ? "| origem: maquina" : "| origem: base geral"}
                 </label>
                 <SearchableSelect
                   items={serviceOptions}
@@ -2200,7 +2315,17 @@ export default function NewProposalPage() {
 
         <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
           <h2 className="mb-4 border-b pb-2 text-lg font-bold text-zinc-800">
-            6. Condicoes comerciais e financeiras
+            6. Despesas operacionais
+          </h2>
+          <OperationalExpensesEditor
+            value={operationalExpenses}
+            onChange={setOperationalExpenses}
+          />
+        </div>
+
+        <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-4 border-b pb-2 text-lg font-bold text-zinc-800">
+            7. Condicoes comerciais e financeiras
           </h2>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
             <div className="md:col-span-4">
@@ -2505,6 +2630,16 @@ export default function NewProposalPage() {
 
         <div className="sticky bottom-4 z-20 flex flex-col gap-4 rounded-xl border border-zinc-200 bg-white/95 p-4 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] backdrop-blur md:flex-row md:items-center md:justify-between md:px-6">
           <div className="flex items-center gap-8">
+            {expensesTotal > 0 ? (
+              <div className="hidden text-zinc-500 lg:block">
+                <p className="mb-1 text-xs font-medium uppercase tracking-wider">
+                  Despesas operacionais
+                </p>
+                <p className="text-lg font-semibold">
+                  R$ {formatMoney(expensesTotal)}
+                </p>
+              </div>
+            ) : null}
             {finalDiscount > 0 ? (
               <div className="hidden text-zinc-400 md:block">
                 <p className="mb-1 text-xs font-medium uppercase tracking-wider">

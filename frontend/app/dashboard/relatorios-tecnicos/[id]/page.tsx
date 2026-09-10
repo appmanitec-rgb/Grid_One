@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { getAccessFromToken } from "@/lib/access";
+import { confirmDeletion } from "@/lib/confirm-action";
 import {
   CHECKLIST_RESULT_LABELS,
   ChecklistResult,
@@ -491,6 +492,7 @@ export default function ServiceReportDetailPage() {
   }
 
   function removeChecklistItem(index: number) {
+    if (!confirmDeletion("este item do checklist")) return;
     setChecklist((current) =>
       current.filter((_, itemIndex) => itemIndex !== index),
     );

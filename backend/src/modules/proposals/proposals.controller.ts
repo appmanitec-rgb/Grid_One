@@ -253,6 +253,12 @@ export class ProposalsController {
   }
 
   @RequireAccessPolicy('proposals.view')
+  @Get('operational-expense-rates')
+  operationalExpenseRates() {
+    return this.proposalsService.getOperationalExpenseRates();
+  }
+
+  @RequireAccessPolicy('proposals.view')
   @Get('generator-lookup')
   generatorLookup(
     @Query('q') query?: string,

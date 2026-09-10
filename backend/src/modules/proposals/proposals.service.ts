@@ -18,6 +18,7 @@ import {
   ContractStatus,
   CostCenterEntryType,
   GeneratorOperationalStatus,
+  OperationalExpenseType,
   PartsCoverageType,
   PreventiveRecurrence,
   Prisma,
@@ -62,6 +63,15 @@ const COMMERCIAL_GENERATOR_PROPOSAL_SELECT = {
   leadTimeDays: true,
   currency: true,
 } as const;
+
+type OperationalExpenseSnapshot = {
+  expenseType: OperationalExpenseType;
+  label: string;
+  unitLabel: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+};
 
 @Injectable()
 export class ProposalsService {
@@ -197,7 +207,12 @@ export class ProposalsService {
         tx,
         createProposalDto.items,
       );
-      const subtotal = this.calculateTotal(normalizedItems);
+      const operationalExpenses = await this.prepareOperationalExpenses(
+        tx,
+        createProposalDto.operationalExpenses,
+      );
+      const itemsSubtotal = this.calculateTotal(normalizedItems);
+      const subtotal = itemsSubtotal + operationalExpenses.total;
       const discountValue = Math.max(
         0,
         Number(createProposalDto.discount || 0),
@@ -231,6 +246,8 @@ export class ProposalsService {
             dto: createProposalDto,
             generator: commercialGenerator,
             items: normalizedItems,
+            operationalExpenses: operationalExpenses.items,
+            itemsSubtotal,
             subtotal,
             discountValue,
             calculatedTotal,
@@ -242,6 +259,9 @@ export class ProposalsService {
           externalCurrency:
             createProposalDto.externalCurrency?.trim().toUpperCase() || 'BRL',
           totalValue: calculatedTotal,
+          operationalExpenses:
+            operationalExpenses.items as unknown as Prisma.InputJsonValue,
+          operationalExpensesTotal: operationalExpenses.total,
           validUntil: createProposalDto.validUntil
             ? new Date(createProposalDto.validUntil)
             : null,
@@ -390,6 +410,8 @@ export class ProposalsService {
           internalNotes: source.internalNotes,
           externalNotes: source.externalNotes,
           discount: source.discount,
+          operationalExpenses: source.operationalExpenses ?? undefined,
+          operationalExpensesTotal: source.operationalExpensesTotal,
           clientId: source.clientId,
           salesOpportunityId: source.salesOpportunityId,
           generatorId: source.generatorId,
@@ -1432,6 +1454,7 @@ export class ProposalsService {
       ...updateProposalDto,
     } as Prisma.ProposalUncheckedUpdateInput;
     delete (header as { items?: unknown }).items;
+    delete (header as { operationalExpenses?: unknown }).operationalExpenses;
 
     return this.prisma.$transaction(async (tx) => {
       const before = await tx.proposal.findUnique({
@@ -1873,6 +1896,73 @@ export class ProposalsService {
     });
   }
 
+  async getOperationalExpenseRates() {
+    return this.prisma.operationalExpenseRate.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
+      select: {
+        id: true,
+        expenseType: true,
+        label: true,
+        unitLabel: true,
+        unitPrice: true,
+        sortOrder: true,
+      },
+    });
+  }
+
+  private async prepareOperationalExpenses(
+    tx: Prisma.TransactionClient,
+    inputs: CreateProposalDto['operationalExpenses'],
+  ) {
+    if (!Array.isArray(inputs) || inputs.length === 0) {
+      return { items: [] as OperationalExpenseSnapshot[], total: 0 };
+    }
+
+    const positiveInputs = inputs.filter((input) => Number(input.quantity) > 0);
+    const types = positiveInputs.map((input) => input.expenseType);
+    if (new Set(types).size !== types.length) {
+      throw new BadRequestException(
+        'Cada tipo de despesa operacional pode ser informado apenas uma vez.',
+      );
+    }
+    if (positiveInputs.length === 0) {
+      return { items: [] as OperationalExpenseSnapshot[], total: 0 };
+    }
+
+    const rates = await tx.operationalExpenseRate.findMany({
+      where: { expenseType: { in: types }, isActive: true },
+    });
+    const rateByType = new Map(rates.map((rate) => [rate.expenseType, rate]));
+    const items = positiveInputs.map((input) => {
+      const quantity = Number(input.quantity);
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        throw new BadRequestException(
+          'A quantidade da despesa operacional deve ser maior que zero.',
+        );
+      }
+      const rate = rateByType.get(input.expenseType);
+      if (!rate) {
+        throw new BadRequestException(
+          `A tarifa de ${this.operationalExpenseLabel(input.expenseType)} esta inativa ou nao cadastrada no Manitec Studio.`,
+        );
+      }
+      return {
+        expenseType: input.expenseType,
+        label: rate.label,
+        unitLabel: rate.unitLabel,
+        quantity,
+        unitPrice: Number(rate.unitPrice),
+        total: quantity * Number(rate.unitPrice),
+      };
+    });
+
+    return {
+      items,
+      total: items.reduce((sum, item) => sum + item.total, 0),
+    };
+  }
+
   private prepareHourlyItem(
     item: CreateProposalDto['items'][number],
     index: number,
@@ -2009,6 +2099,8 @@ export class ProposalsService {
       technicianType: ProposalTechnicianType | null;
       totalPrice: number;
     }>;
+    operationalExpenses: OperationalExpenseSnapshot[];
+    itemsSubtotal: number;
     subtotal: number;
     discountValue: number;
     calculatedTotal: number;
@@ -2061,6 +2153,9 @@ export class ProposalsService {
       generator,
       sizing: input.dto.sizingSnapshot || null,
       items: input.items.map((item) => ({ ...item })),
+      operationalExpenses: input.operationalExpenses.map((item) => ({
+        ...item,
+      })),
       commercialTerms: {
         scope: input.dto.scope || null,
         freight: input.dto.freight || 'FOB',
@@ -2075,6 +2170,11 @@ export class ProposalsService {
         firstDueDate: input.dto.firstDueDate || null,
       },
       totals: {
+        itemsSubtotal: input.itemsSubtotal,
+        operationalExpenses: input.operationalExpenses.reduce(
+          (sum, item) => sum + item.total,
+          0,
+        ),
         subtotal: input.subtotal,
         discount: input.discountValue,
         total: input.calculatedTotal,
@@ -2104,9 +2204,21 @@ export class ProposalsService {
     const sanitized = { ...proposal } as Record<string, unknown>;
     delete sanitized.internalNotes;
     delete sanitized.commercialSnapshot;
+    delete sanitized.operationalExpenses;
     delete sanitized.externalDocumentStorageKey;
     delete sanitized.externalDocumentChecksumSha256;
     return sanitized;
+  }
+
+  private operationalExpenseLabel(type: OperationalExpenseType) {
+    const labels: Record<OperationalExpenseType, string> = {
+      [OperationalExpenseType.DISPLACEMENT]: 'deslocamento',
+      [OperationalExpenseType.MEAL]: 'alimentacao',
+      [OperationalExpenseType.TOLL]: 'pedagio',
+      [OperationalExpenseType.LODGING]: 'hospedagem',
+      [OperationalExpenseType.PARKING]: 'estacionamento',
+    };
+    return labels[type];
   }
 
   private normalizeOpportunityType(input?: string) {

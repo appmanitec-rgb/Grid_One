@@ -47,6 +47,45 @@ describe('InstitutionalDocumentService contract generation', () => {
     });
   });
 
+  it('exposes only the consolidated operational expense total and composition in the client document', () => {
+    const context = service.buildContext(
+      'proposal',
+      {
+        company: { companyName: 'MANITEC' },
+        client: { id: 'client-1', companyName: 'Cliente Exemplo' },
+        document: {
+          id: 'proposal-1',
+          code: '90001/00',
+          totalValue: 1450,
+          operationalExpensesTotal: 450,
+          operationalExpenses: [
+            {
+              expenseType: 'DISPLACEMENT',
+              quantity: 100,
+              unitPrice: 2.5,
+              total: 250,
+            },
+            {
+              expenseType: 'TOLL',
+              quantity: 2,
+              unitPrice: 100,
+              total: 200,
+            },
+          ],
+        },
+        items: [],
+      },
+      'proposal/manitec-default-v1',
+    );
+
+    expect(context.proposal).toMatchObject({
+      expensesTotal: 'R$\u00a0450,00',
+      expensesComposition:
+        '☑ Deslocamento  ☐ Alimentacao  ☑ Pedagio  ☐ Hospedagem  ☐ Estacionamento',
+    });
+    expect(context.proposal).not.toHaveProperty('operationalExpenses');
+  });
+
   it('applies document options without changing the contract master data', () => {
     const context = service.buildContext(
       'contract',

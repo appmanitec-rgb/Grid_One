@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
 import { clearAuthSession } from "@/lib/auth-session";
+import { confirmDeletion } from "@/lib/confirm-action";
 import {
   DataPill,
   EmptyState,
@@ -178,6 +179,7 @@ export default function NewContractPage() {
   }
 
   function removeEquipment(index: number) {
+    if (!confirmDeletion("esta maquina do contrato")) return;
     setEquipmentLines((prev) => prev.filter((_, currentIndex) => currentIndex !== index));
   }
 

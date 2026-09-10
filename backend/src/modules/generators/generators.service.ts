@@ -148,7 +148,7 @@ export class GeneratorsService {
       const generator = await tx.generator.create({ data: createData });
 
       if (data.modelId && data.applyModelBaseItems) {
-        await this.copyModelBaseItemsToGenerator(tx, generator.id, true);
+        await this.copyModelBaseItemsToGenerator(tx, generator.id);
       }
 
       return generator;
@@ -240,7 +240,7 @@ export class GeneratorsService {
           },
         },
         baseItems: {
-          include: { catalogItem: true },
+          include: { catalogItem: true, sourceModelBaseItem: true },
           orderBy: { createdAt: 'asc' },
         },
         proposals: {
@@ -505,6 +505,7 @@ export class GeneratorsService {
   async createModel(data: CreateGeneratorModelDto) {
     const name = this.normalizeRequiredText(data.name, 'Nome do modelo');
     await this.ensureModelNameAvailable(name);
+    this.assertUniqueBaseItems(data.baseItems ?? []);
 
     return this.database.$transaction(async (tx) => {
       const model = await tx.generatorModel.create({
@@ -571,17 +572,7 @@ export class GeneratorsService {
         await this.ensureCatalogItemsExist(
           data.baseItems.map((item) => item.catalogItemId),
         );
-        await tx.modelBaseItem.deleteMany({ where: { modelId: id } });
-        if (data.baseItems.length > 0) {
-          await tx.modelBaseItem.createMany({
-            data: data.baseItems.map((item) => ({
-              modelId: id,
-              catalogItemId: item.catalogItemId,
-              serviceGroup: item.serviceGroup,
-              defaultQuantity: item.defaultQuantity ?? 1,
-            })),
-          });
-        }
+        await this.syncModelBaseItems(tx, id, data.baseItems);
       }
 
       if (data.maintenanceTemplates) {
@@ -607,22 +598,13 @@ export class GeneratorsService {
     }
 
     const normalizedItems = items ?? [];
+    this.assertUniqueBaseItems(normalizedItems);
     await this.ensureCatalogItemsExist(
       normalizedItems.map((item) => item.catalogItemId),
     );
 
     return this.database.$transaction(async (tx) => {
-      await tx.modelBaseItem.deleteMany({ where: { modelId } });
-      if (normalizedItems.length > 0) {
-        await tx.modelBaseItem.createMany({
-          data: normalizedItems.map((item) => ({
-            modelId,
-            catalogItemId: item.catalogItemId,
-            serviceGroup: item.serviceGroup,
-            defaultQuantity: item.defaultQuantity ?? 1,
-          })),
-        });
-      }
+      await this.syncModelBaseItems(tx, modelId, normalizedItems);
 
       return tx.modelBaseItem.findMany({
         where: { modelId },
@@ -632,13 +614,22 @@ export class GeneratorsService {
     });
   }
 
-  async applyModelBaseItems(generatorId: string, overwrite = false) {
+  async applyModelBaseItems(
+    generatorId: string,
+    overwrite = false,
+    detailed = false,
+  ) {
+    // Mantido apenas por compatibilidade com clientes antigos. A sincronizacao
+    // atual nunca apaga itens manuais ou personalizados.
+    void overwrite;
     return this.database.$transaction(async (tx) => {
-      await this.copyModelBaseItemsToGenerator(tx, generatorId, overwrite);
-      return tx.generatorBaseItem.findMany({
+      const summary = await this.copyModelBaseItemsToGenerator(tx, generatorId);
+      const items = await tx.generatorBaseItem.findMany({
         where: { generatorId },
-        include: { catalogItem: true },
+        include: { catalogItem: true, sourceModelBaseItem: true },
+        orderBy: [{ serviceGroup: 'asc' }, { createdAt: 'asc' }],
       });
+      return detailed ? { items, summary } : items;
     });
   }
 
@@ -650,7 +641,7 @@ export class GeneratorsService {
         generatorId,
         ...(group ? { serviceGroup: group } : {}),
       },
-      include: { catalogItem: true },
+      include: { catalogItem: true, sourceModelBaseItem: true },
       orderBy: [{ serviceGroup: 'asc' }, { createdAt: 'asc' }],
     });
   }
@@ -663,23 +654,65 @@ export class GeneratorsService {
     await this.ensureCatalogItemsExist(
       data.items.map((item) => item.catalogItemId),
     );
+    this.assertUniqueBaseItems(data.items);
 
     return this.database.$transaction(async (tx) => {
-      await tx.generatorBaseItem.deleteMany({ where: { generatorId } });
-      if (data.items.length > 0) {
-        await tx.generatorBaseItem.createMany({
-          data: data.items.map((item) => ({
+      const existingItems = await tx.generatorBaseItem.findMany({
+        where: { generatorId },
+      });
+      const desiredKeys = new Set(
+        data.items.map((item) =>
+          this.baseItemKey(item.catalogItemId, item.serviceGroup),
+        ),
+      );
+
+      for (const existingItem of existingItems) {
+        const key = this.baseItemKey(
+          existingItem.catalogItemId,
+          existingItem.serviceGroup,
+        );
+        if (!desiredKeys.has(key)) {
+          await tx.generatorBaseItem.delete({ where: { id: existingItem.id } });
+        }
+      }
+
+      for (const item of data.items) {
+        const quantity = item.quantity ?? 1;
+        const existingItem = existingItems.find(
+          (candidate) =>
+            this.baseItemKey(
+              candidate.catalogItemId,
+              candidate.serviceGroup,
+            ) === this.baseItemKey(item.catalogItemId, item.serviceGroup),
+        );
+        if (existingItem) {
+          await tx.generatorBaseItem.update({
+            where: { id: existingItem.id },
+            data: {
+              quantity,
+              isCustomized: existingItem.sourceModelBaseItemId
+                ? quantity !== existingItem.sourceModelDefaultQuantity
+                : false,
+            },
+          });
+          continue;
+        }
+
+        await tx.generatorBaseItem.create({
+          data: {
             generatorId,
             catalogItemId: item.catalogItemId,
             serviceGroup: item.serviceGroup,
-            quantity: item.quantity ?? 1,
-          })),
+            quantity,
+            isCustomized: false,
+          },
         });
       }
 
       return tx.generatorBaseItem.findMany({
         where: { generatorId },
-        include: { catalogItem: true },
+        include: { catalogItem: true, sourceModelBaseItem: true },
+        orderBy: [{ serviceGroup: 'asc' }, { createdAt: 'asc' }],
       });
     });
   }
@@ -695,6 +728,72 @@ export class GeneratorsService {
 
     if (existing) {
       throw new ConflictException('Ja existe um modelo com este nome.');
+    }
+  }
+
+  private baseItemKey(catalogItemId: string, serviceGroup: ServiceGroup) {
+    return `${catalogItemId}:${serviceGroup}`;
+  }
+
+  private assertUniqueBaseItems(
+    items: Array<{ catalogItemId: string; serviceGroup: ServiceGroup }>,
+  ) {
+    const keys = items.map((item) =>
+      this.baseItemKey(item.catalogItemId, item.serviceGroup),
+    );
+    if (new Set(keys).size !== keys.length) {
+      throw new BadRequestException(
+        'O mesmo item de catalogo nao pode ser repetido no mesmo tipo de manutencao.',
+      );
+    }
+  }
+
+  private async syncModelBaseItems(
+    tx: Prisma.TransactionClient,
+    modelId: string,
+    items: NonNullable<CreateGeneratorModelDto['baseItems']>,
+  ) {
+    this.assertUniqueBaseItems(items);
+    const existingItems = await tx.modelBaseItem.findMany({
+      where: { modelId },
+    });
+    const desiredKeys = new Set(
+      items.map((item) =>
+        this.baseItemKey(item.catalogItemId, item.serviceGroup),
+      ),
+    );
+
+    for (const existingItem of existingItems) {
+      const key = this.baseItemKey(
+        existingItem.catalogItemId,
+        existingItem.serviceGroup,
+      );
+      if (!desiredKeys.has(key)) {
+        await tx.modelBaseItem.delete({ where: { id: existingItem.id } });
+      }
+    }
+
+    for (const item of items) {
+      const existingItem = existingItems.find(
+        (candidate) =>
+          this.baseItemKey(candidate.catalogItemId, candidate.serviceGroup) ===
+          this.baseItemKey(item.catalogItemId, item.serviceGroup),
+      );
+      if (existingItem) {
+        await tx.modelBaseItem.update({
+          where: { id: existingItem.id },
+          data: { defaultQuantity: item.defaultQuantity ?? 1 },
+        });
+        continue;
+      }
+      await tx.modelBaseItem.create({
+        data: {
+          modelId,
+          catalogItemId: item.catalogItemId,
+          serviceGroup: item.serviceGroup,
+          defaultQuantity: item.defaultQuantity ?? 1,
+        },
+      });
     }
   }
 
@@ -861,7 +960,6 @@ export class GeneratorsService {
   private async copyModelBaseItemsToGenerator(
     tx: Prisma.TransactionClient,
     generatorId: string,
-    overwrite: boolean,
   ) {
     const generator = await tx.generator.findUnique({
       where: { id: generatorId },
@@ -877,33 +975,59 @@ export class GeneratorsService {
       where: { modelId: generator.modelId },
     });
 
-    if (overwrite) {
-      await tx.generatorBaseItem.deleteMany({ where: { generatorId } });
-    }
+    const generatorItems = await tx.generatorBaseItem.findMany({
+      where: { generatorId },
+    });
+    const summary = { added: 0, updated: 0, preserved: 0, conflicts: 0 };
 
-    if (modelItems.length === 0) return;
+    if (modelItems.length === 0) return summary;
 
     for (const item of modelItems) {
-      await tx.generatorBaseItem.upsert({
-        where: {
-          generatorId_catalogItemId_serviceGroup: {
-            generatorId,
-            catalogItemId: item.catalogItemId,
-            serviceGroup: item.serviceGroup,
+      const linkedItem = generatorItems.find(
+        (candidate) => candidate.sourceModelBaseItemId === item.id,
+      );
+      if (linkedItem) {
+        if (linkedItem.isCustomized) {
+          summary.preserved += 1;
+          continue;
+        }
+        await tx.generatorBaseItem.update({
+          where: { id: linkedItem.id },
+          data: {
+            quantity: item.defaultQuantity,
+            sourceModelDefaultQuantity: item.defaultQuantity,
+            lastSyncedAt: new Date(),
           },
-        },
-        update: {
-          quantity: item.defaultQuantity,
-          sourceModelBaseItemId: item.id,
-        },
-        create: {
+        });
+        summary.updated += 1;
+        continue;
+      }
+
+      const matchingItem = generatorItems.find(
+        (candidate) =>
+          candidate.catalogItemId === item.catalogItemId &&
+          candidate.serviceGroup === item.serviceGroup,
+      );
+      if (matchingItem) {
+        summary.conflicts += 1;
+        continue;
+      }
+
+      await tx.generatorBaseItem.create({
+        data: {
           generatorId,
           catalogItemId: item.catalogItemId,
           serviceGroup: item.serviceGroup,
           quantity: item.defaultQuantity,
           sourceModelBaseItemId: item.id,
+          sourceModelDefaultQuantity: item.defaultQuantity,
+          isCustomized: false,
+          lastSyncedAt: new Date(),
         },
       });
+      summary.added += 1;
     }
+
+    return summary;
   }
 }

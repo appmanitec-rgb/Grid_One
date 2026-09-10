@@ -73,6 +73,26 @@ export class InstitutionalDocumentService {
   ): InstitutionalDocumentContext {
     const company = this.company(payload.company);
     const client = this.client(payload.client);
+    const operationalExpenses = this.records(
+      payload.document?.operationalExpenses,
+    );
+    const selectedExpenseTypes = new Set(
+      operationalExpenses
+        .filter((expense) => Number(expense.quantity || 0) > 0)
+        .map((expense) => String(expense.expenseType || '')),
+    );
+    const expenseComposition = [
+      ['DISPLACEMENT', 'Deslocamento'],
+      ['MEAL', 'Alimentacao'],
+      ['TOLL', 'Pedagio'],
+      ['LODGING', 'Hospedagem'],
+      ['PARKING', 'Estacionamento'],
+    ]
+      .map(
+        ([type, label]) =>
+          `${selectedExpenseTypes.has(type) ? '☑' : '☐'} ${label}`,
+      )
+      .join('  ');
     const proposal = {
       number: this.safe(payload.document?.code),
       date: this.formatDate(payload.document?.issuedAt),
@@ -116,7 +136,10 @@ export class InstitutionalDocumentService {
         'Proposta comercial para fornecimento e/ou servicos MANITEC.',
       ),
       laborTotal: this.formatCurrency(payload.document?.totalValue),
-      expensesTotal: this.formatCurrency(0),
+      expensesTotal: this.formatCurrency(
+        payload.document?.operationalExpensesTotal,
+      ),
+      expensesComposition: expenseComposition,
       materialsTotal: this.formatCurrency(0),
       discountTotal: this.formatCurrency(0),
       taxes: 'Inclusos conforme regime fiscal aplicavel.',

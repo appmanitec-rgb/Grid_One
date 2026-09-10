@@ -11,6 +11,7 @@ import {
   CommercialGeneratorFuel,
   ItemType,
   ManufacturerType,
+  OperationalExpenseType,
   Prisma,
 } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
@@ -435,6 +436,58 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
       tx.catalogPricingPolicy.findUnique({ where: { id } }),
     update: (tx, id, data) =>
       tx.catalogPricingPolicy.update({ where: { id }, data }),
+  },
+  operationalExpenseRates: {
+    entityType: 'OperationalExpenseRate',
+    domain: AuditDomain.PROPOSALS,
+    resourcePermission: 'finance.update',
+    editableFields: {
+      expenseType: 'enum',
+      label: 'string',
+      unitLabel: 'string',
+      unitPrice: 'number',
+      isActive: 'boolean',
+      sortOrder: 'number',
+      notes: 'string',
+    },
+    enums: {
+      expenseType: Object.values(OperationalExpenseType),
+    },
+    list: (tx) =>
+      tx.operationalExpenseRate.findMany({
+        orderBy: [{ isActive: 'desc' }, { sortOrder: 'asc' }, { label: 'asc' }],
+      }),
+    validate: (data) => {
+      if ('unitPrice' in data && Number(data.unitPrice) < 0) {
+        throw new BadRequestException(
+          'O valor unitario da despesa nao pode ser negativo.',
+        );
+      }
+      if ('label' in data && !studioString(data.label).trim()) {
+        throw new BadRequestException('Informe o nome da despesa.');
+      }
+      if ('unitLabel' in data && !studioString(data.unitLabel).trim()) {
+        throw new BadRequestException('Informe a unidade da despesa.');
+      }
+    },
+    create: (tx, data) =>
+      tx.operationalExpenseRate.create({
+        data: {
+          expenseType:
+            (data.expenseType as OperationalExpenseType | undefined) ??
+            OperationalExpenseType.DISPLACEMENT,
+          label: studioString(data.label).trim(),
+          unitLabel: studioString(data.unitLabel).trim(),
+          unitPrice: Number(data.unitPrice ?? 0),
+          isActive: typeof data.isActive === 'boolean' ? data.isActive : true,
+          sortOrder: Number(data.sortOrder ?? 0),
+          notes: typeof data.notes === 'string' ? data.notes : null,
+        },
+      }),
+    findUnique: (tx, id) =>
+      tx.operationalExpenseRate.findUnique({ where: { id } }),
+    update: (tx, id, data) =>
+      tx.operationalExpenseRate.update({ where: { id }, data }),
   },
   commercialGenerators: {
     entityType: 'CommercialGenerator',

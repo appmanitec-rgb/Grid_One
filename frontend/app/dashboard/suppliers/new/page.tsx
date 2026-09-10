@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
+import { confirmDeletion } from "@/lib/confirm-action";
 import {
   DataPill,
   EmptyState,
@@ -202,6 +203,7 @@ export default function SupplierFormPage() {
   }
 
   function removeItem(index: number) {
+    if (!confirmDeletion("este item do fornecedor")) return;
     setItems((prev) => prev.filter((_, currentIndex) => currentIndex !== index));
   }
 

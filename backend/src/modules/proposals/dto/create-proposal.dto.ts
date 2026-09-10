@@ -1,4 +1,5 @@
 import {
+  OperationalExpenseType,
   ProposalHourType,
   ProposalItemKind,
   ProposalOrigin,
@@ -64,6 +65,15 @@ class ProposalItemDto {
   @IsEnum(ProposalTechnicianType)
   @IsOptional()
   technicianType?: ProposalTechnicianType;
+}
+
+class ProposalOperationalExpenseDto {
+  @IsEnum(OperationalExpenseType)
+  expenseType!: OperationalExpenseType;
+
+  @IsNumber()
+  @Min(0)
+  quantity!: number;
 }
 
 export class CreateProposalDto {
@@ -162,6 +172,12 @@ export class CreateProposalDto {
   @IsString()
   @IsOptional()
   externalNotes?: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProposalOperationalExpenseDto)
+  @IsOptional()
+  operationalExpenses?: ProposalOperationalExpenseDto[];
 
   @IsNumber()
   @Min(0)

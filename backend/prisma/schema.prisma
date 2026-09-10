@@ -199,6 +199,14 @@ enum ProposalOrigin {
   EXTERNAL
 }
 
+enum OperationalExpenseType {
+  DISPLACEMENT
+  MEAL
+  TOLL
+  LODGING
+  PARKING
+}
+
 enum SalesOpportunityStage {
   PROSPECTION
   SITE_SURVEY_SCHEDULED
@@ -273,7 +281,10 @@ enum ClientAddressType {
 }
 
 enum ServiceGroup {
+  TBC
   TOF
+  TROCA_MANGUEIRAS
+  ARREFECIMENTO
   TM
   TB
   TMA
@@ -1331,18 +1342,18 @@ model Generator {
   currentSite   Site?           @relation(fields: [currentSiteId], references: [id], onDelete: SetNull)
   createdByUser User?           @relation("GeneratorCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
-  proposals         Proposal[] @relation("ProposalInstalledGenerator")
-  sourceSaleProposals Proposal[] @relation("ProposalPostSaleGenerator")
-  clientId          String
-  client            Client                       @relation(fields: [clientId], references: [id])
-  orders            MaintenanceOrder[]
-  serviceTickets    ServiceTicket[]
-  serviceReports    ServiceReport[]
-  telemetryEvents   TelemetryEvent[]
-  baseItems         GeneratorBaseItem[]
-  contractLinks     ContractEquipment[]
-  contractSchedules ContractPreventiveSchedule[]
-  costCenter        CostCenter?                  @relation("GeneratorCostCenter")
+  proposals           Proposal[]                   @relation("ProposalInstalledGenerator")
+  sourceSaleProposals Proposal[]                   @relation("ProposalPostSaleGenerator")
+  clientId            String
+  client              Client                       @relation(fields: [clientId], references: [id])
+  orders              MaintenanceOrder[]
+  serviceTickets      ServiceTicket[]
+  serviceReports      ServiceReport[]
+  telemetryEvents     TelemetryEvent[]
+  baseItems           GeneratorBaseItem[]
+  contractLinks       ContractEquipment[]
+  contractSchedules   ContractPreventiveSchedule[]
+  costCenter          CostCenter?                  @relation("GeneratorCostCenter")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1848,6 +1859,8 @@ model ModelBaseItem {
   catalogItemId String
   catalogItem   CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
 
+  generatorItems GeneratorBaseItem[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1866,12 +1879,17 @@ model GeneratorBaseItem {
   catalogItemId String
   catalogItem   CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
 
-  sourceModelBaseItemId String?
+  sourceModelBaseItemId      String?
+  sourceModelDefaultQuantity Int?
+  isCustomized               Boolean        @default(false)
+  lastSyncedAt               DateTime?
+  sourceModelBaseItem        ModelBaseItem? @relation(fields: [sourceModelBaseItemId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([generatorId, catalogItemId, serviceGroup])
+  @@index([sourceModelBaseItemId])
   @@map("generator_base_items")
 }
 
@@ -1904,6 +1922,8 @@ model Proposal {
   firstDueDate            DateTime?
   internalNotes           String?
   externalNotes           String?
+  operationalExpenses      Json?
+  operationalExpensesTotal Float       @default(0)
   discount                Float?     @default(0)
   parentProposalId        String?
   parentProposal          Proposal?  @relation("ProposalRevisionChain", fields: [parentProposalId], references: [id])
@@ -1946,6 +1966,22 @@ model Proposal {
   updatedAt DateTime @updatedAt
 
   @@map("proposals")
+}
+
+model OperationalExpenseRate {
+  id          String                 @id @default(uuid())
+  expenseType OperationalExpenseType @unique
+  label       String
+  unitLabel   String
+  unitPrice   Float
+  isActive    Boolean                @default(true)
+  sortOrder   Int                    @default(0)
+  notes       String?
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  @@index([isActive, sortOrder])
+  @@map("operational_expense_rates")
 }
 
 model SalesOpportunity {

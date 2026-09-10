@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { confirmDeletion } from "@/lib/confirm-action";
 import {
   Dispatch,
   FormEvent,
@@ -1271,6 +1272,7 @@ export function UserManagementWorkspace({
       setError("Selecione um usuario para remover certificacoes.");
       return;
     }
+    if (!confirmDeletion("este certificado")) return;
 
     setSaving(true);
     setError("");

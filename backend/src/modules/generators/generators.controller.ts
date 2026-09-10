@@ -99,11 +99,12 @@ export class GeneratorsController {
   @Post(':id/apply-model-base-items')
   applyModelBaseItems(
     @Param('id') id: string,
-    @Body() body?: { overwrite?: boolean },
+    @Body() body?: { overwrite?: boolean; detailed?: boolean },
   ) {
     return this.generatorsService.applyModelBaseItems(
       id,
       body?.overwrite ?? false,
+      body?.detailed ?? false,
     );
   }
 
