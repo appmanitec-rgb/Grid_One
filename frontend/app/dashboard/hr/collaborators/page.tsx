@@ -8,6 +8,7 @@ import { getAccessFromToken } from "@/lib/access";
 
 type InternalUser = {
   id: string;
+  code: string;
   name: string;
   email: string;
   role: string;
@@ -20,6 +21,7 @@ type InternalUser = {
 
 type PortalUser = {
   id: string;
+  code: string;
   name: string;
   email: string;
   role: string;
@@ -29,6 +31,7 @@ type PortalUser = {
 
 type ClientAgent = {
   id: string;
+  code: string;
   companyName: string;
   tradeName?: string | null;
   cnpj?: string | null;
@@ -308,7 +311,7 @@ function InternalTable({ rows, showHourCost = false }: { rows: InternalUser[]; s
           <tr key={row.id} className="border-b border-zinc-100">
             <td className="px-3 py-3">
               <p className="font-semibold text-zinc-900">{row.name}</p>
-              <p className="text-xs text-zinc-500">{row.email}</p>
+              <p className="text-xs text-zinc-500">{row.code} · {row.email}</p>
             </td>
             <td className="px-3 py-3 text-zinc-700">{row.role}</td>
             <td className="px-3 py-3 text-zinc-700">{row.department || "-"}</td>
@@ -338,7 +341,7 @@ function SystemUsersTable({ rows }: { rows: Array<InternalUser | PortalUser> }) 
           <tr key={row.id} className="border-b border-zinc-100">
             <td className="px-3 py-3">
               <p className="font-semibold text-zinc-900">{row.name}</p>
-              <p className="text-xs text-zinc-500">{row.email}</p>
+              <p className="text-xs text-zinc-500">{row.code} · {row.email}</p>
             </td>
             <td className="px-3 py-3 text-zinc-700">{row.role}</td>
             <td className="px-3 py-3 text-zinc-700">
@@ -368,7 +371,7 @@ function ClientsTable({ rows }: { rows: ClientAgent[] }) {
           <tr key={row.id} className="border-b border-zinc-100">
             <td className="px-3 py-3">
               <p className="font-semibold text-zinc-900">{row.tradeName || row.companyName}</p>
-              <p className="text-xs text-zinc-500">{row.cnpj || "-"}</p>
+              <p className="text-xs text-zinc-500">{row.code} · {row.cnpj || "-"}</p>
             </td>
             <td className="px-3 py-3 text-zinc-700">
               {row.contactName || row.email || row.phone || "-"}
@@ -445,7 +448,7 @@ function matchesUserFilters(
     if (technicianFilter === "YES" && !isTechnician) return false;
     if (technicianFilter === "NO" && isTechnician) return false;
   }
-  return `${row.name} ${row.email} ${row.role} ${"department" in row ? row.department || "" : ""}`
+  return `${row.code} ${row.name} ${row.email} ${row.role} ${"department" in row ? row.department || "" : ""}`
     .toLowerCase()
     .includes(query);
 }

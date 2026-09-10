@@ -66,6 +66,7 @@ type Tone = "blue" | "emerald" | "amber" | "rose" | "slate";
 
 type UserRow = {
   id: string;
+  code: string;
   name: string;
   email: string;
   role: UserRole;
@@ -645,6 +646,7 @@ export function UserManagementWorkspace({
       if (!term) return true;
 
       return (
+        user.code.toLowerCase().includes(term) ||
         user.name.toLowerCase().includes(term) ||
         user.email.toLowerCase().includes(term) ||
         (user.department || "").toLowerCase().includes(term) ||
@@ -2873,6 +2875,7 @@ function UserListPanel({
                       <p className="text-sm font-semibold text-slate-950">
                         {user.name}
                       </p>
+                      <DataPill tone="slate">{user.code}</DataPill>
                       <DataPill tone={user.isActive ? "emerald" : "rose"}>
                         {user.isActive ? "Ativo" : "Inativo"}
                       </DataPill>

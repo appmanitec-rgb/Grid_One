@@ -97,6 +97,7 @@ export class TechniciansService {
       user: {
         select: {
           id: true,
+          code: true,
           name: true,
           email: true,
           role: true,

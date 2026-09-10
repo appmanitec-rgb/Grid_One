@@ -11,6 +11,7 @@ import ListPagination, {
 
 type EquipmentListItem = {
   id: string;
+  code: string;
   name: string;
   brand?: string | null;
   serialNumber?: string | null;
@@ -127,6 +128,7 @@ export default function EquipmentsPage() {
       if (!term) return true;
 
       return [
+        item.code,
         item.name,
         item.assetTag,
         item.serialNumber,
@@ -333,7 +335,8 @@ export default function EquipmentsPage() {
                     </Badge>
                   </div>
                   <p className="mt-1 text-sm text-slate-500">
-                    {item.assetTag || "Sem tag"} | Serie{" "}
+                    <span className="font-mono font-semibold text-slate-700">{item.code}</span>
+                    {" | "}{item.assetTag || "Sem tag"} | Serie{" "}
                     {item.serialNumber || "nao informada"}
                   </p>
                 </div>

@@ -6,6 +6,7 @@ import { apiFetch, apiUrl } from "@/lib/api";
 
 type ClientListItem = {
   id: string;
+  code: string;
   companyName: string;
   tradeName?: string | null;
   cnpj?: string | null;
@@ -101,6 +102,7 @@ export default function ClientsPage() {
       if (!term) return true;
 
       const topLevel = [
+        client.code,
         client.companyName,
         client.tradeName,
         client.cnpj,
@@ -245,6 +247,7 @@ export default function ClientsPage() {
           <table className="w-full border-collapse text-left">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 text-sm text-zinc-500">
+                <th className="p-4 font-medium">Codigo</th>
                 <th className="p-4 font-medium">Empresa / Nome</th>
                 <th className="p-4 font-medium">CNPJ/CPF</th>
                 <th className="p-4 font-medium">Contatos</th>
@@ -255,6 +258,9 @@ export default function ClientsPage() {
             <tbody className="divide-y divide-zinc-200">
               {filteredClients.map((client) => (
                 <tr key={client.id} className="transition-colors hover:bg-zinc-50">
+                  <td className="p-4 font-mono text-sm font-bold text-zinc-700">
+                    {client.code}
+                  </td>
                   <td className="p-4">
                     <p className="font-bold text-zinc-800">{client.companyName}</p>
                     <p className="text-xs text-zinc-500">{client.tradeName || "---"}</p>
@@ -284,7 +290,7 @@ export default function ClientsPage() {
               ))}
               {filteredClients.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-zinc-500">Nenhum cliente registrado.</td>
+                  <td colSpan={6} className="p-8 text-center text-zinc-500">Nenhum cliente registrado.</td>
                 </tr>
               )}
             </tbody>

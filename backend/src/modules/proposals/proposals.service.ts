@@ -211,18 +211,32 @@ export class ProposalsService {
         tx,
         createProposalDto.operationalExpenses,
       );
-      const itemsSubtotal = this.calculateTotal(normalizedItems);
-      const subtotal = itemsSubtotal + operationalExpenses.total;
-      const discountValue = Math.max(
-        0,
-        Number(createProposalDto.discount || 0),
+      const itemsSubtotal = this.roundCurrency(
+        this.calculateTotal(normalizedItems),
       );
-      if (!Number.isFinite(discountValue) || discountValue > subtotal) {
+      const subtotal = this.roundCurrency(
+        itemsSubtotal + operationalExpenses.total,
+      );
+      const allowOperationalExpenseDiscount = Boolean(
+        createProposalDto.allowOperationalExpenseDiscount,
+      );
+      const discountableSubtotal = allowOperationalExpenseDiscount
+        ? subtotal
+        : itemsSubtotal;
+      const discountValue = this.roundCurrency(
+        Math.max(0, Number(createProposalDto.discount || 0)),
+      );
+      if (
+        !Number.isFinite(discountValue) ||
+        discountValue > discountableSubtotal
+      ) {
         throw new BadRequestException(
-          'O desconto geral nao pode superar o subtotal da proposta.',
+          allowOperationalExpenseDiscount
+            ? 'O desconto geral nao pode superar o subtotal da proposta.'
+            : 'O desconto nao pode superar o subtotal de pecas e servicos quando as despesas operacionais estiverem protegidas.',
         );
       }
-      const calculatedTotal = subtotal - discountValue;
+      const calculatedTotal = this.roundCurrency(subtotal - discountValue);
       this.validateCommercialTerms(createProposalDto, calculatedTotal);
 
       const nextCode = await this.generateNextNewCode(tx);
@@ -262,6 +276,7 @@ export class ProposalsService {
           operationalExpenses:
             operationalExpenses.items as unknown as Prisma.InputJsonValue,
           operationalExpensesTotal: operationalExpenses.total,
+          allowOperationalExpenseDiscount,
           validUntil: createProposalDto.validUntil
             ? new Date(createProposalDto.validUntil)
             : null,
@@ -412,6 +427,8 @@ export class ProposalsService {
           discount: source.discount,
           operationalExpenses: source.operationalExpenses ?? undefined,
           operationalExpensesTotal: source.operationalExpensesTotal,
+          allowOperationalExpenseDiscount:
+            source.allowOperationalExpenseDiscount,
           clientId: source.clientId,
           salesOpportunityId: source.salesOpportunityId,
           generatorId: source.generatorId,
@@ -1802,6 +1819,10 @@ export class ProposalsService {
     return items.reduce((acc, item) => acc + item.totalPrice, 0);
   }
 
+  private roundCurrency(value: number) {
+    return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+  }
+
   private async prepareProposalItems(
     tx: Prisma.TransactionClient,
     items: CreateProposalDto['items'],
@@ -1953,13 +1974,15 @@ export class ProposalsService {
         unitLabel: rate.unitLabel,
         quantity,
         unitPrice: Number(rate.unitPrice),
-        total: quantity * Number(rate.unitPrice),
+        total: this.roundCurrency(quantity * Number(rate.unitPrice)),
       };
     });
 
     return {
       items,
-      total: items.reduce((sum, item) => sum + item.total, 0),
+      total: this.roundCurrency(
+        items.reduce((sum, item) => sum + item.total, 0),
+      ),
     };
   }
 
@@ -2168,6 +2191,9 @@ export class ProposalsService {
         installmentCount: input.dto.installmentCount ?? null,
         installmentIntervalDays: input.dto.installmentIntervalDays ?? 30,
         firstDueDate: input.dto.firstDueDate || null,
+        allowOperationalExpenseDiscount: Boolean(
+          input.dto.allowOperationalExpenseDiscount,
+        ),
       },
       totals: {
         itemsSubtotal: input.itemsSubtotal,
@@ -2175,6 +2201,9 @@ export class ProposalsService {
           (sum, item) => sum + item.total,
           0,
         ),
+        discountableSubtotal: input.dto.allowOperationalExpenseDiscount
+          ? input.subtotal
+          : input.itemsSubtotal,
         subtotal: input.subtotal,
         discount: input.discountValue,
         total: input.calculatedTotal,
@@ -2205,6 +2234,7 @@ export class ProposalsService {
     delete sanitized.internalNotes;
     delete sanitized.commercialSnapshot;
     delete sanitized.operationalExpenses;
+    delete sanitized.allowOperationalExpenseDiscount;
     delete sanitized.externalDocumentStorageKey;
     delete sanitized.externalDocumentChecksumSha256;
     return sanitized;

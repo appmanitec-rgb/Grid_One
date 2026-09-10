@@ -14,6 +14,7 @@ import { confirmDeletion } from "@/lib/confirm-action";
 
 type Equipment = {
   id: string;
+  code: string;
   name: string;
   brand: string;
   serialNumber?: string | null;
@@ -440,7 +441,8 @@ export default function EquipmentDetailPage() {
               {equipment.name}
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              {equipment.assetTag || "Sem tag"} | Serie{" "}
+              <span className="font-mono font-semibold text-slate-700">{equipment.code}</span>
+              {" | "}{equipment.assetTag || "Sem tag"} | Serie{" "}
               {equipment.serialNumber || "nao informada"} |{" "}
               {equipment.power} kVA
             </p>
@@ -487,6 +489,7 @@ export default function EquipmentDetailPage() {
           <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
             <Panel title="Identificacao e localizacao">
               <InfoGrid>
+                <Info label="Codigo do equipamento" value={equipment.code} />
                 <Info label="Cliente" value={equipment.client?.companyName || "-"} href={equipment.client?.id ? `/dashboard/clients/${equipment.client.id}` : undefined} permission="clients.view" />
                 <Info label="Local/site" value={equipment.currentSite?.name || equipment.installationSite || "-"} href={equipment.currentSite?.id ? "/dashboard/sites" : undefined} permission="clients.view" />
                 <Info label="Modelo" value={equipment.model?.name || "-"} />

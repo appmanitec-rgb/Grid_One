@@ -191,6 +191,12 @@ export const STUDIO_RESOURCES: StudioResource[] = [
     importMode: "SAFE",
     fields: [
       {
+        key: "code",
+        label: "Codigo",
+        searchable: true,
+        sortable: true,
+      },
+      {
         key: "companyName",
         label: "Empresa",
         searchable: true,
@@ -990,6 +996,12 @@ export const STUDIO_RESOURCES: StudioResource[] = [
     canExport: true,
     importMode: "DISABLED",
     fields: [
+      {
+        key: "code",
+        label: "Codigo",
+        searchable: true,
+        sortable: true,
+      },
       {
         key: "name",
         label: "Politica",

@@ -163,6 +163,8 @@ export default function GeneratorProposalWizardPage() {
   const [deliveryLeadTimeDays, setDeliveryLeadTimeDays] = useState("");
   const [validUntil, setValidUntil] = useState("");
   const [discountPercent, setDiscountPercent] = useState("0");
+  const [allowOperationalExpenseDiscount, setAllowOperationalExpenseDiscount] =
+    useState(false);
   const [externalNotes, setExternalNotes] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
   const [operationalExpenses, setOperationalExpenses] = useState<
@@ -296,7 +298,12 @@ export default function GeneratorProposalWizardPage() {
   }, [additionalItems, generatorQuantity, selectedGenerator]);
   const expensesTotal = operationalExpensesTotal(operationalExpenses);
   const subtotal = itemsSubtotal + expensesTotal;
-  const discountValue = subtotal * Math.min(100, Math.max(0, Number(discountPercent || 0))) / 100;
+  const discountableSubtotal =
+    itemsSubtotal + (allowOperationalExpenseDiscount ? expensesTotal : 0);
+  const discountValue =
+    (discountableSubtotal *
+      Math.min(100, Math.max(0, Number(discountPercent || 0)))) /
+    100;
   const total = subtotal - discountValue;
 
   function restoreDraft() {
@@ -490,6 +497,7 @@ export default function GeneratorProposalWizardPage() {
           internalNotes: internalNotes || undefined,
           externalNotes: externalNotes || undefined,
           discount: discountValue,
+          allowOperationalExpenseDiscount,
           operationalExpenses: operationalExpenses
             .filter((item) => item.quantity > 0)
             .map((item) => ({
@@ -694,6 +702,25 @@ export default function GeneratorProposalWizardPage() {
             <Field label="Observacoes para o cliente"><textarea className={INPUT_CLASS} rows={4} value={externalNotes} onChange={(event) => setExternalNotes(event.target.value)} /></Field>
             <Field label="Observacoes internas"><textarea className={INPUT_CLASS} rows={4} value={internalNotes} onChange={(event) => setInternalNotes(event.target.value)} /></Field>
           </div>
+          <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <input
+              type="checkbox"
+              checked={allowOperationalExpenseDiscount}
+              onChange={(event) =>
+                setAllowOperationalExpenseDiscount(event.target.checked)
+              }
+              className="mt-0.5 h-4 w-4 accent-emerald-600"
+            />
+            <span>
+              <span className="block text-sm font-semibold text-slate-800">
+                Permitir desconto nas despesas operacionais
+              </span>
+              <span className="mt-1 block text-xs text-slate-500">
+                Desmarcado, o desconto incide somente no gerador, peças e
+                serviços.
+              </span>
+            </span>
+          </label>
           <div className="mt-6">
             <OperationalExpensesEditor
               value={operationalExpenses}

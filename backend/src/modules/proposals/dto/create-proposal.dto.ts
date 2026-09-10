@@ -179,6 +179,10 @@ export class CreateProposalDto {
   @IsOptional()
   operationalExpenses?: ProposalOperationalExpenseDto[];
 
+  @IsBoolean()
+  @IsOptional()
+  allowOperationalExpenseDiscount?: boolean;
+
   @IsNumber()
   @Min(0)
   @IsOptional()

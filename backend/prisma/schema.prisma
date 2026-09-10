@@ -743,6 +743,7 @@ enum DocumentAccessResult {
 
 model User {
   id                    String                 @id @default(uuid())
+  code                  String                 @unique @default(dbgenerated())
   name                  String
   email                 String                 @unique
   passwordHash          String
@@ -1107,6 +1108,7 @@ model Technician {
 
 model Client {
   id                      String           @id @default(uuid())
+  code                    String           @unique @default(dbgenerated())
   companyName             String
   tradeName               String?
   cnpj                    String           @unique
@@ -1281,6 +1283,7 @@ model GeneratorModelMaintenanceTemplate {
 
 model Generator {
   id                           String                     @id @default(uuid())
+  code                         String                     @unique @default(dbgenerated())
   name                         String
   brand                        String
   serialNumber                 String?                    @unique
@@ -1910,24 +1913,25 @@ model Proposal {
   customerDecisionSource   String?
   customerDecisionNote     String?
 
-  scope                   String?
-  freight                 String?    @default("FOB")
-  paymentTerm             String?
-  deliveryLeadTimeDays    Int?
-  paymentDetails          String?
-  hasDownPayment          Boolean    @default(false)
-  downPaymentAmount       Float?
-  installmentCount        Int?
-  installmentIntervalDays Int?       @default(30)
-  firstDueDate            DateTime?
-  internalNotes           String?
-  externalNotes           String?
-  operationalExpenses      Json?
-  operationalExpensesTotal Float       @default(0)
-  discount                Float?     @default(0)
-  parentProposalId        String?
-  parentProposal          Proposal?  @relation("ProposalRevisionChain", fields: [parentProposalId], references: [id])
-  revisions               Proposal[] @relation("ProposalRevisionChain")
+  scope                           String?
+  freight                         String?    @default("FOB")
+  paymentTerm                     String?
+  deliveryLeadTimeDays            Int?
+  paymentDetails                  String?
+  hasDownPayment                  Boolean    @default(false)
+  downPaymentAmount               Float?
+  installmentCount                Int?
+  installmentIntervalDays         Int?       @default(30)
+  firstDueDate                    DateTime?
+  internalNotes                   String?
+  externalNotes                   String?
+  operationalExpenses             Json?
+  operationalExpensesTotal        Float      @default(0)
+  allowOperationalExpenseDiscount Boolean    @default(false)
+  discount                        Float?     @default(0)
+  parentProposalId                String?
+  parentProposal                  Proposal?  @relation("ProposalRevisionChain", fields: [parentProposalId], references: [id])
+  revisions                       Proposal[] @relation("ProposalRevisionChain")
 
   clientId           String
   client             Client            @relation(fields: [clientId], references: [id])

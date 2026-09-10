@@ -1072,13 +1072,10 @@ export class CatalogsService {
 
   private async estimateNextSkuNumber() {
     const rows = await this.prisma.$queryRaw<Array<{ nextNumber: number }>>`
-      SELECT GREATEST(
-        123456789,
-        COALESCE(MAX("skuNumber") + 1, 123456789)
-      )::integer AS "nextNumber"
+      SELECT COALESCE(MAX("skuNumber") + 1, 0)::integer AS "nextNumber"
       FROM "catalog_items"
     `;
-    return rows[0]?.nextNumber ?? 123456789;
+    return rows[0]?.nextNumber ?? 0;
   }
 
   private async prepareSkuForCreate(
@@ -1200,7 +1197,7 @@ export class CatalogsService {
   }
 
   private composeSku(number: number, suffix: string) {
-    return `${String(number).padStart(9, '0')}${suffix}`;
+    return `${number}${suffix}`;
   }
 
   private async nextGeneratedSku(tx: Prisma.TransactionClient, suffix: string) {

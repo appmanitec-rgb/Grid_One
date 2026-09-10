@@ -49,6 +49,11 @@ describe('CatalogsService', () => {
     expect(service).toBeDefined();
   });
 
+  it('composes automatic SKUs from zero without numeric padding', () => {
+    expect((service as any).composeSku(0, 'CFT')).toBe('0CFT');
+    expect((service as any).composeSku(1, 'CFT')).toBe('1CFT');
+  });
+
   it('returns operational detail with balances and masks cost data without permission', async () => {
     prisma.catalogItem.findUnique.mockResolvedValue(
       catalogItemFixture({

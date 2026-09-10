@@ -40,6 +40,7 @@ type TechnicianRow = {
   longitude?: number | null;
   user: {
     id: string;
+    code: string;
     name: string;
     email: string;
     role: string;
@@ -531,7 +532,7 @@ export default function TechniciansPage() {
                               {row.user.name}
                             </p>
                             <p className="mt-1 text-xs text-slate-500">
-                              {row.user.email}
+                              {row.user.code} · {row.user.email}
                             </p>
                             <p className="mt-1 text-xs text-slate-500">
                               {row.user.role}

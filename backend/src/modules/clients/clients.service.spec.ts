@@ -211,6 +211,7 @@ describe('ClientsService', () => {
         }),
         select: {
           id: true,
+          code: true,
           companyName: true,
           tradeName: true,
           cnpj: true,

@@ -159,7 +159,69 @@ const INSPECTION_STATUS_LABEL: Record<string, string> = {
 };
 
 function formatMoney(value: number) {
-  return value.toFixed(2);
+  return new Intl.NumberFormat("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(roundMoney(value));
+}
+
+function roundMoney(value: number) {
+  return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+}
+
+type CommercialBreakdownRow = {
+  key: "EXPENSES" | "PARTS" | "SERVICES";
+  label: string;
+  subtotal: number;
+  discountEligible: boolean;
+  discount: number;
+  total: number;
+};
+
+function buildCommercialBreakdown(
+  entries: Array<
+    Pick<
+      CommercialBreakdownRow,
+      "key" | "label" | "subtotal" | "discountEligible"
+    >
+  >,
+  totalDiscount: number,
+): CommercialBreakdownRow[] {
+  const normalized = entries.map((entry) => ({
+    ...entry,
+    subtotal: roundMoney(entry.subtotal),
+  }));
+  const discountableTotal = roundMoney(
+    normalized.reduce(
+      (sum, entry) =>
+        sum + (entry.discountEligible ? entry.subtotal : 0),
+      0,
+    ),
+  );
+  const discount = Math.min(discountableTotal, roundMoney(totalDiscount));
+  const positiveEntries = normalized.filter(
+    (entry) => entry.discountEligible && entry.subtotal > 0,
+  );
+  let allocated = 0;
+
+  return normalized.map((entry) => {
+    const positiveIndex = positiveEntries.findIndex(
+      (positive) => positive.key === entry.key,
+    );
+    const isLastPositive = positiveIndex === positiveEntries.length - 1;
+    const entryDiscount =
+      !entry.discountEligible || entry.subtotal <= 0 || discountableTotal <= 0
+        ? 0
+        : isLastPositive
+          ? roundMoney(discount - allocated)
+          : roundMoney((discount * entry.subtotal) / discountableTotal);
+    allocated = roundMoney(allocated + entryDiscount);
+    return {
+      ...entry,
+      discount: entryDiscount,
+      total: roundMoney(entry.subtotal - entryDiscount),
+    };
+  });
 }
 
 function onlyDigits(value: string) {
@@ -396,6 +458,8 @@ export default function NewProposalPage() {
     "PERCENTAGE",
   );
   const [discountInput, setDiscountInput] = useState("");
+  const [allowOperationalExpenseDiscount, setAllowOperationalExpenseDiscount] =
+    useState(false);
   useEffect(() => {
     async function fetchData() {
       try {
@@ -1138,26 +1202,88 @@ export default function NewProposalPage() {
       ),
     [otherItems],
   );
-  const expensesTotal = operationalExpensesTotal(operationalExpenses);
-  const subtotal =
-    partsTotal + laborTotal + hourlyTotal + otherTotal + expensesTotal;
+  const expensesTotal = roundMoney(
+    operationalExpensesTotal(operationalExpenses),
+  );
+  const partsSubtotal = roundMoney(partsTotal);
+  const servicesSubtotal = roundMoney(laborTotal + hourlyTotal + otherTotal);
+  const subtotal = roundMoney(
+    expensesTotal + partsSubtotal + servicesSubtotal,
+  );
+  const discountableSubtotal = roundMoney(
+    partsSubtotal +
+      servicesSubtotal +
+      (allowOperationalExpenseDiscount ? expensesTotal : 0),
+  );
 
-  const maxDiscountAllowed = USER_ROLE === "ADMIN" ? subtotal : subtotal * 0.07;
+  const maxDiscountAllowed =
+    USER_ROLE === "ADMIN"
+      ? discountableSubtotal
+      : roundMoney(discountableSubtotal * 0.07);
 
   const finalDiscount = useMemo(() => {
     if (discountType === "PERCENTAGE") {
-      let percent = Number(discountInput) || 0;
+      let percent = Math.min(
+        100,
+        Math.max(0, Number(discountInput) || 0),
+      );
       if (USER_ROLE === "NORMAL" && percent > 7) percent = 7;
-      return subtotal * (percent / 100);
+      return roundMoney(discountableSubtotal * (percent / 100));
     }
 
-    let value = Number(discountInput) || 0;
+    let value = Math.max(0, Number(discountInput) || 0);
+    value = Math.min(value, discountableSubtotal);
     if (USER_ROLE === "NORMAL" && value > maxDiscountAllowed)
       value = maxDiscountAllowed;
-    return value;
-  }, [discountInput, discountType, maxDiscountAllowed, subtotal, USER_ROLE]);
+    return roundMoney(value);
+  }, [
+    discountInput,
+    discountType,
+    discountableSubtotal,
+    maxDiscountAllowed,
+    USER_ROLE,
+  ]);
 
-  const grandTotal = Math.max(0, subtotal - finalDiscount);
+  const commercialBreakdown = useMemo(
+    () =>
+      buildCommercialBreakdown(
+        [
+          {
+            key: "EXPENSES",
+            label: "Despesas operacionais",
+            subtotal: expensesTotal,
+            discountEligible: allowOperationalExpenseDiscount,
+          },
+          {
+            key: "PARTS",
+            label: "Peças e materiais",
+            subtotal: partsSubtotal,
+            discountEligible: true,
+          },
+          {
+            key: "SERVICES",
+            label: "Serviços",
+            subtotal: servicesSubtotal,
+            discountEligible: true,
+          },
+        ],
+        finalDiscount,
+      ),
+    [
+      allowOperationalExpenseDiscount,
+      expensesTotal,
+      finalDiscount,
+      partsSubtotal,
+      servicesSubtotal,
+    ],
+  );
+  const grandTotal = roundMoney(
+    commercialBreakdown.reduce((sum, entry) => sum + entry.total, 0),
+  );
+  const effectiveDiscountPercent =
+    discountableSubtotal > 0
+      ? (finalDiscount / discountableSubtotal) * 100
+      : 0;
   const entryAmount = hasDownPayment
     ? Math.min(grandTotal, Math.max(0, Number(downPaymentAmount || 0)))
     : 0;
@@ -1262,6 +1388,7 @@ export default function NewProposalPage() {
       internalNotes,
       externalNotes,
       discount: finalDiscount,
+      allowOperationalExpenseDiscount,
       operationalExpenses: operationalExpenses
         .filter((item) => item.quantity > 0)
         .map((item) => ({
@@ -2579,6 +2706,25 @@ export default function NewProposalPage() {
             </div>
 
             <div className="md:col-span-2 grid grid-cols-2 gap-2 rounded-lg border border-red-100 bg-red-50 p-2">
+              <label className="col-span-2 flex cursor-pointer items-start gap-3 rounded-md border border-red-100 bg-white px-3 py-2.5">
+                <input
+                  type="checkbox"
+                  checked={allowOperationalExpenseDiscount}
+                  onChange={(event) =>
+                    setAllowOperationalExpenseDiscount(event.target.checked)
+                  }
+                  className="mt-0.5 h-4 w-4 accent-rose-600"
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-slate-800">
+                    Permitir desconto nas despesas operacionais
+                  </span>
+                  <span className="block text-xs leading-5 text-slate-500">
+                    Desmarcado, o desconto será aplicado somente em peças e
+                    serviços.
+                  </span>
+                </span>
+              </label>
               <div>
                 <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-red-600">
                   Tipo desconto
@@ -2628,61 +2774,117 @@ export default function NewProposalPage() {
           </div>
         </div>
 
-        <div className="sticky bottom-4 z-20 flex flex-col gap-4 rounded-xl border border-zinc-200 bg-white/95 p-4 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] backdrop-blur md:flex-row md:items-center md:justify-between md:px-6">
-          <div className="flex items-center gap-8">
-            {expensesTotal > 0 ? (
-              <div className="hidden text-zinc-500 lg:block">
-                <p className="mb-1 text-xs font-medium uppercase tracking-wider">
-                  Despesas operacionais
-                </p>
-                <p className="text-lg font-semibold">
-                  R$ {formatMoney(expensesTotal)}
-                </p>
-              </div>
-            ) : null}
-            {finalDiscount > 0 ? (
-              <div className="hidden text-zinc-400 md:block">
-                <p className="mb-1 text-xs font-medium uppercase tracking-wider">
-                  Subtotal
-                </p>
-                <p className="text-xl line-through">
-                  R$ {formatMoney(subtotal)}
-                </p>
-              </div>
-            ) : null}
-
-            {finalDiscount > 0 ? (
-              <div className="rounded-lg bg-red-50 px-3 py-1 text-red-500">
-                <p className="mb-1 text-xs font-bold uppercase tracking-wider">
-                  Desconto
-                </p>
-                <p className="text-lg font-bold">
-                  - R$ {formatMoney(finalDiscount)}
-                </p>
-              </div>
-            ) : null}
-
-            <div>
-              <p className="mb-1 text-sm font-bold text-zinc-500">
-                {finalDiscount > 0 ? "Total final" : "Valor total"}
-              </p>
-              <p className="text-3xl font-extrabold text-emerald-600">
-                R$ {formatMoney(grandTotal)}
-              </p>
-            </div>
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white px-5 py-3">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+              Resumo financeiro da proposta
+            </p>
+            <p className="mt-1 text-sm text-slate-600">
+              {allowOperationalExpenseDiscount
+                ? "O desconto também será distribuído nas despesas operacionais."
+                : "As despesas estão protegidas; o desconto será distribuído somente em peças e serviços."}
+            </p>
           </div>
 
-          <button
-            type="submit"
-            disabled={
-              isSubmitting ||
-              !selectedClientId ||
-              Boolean(selectedClient?.proposalCreationBlocked)
-            }
-            className="rounded-lg bg-emerald-600 px-8 py-3 font-bold text-white shadow-lg transition-all hover:bg-emerald-500 disabled:opacity-50"
-          >
-            {isSubmitting ? "Gerando..." : "Salvar proposta"}
-          </button>
+          <div className="grid lg:grid-cols-[minmax(0,1fr)_280px]">
+            <div className="overflow-x-auto p-4 md:p-5">
+              <div className="min-w-[580px] overflow-hidden rounded-xl border border-slate-200">
+                <div className="grid grid-cols-[1.1fr_1fr_1fr_1fr] bg-slate-900 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-white">
+                  <span>Categoria</span>
+                  <span className="text-right">Subtotal</span>
+                  <span className="text-right">Desconto aplicado</span>
+                  <span className="text-right">Total líquido</span>
+                </div>
+                {commercialBreakdown.map((entry) => (
+                  <div
+                    key={entry.key}
+                    className="grid grid-cols-[1.1fr_1fr_1fr_1fr] items-center border-t border-slate-100 px-4 py-3 first:border-t-0"
+                  >
+                    <span className="font-semibold text-slate-800">
+                      {entry.label}
+                      {!entry.discountEligible ? (
+                        <small className="mt-0.5 block font-normal text-emerald-700">
+                          Protegida de desconto
+                        </small>
+                      ) : null}
+                    </span>
+                    <span className="text-right tabular-nums text-slate-600">
+                      R$ {formatMoney(entry.subtotal)}
+                    </span>
+                    <span
+                      className={`flex flex-col text-right tabular-nums ${
+                        entry.discount > 0
+                          ? "font-semibold text-rose-600"
+                          : "text-slate-400"
+                      }`}
+                    >
+                      {entry.discountEligible ? (
+                        <>
+                          - R$ {formatMoney(entry.discount)}
+                          <small className="font-normal text-slate-400">
+                            {entry.subtotal > 0
+                              ? `${effectiveDiscountPercent.toLocaleString(
+                                  "pt-BR",
+                                  {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  },
+                                )}%`
+                              : "—"}
+                          </small>
+                        </>
+                      ) : (
+                        <span className="font-medium text-emerald-700">
+                          Não aplicado
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-right font-bold tabular-nums text-slate-950">
+                      R$ {formatMoney(entry.total)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                <span>
+                  Subtotal bruto: <strong>R$ {formatMoney(subtotal)}</strong>
+                </span>
+                <span>
+                  Desconto sobre a base permitida:{" "}
+                  {effectiveDiscountPercent.toLocaleString("pt-BR", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}% (- R${" "}
+                  {formatMoney(finalDiscount)})
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col justify-between border-t border-slate-200 bg-emerald-50/70 p-5 lg:border-l lg:border-t-0">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-700">
+                  Investimento total
+                </p>
+                <p className="mt-2 text-3xl font-extrabold tabular-nums text-emerald-700">
+                  R$ {formatMoney(grandTotal)}
+                </p>
+                <p className="mt-2 text-xs leading-5 text-emerald-800/75">
+                  Despesas + peças + serviços − descontos aplicados
+                </p>
+              </div>
+              <button
+                type="submit"
+                disabled={
+                  isSubmitting ||
+                  !selectedClientId ||
+                  Boolean(selectedClient?.proposalCreationBlocked)
+                }
+                className="mt-5 w-full rounded-xl bg-emerald-700 px-6 py-3 font-bold text-white shadow-lg transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isSubmitting ? "Gerando..." : "Salvar proposta"}
+              </button>
+            </div>
+          </div>
         </div>
       </form>
     </div>

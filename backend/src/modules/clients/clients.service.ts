@@ -274,6 +274,12 @@ export class ClientsService {
       ? {
           OR: [
             {
+              code: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+            {
               companyName: {
                 contains: search,
                 mode: 'insensitive',
@@ -314,6 +320,7 @@ export class ClientsService {
       where,
       select: {
         id: true,
+        code: true,
         companyName: true,
         tradeName: true,
         cnpj: true,

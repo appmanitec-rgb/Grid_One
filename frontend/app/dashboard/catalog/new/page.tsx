@@ -185,7 +185,7 @@ export default function CatalogFormPage() {
     areas: SkuArea[];
     applications: SkuApplication[];
     rules: SkuRule[];
-  }>({ previewNumber: 123456789, areas: [], applications: [], rules: [] });
+  }>({ previewNumber: 0, areas: [], applications: [], rules: [] });
   const [supplierSearch, setSupplierSearch] = useState("");
   const [isSupplierFormOpen, setIsSupplierFormOpen] = useState(false);
   const [isCreatingSupplier, setIsCreatingSupplier] = useState(false);
@@ -377,7 +377,7 @@ export default function CatalogFormPage() {
   const skuSuffixPreview = `${selectedSkuArea?.code || "_"}${selectedSkuFamily?.code || "_"}${selectedSkuApplication?.code || "_"}`;
   const skuBaseNumber = formData.sku && /^[0-9]{9}[A-Z]{3}$/.test(formData.sku)
     ? formData.sku.slice(0, -3)
-    : String(skuTaxonomy.previewNumber).padStart(9, "0");
+    : String(skuTaxonomy.previewNumber);
   const generatedSkuPreview = `${skuBaseNumber}${skuSuffixPreview}`;
   const skuClassificationComplete = Boolean(selectedSkuArea && selectedSkuFamily && selectedSkuApplication);
   const skuReadablePath = [selectedSkuArea?.name, selectedSkuFamily?.name, selectedSkuApplication?.name].filter(Boolean).join(" • ");
@@ -658,7 +658,7 @@ export default function CatalogFormPage() {
       const res = await apiFetch("/catalogs/sku-taxonomy", { cache: "no-store" });
       if (res.ok) setSkuTaxonomy(await res.json());
     } catch {
-      setSkuTaxonomy({ previewNumber: 123456789, areas: [], applications: [], rules: [] });
+      setSkuTaxonomy({ previewNumber: 0, areas: [], applications: [], rules: [] });
     }
   }
 

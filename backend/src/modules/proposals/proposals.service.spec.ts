@@ -352,6 +352,7 @@ describe('ProposalsService', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           operationalExpensesTotal: 340,
+          allowOperationalExpenseDiscount: false,
           totalValue: 1340,
           operationalExpenses: expect.arrayContaining([
             expect.objectContaining({
@@ -371,6 +372,54 @@ describe('ProposalsService', () => {
         }),
       }),
     );
+  });
+
+  it('protects operational expenses from discounts unless explicitly allowed', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      role: UserRole.ADMIN,
+      linkedClientId: null,
+    });
+    db.salesOpportunity.findUnique.mockResolvedValue(null);
+    db.user.findFirst.mockResolvedValue({ id: 'seller-1' });
+    db.catalogItem.findMany.mockResolvedValue([]);
+    db.operationalExpenseRate.findMany.mockResolvedValue([
+      {
+        expenseType: OperationalExpenseType.DISPLACEMENT,
+        label: 'Deslocamento',
+        unitLabel: 'km',
+        unitPrice: 2.5,
+      },
+    ]);
+
+    await expect(
+      service.create(
+        {
+          clientId: 'client-1',
+          userId: 'seller-1',
+          type: ProposalType.SERVICES,
+          items: [
+            {
+              kind: ProposalItemKind.OTHER,
+              description: 'Servico',
+              quantity: 1,
+              unitPrice: 100,
+            },
+          ],
+          operationalExpenses: [
+            {
+              expenseType: OperationalExpenseType.DISPLACEMENT,
+              quantity: 100,
+            },
+          ],
+          discount: 200,
+          allowOperationalExpenseDiscount: false,
+        },
+        'admin-1',
+      ),
+    ).rejects.toThrow('despesas operacionais estiverem protegidas');
+
+    expect(db.proposal.create).not.toHaveBeenCalled();
   });
 
   it('opens a centralized board approval when a generator proposal is submitted', async () => {

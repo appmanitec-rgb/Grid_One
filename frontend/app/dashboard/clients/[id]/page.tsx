@@ -40,6 +40,7 @@ type ClientContact = {
 
 type ClientGenerator = {
   id: string;
+  code: string;
   name: string;
   brand: string;
   power: number;
@@ -123,6 +124,7 @@ type ClientReport = {
 
 type ClientProfile = {
   id: string;
+  code: string;
   companyName: string;
   tradeName?: string | null;
   cnpj: string;
@@ -389,6 +391,7 @@ export default function ClientProfilePage() {
       <section className="bg-white border border-zinc-200 rounded-xl p-6">
         <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">Dados gerais</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+          <Info label="Codigo do cliente" value={client.code} />
           <Info label="Razao social / Nome" value={client.companyName} />
           <Info label="Nome fantasia" value={client.tradeName || "-"} />
           <Info label="Documento" value={client.cnpj} />
@@ -481,7 +484,7 @@ export default function ClientProfilePage() {
                 <p className="font-semibold text-zinc-800">{gen.name}</p>
                 <p className="text-sm text-zinc-600">Marca: {gen.brand}</p>
                 <p className="text-sm text-zinc-600">Potencia: {gen.power} kVA</p>
-                <p className="text-sm text-zinc-600">Serie: {gen.serialNumber || "-"}</p>
+                <p className="text-sm text-zinc-600">Codigo: {gen.code} | Serie: {gen.serialNumber || "-"}</p>
                 <p className="text-sm text-zinc-600">
                   Cadastrada por: {gen.createdByUser?.name || "Nao identificado"}
                 </p>

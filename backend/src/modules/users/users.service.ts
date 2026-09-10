@@ -29,6 +29,7 @@ import { UserPresencePingDto } from './dto/user-presence-ping.dto';
 
 const userPublicSelect = {
   id: true,
+  code: true,
   name: true,
   email: true,
   role: true,

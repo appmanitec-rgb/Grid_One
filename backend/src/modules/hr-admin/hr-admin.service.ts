@@ -52,6 +52,7 @@ export class HrAdminService {
       },
       select: {
         id: true,
+        code: true,
         name: true,
         email: true,
         role: true,
@@ -72,6 +73,7 @@ export class HrAdminService {
         where: { role: { notIn: [UserRole.CLIENT, UserRole.AUDITOR] } },
         select: {
           id: true,
+          code: true,
           name: true,
           email: true,
           role: true,
@@ -87,6 +89,7 @@ export class HrAdminService {
         where: { role: UserRole.CLIENT },
         select: {
           id: true,
+          code: true,
           name: true,
           email: true,
           role: true,
@@ -100,6 +103,7 @@ export class HrAdminService {
       this.prisma.client.findMany({
         select: {
           id: true,
+          code: true,
           companyName: true,
           tradeName: true,
           cnpj: true,
@@ -114,6 +118,7 @@ export class HrAdminService {
         where: { role: UserRole.AUDITOR },
         select: {
           id: true,
+          code: true,
           name: true,
           email: true,
           role: true,

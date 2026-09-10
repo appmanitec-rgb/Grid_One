@@ -226,7 +226,7 @@ async function main() {
         `TRUNCATE TABLE ${tables.join(', ')} RESTART IDENTITY CASCADE`,
       );
       await tx.$executeRawUnsafe(
-        `SELECT setval('catalog_sku_number_seq', 123456788, true)`,
+        `SELECT setval('catalog_sku_number_seq', 0, false)`,
       );
 
       for (const user of preservedUsers) {
@@ -530,7 +530,7 @@ async function main() {
         },
       ] as const;
 
-      let skuNumber = 123456789;
+      let skuNumber = 0;
       for (const group of groups) {
         const [area, family, application] = classifications[group.key];
         for (let index = 0; index < group.names.length; index += 1) {
@@ -585,7 +585,7 @@ async function main() {
         }
       }
       await tx.$executeRawUnsafe(
-        `SELECT setval('catalog_sku_number_seq', ${skuNumber - 1}, true)`,
+        `SELECT setval('catalog_sku_number_seq', ${skuNumber}, false)`,
       );
 
       const warehouse = await tx.warehouse.create({

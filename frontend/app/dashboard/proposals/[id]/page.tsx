@@ -48,6 +48,7 @@ type Proposal = {
   commercialSnapshot?: { version?: number; capturedAt?: string } | null;
   totalValue: number;
   operationalExpensesTotal?: number | null;
+  allowOperationalExpenseDiscount?: boolean;
   operationalExpenses?: Array<{
     expenseType: string;
     label: string;
@@ -1129,7 +1130,11 @@ export default function ProposalDetailPage() {
         <SectionCard
           eyebrow="Uso interno"
           title="Despesas operacionais"
-          description="Composicao completa congelada nesta proposta. O cliente recebe apenas o total e os tipos marcados."
+          description={`Composicao completa congelada nesta proposta. ${
+            proposal.allowOperationalExpenseDiscount
+              ? "Despesas participaram da base de desconto."
+              : "Despesas foram protegidas de desconto."
+          } O cliente recebe apenas o total e os tipos marcados.`}
         >
           <div className="overflow-x-auto">
             <table className="w-full min-w-[620px] text-sm">
