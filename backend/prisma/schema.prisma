@@ -1390,7 +1390,9 @@ model ClientAuditLog {
 model CatalogItem {
   id                     String         @id @default(uuid())
   sku                    String?        @unique
-  legacyCode             String?
+  legacyCode             String?        @unique
+  legacySequence         String?
+  radarCode              String?
   skuNumber              Int?           @unique
   skuAreaId              String?
   skuFamilyId            String?
@@ -1464,7 +1466,8 @@ model CatalogItem {
   @@index([skuAreaId])
   @@index([skuFamilyId])
   @@index([skuApplicationId])
-  @@index([legacyCode])
+  @@index([legacySequence])
+  @@index([radarCode])
   @@index([pricingPolicyId])
   @@map("catalog_items")
 }

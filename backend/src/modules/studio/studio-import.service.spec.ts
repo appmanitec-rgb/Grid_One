@@ -31,6 +31,17 @@ describe('StudioImportService - catalog import', () => {
           operationalCostPercent: 0,
         }),
       },
+      catalogSkuRule: {
+        findFirst: jest.fn().mockResolvedValue({
+          areaId: 'area-outros',
+          familyId: 'family-outros',
+          applicationId: 'application-outra',
+          area: { code: 'O' },
+          family: { code: 'O' },
+          application: { code: 'O' },
+        }),
+      },
+      $queryRaw: jest.fn().mockResolvedValue([{ nextval: 123456789 }]),
       studioImportBatch: {
         create: jest.fn().mockResolvedValue({ id: 'batch-1' }),
         update: jest
@@ -93,7 +104,7 @@ describe('StudioImportService - catalog import', () => {
       duplicates: 1,
     });
     expect(preview.rows[0].normalizedData).toMatchObject({
-      sku: 'P-001',
+      legacyCode: 'P-001',
       name: 'Filtro',
       commercialDescription: 'Filtro faturamento',
       type: 'PART',
@@ -110,10 +121,10 @@ describe('StudioImportService - catalog import', () => {
   it('creates only valid catalog rows when the preview is confirmed', async () => {
     const { service, prisma, tx, getPreviewRows } = setup();
     const csv = [
-      'CODIGO;DESCRICAO;TIPODOITEM;CUSTO;CODIGORADAR;ALTERNATIVO',
-      'P-010;Peca valida;Kit;25,90;RAD-10;ALT-10',
-      ';Ignorar sem codigo;Componente;10,00;;',
-      'S-010;Servico valido;Serviço;80,00;;',
+      'CODIGO;SKU INTERNO;SEQUENCIA;DESCRICAO;TIPODOITEM;CUSTO;CODIGORADAR;ALTERNATIVO',
+      'P-010;999XXX;10;Peca valida;Kit;25,90;RAD-10;ALT-10',
+      ';IGNORAR;11;Ignorar sem codigo;Componente;10,00;;',
+      'S-010;123SSS;12;Servico valido;Serviço;80,00;;',
     ].join('\n');
 
     await service.preview(
@@ -137,7 +148,10 @@ describe('StudioImportService - catalog import', () => {
 
     expect(tx.catalogItem.create).toHaveBeenCalledTimes(2);
     expect(tx.catalogItem.create.mock.calls[0][0].data).toMatchObject({
-      sku: 'P-010',
+      sku: '123456789OOO',
+      legacyCode: 'P-010',
+      legacySequence: '10',
+      radarCode: 'RAD-10',
       name: 'Peca valida',
       type: 'PART',
       basePrice: 46.43,
@@ -153,7 +167,9 @@ describe('StudioImportService - catalog import', () => {
       tx.catalogItem.create.mock.calls[0][0].data.identifiers.create,
     ).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ code: 'P-010', isPrimary: true }),
+        expect.objectContaining({ code: '123456789OOO', isPrimary: true }),
+        expect.objectContaining({ code: 'P-010', isPrimary: false }),
+        expect.objectContaining({ code: '10' }),
         expect.objectContaining({ code: 'RAD-10' }),
         expect.objectContaining({ code: 'ALT-10' }),
       ]),

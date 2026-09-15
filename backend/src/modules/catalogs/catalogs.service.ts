@@ -69,6 +69,8 @@ export class CatalogsService {
       );
       Object.assign(catalogData, {
         legacyCode: createCatalogDto.legacyCode?.trim() || null,
+        legacySequence: createCatalogDto.legacySequence?.trim() || null,
+        radarCode: createCatalogDto.radarCode?.trim() || null,
         itemClassification:
           createCatalogDto.itemClassification?.trim() ||
           (createCatalogDto.type === ItemType.SERVICE ? 'Servico' : 'Acabado'),
@@ -99,10 +101,23 @@ export class CatalogsService {
       });
       const skuWrite = await this.prepareSkuForCreate(tx, createCatalogDto);
       Object.assign(catalogData, skuWrite.data);
+      await this.assertLegacyCodeAvailable(tx, createCatalogDto.legacyCode);
 
       const created = await tx.catalogItem.create({ data: catalogData });
       await this.syncSkuIdentifiers(tx, created.id, null, created.sku);
       await this.syncLegacyIdentifier(tx, created.id, null, created.legacyCode);
+      await this.syncExternalIdentifier(tx, created.id, {
+        type: CatalogIdentifierType.OTHER,
+        source: 'sequencia_legada',
+        description: 'Sequencia do sistema anterior',
+        currentCode: created.legacySequence,
+      });
+      await this.syncExternalIdentifier(tx, created.id, {
+        type: CatalogIdentifierType.CATALOG_CODE,
+        source: 'codigo_radar',
+        description: 'Codigo Radar do sistema anterior',
+        currentCode: created.radarCode,
+      });
       return created;
     });
   }
@@ -234,6 +249,18 @@ export class CatalogsService {
                 },
               },
               {
+                legacySequence: {
+                  contains: search,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+              {
+                radarCode: {
+                  contains: search,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+              {
                 itemClassification: {
                   contains: search,
                   mode: Prisma.QueryMode.insensitive,
@@ -325,6 +352,8 @@ export class CatalogsService {
         id: true,
         sku: true,
         legacyCode: true,
+        legacySequence: true,
+        radarCode: true,
         name: true,
         description: true,
         commercialDescription: true,
@@ -369,6 +398,8 @@ export class CatalogsService {
         id: true,
         sku: true,
         legacyCode: true,
+        legacySequence: true,
+        radarCode: true,
         skuNumber: true,
         skuAreaId: true,
         skuFamilyId: true,
@@ -389,6 +420,15 @@ export class CatalogsService {
         updateCatalogDto,
       );
       Object.assign(catalogData, skuWrite.data);
+      if (
+        Object.prototype.hasOwnProperty.call(updateCatalogDto, 'legacyCode')
+      ) {
+        await this.assertLegacyCodeAvailable(
+          tx,
+          updateCatalogDto.legacyCode,
+          id,
+        );
+      }
 
       const updated = await tx.catalogItem.update({
         where: { id },
@@ -405,6 +445,20 @@ export class CatalogsService {
           updated.legacyCode,
         );
       }
+      await this.syncExternalIdentifier(tx, id, {
+        type: CatalogIdentifierType.OTHER,
+        source: 'sequencia_legada',
+        description: 'Sequencia do sistema anterior',
+        previousCode: current.legacySequence,
+        currentCode: updated.legacySequence,
+      });
+      await this.syncExternalIdentifier(tx, id, {
+        type: CatalogIdentifierType.CATALOG_CODE,
+        source: 'codigo_radar',
+        description: 'Codigo Radar do sistema anterior',
+        previousCode: current.radarCode,
+        currentCode: updated.radarCode,
+      });
 
       if (Object.keys(inventoryTargets).length > 0) {
         await tx.inventoryBalance.updateMany({
@@ -1617,6 +1671,25 @@ export class CatalogsService {
     }
   }
 
+  private async assertLegacyCodeAvailable(
+    tx: Prisma.TransactionClient,
+    legacyCode?: string | null,
+    currentItemId?: string,
+  ) {
+    const normalizedCode = legacyCode?.trim() || null;
+    if (!normalizedCode) return;
+
+    const existing = await tx.catalogItem.findFirst({
+      where: { legacyCode: normalizedCode },
+      select: { id: true },
+    });
+    if (existing && existing.id !== currentItemId) {
+      throw new ConflictException(
+        `O codigo legado ${normalizedCode} ja esta registrado.`,
+      );
+    }
+  }
+
   private async syncSkuIdentifiers(
     tx: Prisma.TransactionClient,
     catalogItemId: string,
@@ -1728,6 +1801,67 @@ export class CatalogsService {
         code: normalizedCurrent,
         normalizedCode: this.normalizeIdentifier(normalizedCurrent),
         source: 'sistema_legado',
+        isPrimary: false,
+        isActive: true,
+      },
+    });
+  }
+
+  private async syncExternalIdentifier(
+    tx: Prisma.TransactionClient,
+    catalogItemId: string,
+    options: {
+      type: CatalogIdentifierType;
+      source: string;
+      description: string;
+      previousCode?: string | null;
+      currentCode?: string | null;
+    },
+  ) {
+    const previousCode = options.previousCode?.trim() || null;
+    const currentCode = options.currentCode?.trim() || null;
+
+    if (previousCode !== currentCode) {
+      await tx.catalogItemIdentifier.updateMany({
+        where: {
+          catalogItemId,
+          type: options.type,
+          source: options.source,
+          ...(currentCode ? { NOT: { code: currentCode } } : {}),
+        },
+        data: { isActive: false },
+      });
+    }
+    if (!currentCode) return;
+
+    const existing = await tx.catalogItemIdentifier.findFirst({
+      where: {
+        catalogItemId,
+        type: options.type,
+        source: options.source,
+        code: currentCode,
+      },
+    });
+    if (existing) {
+      await tx.catalogItemIdentifier.update({
+        where: { id: existing.id },
+        data: {
+          normalizedCode: this.normalizeIdentifier(currentCode),
+          description: options.description,
+          isActive: true,
+        },
+      });
+      return;
+    }
+
+    await tx.catalogItemIdentifier.create({
+      data: {
+        catalogItemId,
+        type: options.type,
+        code: currentCode,
+        normalizedCode: this.normalizeIdentifier(currentCode),
+        source: options.source,
+        description: options.description,
         isPrimary: false,
         isActive: true,
       },
@@ -2036,6 +2170,14 @@ export class CatalogsService {
         typeof rawData.legacyCode === 'string'
           ? rawData.legacyCode.trim() || null
           : null;
+    }
+    for (const field of ['legacySequence', 'radarCode']) {
+      if (Object.prototype.hasOwnProperty.call(rawData, field)) {
+        rawData[field] =
+          typeof rawData[field] === 'string'
+            ? rawData[field].trim() || null
+            : null;
+      }
     }
     if (Object.prototype.hasOwnProperty.call(rawData, 'itemClassification')) {
       rawData.itemClassification =

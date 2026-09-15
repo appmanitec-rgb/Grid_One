@@ -364,8 +364,7 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
     resourcePermission: 'catalog.update',
     editableFields: {
       name: 'string',
-      sku: 'string',
-      legacyCode: 'string',
+      ncm: 'string',
       type: 'enum',
       itemClassification: 'string',
       category: 'string',

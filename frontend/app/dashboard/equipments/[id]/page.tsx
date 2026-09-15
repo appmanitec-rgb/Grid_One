@@ -432,7 +432,7 @@ export default function EquipmentDetailPage() {
       />
 
       <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div>
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
               Prontuario tecnico operacional
@@ -447,7 +447,15 @@ export default function EquipmentDetailPage() {
               {equipment.power} kVA
             </p>
           </div>
-
+          {equipment.client?.id ? (
+            <PermissionAwareLink
+              href={`/dashboard/clients/${equipment.client.id}`}
+              permission="clients.view"
+              className={SECONDARY_BUTTON}
+            >
+              Abrir cliente
+            </PermissionAwareLink>
+          ) : null}
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -1059,22 +1067,6 @@ function RelatedList({ empty, children }: { empty: string; children: ReactNode }
   const items = Array.isArray(children) ? children.filter(Boolean) : children;
   const hasItems = Array.isArray(items) ? items.length > 0 : Boolean(items);
   return hasItems ? <div className="space-y-2">{items}</div> : <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">{empty}</p>;
-}
-
-function ActionLink({
-  href,
-  children,
-  permission,
-}: {
-  href: string;
-  children: ReactNode;
-  permission?: string;
-}) {
-  return (
-    <PermissionAwareLink href={href} permission={permission} className={SECONDARY_BUTTON}>
-      {children}
-    </PermissionAwareLink>
-  );
 }
 
 function TabButton({

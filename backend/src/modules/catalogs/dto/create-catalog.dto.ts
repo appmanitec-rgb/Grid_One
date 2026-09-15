@@ -20,6 +20,14 @@ export class CreateCatalogDto {
 
   @IsString()
   @IsOptional()
+  legacySequence?: string;
+
+  @IsString()
+  @IsOptional()
+  radarCode?: string;
+
+  @IsString()
+  @IsOptional()
   skuAreaId?: string;
 
   @IsString()

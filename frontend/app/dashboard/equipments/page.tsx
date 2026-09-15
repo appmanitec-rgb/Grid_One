@@ -341,12 +341,22 @@ export default function EquipmentsPage() {
                   </p>
                 </div>
 
-                <Link
-                  href={`/dashboard/equipments/${item.id}`}
-                  className={PRIMARY_BUTTON}
-                >
-                  Abrir ficha
-                </Link>
+                <div className="flex flex-wrap justify-end gap-2">
+                  {access.clients.view && item.client?.id ? (
+                    <Link
+                      href={`/dashboard/clients/${item.client.id}`}
+                      className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100"
+                    >
+                      Abrir cliente
+                    </Link>
+                  ) : null}
+                  <Link
+                    href={`/dashboard/equipments/${item.id}`}
+                    className={PRIMARY_BUTTON}
+                  >
+                    Abrir ficha
+                  </Link>
+                </div>
               </div>
 
               <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

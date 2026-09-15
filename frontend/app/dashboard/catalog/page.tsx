@@ -9,6 +9,8 @@ type CatalogItem = {
   id: string;
   sku?: string | null;
   legacyCode?: string | null;
+  legacySequence?: string | null;
+  radarCode?: string | null;
   name: string;
   description?: string | null;
   commercialDescription?: string | null;
@@ -86,7 +88,7 @@ export default function CatalogPage() {
     return items.filter((item) => {
       if (!matchesCatalogGroup(item, activeGroup)) return false;
       if (!q) return true;
-      return `${item.name} ${item.sku || ""} ${item.legacyCode || ""} ${item.category || ""} ${item.itemClassification || ""} ${item.acquisitionOrigin || ""} ${item.storageLocation || ""} ${item.description || ""} ${item.commercialDescription || ""}`
+      return `${item.name} ${item.sku || ""} ${item.legacyCode || ""} ${item.legacySequence || ""} ${item.radarCode || ""} ${item.category || ""} ${item.itemClassification || ""} ${item.acquisitionOrigin || ""} ${item.storageLocation || ""} ${item.description || ""} ${item.commercialDescription || ""}`
         .toLowerCase()
         .includes(q);
     });
@@ -199,7 +201,7 @@ export default function CatalogPage() {
               <tr className="bg-zinc-50 text-zinc-500 text-sm border-b border-zinc-200">
                 <th className="p-4 font-medium">Item</th>
                 <th className="p-4 font-medium">Descricao</th>
-                <th className="p-4 font-medium">SKU / Local</th>
+                <th className="p-4 font-medium">Identificacao / Local</th>
                 <th className="p-4 font-medium">Tipo</th>
                 <th className="p-4 font-medium">Saldo</th>
                 <th className="p-4 font-medium">Venda sugerida</th>
@@ -218,8 +220,10 @@ export default function CatalogPage() {
                     <td className="p-4 font-bold text-zinc-800">{item.name}</td>
                     <td className="p-4 text-zinc-600 text-sm max-w-md truncate">{item.description || item.commercialDescription || "Sem descricao"}</td>
                     <td className="p-4 text-sm text-zinc-600">
-                      <p>{item.sku || "-"}</p>
-                      {item.legacyCode ? <p className="text-xs text-blue-700">Legado: {item.legacyCode}</p> : null}
+                      <p className="font-mono font-semibold text-zinc-800">SKU: {item.sku || "-"}</p>
+                      {item.legacyCode ? <p className="text-xs text-blue-700">Codigo legado: {item.legacyCode}</p> : null}
+                      {item.legacySequence ? <p className="text-xs text-zinc-500">Sequencia: {item.legacySequence}</p> : null}
+                      {item.radarCode ? <p className="text-xs text-zinc-500">Radar: {item.radarCode}</p> : null}
                       <p className="text-xs text-zinc-500">{item.storageLocation || "Sem localizacao"}</p>
                     </td>
                     <td className="p-4">

@@ -17,6 +17,12 @@ describe('CatalogsService', () => {
         findUnique: jest.fn(),
         update: jest.fn(),
       },
+      catalogItemIdentifier: {
+        create: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null),
+        update: jest.fn(),
+        updateMany: jest.fn(),
+      },
       catalogPricingPolicy: {
         findFirst: jest.fn().mockResolvedValue({
           id: 'policy-service',
@@ -225,12 +231,47 @@ describe('CatalogsService', () => {
       data: { minQty: 4, maxQty: 18, reorderPoint: 6 },
     });
   });
+
+  it('keeps legacy sequence and Radar code searchable after editing', async () => {
+    const current = catalogItemFixture({
+      legacySequence: '10',
+      radarCode: 'RAD-10',
+    });
+    prisma.catalogItem.findUnique.mockResolvedValue(current);
+    prisma.catalogItem.update.mockImplementation(({ data }: any) =>
+      Promise.resolve({ ...current, ...data }),
+    );
+
+    await service.update(
+      'cat-1',
+      { legacySequence: '11', radarCode: 'RAD-11' },
+      { role: UserRole.ADMIN },
+    );
+
+    expect(prisma.catalogItemIdentifier.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        catalogItemId: 'cat-1',
+        code: '11',
+        source: 'sequencia_legada',
+      }),
+    });
+    expect(prisma.catalogItemIdentifier.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        catalogItemId: 'cat-1',
+        code: 'RAD-11',
+        source: 'codigo_radar',
+      }),
+    });
+  });
 });
 
 function catalogItemFixture(overrides: Record<string, any> = {}) {
   return {
     id: 'cat-1',
     sku: 'FLT-001',
+    legacyCode: null,
+    legacySequence: null,
+    radarCode: null,
     name: 'Filtro de oleo',
     description: 'Filtro tecnico',
     type: ItemType.PART,

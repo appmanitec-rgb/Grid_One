@@ -389,10 +389,7 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
     {
       key: 'preferences',
       label: 'Preferencias',
-      aliases: [
-        'preferencias',
-        'preferÃªncias',
-      ],
+      aliases: ['preferencias', 'preferÃªncias'],
       normalize: normalizeText,
     },
     {
@@ -502,13 +499,7 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
       nullableString(data.contact01Mobile) ||
       '-';
     const addresses = [
-      buildClientAddress(
-        data,
-        'primary',
-        ClientAddressType.OTHER,
-        city,
-        state,
-      ),
+      buildClientAddress(data, 'primary', ClientAddressType.OTHER, city, state),
       buildClientAddress(
         data,
         'billing',
@@ -634,7 +625,13 @@ const EQUIPMENT_IMPORT_DEFINITION: ImportDefinition = {
       validate: (value) =>
         isValidBrazilDocument(primitiveString(value))
           ? []
-          : [{ code: 'INVALID_CLIENT_DOCUMENT', field: 'clientDocument', message: 'CNPJ/CPF do cliente invalido ou incompleto.' }],
+          : [
+              {
+                code: 'INVALID_CLIENT_DOCUMENT',
+                field: 'clientDocument',
+                message: 'CNPJ/CPF do cliente invalido ou incompleto.',
+              },
+            ],
     },
     {
       key: 'clientLegacyCode',
@@ -642,41 +639,129 @@ const EQUIPMENT_IMPORT_DEFINITION: ImportDefinition = {
       aliases: ['codigo cliente'],
       normalize: normalizeText,
     },
-    { key: 'condition', label: 'Condicao', aliases: ['condicao 1', 'situacao'], normalize: normalizeText },
-    { key: 'installationSite', label: 'Endereco Instalacao', aliases: ['local instalacao'], normalize: normalizeText },
-    { key: 'engineBrand', label: 'Fabricante Motor', aliases: ['marca motor'], normalize: normalizeText },
-    { key: 'engineModelName', label: 'Modelo Motor', aliases: ['motor modelo'], normalize: normalizeText },
-    { key: 'engineSerialNumber', label: 'Serie Motor', aliases: ['numero serie motor'], normalize: normalizeText },
-    { key: 'manufactureYear', label: 'Ano Fabricacao', aliases: ['ano fabricacao motor'], normalize: normalizeIntegerInput },
-    { key: 'alternatorBrand', label: 'Fabricante Alternador', aliases: ['marca alternador'], normalize: normalizeText },
-    { key: 'alternatorModelName', label: 'Modelo Alternador', aliases: ['alternador modelo'], normalize: normalizeText },
-    { key: 'alternatorSerialNumber', label: 'Serie Alternador', aliases: ['nserie alternador'], normalize: normalizeText },
-    { key: 'alternatorVoltage', label: 'Tensao Alternador', aliases: ['tensao nominal alternador'], normalize: normalizeText },
-    { key: 'transferSwitchBrand', label: 'Fabricante QTA', aliases: ['fabricante quadro transferencia'], normalize: normalizeText },
-    { key: 'transferSwitchModel', label: 'Modelo QTA', aliases: ['modelo quadro transferencia'], normalize: normalizeText },
-    { key: 'transferSwitchCommandVoltage', label: 'Tensao Comando QTA', aliases: ['tensao comando quadro transferencia'], normalize: normalizeText },
-    { key: 'transferSwitchRatedCurrent', label: 'Corrente Nominal QTA', aliases: ['corrente nominal quadro transferencia'], normalize: normalizeText },
-    { key: 'notes', label: 'Observacoes', aliases: ['observacao', 'notas'], normalize: normalizeText },
-    { key: 'hasMaintenanceContract', label: 'Possui Contrato', aliases: ['com contrato', 'contrato'], normalize: normalizeBooleanInput },
+    {
+      key: 'condition',
+      label: 'Condicao',
+      aliases: ['condicao 1', 'situacao'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'installationSite',
+      label: 'Endereco Instalacao',
+      aliases: ['local instalacao'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'engineBrand',
+      label: 'Fabricante Motor',
+      aliases: ['marca motor'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'engineModelName',
+      label: 'Modelo Motor',
+      aliases: ['motor modelo'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'engineSerialNumber',
+      label: 'Serie Motor',
+      aliases: ['numero serie motor'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'manufactureYear',
+      label: 'Ano Fabricacao',
+      aliases: ['ano fabricacao motor'],
+      normalize: normalizeIntegerInput,
+    },
+    {
+      key: 'alternatorBrand',
+      label: 'Fabricante Alternador',
+      aliases: ['marca alternador'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'alternatorModelName',
+      label: 'Modelo Alternador',
+      aliases: ['alternador modelo'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'alternatorSerialNumber',
+      label: 'Serie Alternador',
+      aliases: ['nserie alternador'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'alternatorVoltage',
+      label: 'Tensao Alternador',
+      aliases: ['tensao nominal alternador'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'transferSwitchBrand',
+      label: 'Fabricante QTA',
+      aliases: ['fabricante quadro transferencia'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'transferSwitchModel',
+      label: 'Modelo QTA',
+      aliases: ['modelo quadro transferencia'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'transferSwitchCommandVoltage',
+      label: 'Tensao Comando QTA',
+      aliases: ['tensao comando quadro transferencia'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'transferSwitchRatedCurrent',
+      label: 'Corrente Nominal QTA',
+      aliases: ['corrente nominal quadro transferencia'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'notes',
+      label: 'Observacoes',
+      aliases: ['observacao', 'notas'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'hasMaintenanceContract',
+      label: 'Possui Contrato',
+      aliases: ['com contrato', 'contrato'],
+      normalize: normalizeBooleanInput,
+    },
   ],
   findDuplicates: async (tx, values) => {
     const generators = await tx.generator.findMany({
       where: { legacyCode: { in: values } },
       select: { legacyCode: true },
     });
-    return new Set(generators.map((generator) => generator.legacyCode).filter((value): value is string => Boolean(value)));
+    return new Set(
+      generators
+        .map((generator) => generator.legacyCode)
+        .filter((value): value is string => Boolean(value)),
+    );
   },
   createRecord: async (tx, data) => {
+    const clientLegacyCode = nullableString(data.clientLegacyCode);
     const client = await tx.client.findFirst({
       where: {
         OR: [
           { cnpj: String(data.clientDocument) },
-          ...(data.clientLegacyCode ? [{ legacyCode: String(data.clientLegacyCode) }] : []),
+          ...(clientLegacyCode ? [{ legacyCode: clientLegacyCode }] : []),
         ],
       },
       select: { id: true },
     });
-    if (!client) throw new BadRequestException('Cliente da maquina nao encontrado pelo CNPJ/CPF ou codigo legado.');
+    if (!client)
+      throw new BadRequestException(
+        'Cliente da maquina nao encontrado pelo CNPJ/CPF ou codigo legado.',
+      );
     return tx.generator.create({
       data: {
         legacyCode: String(data.legacyCode),
@@ -691,15 +776,22 @@ const EQUIPMENT_IMPORT_DEFINITION: ImportDefinition = {
         engineBrand: nullableString(data.engineBrand),
         engineModelName: nullableString(data.engineModelName),
         engineSerialNumber: nullableString(data.engineSerialNumber),
-        manufactureYear: typeof data.manufactureYear === 'number' ? data.manufactureYear : undefined,
+        manufactureYear:
+          typeof data.manufactureYear === 'number'
+            ? data.manufactureYear
+            : undefined,
         alternatorBrand: nullableString(data.alternatorBrand),
         alternatorModelName: nullableString(data.alternatorModelName),
         alternatorSerialNumber: nullableString(data.alternatorSerialNumber),
         alternatorVoltage: nullableString(data.alternatorVoltage),
         transferSwitchBrand: nullableString(data.transferSwitchBrand),
         transferSwitchModel: nullableString(data.transferSwitchModel),
-        transferSwitchCommandVoltage: nullableString(data.transferSwitchCommandVoltage),
-        transferSwitchRatedCurrent: nullableString(data.transferSwitchRatedCurrent),
+        transferSwitchCommandVoltage: nullableString(
+          data.transferSwitchCommandVoltage,
+        ),
+        transferSwitchRatedCurrent: nullableString(
+          data.transferSwitchRatedCurrent,
+        ),
         notes: nullableString(data.notes),
         hasMaintenanceContract: Boolean(data.hasMaintenanceContract),
         operationalStatus: GeneratorOperationalStatus.OPERATING,
@@ -719,19 +811,13 @@ const CATALOG_IMPORT_DEFINITION: ImportDefinition = {
   resourceCreatePermission: 'catalog.create',
   domain: AuditDomain.INVENTORY,
   entityType: 'CatalogItem',
-  uniqueField: 'sku',
+  uniqueField: 'legacyCode',
   fields: [
     {
-      key: 'sku',
-      label: 'Codigo',
-      aliases: ['codigo', 'código', 'sku', 'id produto', 'id do produto'],
-      required: true,
-      normalize: normalizeCatalogCode,
-    },
-    {
       key: 'legacySequence',
-      label: 'Sequencia',
+      label: 'Sequencia Legada',
       aliases: ['sequencia', 'sequência', 'sequence'],
+      required: true,
       normalize: normalizeText,
     },
     {
@@ -816,10 +902,16 @@ const CATALOG_IMPORT_DEFINITION: ImportDefinition = {
         'código legado',
         'legacycode',
         'legacy code',
-        'codigo_1',
-        'codigo 1',
-        'código 1',
+        'codigo',
+        'código',
       ],
+      required: true,
+      normalize: normalizeCatalogCode,
+    },
+    {
+      key: 'ncm',
+      label: 'NCM',
+      aliases: ['ncm', 'codigo_1', 'codigo 1', 'código 1'],
       normalize: normalizeCatalogCode,
     },
     {
@@ -881,17 +973,21 @@ const CATALOG_IMPORT_DEFINITION: ImportDefinition = {
   ],
   findDuplicates: async (tx, values) => {
     const items = await tx.catalogItem.findMany({
-      where: { sku: { in: values } },
-      select: { sku: true },
+      where: { legacyCode: { in: values } },
+      select: { legacyCode: true },
     });
     return new Set(
       items
-        .map((item) => item.sku)
-        .filter((sku): sku is string => Boolean(sku)),
+        .map((item) => item.legacyCode)
+        .filter((code): code is string => Boolean(code)),
     );
   },
   createRecord: async (tx, data) => {
-    const sku = String(data.sku).trim().toUpperCase();
+    const generatedSku = await generateProvisionalCatalogSku(
+      tx,
+      data.type as ItemType,
+    );
+    const sku = generatedSku.sku;
     const policy = await tx.catalogPricingPolicy.findFirst({
       where: { itemType: data.type as ItemType, isActive: true },
       orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
@@ -933,15 +1029,6 @@ const CATALOG_IMPORT_DEFINITION: ImportDefinition = {
               100),
       ).toFixed(2),
     );
-    const legacyDetails = compactObject({
-      sequencia: nullableString(data.legacySequence),
-      origem: nullableString(data.acquisitionOrigin),
-      tipoDoItem: nullableString(data.itemClassification),
-      descricaoComplementar: nullableString(data.legacyDescription),
-      codigoSecundario: nullableString(data.legacyCode),
-      codigoRadar: nullableString(data.radarCode),
-      codigoAlternativo: nullableString(data.alternativeCode),
-    });
     const identifiers = [
       catalogIdentifier(
         sku,
@@ -953,7 +1040,13 @@ const CATALOG_IMPORT_DEFINITION: ImportDefinition = {
         nullableString(data.legacyCode),
         CatalogIdentifierType.LEGACY_CODE,
         false,
-        'codigo_1',
+        'codigo_legado',
+      ),
+      catalogIdentifier(
+        nullableString(data.legacySequence),
+        CatalogIdentifierType.OTHER,
+        false,
+        'sequencia_legada',
       ),
       catalogIdentifier(
         nullableString(data.radarCode),
@@ -975,6 +1068,12 @@ const CATALOG_IMPORT_DEFINITION: ImportDefinition = {
       data: {
         sku,
         legacyCode: nullableString(data.legacyCode),
+        legacySequence: nullableString(data.legacySequence),
+        radarCode: nullableString(data.radarCode),
+        skuNumber: generatedSku.skuNumber,
+        skuAreaId: generatedSku.areaId,
+        skuFamilyId: generatedSku.familyId,
+        skuApplicationId: generatedSku.applicationId,
         name: String(data.name).trim(),
         commercialDescription: nullableString(data.commercialDescription),
         description: nullableString(data.legacyDescription),
@@ -987,6 +1086,7 @@ const CATALOG_IMPORT_DEFINITION: ImportDefinition = {
         category: nullableString(data.category),
         subcategory: nullableString(data.subcategory),
         brand: nullableString(data.brand),
+        ncm: nullableString(data.ncm),
         pricingPolicyId: policy?.id || null,
         basePrice: suggestedSalePrice,
         costPrice,
@@ -1006,10 +1106,6 @@ const CATALOG_IMPORT_DEFINITION: ImportDefinition = {
         stockMin: Math.max(0, Number(data.stockMin || 0)),
         stockMax: Math.max(0, Number(data.stockMax || 0)),
         storageLocation: nullableString(data.storageLocation),
-        technicalSpecs:
-          Object.keys(legacyDetails).length > 0
-            ? (legacyDetails as Prisma.InputJsonValue)
-            : undefined,
         taxProfile: {
           icmsPercent,
           pisPercent,
@@ -1849,12 +1945,39 @@ function nullableString(value: unknown) {
   return text || undefined;
 }
 
-function compactObject(values: Record<string, unknown>) {
-  return Object.fromEntries(
-    Object.entries(values).filter(
-      ([, value]) => value !== undefined && value !== null,
-    ),
-  );
+async function generateProvisionalCatalogSku(
+  tx: Prisma.TransactionClient,
+  itemType: ItemType,
+) {
+  const areaCode = itemType === ItemType.SERVICE ? 'S' : 'O';
+  const rule = await tx.catalogSkuRule.findFirst({
+    where: {
+      isActive: true,
+      area: { code: areaCode, isActive: true },
+      family: { code: 'O', isActive: true },
+      application: { code: 'O', isActive: true },
+    },
+    include: { area: true, family: true, application: true },
+  });
+  if (!rule) {
+    throw new BadRequestException(
+      'Classificacao provisoria do SKU nao esta configurada.',
+    );
+  }
+  const rows = await tx.$queryRaw<Array<{ nextval: number }>>`
+    SELECT nextval('catalog_sku_number_seq')::integer AS "nextval"
+  `;
+  const skuNumber = Number(rows[0]?.nextval);
+  if (!Number.isFinite(skuNumber)) {
+    throw new BadRequestException('Nao foi possivel gerar o SKU interno.');
+  }
+  return {
+    sku: `${skuNumber}${rule.area.code}${rule.family.code}${rule.application.code}`,
+    skuNumber,
+    areaId: rule.areaId,
+    familyId: rule.familyId,
+    applicationId: rule.applicationId,
+  };
 }
 
 function normalizeCatalogIdentifier(value: string) {

@@ -236,6 +236,8 @@ export default function CatalogFormPage() {
   const [formData, setFormData] = useState({
     sku: "",
     legacyCode: "",
+    legacySequence: "",
+    radarCode: "",
     skuAreaId: "",
     skuFamilyId: "",
     skuApplicationId: "",
@@ -401,7 +403,7 @@ export default function CatalogFormPage() {
   );
   const selectedSkuApplication = availableSkuApplications.find((application) => application.id === formData.skuApplicationId);
   const skuSuffixPreview = `${selectedSkuArea?.code || "_"}${selectedSkuFamily?.code || "_"}${selectedSkuApplication?.code || "_"}`;
-  const skuBaseNumber = formData.sku && /^[0-9]{9}[A-Z]{3}$/.test(formData.sku)
+  const skuBaseNumber = formData.sku && /^\d+[A-Z]{3}$/.test(formData.sku)
     ? formData.sku.slice(0, -3)
     : String(skuTaxonomy.previewNumber);
   const generatedSkuPreview = `${skuBaseNumber}${skuSuffixPreview}`;
@@ -492,6 +494,8 @@ export default function CatalogFormPage() {
         setFormData({
           sku: item.sku || "",
           legacyCode: item.legacyCode || "",
+          legacySequence: item.legacySequence || "",
+          radarCode: item.radarCode || "",
           skuAreaId: item.skuAreaId || item.skuArea?.id || "",
           skuFamilyId: item.skuFamilyId || item.skuFamily?.id || "",
           skuApplicationId: item.skuApplicationId || item.skuApplication?.id || "",
@@ -994,7 +998,9 @@ export default function CatalogFormPage() {
 
     const payload = {
       sku: skuClassificationComplete ? undefined : formData.sku || undefined,
-      legacyCode: formData.legacyCode || undefined,
+      legacyCode: formData.legacyCode.trim() || (isEditing ? null : undefined),
+      legacySequence: formData.legacySequence.trim() || (isEditing ? null : undefined),
+      radarCode: formData.radarCode.trim() || (isEditing ? null : undefined),
       skuAreaId: formData.skuAreaId || undefined,
       skuFamilyId: formData.skuFamilyId || undefined,
       skuApplicationId: formData.skuApplicationId || undefined,
@@ -1169,7 +1175,19 @@ export default function CatalogFormPage() {
                 </select>
               </div>
               <Input label="Nome do Item" name="name" value={formData.name} onChange={handleChange} className="md:col-span-2" requiredMark required />
-              <Input label="Codigo legado" name="legacyCode" value={formData.legacyCode} onChange={handleChange} placeholder="Codigo do sistema antigo" />
+              <div className="md:col-span-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <p className="text-xs font-black uppercase tracking-wide text-amber-800">
+                  Identificadores do sistema anterior
+                </p>
+                <p className="mt-1 text-xs text-amber-700">
+                  Estes codigos servem para rastreabilidade e nao fazem parte dos dados tecnicos.
+                </p>
+                <div className="mt-3 grid gap-3 md:grid-cols-3">
+                  <Input label="Codigo legado" name="legacyCode" value={formData.legacyCode} onChange={handleChange} placeholder="Coluna CODIGO" />
+                  <Input label="Sequencia legada" name="legacySequence" value={formData.legacySequence} onChange={handleChange} placeholder="Coluna SEQUENCIA" />
+                  <Input label="Codigo Radar" name="radarCode" value={formData.radarCode} onChange={handleChange} placeholder="Coluna CODIGORADAR" />
+                </div>
+              </div>
               {!isEditing && canViewCosts ? (
                 <Input
                   label="Preco de compra inicial"

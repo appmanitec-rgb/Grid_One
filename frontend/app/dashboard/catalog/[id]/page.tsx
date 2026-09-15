@@ -200,6 +200,8 @@ type Item = {
   id: string;
   sku?: string | null;
   legacyCode?: string | null;
+  legacySequence?: string | null;
+  radarCode?: string | null;
   name: string;
   description?: string | null;
   commercialDescription?: string | null;
@@ -446,7 +448,7 @@ export default function CatalogItemDetailPage() {
               {summary?.isLowStock ? <Badge tone="rose">Baixo estoque</Badge> : null}
             </div>
             <p className="mt-2 text-sm text-zinc-500">
-              SKU {item.sku || "-"} | Legado {item.legacyCode || "-"} | PN {item.manufacturerPartNumber || "-"} | {item.category || "Sem categoria"}
+              SKU interno {item.sku || "-"} | PN {item.manufacturerPartNumber || "-"} | {item.category || "Sem categoria"}
             </p>
             <p className="mt-3 max-w-4xl text-sm text-zinc-700">
               {item.description || item.commercialDescription || "Sem descricao cadastrada."}
@@ -489,6 +491,23 @@ export default function CatalogItemDetailPage() {
 
       {activeTab === "summary" ? (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+          <section className="rounded-xl border border-amber-200 bg-amber-50 p-5 xl:col-span-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="text-lg font-bold text-zinc-900">Identificacao e codigos</h2>
+                <p className="mt-1 text-sm text-amber-800">
+                  O SKU pertence a Manitec; os demais identificadores vieram dos sistemas anteriores.
+                </p>
+              </div>
+              <Badge tone="amber">Rastreabilidade</Badge>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <Info label="SKU interno" value={item.sku || "-"} />
+              <Info label="Codigo legado" value={item.legacyCode || "-"} />
+              <Info label="Sequencia legada" value={item.legacySequence || "-"} />
+              <Info label="Codigo Radar" value={item.radarCode || "-"} />
+            </div>
+          </section>
           <section className="rounded-xl border border-zinc-200 bg-white p-5 xl:col-span-2">
             <h2 className="text-lg font-bold text-zinc-900">Saldo por almoxarifado</h2>
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -527,7 +546,6 @@ export default function CatalogItemDetailPage() {
               <Info label="Unidade" value={item.unit || "-"} />
               <Info label="Tipo do item" value={item.itemClassification || (item.type === "SERVICE" ? "Servico" : "Acabado")} />
               <Info label="Origem" value={item.acquisitionOrigin || "-"} />
-              <Info label="Codigo legado" value={item.legacyCode || "-"} />
               <Info label="Marca" value={item.brand || "-"} />
               <Info label="Localizacao" value={item.storageLocation || "-"} />
               <Info label="Venda sugerida" value={formatCurrency(item.basePrice)} />
