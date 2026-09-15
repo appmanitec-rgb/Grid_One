@@ -1,0 +1,213 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+import { StudioImportBatchStatus } from '@prisma/client';
+import { StudioImportService } from './studio-import.service';
+
+describe('StudioImportService - catalog import', () => {
+  function setup() {
+    let previewRows: any[] = [];
+    const tx = {
+      catalogItem: {
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest
+          .fn()
+          .mockImplementation(({ data }) =>
+            Promise.resolve({ id: `item-${data.sku}` }),
+          ),
+      },
+      catalogPricingPolicy: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'policy-part',
+          salesTaxPercent: 27.25,
+          icmsPercent: 18,
+          pisPercent: 1.65,
+          cofinsPercent: 7.6,
+          ipiPercent: 0,
+          issPercent: 0,
+          irpjPercent: 0,
+          csllPercent: 0,
+          cppPercent: 0,
+          commissionPercent: 2,
+          profitMarginPercent: 50,
+          operationalCostPercent: 0,
+        }),
+      },
+      studioImportBatch: {
+        create: jest.fn().mockResolvedValue({ id: 'batch-1' }),
+        update: jest
+          .fn()
+          .mockImplementation(({ data }) =>
+            Promise.resolve({ id: 'batch-1', ...data }),
+          ),
+      },
+      studioImportRow: {
+        createMany: jest.fn().mockImplementation(({ data }) => {
+          previewRows = data;
+          return Promise.resolve({ count: data.length });
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      systemAuditLog: {
+        create: jest.fn().mockResolvedValue({ id: 'audit-1' }),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback) => callback(tx)),
+      studioImportBatch: {
+        findUnique: jest.fn(),
+        update: jest
+          .fn()
+          .mockImplementation(({ data }) =>
+            Promise.resolve({ id: 'batch-1', ...data }),
+          ),
+      },
+      studioImportRow: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    const service = new StudioImportService(prisma as never);
+    return { service, prisma, tx, getPreviewRows: () => previewRows };
+  }
+
+  it('maps legacy columns and marks missing required fields and duplicates to skip', async () => {
+    const { service, tx, getPreviewRows } = setup();
+    const csv = [
+      'CODIGO;DESCRICAO;DESCRICAOFAT;TIPODOITEM;PRECO;CUSTO;ORIGEM;SEQUENCIA',
+      'P-001;Filtro;Filtro faturamento;Componente;10,50;4,25;Comprado;100',
+      'P-001;Filtro repetido;;Acabado;11,00;5,00;Comprado;101',
+      ';Sem codigo;;Componente;10,00;;;102',
+      'P-002;Sem tipo;;;20,00;;;103',
+      'P-003;Sem preco;;Servico;;;;104',
+      'S-001;Manutencao;;Serviço;100.25;;;105',
+    ].join('\n');
+
+    const preview = await service.preview(
+      { resource: 'catalog', originalFileName: 'Produtos.xlsx', csv },
+      { role: 'ADMIN' },
+    );
+
+    expect(preview.summary).toMatchObject({
+      total: 6,
+      valid: 3,
+      warnings: 0,
+      invalid: 2,
+      duplicates: 1,
+    });
+    expect(preview.rows[0].normalizedData).toMatchObject({
+      sku: 'P-001',
+      name: 'Filtro',
+      commercialDescription: 'Filtro faturamento',
+      type: 'PART',
+      acquisitionOrigin: 'Comprado',
+      itemClassification: 'Componente',
+      costPrice: 4.25,
+      legacySequence: '100',
+    });
+    expect(preview.rows[0].normalizedData).not.toHaveProperty('basePrice');
+    expect(getPreviewRows()).toHaveLength(6);
+    expect(tx.catalogItem.create).not.toHaveBeenCalled();
+  });
+
+  it('creates only valid catalog rows when the preview is confirmed', async () => {
+    const { service, prisma, tx, getPreviewRows } = setup();
+    const csv = [
+      'CODIGO;DESCRICAO;TIPODOITEM;CUSTO;CODIGORADAR;ALTERNATIVO',
+      'P-010;Peca valida;Kit;25,90;RAD-10;ALT-10',
+      ';Ignorar sem codigo;Componente;10,00;;',
+      'S-010;Servico valido;Serviço;80,00;;',
+    ].join('\n');
+
+    await service.preview(
+      { resource: 'catalog', originalFileName: 'Produtos.xlsx', csv },
+      { role: 'ADMIN' },
+    );
+    const storedRows = getPreviewRows();
+    prisma.studioImportBatch.findUnique
+      .mockResolvedValueOnce({
+        id: 'batch-1',
+        resource: 'catalog',
+        status: StudioImportBatchStatus.PREVIEW,
+        rows: storedRows.map((row) => ({
+          rowNumber: row.rowNumber,
+          rawData: row.rawData,
+        })),
+      })
+      .mockResolvedValueOnce({ id: 'batch-1', rows: [] });
+
+    await service.execute('batch-1', { role: 'ADMIN' });
+
+    expect(tx.catalogItem.create).toHaveBeenCalledTimes(2);
+    expect(tx.catalogItem.create.mock.calls[0][0].data).toMatchObject({
+      sku: 'P-010',
+      name: 'Peca valida',
+      type: 'PART',
+      basePrice: 46.43,
+      costPrice: 25.9,
+      icmsPercent: 18,
+      pisPercent: 1.65,
+      cofinsPercent: 7.6,
+      commissionPercent: 2,
+      profitMargin: 50,
+      isActive: true,
+    });
+    expect(
+      tx.catalogItem.create.mock.calls[0][0].data.identifiers.create,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'P-010', isPrimary: true }),
+        expect.objectContaining({ code: 'RAD-10' }),
+        expect.objectContaining({ code: 'ALT-10' }),
+      ]),
+    );
+    const finalUpdate = prisma.studioImportBatch.update.mock.calls.at(-1)?.[0];
+    expect(finalUpdate.data).toMatchObject({
+      createdRows: 2,
+      skippedRows: 1,
+      failedRows: 0,
+    });
+  });
+});
+
+describe('StudioImportService - supplier import', () => {
+  it('accepts an individual supplier and preserves legacy operational fields', async () => {
+    let previewRows: any[] = [];
+    const tx = {
+      supplier: { findMany: jest.fn().mockResolvedValue([]) },
+      studioImportBatch: {
+        create: jest.fn().mockResolvedValue({ id: 'supplier-batch-1' }),
+      },
+      studioImportRow: {
+        createMany: jest.fn().mockImplementation(({ data }) => {
+          previewRows = data;
+          return Promise.resolve({ count: data.length });
+        }),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback) => callback(tx)),
+    };
+    const service = new StudioImportService(prisma as never);
+
+    const preview = await service.preview(
+      {
+        resource: 'suppliers',
+        originalFileName: 'Agentes-fornecedores.csv',
+        csv: [
+          'Razao Social;CNPJ/CPF;Telefone;Endereco;Cidade;Estado;Inscricao Estadual;Inscricao Municipal;Observacoes;Ativo',
+          'Prestador Individual;12345678901;11999999999;Rua Um, 10;Sao Paulo;SP;ISENTO;123;Codigo legado: 42;Inativo',
+        ].join('\n'),
+      },
+      { role: 'ADMIN' },
+    );
+
+    expect(preview.summary).toMatchObject({ total: 1, valid: 1, invalid: 0 });
+    expect(previewRows[0].normalizedData).toMatchObject({
+      companyName: 'Prestador Individual',
+      cnpj: '12345678901',
+      address: 'Rua Um, 10',
+      stateRegistration: 'ISENTO',
+      municipalRegistration: '123',
+      notes: 'Codigo legado: 42',
+      isActive: false,
+    });
+  });
+});

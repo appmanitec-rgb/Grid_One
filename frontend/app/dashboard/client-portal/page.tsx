@@ -587,7 +587,9 @@ function statusLabel(status: string) {
   const map: Record<string, string> = {
     DRAFT: "Rascunho",
     BOARD_REVIEW: "Diretoria",
-    REVISION_REQUIRED: "Em revisao",
+    REVISION_REQUIRED: "Ajustes solicitados",
+    REVISED: "Revisada",
+    REJECTED: "Reprovada pela diretoria",
     CLIENT_REVIEW: "Aguardando cliente",
     DISCOUNT_REVIEW: "Desconto",
     WON: "Ganha",

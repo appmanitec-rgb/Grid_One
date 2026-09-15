@@ -1528,6 +1528,7 @@ export class DeliveriesService {
       DRAFT: 'Rascunho',
       BOARD_REVIEW: 'Em analise',
       REVISION_REQUIRED: 'Revisao solicitada',
+      REVISED: 'Revisada',
       CLIENT_REVIEW: 'Aguardando decisao',
       DISCOUNT_REVIEW: 'Analise de desconto',
       WON: 'Aprovada',

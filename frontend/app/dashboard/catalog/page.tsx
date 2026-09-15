@@ -8,10 +8,13 @@ import { apiFetch, readApiErrorMessage } from "@/lib/api";
 type CatalogItem = {
   id: string;
   sku?: string | null;
+  legacyCode?: string | null;
   name: string;
   description?: string | null;
   commercialDescription?: string | null;
   type: "PART" | "SERVICE";
+  itemClassification?: string | null;
+  acquisitionOrigin?: string | null;
   category?: string | null;
   unit?: string | null;
   basePrice: number;
@@ -83,7 +86,7 @@ export default function CatalogPage() {
     return items.filter((item) => {
       if (!matchesCatalogGroup(item, activeGroup)) return false;
       if (!q) return true;
-      return `${item.name} ${item.sku || ""} ${item.category || ""} ${item.storageLocation || ""} ${item.description || ""} ${item.commercialDescription || ""}`
+      return `${item.name} ${item.sku || ""} ${item.legacyCode || ""} ${item.category || ""} ${item.itemClassification || ""} ${item.acquisitionOrigin || ""} ${item.storageLocation || ""} ${item.description || ""} ${item.commercialDescription || ""}`
         .toLowerCase()
         .includes(q);
     });
@@ -153,7 +156,7 @@ export default function CatalogPage() {
         <input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Item, SKU, categoria, descricao ou localizacao..."
+          placeholder="Item, SKU, codigo legado, categoria, descricao ou localizacao..."
           className="w-full rounded-lg border border-zinc-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
         />
         {showFilters ? (
@@ -199,7 +202,7 @@ export default function CatalogPage() {
                 <th className="p-4 font-medium">SKU / Local</th>
                 <th className="p-4 font-medium">Tipo</th>
                 <th className="p-4 font-medium">Saldo</th>
-                <th className="p-4 font-medium">Preco Final</th>
+                <th className="p-4 font-medium">Venda sugerida</th>
                 {hydrated && canViewCosts && <th className="p-4 font-medium">Custo</th>}
                 {hydrated && canViewCosts && <th className="p-4 font-medium">Margem</th>}
                 <th className="p-4 font-medium text-right">Acoes</th>
@@ -216,6 +219,7 @@ export default function CatalogPage() {
                     <td className="p-4 text-zinc-600 text-sm max-w-md truncate">{item.description || item.commercialDescription || "Sem descricao"}</td>
                     <td className="p-4 text-sm text-zinc-600">
                       <p>{item.sku || "-"}</p>
+                      {item.legacyCode ? <p className="text-xs text-blue-700">Legado: {item.legacyCode}</p> : null}
                       <p className="text-xs text-zinc-500">{item.storageLocation || "Sem localizacao"}</p>
                     </td>
                     <td className="p-4">

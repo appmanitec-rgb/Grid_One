@@ -5,6 +5,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  ApprovalType,
+  AuditDomain,
   CatalogIdentifierType,
   CatalogOfferStatus,
   ItemType,
@@ -19,6 +21,7 @@ import { CreateCatalogIdentifierDto } from './dto/create-catalog-identifier.dto'
 import { CreateCatalogOfferDto } from './dto/create-catalog-offer.dto';
 import { CreateCatalogDto } from './dto/create-catalog.dto';
 import { UpdateCatalogPricingDto } from './dto/update-catalog-pricing.dto';
+import { UpdateCatalogPricingParametersDto } from './dto/update-catalog-pricing-parameters.dto';
 import { UpdateCatalogDto } from './dto/update-catalog.dto';
 
 export type CatalogActor = {
@@ -51,11 +54,55 @@ export class CatalogsService {
 
     return this.prisma.$transaction(async (tx) => {
       const { catalogData } = this.prepareCatalogWriteData(createCatalogDto);
+      const policy = await tx.catalogPricingPolicy.findFirst({
+        where: { itemType: createCatalogDto.type, isActive: true },
+        orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
+      });
+      const costPrice = this.nonNegative(
+        createCatalogDto.costPrice,
+        'preco de compra',
+      );
+      const pricing = this.pricingValuesFromPolicy(policy);
+      const suggestedSalePrice = this.calculateSuggestedSalePrice(
+        costPrice,
+        pricing,
+      );
+      Object.assign(catalogData, {
+        legacyCode: createCatalogDto.legacyCode?.trim() || null,
+        itemClassification:
+          createCatalogDto.itemClassification?.trim() ||
+          (createCatalogDto.type === ItemType.SERVICE ? 'Servico' : 'Acabado'),
+        acquisitionOrigin:
+          createCatalogDto.acquisitionOrigin?.trim() || 'Comprado',
+        pricingPolicyId: policy?.id || null,
+        basePrice: suggestedSalePrice,
+        costPrice,
+        averageCost: 0,
+        lastCost: costPrice,
+        taxPercentage: pricing.salesTaxPercent,
+        profitMargin: pricing.profitMarginPercent,
+        icmsPercent: pricing.icmsPercent,
+        pisPercent: pricing.pisPercent,
+        cofinsPercent: pricing.cofinsPercent,
+        ipiPercent: pricing.ipiPercent,
+        issPercent: pricing.issPercent,
+        irpjPercent: pricing.irpjPercent,
+        csllPercent: pricing.csllPercent,
+        cppPercent: pricing.cppPercent,
+        commissionPercent: pricing.commissionPercent,
+        operationalCostPercent: pricing.operationalCostPercent,
+        taxProfile: {
+          ...pricing,
+          suggestedSalePrice,
+          pricingSource: policy ? 'DEFAULT_POLICY' : 'SYSTEM_DEFAULT',
+        } as Prisma.InputJsonValue,
+      });
       const skuWrite = await this.prepareSkuForCreate(tx, createCatalogDto);
       Object.assign(catalogData, skuWrite.data);
 
       const created = await tx.catalogItem.create({ data: catalogData });
       await this.syncSkuIdentifiers(tx, created.id, null, created.sku);
+      await this.syncLegacyIdentifier(tx, created.id, null, created.legacyCode);
       return created;
     });
   }
@@ -181,6 +228,24 @@ export class CatalogsService {
                 },
               },
               {
+                legacyCode: {
+                  contains: search,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+              {
+                itemClassification: {
+                  contains: search,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+              {
+                acquisitionOrigin: {
+                  contains: search,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+              {
                 description: {
                   contains: search,
                   mode: Prisma.QueryMode.insensitive,
@@ -259,6 +324,7 @@ export class CatalogsService {
       select: {
         id: true,
         sku: true,
+        legacyCode: true,
         name: true,
         description: true,
         commercialDescription: true,
@@ -296,11 +362,13 @@ export class CatalogsService {
     actor?: CatalogActor,
   ) {
     this.assertNoDirectStockMutation(updateCatalogDto);
+    this.assertNoDirectPricingMutation(updateCatalogDto);
     const current = await this.prisma.catalogItem.findUnique({
       where: { id },
       select: {
         id: true,
         sku: true,
+        legacyCode: true,
         skuNumber: true,
         skuAreaId: true,
         skuFamilyId: true,
@@ -328,6 +396,14 @@ export class CatalogsService {
       });
       if (updated.sku && updated.sku !== current.sku) {
         await this.syncSkuIdentifiers(tx, id, current.sku, updated.sku);
+      }
+      if (updated.legacyCode !== current.legacyCode) {
+        await this.syncLegacyIdentifier(
+          tx,
+          id,
+          current.legacyCode,
+          updated.legacyCode,
+        );
       }
 
       if (Object.keys(inventoryTargets).length > 0) {
@@ -823,24 +899,37 @@ export class CatalogsService {
 
       if (dto.applyToReplacementCost) {
         const item = await tx.catalogItem.findUnique({ where: { id } });
+        if (!item) {
+          throw new NotFoundException('Item do catalogo nao encontrado.');
+        }
+        const replacementCost = Number(offer.effectiveUnitCost || 0);
+        const salesTaxPercent = this.totalTaxPercent(item);
+        const suggestedSalePrice = this.calculateSuggestedSalePrice(
+          replacementCost,
+          {
+            ...item,
+            salesTaxPercent,
+            profitMarginPercent: item.profitMargin ?? 0,
+          },
+        );
         await tx.catalogItem.update({
           where: { id },
           data: {
             supplier: offer.supplier.companyName,
-            costPrice: offer.effectiveUnitCost,
-            lastCost: offer.effectiveUnitCost,
-            basePrice: dto.finalSalePrice ?? item?.basePrice ?? 0,
+            costPrice: replacementCost,
+            lastCost: replacementCost,
+            basePrice: suggestedSalePrice,
+            taxPercentage: salesTaxPercent,
             taxProfile: {
               ...(item?.taxProfile && typeof item.taxProfile === 'object'
                 ? (item.taxProfile as Record<string, unknown>)
                 : {}),
-              replacementCost: offer.effectiveUnitCost,
               preferredOfferId: offer.id,
               preferredSupplierId: offer.supplierId,
               preferredSupplierName: offer.supplier.companyName,
-              pricingNeedsReview: true,
-              pricingNeedsReviewReason:
-                'Oferta preferencial alterada; revisar preco de venda.',
+              suggestedSalePrice,
+              pricingNeedsReview: false,
+              pricingNeedsReviewReason: null,
             } as any,
           },
         });
@@ -887,31 +976,96 @@ export class CatalogsService {
         ? Number((purchaseInvoiceValue * (purchaseTaxPercent / 100)).toFixed(2))
         : this.nonNegative(dto.purchaseTaxAmount, 'imposto de compra');
     const freightAmount = this.nonNegative(dto.freightAmount, 'frete');
+    const insuranceAmount = this.nonNegative(dto.insuranceAmount, 'seguro');
+    const discountAmount = this.nonNegative(dto.discountAmount, 'desconto');
+    const recoverableCreditAmount = this.nonNegative(
+      dto.recoverableCreditAmount,
+      'creditos recuperaveis',
+    );
     const otherPurchaseCosts = this.nonNegative(
       dto.otherPurchaseCosts,
       'outros custos',
     );
-    const salesTaxPercent = this.nonNegative(
-      dto.salesTaxPercent,
-      'impostos de venda',
+    const policy = await this.prisma.catalogPricingPolicy.findFirst({
+      where: { itemType: item.type, isActive: true },
+      orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
+    });
+    const icmsPercent = this.nonNegative(
+      dto.icmsPercent ?? policy?.icmsPercent,
+      'ICMS',
     );
+    const pisPercent = this.nonNegative(
+      dto.pisPercent ?? policy?.pisPercent,
+      'PIS',
+    );
+    const cofinsPercent = this.nonNegative(
+      dto.cofinsPercent ?? policy?.cofinsPercent,
+      'COFINS',
+    );
+    const ipiPercent = this.nonNegative(
+      dto.ipiPercent ?? policy?.ipiPercent,
+      'IPI',
+    );
+    const issPercent = this.nonNegative(
+      dto.issPercent ?? policy?.issPercent,
+      'ISS',
+    );
+    const irpjPercent = this.nonNegative(
+      dto.irpjPercent ?? policy?.irpjPercent,
+      'IRPJ',
+    );
+    const csllPercent = this.nonNegative(
+      dto.csllPercent ?? policy?.csllPercent,
+      'CSLL',
+    );
+    const cppPercent = this.nonNegative(
+      dto.cppPercent ?? policy?.cppPercent,
+      'CPP',
+    );
+    const componentTaxPercent =
+      icmsPercent +
+      pisPercent +
+      cofinsPercent +
+      ipiPercent +
+      issPercent +
+      irpjPercent +
+      csllPercent +
+      cppPercent;
+    const salesTaxPercent =
+      componentTaxPercent > 0
+        ? componentTaxPercent
+        : this.nonNegative(
+            dto.salesTaxPercent ?? policy?.salesTaxPercent,
+            'impostos de venda',
+          );
     const commissionPercent = this.nonNegative(
-      dto.commissionPercent,
+      dto.commissionPercent ?? policy?.commissionPercent,
       'comissao',
     );
     const profitMarginPercent = this.nonNegative(
-      dto.profitMarginPercent,
+      dto.profitMarginPercent ?? policy?.profitMarginPercent,
       'margem',
     );
     const operationalCostPercent = this.nonNegative(
-      dto.operationalCostPercent,
+      dto.operationalCostPercent ?? policy?.operationalCostPercent,
       'custos operacionais',
     );
-    const calculatedPurchaseCost =
-      purchaseInvoiceValue +
-      purchaseTaxAmount +
-      freightAmount +
-      otherPurchaseCosts;
+    const calculatedPurchaseCost = Number(
+      (
+        purchaseInvoiceValue +
+        purchaseTaxAmount +
+        freightAmount +
+        insuranceAmount +
+        otherPurchaseCosts -
+        discountAmount -
+        recoverableCreditAmount
+      ).toFixed(2),
+    );
+    if (calculatedPurchaseCost < 0) {
+      throw new BadRequestException(
+        'Descontos e creditos nao podem superar o custo total de compra.',
+      );
+    }
     const markupPercent =
       salesTaxPercent +
       commissionPercent +
@@ -932,108 +1086,308 @@ export class CatalogsService {
       );
     }
 
-    await this.prisma.$transaction(async (tx) => {
-      if (dto.setAsPrimary !== false) {
-        await tx.supplierCatalogItem.updateMany({
-          where: { catalogItemId: id, supplierId: { not: supplier.id } },
-          data: { isPrimary: false },
-        });
-      }
+    if (finalSalePrice < calculatedPurchaseCost) {
+      throw new BadRequestException(
+        'O preco de venda nao pode ser menor que o custo total do produto.',
+      );
+    }
+    if (!actor?.sub) {
+      throw new BadRequestException('Usuario solicitante nao identificado.');
+    }
+    const requesterUserId = actor.sub;
 
-      await tx.supplierCatalogItem.upsert({
-        where: {
-          supplierId_catalogItemId: {
-            supplierId: supplier.id,
-            catalogItemId: id,
-          },
-        },
-        update: {
-          supplierSku: dto.supplierSku?.trim() || null,
-          supplierPrice: calculatedPurchaseCost,
-          leadTimeDays: dto.leadTimeDays,
-          isPrimary: dto.setAsPrimary !== false,
-          purchasePaymentTerm: dto.purchasePaymentTerm?.trim() || null,
-          purchaseTaxMode,
-          purchaseTaxPercent,
-          purchaseTaxAmount,
-          freightAmount,
-          otherPurchaseCosts,
-          priceValidFrom: validFrom,
-          priceValidUntil: validUntil,
-          lastQuotedAt: new Date(),
-          priceNotes: dto.notes?.trim() || null,
-        },
-        create: {
-          supplierId: supplier.id,
-          catalogItemId: id,
-          supplierSku: dto.supplierSku?.trim() || null,
-          supplierPrice: calculatedPurchaseCost,
-          leadTimeDays: dto.leadTimeDays,
-          isPrimary: dto.setAsPrimary !== false,
-          purchasePaymentTerm: dto.purchasePaymentTerm?.trim() || null,
-          purchaseTaxMode,
-          purchaseTaxPercent,
-          purchaseTaxAmount,
-          freightAmount,
-          otherPurchaseCosts,
-          priceValidFrom: validFrom,
-          priceValidUntil: validUntil,
-          lastQuotedAt: new Date(),
-          priceNotes: dto.notes?.trim() || null,
-        },
-      });
+    const pending = await this.prisma.approvalRequest.findFirst({
+      where: {
+        type: ApprovalType.CATALOG_PRICING,
+        entityType: 'CATALOG_ITEM',
+        entityId: id,
+        status: 'PENDING',
+      },
+      select: { id: true },
+    });
+    if (pending) {
+      throw new BadRequestException(
+        'Ja existe uma alteracao de preco aguardando aprovacao financeira.',
+      );
+    }
 
-      await tx.catalogItem.update({
-        where: { id },
+    const suggestedSalePrice = Number(
+      (calculatedPurchaseCost * (1 + markupPercent / 100)).toFixed(2),
+    );
+    const approverUserId = await this.findFinancialApproverId(requesterUserId);
+    return this.prisma.$transaction(async (tx) => {
+      const approval = await tx.approvalRequest.create({
         data: {
-          supplier: supplier.companyName,
-          costPrice: calculatedPurchaseCost,
-          lastCost: calculatedPurchaseCost,
-          basePrice: finalSalePrice,
-          taxPercentage: salesTaxPercent,
-          profitMargin: profitMarginPercent,
-          taxProfile: {
-            ...(item.taxProfile && typeof item.taxProfile === 'object'
-              ? (item.taxProfile as Record<string, unknown>)
-              : {}),
+          type: ApprovalType.CATALOG_PRICING,
+          entityType: 'CATALOG_ITEM',
+          entityId: id,
+          requesterUserId,
+          approverUserId,
+          requestNote:
+            dto.notes?.trim() ||
+            `Nova formacao de preco para ${item.sku || item.name}.`,
+          requestPayload: {
+            supplierId: supplier.id,
+            supplierName: supplier.companyName,
+            supplierSku: dto.supplierSku?.trim() || null,
+            leadTimeDays: dto.leadTimeDays ?? null,
+            purchasePaymentTerm: dto.purchasePaymentTerm?.trim() || null,
+            purchaseInvoiceValue,
+            purchaseTaxMode,
+            purchaseTaxPercent,
+            purchaseTaxAmount,
+            freightAmount,
+            insuranceAmount,
+            discountAmount,
+            recoverableCreditAmount,
+            otherPurchaseCosts,
+            calculatedPurchaseCost,
+            icmsPercent,
+            pisPercent,
+            cofinsPercent,
+            ipiPercent,
+            issPercent,
+            irpjPercent,
+            csllPercent,
+            cppPercent,
             salesTaxPercent,
             commissionPercent,
+            profitMarginPercent,
             operationalCostPercent,
-            pricingSupplierId: supplier.id,
-            pricingSupplierName: supplier.companyName,
-            priceValidFrom: validFrom?.toISOString(),
-            priceValidUntil: validUntil?.toISOString(),
-          } as any,
+            suggestedSalePrice,
+            finalSalePrice,
+            validFrom: validFrom?.toISOString() ?? null,
+            validUntil: validUntil?.toISOString() ?? null,
+            notes: dto.notes?.trim() || null,
+            setAsPrimary: dto.setAsPrimary !== false,
+          },
+        },
+        include: {
+          requesterUser: { select: { id: true, name: true } },
+          approverUser: { select: { id: true, name: true } },
         },
       });
-
-      await tx.catalogPriceRevision.create({
+      await tx.systemAuditLog.create({
         data: {
-          catalogItemId: id,
-          supplierId: supplier.id,
-          previousCostPrice: item.costPrice,
-          previousBasePrice: item.basePrice,
-          purchaseInvoiceValue,
-          purchaseTaxMode,
-          purchaseTaxPercent,
-          purchaseTaxAmount,
-          freightAmount,
-          otherPurchaseCosts,
-          calculatedPurchaseCost,
-          salesTaxPercent,
-          commissionPercent,
-          profitMarginPercent,
-          operationalCostPercent,
-          finalSalePrice,
-          validFrom,
-          validUntil,
-          notes: dto.notes?.trim() || null,
-          createdById: actor?.sub,
+          domain: AuditDomain.INVENTORY,
+          entityType: 'CATALOG_ITEM',
+          entityId: id,
+          action: 'CATALOG_PRICING_APPROVAL_REQUESTED',
+          actorUserId: requesterUserId,
+          afterPayload: {
+            approvalRequestId: approval.id,
+            approverUserId,
+            calculatedPurchaseCost,
+            suggestedSalePrice,
+            finalSalePrice,
+          },
+          reason: dto.notes?.trim() || null,
         },
       });
+      return approval;
     });
+  }
 
-    return this.findOne(id, actor);
+  async updatePricingParameters(
+    id: string,
+    dto: UpdateCatalogPricingParametersDto,
+    actor?: CatalogActor,
+  ) {
+    if (!this.canViewCostData(actor)) {
+      throw new BadRequestException(
+        'Seu perfil nao possui permissao para alterar parametros de preco.',
+      );
+    }
+    if (!actor?.sub) {
+      throw new BadRequestException('Usuario solicitante nao identificado.');
+    }
+
+    const item = await this.prisma.catalogItem.findUnique({ where: { id } });
+    if (!item) {
+      throw new NotFoundException('Item do catalogo nao encontrado.');
+    }
+
+    const requested = {
+      icmsPercent: this.nonNegative(
+        dto.icmsPercent ?? item.icmsPercent,
+        'ICMS',
+      ),
+      pisPercent: this.nonNegative(dto.pisPercent ?? item.pisPercent, 'PIS'),
+      cofinsPercent: this.nonNegative(
+        dto.cofinsPercent ?? item.cofinsPercent,
+        'COFINS',
+      ),
+      ipiPercent: this.nonNegative(dto.ipiPercent ?? item.ipiPercent, 'IPI'),
+      issPercent: this.nonNegative(dto.issPercent ?? item.issPercent, 'ISS'),
+      irpjPercent: this.nonNegative(
+        dto.irpjPercent ?? item.irpjPercent,
+        'IRPJ',
+      ),
+      csllPercent: this.nonNegative(
+        dto.csllPercent ?? item.csllPercent,
+        'CSLL',
+      ),
+      cppPercent: this.nonNegative(dto.cppPercent ?? item.cppPercent, 'CPP'),
+      commissionPercent: this.nonNegative(
+        dto.commissionPercent ?? item.commissionPercent,
+        'comissao',
+      ),
+      profitMarginPercent: this.nonNegative(
+        dto.profitMarginPercent ?? item.profitMargin ?? 0,
+        'margem de lucro',
+      ),
+      operationalCostPercent: this.nonNegative(
+        dto.operationalCostPercent ?? item.operationalCostPercent,
+        'custo operacional',
+      ),
+    };
+    const current = {
+      icmsPercent: item.icmsPercent,
+      pisPercent: item.pisPercent,
+      cofinsPercent: item.cofinsPercent,
+      ipiPercent: item.ipiPercent,
+      issPercent: item.issPercent,
+      irpjPercent: item.irpjPercent,
+      csllPercent: item.csllPercent,
+      cppPercent: item.cppPercent,
+      commissionPercent: item.commissionPercent,
+      profitMarginPercent: item.profitMargin ?? 0,
+      operationalCostPercent: item.operationalCostPercent,
+    };
+    const changedFields = Object.keys(requested).filter(
+      (key) =>
+        Math.abs(
+          requested[key as keyof typeof requested] -
+            current[key as keyof typeof current],
+        ) > 0.0001,
+    );
+    if (changedFields.length === 0) {
+      throw new BadRequestException(
+        'Nenhum parametro foi alterado em relacao ao cadastro vigente.',
+      );
+    }
+
+    const pending = await this.prisma.approvalRequest.findFirst({
+      where: {
+        type: ApprovalType.CATALOG_PRICING,
+        entityType: 'CATALOG_ITEM',
+        entityId: id,
+        status: 'PENDING',
+      },
+      select: { id: true },
+    });
+    if (pending) {
+      throw new BadRequestException(
+        'Ja existe uma alteracao deste produto aguardando o Financeiro.',
+      );
+    }
+
+    const salesTaxPercent = this.totalTaxPercent(requested);
+    const suggestedSalePrice = this.calculateSuggestedSalePrice(
+      item.costPrice ?? 0,
+      { ...requested, salesTaxPercent },
+    );
+    const approverUserId = await this.findFinancialApproverId(actor.sub);
+    return this.prisma.$transaction(async (tx) => {
+      const approval = await tx.approvalRequest.create({
+        data: {
+          type: ApprovalType.CATALOG_PRICING,
+          entityType: 'CATALOG_ITEM',
+          entityId: id,
+          requesterUserId: actor.sub!,
+          approverUserId,
+          requestNote:
+            dto.notes?.trim() ||
+            `Alteracao dos parametros comerciais de ${item.sku || item.name}.`,
+          requestPayload: {
+            changeKind: 'PARAMETERS',
+            changedFields,
+            currentValues: current,
+            ...requested,
+            salesTaxPercent,
+            calculatedPurchaseCost: item.costPrice ?? 0,
+            suggestedSalePrice,
+            finalSalePrice: suggestedSalePrice,
+            notes: dto.notes?.trim() || null,
+          },
+        },
+        include: {
+          requesterUser: { select: { id: true, name: true } },
+          approverUser: { select: { id: true, name: true } },
+        },
+      });
+      await tx.systemAuditLog.create({
+        data: {
+          domain: AuditDomain.INVENTORY,
+          entityType: 'CATALOG_ITEM',
+          entityId: id,
+          action: 'CATALOG_PRICING_PARAMETERS_APPROVAL_REQUESTED',
+          actorUserId: actor.sub,
+          beforePayload: current,
+          afterPayload: {
+            approvalRequestId: approval.id,
+            changedFields,
+            ...requested,
+            salesTaxPercent,
+            suggestedSalePrice,
+          },
+          reason: dto.notes?.trim() || null,
+        },
+      });
+      return approval;
+    });
+  }
+
+  async pricingApprovalContext(id: string, actor?: CatalogActor) {
+    if (!this.canViewCostData(actor) || !actor?.sub) {
+      throw new BadRequestException(
+        'Seu perfil nao possui permissao para visualizar a formacao de preco.',
+      );
+    }
+    const item = await this.prisma.catalogItem.findUnique({
+      where: { id },
+      select: { id: true, type: true },
+    });
+    if (!item) throw new NotFoundException('Item do catalogo nao encontrado.');
+
+    const [policy, approvals] = await Promise.all([
+      this.prisma.catalogPricingPolicy.findFirst({
+        where: { itemType: item.type, isActive: true },
+        orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
+      }),
+      this.prisma.approvalRequest.findMany({
+        where: {
+          type: ApprovalType.CATALOG_PRICING,
+          entityType: 'CATALOG_ITEM',
+          entityId: id,
+          ...(actor.role === UserRole.ADMIN || actor.isSystemMaster
+            ? {}
+            : {
+                OR: [
+                  { requesterUserId: actor.sub },
+                  { approverUserId: actor.sub },
+                ],
+              }),
+        },
+        include: {
+          requesterUser: { select: { id: true, name: true } },
+          approverUser: { select: { id: true, name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
+    ]);
+
+    return {
+      policy,
+      approvals: approvals.map((approval) => ({
+        ...approval,
+        canDecide:
+          actor.role === UserRole.ADMIN ||
+          actor.isSystemMaster ||
+          approval.approverUserId === actor.sub,
+      })),
+    };
   }
 
   private async ensureItemExists(id: string) {
@@ -1050,6 +1404,34 @@ export class CatalogsService {
     if (!actor) return false;
     if (actor.isSystemMaster || actor.role === UserRole.ADMIN) return true;
     return actor?.accessPolicy?.catalog?.viewCosts === true;
+  }
+
+  private async findFinancialApproverId(requesterUserId: string) {
+    const finance = await this.prisma.user.findFirst({
+      where: {
+        role: UserRole.FINANCE,
+        isActive: true,
+        id: { not: requesterUserId },
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    if (finance) return finance.id;
+
+    const admin = await this.prisma.user.findFirst({
+      where: {
+        role: UserRole.ADMIN,
+        isActive: true,
+        id: { not: requesterUserId },
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    if (admin) return admin.id;
+
+    throw new BadRequestException(
+      'Nao existe usuario ativo do Financeiro (ou administrador) para aprovar a alteracao.',
+    );
   }
 
   private hasSkuClassification(
@@ -1302,9 +1684,140 @@ export class CatalogsService {
     });
   }
 
+  private async syncLegacyIdentifier(
+    tx: Prisma.TransactionClient,
+    catalogItemId: string,
+    previousCode?: string | null,
+    currentCode?: string | null,
+  ) {
+    const normalizedCurrent = currentCode?.trim() || null;
+    if (previousCode && previousCode !== normalizedCurrent) {
+      await tx.catalogItemIdentifier.updateMany({
+        where: {
+          catalogItemId,
+          type: CatalogIdentifierType.LEGACY_CODE,
+          code: previousCode,
+        },
+        data: { isActive: false },
+      });
+    }
+    if (!normalizedCurrent) return;
+
+    const existing = await tx.catalogItemIdentifier.findFirst({
+      where: {
+        catalogItemId,
+        type: CatalogIdentifierType.LEGACY_CODE,
+        code: normalizedCurrent,
+      },
+    });
+    if (existing) {
+      await tx.catalogItemIdentifier.update({
+        where: { id: existing.id },
+        data: {
+          normalizedCode: this.normalizeIdentifier(normalizedCurrent),
+          source: 'sistema_legado',
+          isActive: true,
+        },
+      });
+      return;
+    }
+    await tx.catalogItemIdentifier.create({
+      data: {
+        catalogItemId,
+        type: CatalogIdentifierType.LEGACY_CODE,
+        code: normalizedCurrent,
+        normalizedCode: this.normalizeIdentifier(normalizedCurrent),
+        source: 'sistema_legado',
+        isPrimary: false,
+        isActive: true,
+      },
+    });
+  }
+
   private maskCatalogValues(item: any, canViewCosts: boolean) {
     if (canViewCosts) return item;
     return this.maskOperationalCosts(item, false);
+  }
+
+  private pricingValuesFromPolicy(
+    policy?: {
+      salesTaxPercent: number;
+      icmsPercent: number;
+      pisPercent: number;
+      cofinsPercent: number;
+      ipiPercent: number;
+      issPercent: number;
+      irpjPercent: number;
+      csllPercent: number;
+      cppPercent: number;
+      commissionPercent: number;
+      profitMarginPercent: number;
+      operationalCostPercent: number;
+    } | null,
+  ) {
+    const values = {
+      icmsPercent: Number(policy?.icmsPercent || 0),
+      pisPercent: Number(policy?.pisPercent || 0),
+      cofinsPercent: Number(policy?.cofinsPercent || 0),
+      ipiPercent: Number(policy?.ipiPercent || 0),
+      issPercent: Number(policy?.issPercent || 0),
+      irpjPercent: Number(policy?.irpjPercent || 0),
+      csllPercent: Number(policy?.csllPercent || 0),
+      cppPercent: Number(policy?.cppPercent || 0),
+      commissionPercent: Number(policy?.commissionPercent || 0),
+      profitMarginPercent: Number(policy?.profitMarginPercent || 0),
+      operationalCostPercent: Number(policy?.operationalCostPercent || 0),
+    };
+    const componentTotal = this.totalTaxPercent(values);
+    return {
+      ...values,
+      salesTaxPercent:
+        componentTotal > 0
+          ? componentTotal
+          : Number(policy?.salesTaxPercent || 0),
+    };
+  }
+
+  private totalTaxPercent(values: {
+    icmsPercent?: number | null;
+    pisPercent?: number | null;
+    cofinsPercent?: number | null;
+    ipiPercent?: number | null;
+    issPercent?: number | null;
+    irpjPercent?: number | null;
+    csllPercent?: number | null;
+    cppPercent?: number | null;
+  }) {
+    return Number(
+      (
+        Number(values.icmsPercent || 0) +
+        Number(values.pisPercent || 0) +
+        Number(values.cofinsPercent || 0) +
+        Number(values.ipiPercent || 0) +
+        Number(values.issPercent || 0) +
+        Number(values.irpjPercent || 0) +
+        Number(values.csllPercent || 0) +
+        Number(values.cppPercent || 0)
+      ).toFixed(4),
+    );
+  }
+
+  private calculateSuggestedSalePrice(
+    purchaseCost: number,
+    values: {
+      salesTaxPercent?: number | null;
+      commissionPercent?: number | null;
+      profitMarginPercent?: number | null;
+      operationalCostPercent?: number | null;
+    },
+  ) {
+    const cost = Math.max(0, Number(purchaseCost || 0));
+    const markupPercent =
+      Number(values.salesTaxPercent || 0) +
+      Number(values.commissionPercent || 0) +
+      Number(values.profitMarginPercent || 0) +
+      Number(values.operationalCostPercent || 0);
+    return Number(Math.max(cost, cost * (1 + markupPercent / 100)).toFixed(2));
   }
 
   private maskOperationalCosts<T>(item: T, canViewCosts: boolean): T {
@@ -1324,6 +1837,14 @@ export class CatalogsService {
       'lastCost',
       'taxPercentage',
       'profitMargin',
+      'icmsPercent',
+      'pisPercent',
+      'cofinsPercent',
+      'ipiPercent',
+      'issPercent',
+      'irpjPercent',
+      'csllPercent',
+      'cppPercent',
       'supplierPrice',
       'purchaseTaxPercent',
       'purchaseTaxAmount',
@@ -1479,6 +2000,28 @@ export class CatalogsService {
     }
   }
 
+  private assertNoDirectPricingMutation(dto: Record<string, any>) {
+    const protectedFields = [
+      'basePrice',
+      'costPrice',
+      'averageCost',
+      'lastCost',
+      'taxPercentage',
+      'profitMargin',
+      'taxProfile',
+    ];
+    const received = protectedFields.filter(
+      (key) =>
+        Object.prototype.hasOwnProperty.call(dto, key) &&
+        dto[key] !== undefined,
+    );
+    if (received.length > 0) {
+      throw new BadRequestException(
+        'Custos, impostos, margens e preco devem ser alterados pela formacao de preco com aprovacao do Financeiro.',
+      );
+    }
+  }
+
   private prepareCatalogWriteData(dto: CreateCatalogDto | UpdateCatalogDto): {
     catalogData: Prisma.CatalogItemUncheckedCreateInput &
       Prisma.CatalogItemUncheckedUpdateInput;
@@ -1488,6 +2031,24 @@ export class CatalogsService {
     const reorderPoint = rawData.reorderPoint;
     delete rawData.reorderPoint;
     delete rawData.stockCurrent;
+    if (Object.prototype.hasOwnProperty.call(rawData, 'legacyCode')) {
+      rawData.legacyCode =
+        typeof rawData.legacyCode === 'string'
+          ? rawData.legacyCode.trim() || null
+          : null;
+    }
+    if (Object.prototype.hasOwnProperty.call(rawData, 'itemClassification')) {
+      rawData.itemClassification =
+        typeof rawData.itemClassification === 'string'
+          ? rawData.itemClassification.trim() || null
+          : null;
+    }
+    if (Object.prototype.hasOwnProperty.call(rawData, 'acquisitionOrigin')) {
+      rawData.acquisitionOrigin =
+        typeof rawData.acquisitionOrigin === 'string'
+          ? rawData.acquisitionOrigin.trim() || null
+          : null;
+    }
 
     const inventoryTargets: Prisma.InventoryBalanceUpdateManyMutationInput = {};
     if (typeof rawData.stockMin === 'number') {

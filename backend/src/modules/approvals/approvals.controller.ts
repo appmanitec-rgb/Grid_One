@@ -45,4 +45,18 @@ export class ApprovalsController {
     const userId = (req['user'] as any)?.sub as string;
     return this.approvalsService.reject(id, userId, dto.decisionNote);
   }
+
+  @Post(':id/request-adjustments')
+  requestAdjustments(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Body() dto: DecideApprovalDto,
+  ) {
+    const userId = (req['user'] as any)?.sub as string;
+    return this.approvalsService.requestAdjustments(
+      id,
+      userId,
+      dto.decisionNote,
+    );
+  }
 }

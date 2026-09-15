@@ -23,6 +23,7 @@ describe('ProposalsService', () => {
     create: jest.Mock;
     approve: jest.Mock;
     reject: jest.Mock;
+    requestAdjustments: jest.Mock;
   };
   let db: {
     proposal: {
@@ -159,6 +160,7 @@ describe('ProposalsService', () => {
       create: jest.fn(),
       approve: jest.fn(),
       reject: jest.fn(),
+      requestAdjustments: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -189,6 +191,95 @@ describe('ProposalsService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it('creates a draft revision and locks the previous version as revised', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'seller-1',
+      role: UserRole.SALES,
+      linkedClientId: null,
+    });
+    db.proposal.findUnique.mockResolvedValue({
+      id: 'proposal-00',
+      code: '20001/00',
+      baseSequence: 20001,
+      revision: 0,
+      status: ProposalStatus.DRAFT,
+      type: ProposalType.PARTS_AND_SERVICES,
+      totalValue: 1000,
+      validUntil: new Date('2026-10-01T00:00:00.000Z'),
+      clientId: 'client-1',
+      userId: 'seller-1',
+      origin: ProposalOrigin.MANITEC,
+      operationalExpensesTotal: 0,
+      allowOperationalExpenseDiscount: false,
+      items: [],
+      revisions: [],
+    });
+    db.proposal.findMany.mockResolvedValue([{ code: '20001/00' }]);
+    db.proposal.create.mockResolvedValue({
+      id: 'proposal-01',
+      code: '20001/01',
+      status: ProposalStatus.DRAFT,
+    });
+
+    const result = await service.revise(
+      'proposal-00',
+      'seller-1',
+      'Inclusao de item solicitado pelo cliente.',
+    );
+
+    expect(db.proposal.update).toHaveBeenCalledWith({
+      where: { id: 'proposal-00' },
+      data: { status: ProposalStatus.REVISED },
+    });
+    expect(db.proposal.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          code: '20001/01',
+          status: ProposalStatus.DRAFT,
+          parentProposalId: 'proposal-00',
+        }),
+      }),
+    );
+    expect(result.status).toBe(ProposalStatus.DRAFT);
+    expect(db.proposalMovement.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          proposalId: 'proposal-00',
+          action: 'REVISION_CREATED',
+          toStatus: ProposalStatus.REVISED,
+        }),
+      }),
+    );
+  });
+
+  it('requires a reason before creating a revision', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'seller-1',
+      role: UserRole.SALES,
+      linkedClientId: null,
+    });
+
+    await expect(service.revise('proposal-00', 'seller-1', '  ')).rejects.toThrow(
+      'Informe o motivo da revisao',
+    );
+    expect(db.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('requires reasons for board adjustment and definitive rejection', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      role: UserRole.ADMIN,
+      linkedClientId: null,
+    });
+
+    await expect(
+      service.boardRequestAdjustments('proposal-00', 'admin-1', ''),
+    ).rejects.toThrow('motivo da solicitacao de ajustes');
+    await expect(
+      service.boardReject('proposal-00', 'admin-1', 'nao'),
+    ).rejects.toThrow('motivo da reprovacao');
   });
 
   it('requires an active commercial generator for generator sale proposals', async () => {

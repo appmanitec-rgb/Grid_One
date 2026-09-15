@@ -117,12 +117,17 @@ type PresenceRow = {
 
 type PendingApprovalRow = {
   id: string;
-  type: "BUDGET_DISCOUNT" | "GENERATOR_PROPOSAL" | "RVT_SIGNOFF";
+  type:
+    | "BUDGET_DISCOUNT"
+    | "GENERATOR_PROPOSAL"
+    | "RVT_SIGNOFF"
+    | "CATALOG_PRICING";
   entityType: string;
   entityId: string;
   createdAt: string;
   requesterUser?: { name: string } | null;
 };
+type ApprovalDecision = "approve" | "adjust" | "reject";
 
 type AuditRow = {
   id: string;
@@ -286,6 +291,7 @@ const APPROVAL_LABELS: Record<PendingApprovalRow["type"], string> = {
   BUDGET_DISCOUNT: "Desconto especial",
   GENERATOR_PROPOSAL: "Proposta de gerador",
   RVT_SIGNOFF: "Aprovacao tecnica",
+  CATALOG_PRICING: "Formacao de preco",
 };
 const AUDIT_LABELS: Record<AuditDomain, string> = {
   USERS: "Usuarios",
@@ -1113,14 +1119,38 @@ export function UserManagementWorkspace({
     }
   }
 
-  async function decideApproval(id: string, decision: "approve" | "reject") {
+  async function decideApproval(id: string, decision: ApprovalDecision) {
+    const decisionReason =
+      decision !== "approve"
+        ? window.prompt(
+            decision === "adjust"
+              ? "Informe os ajustes obrigatórios para o vendedor:"
+              : "Informe o motivo obrigatório da reprovação:",
+            "",
+          )
+        : null;
+    if (decision !== "approve" && decisionReason === null) return;
+    if (
+      decision !== "approve" &&
+      (decisionReason?.trim().length ?? 0) < 5
+    ) {
+      setError("Informe uma justificativa com pelo menos 5 caracteres.");
+      return;
+    }
+
     setSaving(true);
     setError("");
     setSuccess("");
 
     try {
       const res = await apiFetch(
-        `/approvals/${id}/${decision === "approve" ? "approve" : "reject"}`,
+        `/approvals/${id}/${
+          decision === "approve"
+            ? "approve"
+            : decision === "adjust"
+              ? "request-adjustments"
+              : "reject"
+        }`,
         {
           method: "POST",
           headers: {
@@ -1130,7 +1160,7 @@ export function UserManagementWorkspace({
             decisionNote:
               decision === "approve"
                 ? "Aprovacao registrada pelo painel de governanca."
-                : "Reprovacao registrada pelo painel de governanca.",
+                : decisionReason?.trim(),
           }),
         },
       );
@@ -1145,7 +1175,9 @@ export function UserManagementWorkspace({
       setSuccess(
         decision === "approve"
           ? "Solicitacao aprovada com sucesso."
-          : "Solicitacao rejeitada com sucesso.",
+          : decision === "adjust"
+            ? "Ajustes solicitados ao vendedor."
+            : "Solicitacao rejeitada com sucesso.",
       );
       await loadUsers();
     } catch (approvalError: unknown) {
@@ -1717,7 +1749,7 @@ function UserManagementOverview({
   onChangeAuditDomain: Dispatch<SetStateAction<"ALL" | AuditDomain>>;
   onApprovalDecision: (
     id: string,
-    decision: "approve" | "reject",
+    decision: ApprovalDecision,
   ) => Promise<void>;
 }) {
   return (
@@ -2242,7 +2274,7 @@ function GovernanceRadar({
   onChangeAuditDomain: Dispatch<SetStateAction<"ALL" | AuditDomain>>;
   onApprovalDecision: (
     id: string,
-    decision: "approve" | "reject",
+    decision: ApprovalDecision,
   ) => Promise<void>;
 }) {
   return (
@@ -2334,6 +2366,18 @@ function GovernanceRadar({
                       </p>
                     </div>
                     <div className="flex gap-2">
+                      {row.type === "GENERATOR_PROPOSAL" ? (
+                        <button
+                          type="button"
+                          className="inline-flex items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-100"
+                          onClick={() =>
+                            void onApprovalDecision(row.id, "adjust")
+                          }
+                          disabled={saving}
+                        >
+                          Solicitar ajustes
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         className={SECONDARY_BUTTON}

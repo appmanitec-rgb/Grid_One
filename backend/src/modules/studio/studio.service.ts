@@ -205,6 +205,7 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
     domain: AuditDomain.USERS,
     resourcePermission: 'clients.update',
     editableFields: {
+      legacyCode: 'string',
       companyName: 'string',
       tradeName: 'string',
       cnpj: 'string',
@@ -218,6 +219,8 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
       cnae: 'string',
       segment: 'string',
       preferences: 'string',
+      notes: 'string',
+      isActive: 'boolean',
       clientType: 'enum',
       personType: 'enum',
       paymentTermDefault: 'string',
@@ -239,6 +242,7 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
     domain: AuditDomain.PURCHASE_ORDERS,
     resourcePermission: 'purchaseOrders.update',
     editableFields: {
+      legacyCode: 'string',
       companyName: 'string',
       tradeName: 'string',
       cnpj: 'string',
@@ -247,6 +251,11 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
       city: 'string',
       state: 'string',
       paymentTerm: 'string',
+      address: 'string',
+      stateRegistration: 'string',
+      municipalRegistration: 'string',
+      notes: 'string',
+      isActive: 'boolean',
     },
     findUnique: (tx, id) => tx.supplier.findUnique({ where: { id } }),
     update: (tx, id, data) => tx.supplier.update({ where: { id }, data }),
@@ -256,6 +265,7 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
     domain: AuditDomain.MAINTENANCE_ORDERS,
     resourcePermission: 'equipments.update',
     editableFields: {
+      legacyCode: 'string',
       name: 'string',
       brand: 'string',
       serialNumber: 'string',
@@ -355,11 +365,14 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
     editableFields: {
       name: 'string',
       sku: 'string',
+      legacyCode: 'string',
       type: 'enum',
+      itemClassification: 'string',
       category: 'string',
+      subcategory: 'string',
       unit: 'string',
+      acquisitionOrigin: 'string',
       brand: 'string',
-      basePrice: 'number',
       stockMin: 'number',
       stockMax: 'number',
       storageLocation: 'string',
@@ -379,6 +392,14 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
       name: 'string',
       itemType: 'enum',
       salesTaxPercent: 'number',
+      icmsPercent: 'number',
+      pisPercent: 'number',
+      cofinsPercent: 'number',
+      ipiPercent: 'number',
+      issPercent: 'number',
+      irpjPercent: 'number',
+      csllPercent: 'number',
+      cppPercent: 'number',
       commissionPercent: 'number',
       profitMarginPercent: 'number',
       operationalCostPercent: 'number',
@@ -395,7 +416,28 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
         'SUPPLIER_COST_MARKUP',
       ],
     },
-    create: (tx, data) => {
+    validate: (data) => {
+      const percentFields = [
+        'salesTaxPercent',
+        'icmsPercent',
+        'pisPercent',
+        'cofinsPercent',
+        'ipiPercent',
+        'issPercent',
+        'irpjPercent',
+        'csllPercent',
+        'cppPercent',
+        'commissionPercent',
+        'profitMarginPercent',
+        'operationalCostPercent',
+      ];
+      if (percentFields.some((key) => key in data && Number(data[key]) < 0)) {
+        throw new BadRequestException(
+          'Percentuais da politica de preco nao podem ser negativos.',
+        );
+      }
+    },
+    create: async (tx, data) => {
       const name = studioString(data.name).trim();
       if (!name) {
         throw new BadRequestException(
@@ -403,12 +445,50 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
         );
       }
 
+      const componentTaxPercent = [
+        data.icmsPercent,
+        data.pisPercent,
+        data.cofinsPercent,
+        data.ipiPercent,
+        data.issPercent,
+        data.irpjPercent,
+        data.csllPercent,
+        data.cppPercent,
+      ].reduce<number>(
+        (total, value) => total + (typeof value === 'number' ? value : 0),
+        0,
+      );
+
+      const itemType = (data.itemType as ItemType | undefined) ?? ItemType.PART;
+      if (data.isDefault === true) {
+        await tx.catalogPricingPolicy.updateMany({
+          where: { itemType, isDefault: true },
+          data: { isDefault: false },
+        });
+      }
+
       return tx.catalogPricingPolicy.create({
         data: {
           name,
-          itemType: (data.itemType as ItemType | undefined) ?? ItemType.PART,
+          itemType,
           salesTaxPercent:
-            typeof data.salesTaxPercent === 'number' ? data.salesTaxPercent : 0,
+            componentTaxPercent > 0
+              ? componentTaxPercent
+              : typeof data.salesTaxPercent === 'number'
+                ? data.salesTaxPercent
+                : 0,
+          icmsPercent:
+            typeof data.icmsPercent === 'number' ? data.icmsPercent : 0,
+          pisPercent: typeof data.pisPercent === 'number' ? data.pisPercent : 0,
+          cofinsPercent:
+            typeof data.cofinsPercent === 'number' ? data.cofinsPercent : 0,
+          ipiPercent: typeof data.ipiPercent === 'number' ? data.ipiPercent : 0,
+          issPercent: typeof data.issPercent === 'number' ? data.issPercent : 0,
+          irpjPercent:
+            typeof data.irpjPercent === 'number' ? data.irpjPercent : 0,
+          csllPercent:
+            typeof data.csllPercent === 'number' ? data.csllPercent : 0,
+          cppPercent: typeof data.cppPercent === 'number' ? data.cppPercent : 0,
           commissionPercent:
             typeof data.commissionPercent === 'number'
               ? data.commissionPercent
@@ -434,8 +514,43 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
     },
     findUnique: (tx, id) =>
       tx.catalogPricingPolicy.findUnique({ where: { id } }),
-    update: (tx, id, data) =>
-      tx.catalogPricingPolicy.update({ where: { id }, data }),
+    update: async (tx, id, data) => {
+      const current = await tx.catalogPricingPolicy.findUnique({
+        where: { id },
+      });
+      if (current && data.isDefault === true) {
+        await tx.catalogPricingPolicy.updateMany({
+          where: {
+            itemType:
+              (data.itemType as ItemType | undefined) ?? current.itemType,
+            isDefault: true,
+            id: { not: id },
+          },
+          data: { isDefault: false },
+        });
+      }
+      const componentKeys = [
+        'icmsPercent',
+        'pisPercent',
+        'cofinsPercent',
+        'ipiPercent',
+        'issPercent',
+        'irpjPercent',
+        'csllPercent',
+        'cppPercent',
+      ];
+      if (componentKeys.some((key) => key in data)) {
+        if (current) {
+          data.salesTaxPercent = componentKeys.reduce(
+            (total, key) =>
+              total +
+              Number(data[key] ?? current[key as keyof typeof current] ?? 0),
+            0,
+          );
+        }
+      }
+      return tx.catalogPricingPolicy.update({ where: { id }, data });
+    },
   },
   operationalExpenseRates: {
     entityType: 'OperationalExpenseRate',

@@ -17,6 +17,23 @@ describe('CatalogsService', () => {
         findUnique: jest.fn(),
         update: jest.fn(),
       },
+      catalogPricingPolicy: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'policy-service',
+          salesTaxPercent: 10,
+          icmsPercent: 5,
+          pisPercent: 2,
+          cofinsPercent: 3,
+          ipiPercent: 0,
+          issPercent: 0,
+          irpjPercent: 0,
+          csllPercent: 0,
+          cppPercent: 0,
+          commissionPercent: 2,
+          profitMarginPercent: 20,
+          operationalCostPercent: 3,
+        }),
+      },
       inventoryBalance: {
         updateMany: jest.fn(),
       },
@@ -47,6 +64,36 @@ describe('CatalogsService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it('fills a new product with the active pricing policy and purchase price', async () => {
+    prisma.catalogItem.create.mockImplementation(({ data }: any) =>
+      Promise.resolve({ id: 'cat-new', ...data }),
+    );
+
+    await service.create({
+      name: 'Servico de teste',
+      type: ItemType.SERVICE,
+      costPrice: 100,
+      basePrice: 999,
+    });
+
+    expect(prisma.catalogItem.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        pricingPolicyId: 'policy-service',
+        acquisitionOrigin: 'Comprado',
+        itemClassification: 'Servico',
+        costPrice: 100,
+        lastCost: 100,
+        icmsPercent: 5,
+        pisPercent: 2,
+        cofinsPercent: 3,
+        commissionPercent: 2,
+        profitMargin: 20,
+        operationalCostPercent: 3,
+        basePrice: 135,
+      }),
+    });
   });
 
   it('composes automatic SKUs from zero without numeric padding', () => {
@@ -137,6 +184,14 @@ describe('CatalogsService', () => {
     await expect(
       service.update('cat-1', { stockCurrent: 50 } as any),
     ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.catalogItem.update).not.toHaveBeenCalled();
+  });
+
+  it('blocks direct price mutation through the generic catalog update', async () => {
+    await expect(
+      service.update('cat-1', { basePrice: 999 } as any),
+    ).rejects.toThrow('aprovacao do Financeiro');
 
     expect(prisma.catalogItem.update).not.toHaveBeenCalled();
   });

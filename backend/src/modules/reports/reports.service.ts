@@ -702,6 +702,7 @@ const proposalStatusLabels: Record<string, string> = {
   DRAFT: 'Rascunho',
   BOARD_REVIEW: 'Diretoria',
   REVISION_REQUIRED: 'Revisao',
+  REVISED: 'Revisadas',
   CLIENT_REVIEW: 'Cliente',
   DISCOUNT_REVIEW: 'Desconto',
   WON: 'Ganhas',

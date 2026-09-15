@@ -265,7 +265,6 @@ export class PurchaseOrdersService {
               unitCost,
             ),
             lastCost: unitCost,
-            costPrice: unitCost,
           },
         });
 

@@ -43,11 +43,55 @@ export class UpdateCatalogPricingDto {
 
   @IsNumber()
   @IsOptional()
+  insuranceAmount?: number;
+
+  @IsNumber()
+  @IsOptional()
+  discountAmount?: number;
+
+  @IsNumber()
+  @IsOptional()
+  recoverableCreditAmount?: number;
+
+  @IsNumber()
+  @IsOptional()
   otherPurchaseCosts?: number;
 
   @IsNumber()
   @IsOptional()
   salesTaxPercent?: number;
+
+  @IsNumber()
+  @IsOptional()
+  icmsPercent?: number;
+
+  @IsNumber()
+  @IsOptional()
+  pisPercent?: number;
+
+  @IsNumber()
+  @IsOptional()
+  cofinsPercent?: number;
+
+  @IsNumber()
+  @IsOptional()
+  ipiPercent?: number;
+
+  @IsNumber()
+  @IsOptional()
+  issPercent?: number;
+
+  @IsNumber()
+  @IsOptional()
+  irpjPercent?: number;
+
+  @IsNumber()
+  @IsOptional()
+  csllPercent?: number;
+
+  @IsNumber()
+  @IsOptional()
+  cppPercent?: number;
 
   @IsNumber()
   @IsOptional()

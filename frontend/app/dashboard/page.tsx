@@ -79,11 +79,13 @@ type DashboardPanelsState = Record<DashboardPanelKey, boolean>;
 const PIPELINE_COLUMNS: StageColumn[] = [
   { key: "DRAFT", label: "Rascunho" },
   { key: "BOARD_REVIEW", label: "Análise diretoria" },
-  { key: "REVISION_REQUIRED", label: "Em revisão" },
+  { key: "REVISION_REQUIRED", label: "Ajustes solicitados" },
   { key: "CLIENT_REVIEW", label: "Análise cliente" },
   { key: "DISCOUNT_REVIEW", label: "Desconto" },
   { key: "WON", label: "Ganhas" },
   { key: "LOST", label: "Perdidas" },
+  { key: "REJECTED", label: "Reprovadas" },
+  { key: "REVISED", label: "Revisadas" },
 ];
 
 const ACTION_TONES: Record<
@@ -154,6 +156,20 @@ const STAGE_STYLES: Record<
     shell:
       "border-rose-200 bg-[radial-gradient(circle_at_top_right,rgba(244,63,94,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff2f4_100%)]",
     badge: "bg-rose-500 text-white",
+    hover: "hover:border-rose-300",
+    tone: "rose",
+  },
+  REVISED: {
+    shell:
+      "border-sky-200 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#eef7ff_100%)]",
+    badge: "bg-sky-500 text-white",
+    hover: "hover:border-sky-300",
+    tone: "blue",
+  },
+  REJECTED: {
+    shell:
+      "border-rose-200 bg-[radial-gradient(circle_at_top_right,rgba(244,63,94,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff2f4_100%)]",
+    badge: "bg-rose-600 text-white",
     hover: "hover:border-rose-300",
     tone: "rose",
   },
@@ -775,7 +791,11 @@ export default function DashboardPage() {
                             {stage.total} proposta(s)
                           </p>
                         </div>
-                        <DataPill tone={STAGE_STYLES[stage.key].tone}>
+                        <DataPill
+                          tone={
+                            (STAGE_STYLES[stage.key] ?? STAGE_STYLES.DRAFT).tone
+                          }
+                        >
                           {stage.total}
                         </DataPill>
                       </div>
@@ -898,7 +918,9 @@ export default function DashboardPage() {
                 .map((column) => (
                   <DataPill
                     key={column.key}
-                    tone={STAGE_STYLES[column.key].tone}
+                    tone={
+                      (STAGE_STYLES[column.key] ?? STAGE_STYLES.DRAFT).tone
+                    }
                   >
                     {column.label}: {column.total}
                   </DataPill>
@@ -1575,7 +1597,9 @@ function statusLabel(status: string) {
   const map: Record<string, string> = {
     DRAFT: "Rascunho",
     BOARD_REVIEW: "Análise diretoria",
-    REVISION_REQUIRED: "Em revisão",
+    REVISION_REQUIRED: "Ajustes solicitados",
+    REVISED: "Revisada",
+    REJECTED: "Reprovada pela diretoria",
     CLIENT_REVIEW: "Análise cliente",
     DISCOUNT_REVIEW: "Análise desconto",
     WON: "Ganho",

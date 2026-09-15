@@ -1878,6 +1878,7 @@ export class DocumentsService {
       DRAFT: 'Rascunho',
       BOARD_REVIEW: 'Diretoria',
       REVISION_REQUIRED: 'Revisao',
+      REVISED: 'Revisada',
       CLIENT_REVIEW: 'Cliente',
       DISCOUNT_REVIEW: 'Desconto',
       WON: 'Ganha',

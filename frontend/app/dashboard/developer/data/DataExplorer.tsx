@@ -282,8 +282,9 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
     () =>
       resource.fields.filter(
         (field) =>
+          field.importable !== false &&
           (field.editable || field.importable) &&
-          !field.readOnly &&
+          (!field.readOnly || field.importable === true) &&
           !field.hidden &&
           !field.sensitive,
       ),
@@ -352,7 +353,7 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
 
   function downloadTemplate() {
     if (!canImportData) return;
-    const csv = buildCsv([], importFields);
+    const csv = buildCsv([], importFields, true);
     downloadTextFile(`modelo-importacao-${resource.key}.csv`, csv);
   }
 
@@ -363,44 +364,50 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
     });
   }
 
-  function handleImportFile(file?: File | null) {
+  async function handleImportFile(file?: File | null) {
     if (!canImportData) return;
     if (!file) return;
     setImporting(true);
     setImportError("");
     setImportPreview(null);
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const response = await apiFetch("/studio/imports/preview", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            resource: resource.key,
-            originalFileName: file.name,
-            csv: String(reader.result || ""),
-            mode: "CREATE_ONLY",
-          }),
-        });
-        if (!response.ok) {
-          throw new Error(
-            await readApiErrorMessage(response, "Nao foi possivel gerar a previa da importacao."),
-          );
-        }
-        setImportPreview((await response.json()) as ImportPreviewResult);
-      } catch (error: unknown) {
-        setImportError(
-          error instanceof Error ? error.message : "Falha ao ler importacao.",
-        );
-      } finally {
-        setImporting(false);
+    try {
+      if (file.size > 5 * 1024 * 1024) {
+        throw new Error("O arquivo deve ter no maximo 5 MB.");
       }
-    };
-    reader.onerror = () => {
+      const extension = file.name.split(".").pop()?.toLowerCase();
+      let csv: string;
+      if (extension === "xlsx") {
+        const { readSheet } = await import("read-excel-file/browser");
+        csv = spreadsheetRowsToCsv(await readSheet(file));
+      } else if (extension === "csv") {
+        csv = await file.text();
+      } else {
+        throw new Error("Selecione um arquivo CSV ou XLSX.");
+      }
+
+      const response = await apiFetch("/studio/imports/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resource: resource.key,
+          originalFileName: file.name,
+          csv,
+          mode: "CREATE_ONLY",
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(
+          await readApiErrorMessage(response, "Nao foi possivel gerar a previa da importacao."),
+        );
+      }
+      setImportPreview((await response.json()) as ImportPreviewResult);
+    } catch (error: unknown) {
+      setImportError(
+        error instanceof Error ? error.message : "Falha ao ler importacao.",
+      );
+    } finally {
       setImporting(false);
-      setImportError("Nao foi possivel ler o arquivo CSV.");
-    };
-    reader.readAsText(file);
+    }
   }
 
   async function executeImport() {
@@ -565,7 +572,7 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
               <div>
                 <p className="text-sm font-bold text-amber-950">Importacao controlada</p>
                 <p className="mt-1 text-sm leading-6 text-amber-900">
-                  O Studio gera modelo, le o arquivo, mostra a previa e so grava os registros depois da confirmacao, com validacao e auditoria.
+                  O Studio le CSV ou XLSX, mostra a previa e so grava depois da confirmacao. Linhas sem os campos obrigatorios e duplicados sao ignoradas, com validacao e auditoria.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -577,10 +584,10 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
                   Baixar modelo
                 </button>
                 <label className="cursor-pointer rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900">
-                  Ler CSV
+                  Ler CSV ou XLSX
                   <input
                     type="file"
-                    accept=".csv,text/csv"
+                    accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     className="hidden"
                     onChange={(event) => handleImportFile(event.target.files?.[0])}
                   />
@@ -599,13 +606,21 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
             ) : null}
             {importPreview ? (
               <div className="mt-4 space-y-3">
-                <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                <div className="grid gap-2 sm:grid-cols-4 lg:grid-cols-8">
                   <ImportMetric label="Total" value={importPreview.summary.total} />
                   <ImportMetric label="Validos" value={importPreview.summary.valid} />
                   <ImportMetric label="Avisos" value={importPreview.summary.warnings} />
                   <ImportMetric label="Invalidos" value={importPreview.summary.invalid} />
                   <ImportMetric label="Duplicados" value={importPreview.summary.duplicates} />
                   <ImportMetric label="Criados" value={importPreview.summary.created ?? 0} />
+                  <ImportMetric
+                    label="Ignorados"
+                    value={
+                      importPreview.summary.skipped ??
+                      importPreview.summary.invalid + importPreview.summary.duplicates
+                    }
+                  />
+                  <ImportMetric label="Falhas" value={importPreview.summary.failed ?? 0} />
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-xs font-semibold text-amber-900">
@@ -998,8 +1013,14 @@ function compareValues(a: unknown, b: unknown, field?: StudioField) {
   });
 }
 
-function buildCsv(rows: StudioRecord[], fields: StudioField[]) {
-  const header = fields.map((field) => escapeCsv(field.key)).join(";");
+function buildCsv(
+  rows: StudioRecord[],
+  fields: StudioField[],
+  useImportHeaders = false,
+) {
+  const header = fields
+    .map((field) => escapeCsv(useImportHeaders ? field.importHeader || field.key : field.key))
+    .join(";");
   const body = rows.map((row) =>
     fields
       .map((field) =>
@@ -1010,6 +1031,25 @@ function buildCsv(rows: StudioRecord[], fields: StudioField[]) {
       .join(";"),
   );
   return ["\uFEFF" + header, ...body].join("\n");
+}
+
+function spreadsheetRowsToCsv(rows: unknown[][]) {
+  if (rows.length === 0) {
+    throw new Error("A primeira aba da planilha esta vazia.");
+  }
+  return rows
+    .map((row, rowIndex) =>
+      row
+        .map((value) => {
+          const normalized =
+            value instanceof Date ? value.toISOString() : String(value ?? "");
+          return escapeCsv(rowIndex === 0 && normalized.startsWith("\uFEFF")
+            ? normalized.slice(1)
+            : normalized);
+        })
+        .join(";"),
+    )
+    .join("\n");
 }
 
 function escapeCsv(value: unknown) {

@@ -597,16 +597,20 @@ export class NotificationsService {
         ? `/dashboard/proposals/${approval.entityId}`
         : approval.entityType === 'MAINTENANCE_ORDER'
           ? `/dashboard/orders/${approval.entityId}`
-          : '/dashboard/dispatch';
+          : approval.entityType === 'CATALOG_ITEM'
+            ? `/dashboard/catalog/${approval.entityId}`
+            : '/dashboard/dispatch';
 
     const title =
       approval.type === ApprovalType.GENERATOR_PROPOSAL
         ? 'Proposta de gerador aguardando diretoria'
         : approval.type === ApprovalType.BUDGET_DISCOUNT
           ? 'Aprovacao de desconto pendente'
-          : approval.entityType === 'MAINTENANCE_ORDER_ASSIGNMENT'
-            ? 'Override de despacho pendente'
-            : 'Relatorio tecnico aguardando aprovacao';
+          : approval.type === ApprovalType.CATALOG_PRICING
+            ? 'Formacao de preco aguardando Financeiro'
+            : approval.entityType === 'MAINTENANCE_ORDER_ASSIGNMENT'
+              ? 'Override de despacho pendente'
+              : 'Relatorio tecnico aguardando aprovacao';
 
     return {
       id: `approval:${approval.id}`,
@@ -692,10 +696,16 @@ export class NotificationsService {
         priority: 'high',
       },
       REVISION_REQUIRED: {
-        title: 'Proposta pede revisao',
-        message: `${proposal.code} voltou com ajustes para ${clientName}.`,
+        title: 'Diretoria solicitou ajustes',
+        message: `${proposal.code} esta bloqueada e aguarda uma nova revisao para ${clientName}.`,
         tone: 'rose',
         priority: 'medium',
+      },
+      REVISED: {
+        title: 'Versao revisada',
+        message: `${proposal.code} foi substituida por uma revisao mais recente.`,
+        tone: 'slate',
+        priority: 'low',
       },
       CLIENT_REVIEW: {
         title:
@@ -1198,6 +1208,7 @@ export class NotificationsService {
       DRAFT: 'Rascunho',
       BOARD_REVIEW: 'Diretoria',
       REVISION_REQUIRED: 'Revisao',
+      REVISED: 'Revisada',
       CLIENT_REVIEW: 'Cliente',
       DISCOUNT_REVIEW: 'Desconto',
       WON: 'Ganha',

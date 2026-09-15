@@ -1,0 +1,1 @@
+ALTER TYPE "ProposalStatus" ADD VALUE 'REVISED' AFTER 'DRAFT';

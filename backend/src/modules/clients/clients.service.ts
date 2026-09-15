@@ -130,6 +130,7 @@ export class ClientsService {
     return this.database.$transaction(async (tx) => {
       const createdClient = await tx.client.create({
         data: {
+          legacyCode: data.legacyCode?.trim() || undefined,
           companyName: data.companyName,
           tradeName: data.tradeName,
           cnpj: normalizedDocument,
@@ -148,6 +149,8 @@ export class ClientsService {
           municipalRegistration: data.municipalRegistration,
           cnae: data.cnae,
           preferences: data.preferences,
+          notes: data.notes,
+          isActive: data.isActive,
           segment: data.segment,
           clientType: data.clientType,
           paymentTermDefault: data.paymentTermDefault,

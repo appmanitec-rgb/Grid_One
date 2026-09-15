@@ -16,6 +16,10 @@ export class CreateCatalogDto {
 
   @IsString()
   @IsOptional()
+  legacyCode?: string;
+
+  @IsString()
+  @IsOptional()
   skuAreaId?: string;
 
   @IsString()
@@ -36,6 +40,10 @@ export class CreateCatalogDto {
 
   @IsString()
   @IsOptional()
+  itemClassification?: string;
+
+  @IsString()
+  @IsOptional()
   description?: string;
 
   @IsString()
@@ -53,6 +61,10 @@ export class CreateCatalogDto {
   @IsString()
   @IsOptional()
   unit?: string;
+
+  @IsString()
+  @IsOptional()
+  acquisitionOrigin?: string;
 
   @IsString()
   @IsOptional()
@@ -107,8 +119,8 @@ export class CreateCatalogDto {
   profitMargin?: number;
 
   @IsNumber()
-  @IsNotEmpty()
-  basePrice!: number;
+  @IsOptional()
+  basePrice?: number;
 
   @IsNumber()
   @IsOptional()

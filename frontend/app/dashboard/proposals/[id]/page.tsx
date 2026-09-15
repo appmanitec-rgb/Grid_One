@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ADMIN_STATUS_OPTIONS,
   FLOW_STEPS,
   statusLabel,
   statusToFlowStep,
@@ -23,7 +22,6 @@ import {
   InlineMessage,
   PageHero,
   SectionCard,
-  SelectInput,
   StatusBanner,
   TextInput,
 } from "../../components/DashboardPageKit";
@@ -128,6 +126,7 @@ const SECONDARY_BUTTON =
 type Tone = "blue" | "emerald" | "amber" | "rose" | "slate";
 
 const OPERATIONAL_PROPOSAL_TYPES = new Set(["SERVICES", "PARTS_AND_SERVICES"]);
+type ReasonedAction = "REVISE" | "REQUEST_ADJUSTMENTS" | "REJECT";
 
 export default function ProposalDetailPage() {
   const router = useRouter();
@@ -136,13 +135,15 @@ export default function ProposalDetailPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [isBusy, setIsBusy] = useState(false);
-  const [adminStatus, setAdminStatus] = useState("DRAFT");
   const [showDiscountForm, setShowDiscountForm] = useState(false);
   const [discountPercentInput, setDiscountPercentInput] = useState("10");
   const [discountReason, setDiscountReason] = useState("");
   const [showPostSaleForm, setShowPostSaleForm] = useState(false);
   const [postSaleName, setPostSaleName] = useState("");
   const [postSaleSerial, setPostSaleSerial] = useState("");
+  const [reasonedAction, setReasonedAction] = useState<ReasonedAction | null>(null);
+  const [actionReason, setActionReason] = useState("");
+  const [actionReasonError, setActionReasonError] = useState("");
 
   const tokenPayload = useMemo(() => {
     const token = getStoredAccessToken();
@@ -187,12 +188,6 @@ export default function ProposalDetailPage() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  useEffect(() => {
-    if (proposal?.status) {
-      setAdminStatus(proposal.status);
-    }
-  }, [proposal?.status]);
 
   useEffect(() => {
     if (proposal?.status !== "CLIENT_REVIEW") {
@@ -268,34 +263,36 @@ export default function ProposalDetailPage() {
     }
   }
 
-  async function updateStatusDirect(nextStatus: string) {
-    if (!proposal || !nextStatus || nextStatus === proposal.status) return;
-    setIsBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      const res = await apiFetch(apiUrl(`/proposals/${proposal.id}`), {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ status: nextStatus }),
-      });
+  function openReasonedAction(action: ReasonedAction) {
+    setReasonedAction(action);
+    setActionReason("");
+    setActionReasonError("");
+  }
 
-      if (await handleUnauthorized(res)) return;
-      if (!res.ok) {
-        throw new Error(
-          await readApiErrorMessage(res, "Falha ao atualizar status."),
-        );
-      }
+  function closeReasonedAction() {
+    if (isBusy) return;
+    setReasonedAction(null);
+    setActionReason("");
+    setActionReasonError("");
+  }
 
-      await load();
-      setNotice(`Status atualizado para ${statusLabel(nextStatus)}.`);
-    } catch (e: unknown) {
-      setError(getErrorMessage(e, "Erro ao atualizar status."));
-    } finally {
-      setIsBusy(false);
+  async function submitReasonedAction() {
+    if (!reasonedAction) return;
+    const reason = actionReason.trim();
+    if (reason.length < 5) {
+      setActionReasonError("Informe uma justificativa com pelo menos 5 caracteres.");
+      return;
     }
+
+    setActionReasonError("");
+    const succeeded =
+      reasonedAction === "REVISE"
+        ? await runAction("revise", { reason }, true)
+        : reasonedAction === "REQUEST_ADJUSTMENTS"
+          ? await runAction("board-request-adjustments", { reason })
+          : await runAction("board-reject", { reason });
+
+    if (succeeded) closeReasonedAction();
   }
 
   async function downloadExternalDocument() {
@@ -400,6 +397,17 @@ export default function ProposalDetailPage() {
     isOperationalProposal &&
     Boolean(proposal.generator?.id) &&
     !isClient;
+  const canCreateRevision =
+    !isClient &&
+    (!proposal.revisions || proposal.revisions.length === 0) &&
+    [
+      "DRAFT",
+      "REVISION_REQUIRED",
+      "CLIENT_REVIEW",
+      "LOST",
+      "REJECTED",
+      "SENT",
+    ].includes(proposal.status);
 
   const flowActions: Array<{
     label: string;
@@ -411,16 +419,6 @@ export default function ProposalDetailPage() {
   if (proposal.status === "DRAFT") {
     flowActions.push({
       label: "Enviar para diretoria",
-      tone: "primary",
-      run: async () => {
-        await runAction("submit-board");
-      },
-    });
-  }
-
-  if (proposal.status === "REVISION_REQUIRED") {
-    flowActions.push({
-      label: "Reenviar para diretoria",
       tone: "primary",
       run: async () => {
         await runAction("submit-board");
@@ -441,11 +439,15 @@ export default function ProposalDetailPage() {
       {
         label: "Solicitar ajustes",
         tone: "amber",
-        confirmText: "Solicitar ajustes nesta proposta?",
         run: async () => {
-          await runAction("board-reject", {
-            note: "Diretoria solicitou ajustes.",
-          });
+          openReasonedAction("REQUEST_ADJUSTMENTS");
+        },
+      },
+      {
+        label: "Reprovar proposta",
+        tone: "danger",
+        run: async () => {
+          openReasonedAction("REJECT");
         },
       },
     );
@@ -492,6 +494,20 @@ export default function ProposalDetailPage() {
 
   return (
     <div className="space-y-6">
+      {reasonedAction ? (
+        <ReasonedActionDialog
+          action={reasonedAction}
+          reason={actionReason}
+          error={actionReasonError}
+          busy={isBusy}
+          onReasonChange={(value) => {
+            setActionReason(value);
+            if (actionReasonError) setActionReasonError("");
+          }}
+          onCancel={closeReasonedAction}
+          onConfirm={() => void submitReasonedAction()}
+        />
+      ) : null}
       <OperationalBreadcrumb
         items={[
           { label: "Dashboard", href: "/dashboard" },
@@ -594,17 +610,10 @@ export default function ProposalDetailPage() {
                 Abrir O.S. no despacho
               </PermissionAwareLink>
             ) : null}
-            {!isClient ? (
+            {canCreateRevision ? (
               <ActionButton
                 busy={isBusy}
-                onClick={() => {
-                  if (
-                    !window.confirm("Criar uma nova revisão desta proposta?")
-                  ) {
-                    return;
-                  }
-                  void runAction("revise", undefined, true);
-                }}
+                onClick={() => openReasonedAction("REVISE")}
               >
                 Revisar proposta
               </ActionButton>
@@ -792,7 +801,7 @@ export default function ProposalDetailPage() {
         }
         actions={
           proposal.status === "REVISION_REQUIRED" ? (
-            <DataPill tone="amber">Em revisão para diretoria</DataPill>
+            <DataPill tone="amber">Conteúdo bloqueado — gere uma revisão</DataPill>
           ) : (
             <DataPill tone={statusTone(proposal.status)}>
               {statusLabel(proposal.status)}
@@ -907,39 +916,6 @@ export default function ProposalDetailPage() {
           </div>
         ) : null}
 
-        {isBoard ? (
-          <div className="mt-5 rounded-[24px] border border-sky-200 bg-sky-50/80 p-4">
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-sky-700">
-              Controle direto admin
-            </p>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <SelectInput
-                value={adminStatus}
-                onChange={(event) => setAdminStatus(event.target.value)}
-                className="min-w-[240px] border-sky-200 bg-white"
-              >
-                {ADMIN_STATUS_OPTIONS.map((status) => (
-                  <option key={status} value={status}>
-                    {statusLabel(status)}
-                  </option>
-                ))}
-              </SelectInput>
-              <button
-                type="button"
-                disabled={isBusy || adminStatus === proposal.status}
-                onClick={() => {
-                  void updateStatusDirect(adminStatus);
-                }}
-                className={PRIMARY_BUTTON}
-              >
-                Atualizar status
-              </button>
-              <p className="text-sm text-sky-900">
-                Admins podem mover livremente entre etapas.
-              </p>
-            </div>
-          </div>
-        ) : null}
       </SectionCard>
 
       {proposal.requestedDiscountPercent ? (
@@ -1279,6 +1255,105 @@ function ActionButton({
   );
 }
 
+function ReasonedActionDialog({
+  action,
+  reason,
+  error,
+  busy,
+  onReasonChange,
+  onCancel,
+  onConfirm,
+}: {
+  action: ReasonedAction;
+  reason: string;
+  error: string;
+  busy: boolean;
+  onReasonChange: (value: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const content = {
+    REVISE: {
+      eyebrow: "Nova revisão comercial",
+      title: "Por que esta proposta precisa ser revisada?",
+      description:
+        "A versão atual será bloqueada como Revisada e uma nova versão será criada em Rascunho.",
+      placeholder: "Ex.: incluir item solicitado pelo cliente e atualizar o prazo de entrega.",
+      confirm: "Criar nova revisão",
+      button: "bg-slate-950 hover:bg-slate-800",
+    },
+    REQUEST_ADJUSTMENTS: {
+      eyebrow: "Decisão da diretoria",
+      title: "Quais ajustes o vendedor deve realizar?",
+      description:
+        "A versão atual ficará bloqueada em Ajustes solicitados. O vendedor deverá gerar uma nova revisão para editar.",
+      placeholder: "Descreva objetivamente os itens, valores ou condições que precisam ser corrigidos.",
+      confirm: "Solicitar ajustes",
+      button: "bg-amber-600 hover:bg-amber-500",
+    },
+    REJECT: {
+      eyebrow: "Decisão definitiva da diretoria",
+      title: "Por que esta proposta está sendo reprovada?",
+      description:
+        "A proposta ficará em Reprovada e não seguirá para o cliente. Uma revisão poderá ser criada posteriormente, se necessário.",
+      placeholder: "Ex.: fornecimento não autorizado para este cliente neste momento.",
+      confirm: "Reprovar proposta",
+      button: "bg-rose-600 hover:bg-rose-500",
+    },
+  }[action];
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="proposal-action-title"
+    >
+      <div className="w-full max-w-2xl rounded-[28px] border border-white/70 bg-white p-6 shadow-2xl">
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+          {content.eyebrow}
+        </p>
+        <h2 id="proposal-action-title" className="mt-2 text-2xl font-bold text-slate-950">
+          {content.title}
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">{content.description}</p>
+
+        <label className="mt-5 block text-sm font-semibold text-slate-800">
+          Justificativa obrigatória
+          <textarea
+            autoFocus
+            rows={5}
+            value={reason}
+            onChange={(event) => onReasonChange(event.target.value)}
+            placeholder={content.placeholder}
+            className="mt-2 w-full resize-y rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-normal text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+          />
+        </label>
+        <div className="mt-2 flex items-center justify-between gap-3">
+          <p className={`text-xs ${error ? "font-semibold text-rose-600" : "text-slate-500"}`}>
+            {error || "O motivo será registrado na trilha operacional e na auditoria."}
+          </p>
+          <p className="text-xs text-slate-400">{reason.trim().length} caracteres</p>
+        </div>
+
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button type="button" disabled={busy} onClick={onCancel} className={SECONDARY_BUTTON}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={busy || reason.trim().length < 5}
+            onClick={onConfirm}
+            className={`inline-flex items-center justify-center rounded-2xl px-4 py-2.5 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${content.button}`}
+          >
+            {busy ? "Processando..." : content.confirm}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StatusActionButton({
   busy,
   onClick,
@@ -1418,6 +1493,8 @@ function proposalTypeLabel(type: string) {
 function statusTone(status: string): Tone {
   const flowStep = statusToFlowStep(status);
 
+  if (flowStep === "REVISION_REQUIRED") return "amber";
+  if (flowStep === "REJECTED") return "rose";
   if (flowStep === "BOARD_REVIEW") return "blue";
   if (flowStep === "CLIENT_REVIEW") return "amber";
   if (flowStep === "WON") return "emerald";

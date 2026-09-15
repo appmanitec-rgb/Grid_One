@@ -82,8 +82,9 @@ export class ProposalsService {
   > = {
     [ProposalStatus.DRAFT]: [ProposalStatus.BOARD_REVIEW],
     [ProposalStatus.BOARD_REVIEW]: [ProposalStatus.CLIENT_REVIEW],
-    [ProposalStatus.REVISION_REQUIRED]: [ProposalStatus.BOARD_REVIEW],
     [ProposalStatus.CLIENT_REVIEW]: [ProposalStatus.WON, ProposalStatus.LOST],
+    [ProposalStatus.REVISED]: [],
+    [ProposalStatus.REVISION_REQUIRED]: [],
     [ProposalStatus.WON]: [],
     [ProposalStatus.LOST]: [],
     [ProposalStatus.SENT]: [],
@@ -377,16 +378,40 @@ export class ProposalsService {
     });
   }
 
-  async revise(id: string, revisedByUserId?: string) {
+  async revise(id: string, revisedByUserId?: string, reason?: string) {
     await this.assertInternalActor(revisedByUserId);
+    const revisionReason = this.requireActionReason(reason, 'revisao');
     return this.prisma.$transaction(async (tx) => {
       const source = await tx.proposal.findUnique({
         where: { id },
-        include: { items: true },
+        include: {
+          items: true,
+          revisions: { select: { id: true, code: true }, take: 1 },
+        },
       });
 
       if (!source) {
         throw new NotFoundException('Proposta nao encontrada.');
+      }
+
+      if (source.revisions.length > 0) {
+        throw new ConflictException(
+          `A proposta ${source.code} ja possui uma revisao posterior. Abra a versao mais recente para continuar.`,
+        );
+      }
+
+      const allowedSourceStatuses: ProposalStatus[] = [
+        ProposalStatus.DRAFT,
+        ProposalStatus.REVISION_REQUIRED,
+        ProposalStatus.CLIENT_REVIEW,
+        ProposalStatus.LOST,
+        ProposalStatus.REJECTED,
+        ProposalStatus.SENT,
+      ];
+      if (!allowedSourceStatuses.includes(source.status)) {
+        throw new BadRequestException(
+          `A proposta no estado ${source.status} nao pode gerar revisao.`,
+        );
       }
 
       await this.assertCommercialEligibility(
@@ -403,12 +428,25 @@ export class ProposalsService {
 
       const parsed = this.parseProposalCode(nextCode);
 
+      const sourceFinalStatus =
+        source.status === ProposalStatus.REVISION_REQUIRED ||
+        source.status === ProposalStatus.REJECTED
+          ? source.status
+          : ProposalStatus.REVISED;
+
+      if (sourceFinalStatus !== source.status) {
+        await tx.proposal.update({
+          where: { id: source.id },
+          data: { status: sourceFinalStatus },
+        });
+      }
+
       const revised = await tx.proposal.create({
         data: {
           code: nextCode,
           baseSequence: parsed?.sequence,
           revision: parsed?.revision ?? 0,
-          status: ProposalStatus.REVISION_REQUIRED,
+          status: ProposalStatus.DRAFT,
           type: source.type,
           totalValue: source.totalValue,
           validUntil: source.validUntil,
@@ -464,12 +502,39 @@ export class ProposalsService {
 
       await this.createMovement(
         tx,
+        source.id,
+        revisedByUserId,
+        'REVISION_CREATED',
+        source.status,
+        sourceFinalStatus,
+        `Revisao ${revised.code} criada. Motivo: ${revisionReason}`,
+      );
+
+      await this.createMovement(
+        tx,
         revised.id,
         revisedByUserId,
         'REVISE_COPY',
         null,
-        ProposalStatus.REVISION_REQUIRED,
-        `Nova revisao gerada a partir da proposta ${source.code}.`,
+        ProposalStatus.DRAFT,
+        `Rascunho criado a partir da proposta ${source.code}. Motivo: ${revisionReason}`,
+      );
+
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.PROPOSALS,
+          entityType: 'PROPOSAL',
+          entityId: source.id,
+          action: 'CREATE_REVISION',
+          actorUserId: revisedByUserId,
+          afterPayload: {
+            revisionId: revised.id,
+            revisionCode: revised.code,
+            sourceFinalStatus,
+          },
+          reason: revisionReason,
+        },
+        tx,
       );
 
       return revised;
@@ -479,12 +544,9 @@ export class ProposalsService {
   async submitForBoardReview(id: string, actorUserId?: string) {
     await this.assertInternalActor(actorUserId);
     const proposal = await this.requireProposal(id, actorUserId);
-    if (
-      proposal.status !== ProposalStatus.DRAFT &&
-      proposal.status !== ProposalStatus.REVISION_REQUIRED
-    ) {
+    if (proposal.status !== ProposalStatus.DRAFT) {
       throw new Error(
-        'Somente propostas em rascunho ou em revisao podem ir para analise da diretoria.',
+        'Somente a revisao atual em rascunho pode ir para analise da diretoria.',
       );
     }
 
@@ -559,8 +621,53 @@ export class ProposalsService {
     );
   }
 
-  async boardReject(id: string, actorUserId?: string, note?: string) {
+  async boardRequestAdjustments(
+    id: string,
+    actorUserId?: string,
+    reason?: string,
+  ) {
     await this.assertInternalActor(actorUserId);
+    const adjustmentReason = this.requireActionReason(
+      reason,
+      'solicitacao de ajustes',
+    );
+    const proposal = await this.requireProposal(id, actorUserId);
+    if (proposal.status !== ProposalStatus.BOARD_REVIEW) {
+      throw new Error('A proposta precisa estar em analise da diretoria.');
+    }
+
+    if (proposal.type === ProposalType.GENERATOR_SALE && actorUserId) {
+      const pendingApproval = await this.prisma.approvalRequest.findFirst({
+        where: {
+          type: ApprovalType.GENERATOR_PROPOSAL,
+          entityType: 'PROPOSAL',
+          entityId: proposal.id,
+          status: ApprovalStatus.PENDING,
+        },
+        select: { id: true },
+      });
+      if (pendingApproval) {
+        await this.approvalsService.requestAdjustments(
+          pendingApproval.id,
+          actorUserId,
+          adjustmentReason,
+        );
+        return this.requireProposal(id, actorUserId);
+      }
+    }
+
+    return this.changeStatus(
+      id,
+      ProposalStatus.REVISION_REQUIRED,
+      actorUserId,
+      'BOARD_REQUEST_ADJUSTMENTS',
+      `Diretoria solicitou ajustes. Motivo: ${adjustmentReason}`,
+    );
+  }
+
+  async boardReject(id: string, actorUserId?: string, reason?: string) {
+    await this.assertInternalActor(actorUserId);
+    const rejectionReason = this.requireActionReason(reason, 'reprovacao');
     const proposal = await this.requireProposal(id, actorUserId);
     if (proposal.status !== ProposalStatus.BOARD_REVIEW) {
       throw new Error('A proposta precisa estar em analise da diretoria.');
@@ -580,7 +687,7 @@ export class ProposalsService {
         await this.approvalsService.reject(
           pendingApproval.id,
           actorUserId,
-          note || 'Ajustes solicitados pela diretoria.',
+          rejectionReason,
         );
         return this.requireProposal(id, actorUserId);
       }
@@ -588,10 +695,10 @@ export class ProposalsService {
 
     return this.changeStatus(
       id,
-      ProposalStatus.REVISION_REQUIRED,
+      ProposalStatus.REJECTED,
       actorUserId,
       'BOARD_REJECT',
-      note || 'Diretoria reprovou. Ajustar e reenviar.',
+      `Diretoria reprovou definitivamente. Motivo: ${rejectionReason}`,
     );
   }
 
@@ -1190,6 +1297,11 @@ export class ProposalsService {
   ) {
     await this.assertInternalActor(actorUserId);
     const proposal = await this.requireProposal(id, actorUserId);
+    if (proposal.status !== ProposalStatus.DRAFT) {
+      throw new BadRequestException(
+        `A proposta ${proposal.code} esta em ${proposal.status} e e imutavel. Gere uma nova revisao para substituir o documento externo.`,
+      );
+    }
     if (proposal.origin !== ProposalOrigin.EXTERNAL) {
       throw new BadRequestException(
         'Anexo externo so pode ser enviado para proposta de origem externa.',
@@ -1446,6 +1558,33 @@ export class ProposalsService {
   ) {
     await this.assertInternalActor(actorUserId);
     const current = await this.requireProposal(id, actorUserId);
+    const contentFields = Object.keys(updateProposalDto).filter(
+      (field) => field !== 'status',
+    );
+    if (
+      current.status !== ProposalStatus.DRAFT &&
+      contentFields.length > 0
+    ) {
+      throw new BadRequestException(
+        `A proposta ${current.code} esta em ${current.status} e e imutavel. Gere uma nova revisao para alterar o conteudo.`,
+      );
+    }
+
+    const protectedWorkflowStatuses: ProposalStatus[] = [
+      ProposalStatus.REVISED,
+      ProposalStatus.REVISION_REQUIRED,
+      ProposalStatus.REJECTED,
+    ];
+    if (
+      updateProposalDto.status &&
+      current.status !== updateProposalDto.status &&
+      (protectedWorkflowStatuses.includes(current.status) ||
+        protectedWorkflowStatuses.includes(updateProposalDto.status))
+    ) {
+      throw new BadRequestException(
+        'Este estado so pode ser alterado pelas acoes governadas da proposta.',
+      );
+    }
     let actorIsAdmin = false;
     if (updateProposalDto.status && actorUserId) {
       const actor = await this.prisma.user.findUnique({
@@ -2339,6 +2478,16 @@ export class ProposalsService {
       sequence: Number(match[1]),
       revision: Number(match[2]),
     };
+  }
+
+  private requireActionReason(reason: string | undefined, action: string) {
+    const normalized = reason?.trim();
+    if (!normalized || normalized.length < 5) {
+      throw new BadRequestException(
+        `Informe o motivo da ${action} com pelo menos 5 caracteres.`,
+      );
+    }
+    return normalized;
   }
 
   private formatProposalCode(sequence: number, revision: number) {

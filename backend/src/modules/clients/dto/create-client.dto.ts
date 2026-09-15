@@ -124,6 +124,10 @@ export class CreateClientGeneratorDto {
 
 export class CreateClientDto {
   @IsString()
+  @IsOptional()
+  legacyCode?: string;
+
+  @IsString()
   @IsNotEmpty()
   companyName!: string;
 
@@ -176,6 +180,14 @@ export class CreateClientDto {
   @IsString()
   @IsOptional()
   preferences?: string;
+
+  @IsString()
+  @IsOptional()
+  notes?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
 
   @IsEnum(ClientTypeDto)
   @IsOptional()

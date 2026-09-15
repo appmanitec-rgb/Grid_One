@@ -6,10 +6,15 @@ import {
 } from '@nestjs/common';
 import {
   AuditDomain,
+  CatalogIdentifierType,
   ClientAddressType,
   ClientContactStatus,
   ClientPersonType,
   ClientType,
+  GeneratorCriticality,
+  GeneratorLifecycleStatus,
+  GeneratorOperationalStatus,
+  ItemType,
   Prisma,
   StudioImportBatchStatus,
   StudioImportMode,
@@ -66,6 +71,8 @@ type PreviewInput = {
   columnMapping?: Record<string, string>;
 };
 
+const MAX_IMPORT_ROWS = 20_000;
+
 const SUPPLIER_IMPORT_DEFINITION: ImportDefinition = {
   resource: 'suppliers',
   label: 'Fornecedores',
@@ -75,6 +82,12 @@ const SUPPLIER_IMPORT_DEFINITION: ImportDefinition = {
   entityType: 'Supplier',
   uniqueField: 'cnpj',
   fields: [
+    {
+      key: 'legacyCode',
+      label: 'Codigo Legado',
+      aliases: ['codigo', 'codigo legado'],
+      normalize: normalizeText,
+    },
     {
       key: 'companyName',
       label: 'Razao Social',
@@ -96,18 +109,18 @@ const SUPPLIER_IMPORT_DEFINITION: ImportDefinition = {
     },
     {
       key: 'cnpj',
-      label: 'CNPJ',
-      aliases: ['cnpj', 'documento', 'cpf/cnpj'],
+      label: 'CNPJ/CPF',
+      aliases: ['cnpj', 'cpf', 'documento', 'cpf/cnpj', 'cnpjcpf'],
       required: true,
       normalize: normalizeDigits,
       validate: (value) => {
-        const cnpj = primitiveString(value);
-        if (!isValidCnpj(cnpj)) {
+        const document = primitiveString(value);
+        if (!isValidBrazilDocument(document)) {
           return [
             {
-              code: 'INVALID_CNPJ',
+              code: 'INVALID_DOCUMENT',
               field: 'cnpj',
-              message: 'CNPJ invalido.',
+              message: 'CNPJ/CPF invalido ou incompleto.',
             },
           ];
         }
@@ -135,7 +148,7 @@ const SUPPLIER_IMPORT_DEFINITION: ImportDefinition = {
     {
       key: 'phone',
       label: 'Telefone',
-      aliases: ['telefone', 'tel', 'celular', 'whatsapp'],
+      aliases: ['telefone', 'tel', 'tel1', 'celular', 'whatsapp'],
       normalize: normalizeText,
       validate: (value) =>
         value
@@ -162,6 +175,24 @@ const SUPPLIER_IMPORT_DEFINITION: ImportDefinition = {
         normalizeText(value)?.toUpperCase().slice(0, 2) ?? null,
     },
     {
+      key: 'address',
+      label: 'Endereco',
+      aliases: ['endereco', 'rua', 'logradouro', 'ruaprincipal'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'stateRegistration',
+      label: 'Inscricao Estadual',
+      aliases: ['inscricao estadual', 'ie', 'inscrrg'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'municipalRegistration',
+      label: 'Inscricao Municipal',
+      aliases: ['inscricao municipal', 'im', 'inscricaomunicipal'],
+      normalize: normalizeText,
+    },
+    {
       key: 'paymentTerm',
       label: 'Condicao de Pagamento',
       aliases: [
@@ -171,6 +202,18 @@ const SUPPLIER_IMPORT_DEFINITION: ImportDefinition = {
         'prazo',
       ],
       normalize: normalizeText,
+    },
+    {
+      key: 'notes',
+      label: 'Observacoes',
+      aliases: ['observacoes', 'observacao', 'notas'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'isActive',
+      label: 'Ativo',
+      aliases: ['ativo', 'status'],
+      normalize: normalizeActiveStatus,
     },
   ],
   findDuplicates: async (tx, values) => {
@@ -187,14 +230,20 @@ const SUPPLIER_IMPORT_DEFINITION: ImportDefinition = {
   createRecord: (tx, data) =>
     tx.supplier.create({
       data: {
+        legacyCode: nullableString(data.legacyCode),
         companyName: String(data.companyName),
         tradeName: nullableString(data.tradeName),
         cnpj: String(data.cnpj),
         email: nullableString(data.email),
         phone: nullableString(data.phone),
+        address: nullableString(data.address),
         city: nullableString(data.city),
         state: nullableString(data.state),
+        stateRegistration: nullableString(data.stateRegistration),
+        municipalRegistration: nullableString(data.municipalRegistration),
         paymentTerm: nullableString(data.paymentTerm),
+        notes: nullableString(data.notes),
+        isActive: data.isActive !== false,
         categories: [],
         representedBrands: [],
       },
@@ -212,6 +261,12 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
   uniqueField: 'cnpj',
   fields: [
     {
+      key: 'legacyCode',
+      label: 'Codigo Legado',
+      aliases: ['codigo', 'codigo legado'],
+      normalize: normalizeText,
+    },
+    {
       key: 'companyName',
       label: 'Razao Social',
       aliases: ['razao social', 'razÃ£o social', 'empresa', 'cliente', 'nome'],
@@ -227,7 +282,7 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
     {
       key: 'cnpj',
       label: 'CNPJ/CPF',
-      aliases: ['cnpj', 'cpf', 'documento', 'cpf/cnpj'],
+      aliases: ['cnpj', 'cpf', 'documento', 'cpf/cnpj', 'cnpjcpf'],
       required: true,
       normalize: normalizeDigits,
       validate: (value) => {
@@ -254,7 +309,7 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
     {
       key: 'phone',
       label: 'Telefone',
-      aliases: ['telefone', 'tel', 'celular', 'whatsapp'],
+      aliases: ['telefone', 'tel', 'tel1', 'celular', 'whatsapp'],
       normalize: normalizeText,
       validate: (value, row) =>
         value || row.contact01Phone || row.contact01Mobile
@@ -275,6 +330,7 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
         'endereco',
         'endereÃ§o',
         'endereco completo',
+        'ruaprincipal',
         'endereÃ§o completo',
       ],
       normalize: normalizeText,
@@ -282,7 +338,7 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
     {
       key: 'city',
       label: 'Cidade',
-      aliases: ['cidade', 'municipio', 'municÃ­pio'],
+      aliases: ['cidade', 'cidadeprincipal', 'municipio', 'municÃ­pio'],
       normalize: normalizeText,
       validate: (value, row) =>
         value || row.billingCity || row.installationCity
@@ -298,7 +354,7 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
     {
       key: 'state',
       label: 'UF',
-      aliases: ['estado', 'uf'],
+      aliases: ['estado', 'uf', 'ufprincipal'],
       normalize: normalizeUf,
       validate: (value, row) =>
         value || row.billingState || row.installationState
@@ -314,13 +370,13 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
     {
       key: 'stateRegistration',
       label: 'Inscricao Estadual',
-      aliases: ['inscricao estadual', 'inscriÃ§Ã£o estadual', 'ie'],
+      aliases: ['inscricao estadual', 'ie', 'inscrrg'],
       normalize: normalizeText,
     },
     {
       key: 'municipalRegistration',
       label: 'Inscricao Municipal',
-      aliases: ['inscricao municipal', 'inscriÃ§Ã£o municipal', 'im'],
+      aliases: ['inscricao municipal', 'im', 'inscricaomunicipal'],
       normalize: normalizeText,
     },
     { key: 'cnae', label: 'CNAE', aliases: ['cnae'], normalize: normalizeText },
@@ -336,15 +392,25 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
       aliases: [
         'preferencias',
         'preferÃªncias',
-        'observacoes',
-        'observaÃ§Ãµes',
       ],
       normalize: normalizeText,
     },
     {
+      key: 'notes',
+      label: 'Observacoes',
+      aliases: ['observacoes', 'observacao', 'obs'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'isActive',
+      label: 'Ativo',
+      aliases: ['ativo', 'status'],
+      normalize: normalizeActiveStatus,
+    },
+    {
       key: 'clientType',
       label: 'Tipo',
-      aliases: ['tipo', 'tipo cliente', 'contrato'],
+      aliases: ['tipo', 'tipo cliente', 'tipocliente', 'contrato'],
       normalize: normalizeClientType,
     },
     {
@@ -399,11 +465,13 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
       aliases: ['retem iss', 'retÃ©m iss', 'iss'],
       normalize: normalizeBooleanInput,
     },
+    ...clientAddressFields('primary', 'Principal', 'principal'),
     ...clientAddressFields('billing', 'Cobranca', 'cobranca'),
-    ...clientAddressFields('installation', 'Instalacao', 'instalacao'),
+    ...clientAddressFields('installation', 'Entrega', 'entrega'),
     ...clientContactFields(1),
     ...clientContactFields(2),
     ...clientContactFields(3),
+    ...clientContactFields(4),
   ],
   findDuplicates: async (tx, values) => {
     const clients = await tx.client.findMany({
@@ -436,6 +504,13 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
     const addresses = [
       buildClientAddress(
         data,
+        'primary',
+        ClientAddressType.OTHER,
+        city,
+        state,
+      ),
+      buildClientAddress(
+        data,
         'billing',
         ClientAddressType.BILLING,
         city,
@@ -451,7 +526,7 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
     ].filter((address): address is NonNullable<typeof address> =>
       Boolean(address),
     );
-    const contacts = [1, 2, 3]
+    const contacts = [1, 2, 3, 4]
       .map((index) => buildClientContact(data, index))
       .filter((contact): contact is NonNullable<typeof contact> =>
         Boolean(contact),
@@ -459,6 +534,7 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
 
     return tx.client.create({
       data: {
+        legacyCode: nullableString(data.legacyCode),
         companyName: String(data.companyName),
         tradeName: nullableString(data.tradeName),
         cnpj: String(data.cnpj),
@@ -472,6 +548,8 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
         cnae: nullableString(data.cnae),
         segment: nullableString(data.segment),
         preferences: nullableString(data.preferences),
+        notes: nullableString(data.notes),
+        isActive: data.isActive !== false,
         clientType:
           (data.clientType as ClientType | undefined) ?? ClientType.NO_CONTRACT,
         personType:
@@ -492,9 +570,475 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
   },
 };
 
+const EQUIPMENT_IMPORT_DEFINITION: ImportDefinition = {
+  resource: 'equipments',
+  label: 'Equipamentos',
+  mode: StudioImportMode.CREATE_ONLY,
+  resourceCreatePermission: 'equipments.create',
+  domain: AuditDomain.MAINTENANCE_ORDERS,
+  entityType: 'Generator',
+  uniqueField: 'legacyCode',
+  fields: [
+    {
+      key: 'legacyCode',
+      label: 'Codigo Legado',
+      aliases: ['sequencia', 'codigo legado'],
+      required: true,
+      normalize: normalizeText,
+    },
+    {
+      key: 'name',
+      label: 'Descricao',
+      aliases: ['nome', 'equipamento'],
+      required: true,
+      normalize: normalizeText,
+    },
+    {
+      key: 'serialNumber',
+      label: 'Numero de Serie',
+      aliases: ['serie', 'numero serie'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'assetTag',
+      label: 'Codigo do Equipamento',
+      aliases: ['codigo', 'tag'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'brand',
+      label: 'Marca',
+      aliases: ['descricao 1', 'fabricante'],
+      required: true,
+      normalize: normalizeText,
+    },
+    {
+      key: 'power',
+      label: 'Potencia kVA',
+      aliases: ['potencia', 'potencia alternador'],
+      required: true,
+      normalize: normalizePowerInput,
+    },
+    {
+      key: 'voltage',
+      label: 'Tensao',
+      aliases: ['tensao nominal', 'tensao nominal alternador'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'clientDocument',
+      label: 'CNPJCPF Cliente',
+      aliases: ['documento cliente', 'cnpj cliente', 'cpf cliente'],
+      required: true,
+      normalize: normalizeDigits,
+      validate: (value) =>
+        isValidBrazilDocument(primitiveString(value))
+          ? []
+          : [{ code: 'INVALID_CLIENT_DOCUMENT', field: 'clientDocument', message: 'CNPJ/CPF do cliente invalido ou incompleto.' }],
+    },
+    {
+      key: 'clientLegacyCode',
+      label: 'Codigo Legado Cliente',
+      aliases: ['codigo cliente'],
+      normalize: normalizeText,
+    },
+    { key: 'condition', label: 'Condicao', aliases: ['condicao 1', 'situacao'], normalize: normalizeText },
+    { key: 'installationSite', label: 'Endereco Instalacao', aliases: ['local instalacao'], normalize: normalizeText },
+    { key: 'engineBrand', label: 'Fabricante Motor', aliases: ['marca motor'], normalize: normalizeText },
+    { key: 'engineModelName', label: 'Modelo Motor', aliases: ['motor modelo'], normalize: normalizeText },
+    { key: 'engineSerialNumber', label: 'Serie Motor', aliases: ['numero serie motor'], normalize: normalizeText },
+    { key: 'manufactureYear', label: 'Ano Fabricacao', aliases: ['ano fabricacao motor'], normalize: normalizeIntegerInput },
+    { key: 'alternatorBrand', label: 'Fabricante Alternador', aliases: ['marca alternador'], normalize: normalizeText },
+    { key: 'alternatorModelName', label: 'Modelo Alternador', aliases: ['alternador modelo'], normalize: normalizeText },
+    { key: 'alternatorSerialNumber', label: 'Serie Alternador', aliases: ['nserie alternador'], normalize: normalizeText },
+    { key: 'alternatorVoltage', label: 'Tensao Alternador', aliases: ['tensao nominal alternador'], normalize: normalizeText },
+    { key: 'transferSwitchBrand', label: 'Fabricante QTA', aliases: ['fabricante quadro transferencia'], normalize: normalizeText },
+    { key: 'transferSwitchModel', label: 'Modelo QTA', aliases: ['modelo quadro transferencia'], normalize: normalizeText },
+    { key: 'transferSwitchCommandVoltage', label: 'Tensao Comando QTA', aliases: ['tensao comando quadro transferencia'], normalize: normalizeText },
+    { key: 'transferSwitchRatedCurrent', label: 'Corrente Nominal QTA', aliases: ['corrente nominal quadro transferencia'], normalize: normalizeText },
+    { key: 'notes', label: 'Observacoes', aliases: ['observacao', 'notas'], normalize: normalizeText },
+    { key: 'hasMaintenanceContract', label: 'Possui Contrato', aliases: ['com contrato', 'contrato'], normalize: normalizeBooleanInput },
+  ],
+  findDuplicates: async (tx, values) => {
+    const generators = await tx.generator.findMany({
+      where: { legacyCode: { in: values } },
+      select: { legacyCode: true },
+    });
+    return new Set(generators.map((generator) => generator.legacyCode).filter((value): value is string => Boolean(value)));
+  },
+  createRecord: async (tx, data) => {
+    const client = await tx.client.findFirst({
+      where: {
+        OR: [
+          { cnpj: String(data.clientDocument) },
+          ...(data.clientLegacyCode ? [{ legacyCode: String(data.clientLegacyCode) }] : []),
+        ],
+      },
+      select: { id: true },
+    });
+    if (!client) throw new BadRequestException('Cliente da maquina nao encontrado pelo CNPJ/CPF ou codigo legado.');
+    return tx.generator.create({
+      data: {
+        legacyCode: String(data.legacyCode),
+        name: String(data.name),
+        brand: String(data.brand),
+        serialNumber: nullableString(data.serialNumber),
+        assetTag: nullableString(data.assetTag),
+        power: Number(data.power),
+        voltage: nullableString(data.voltage),
+        condition: nullableString(data.condition),
+        installationSite: nullableString(data.installationSite),
+        engineBrand: nullableString(data.engineBrand),
+        engineModelName: nullableString(data.engineModelName),
+        engineSerialNumber: nullableString(data.engineSerialNumber),
+        manufactureYear: typeof data.manufactureYear === 'number' ? data.manufactureYear : undefined,
+        alternatorBrand: nullableString(data.alternatorBrand),
+        alternatorModelName: nullableString(data.alternatorModelName),
+        alternatorSerialNumber: nullableString(data.alternatorSerialNumber),
+        alternatorVoltage: nullableString(data.alternatorVoltage),
+        transferSwitchBrand: nullableString(data.transferSwitchBrand),
+        transferSwitchModel: nullableString(data.transferSwitchModel),
+        transferSwitchCommandVoltage: nullableString(data.transferSwitchCommandVoltage),
+        transferSwitchRatedCurrent: nullableString(data.transferSwitchRatedCurrent),
+        notes: nullableString(data.notes),
+        hasMaintenanceContract: Boolean(data.hasMaintenanceContract),
+        operationalStatus: GeneratorOperationalStatus.OPERATING,
+        lifecycleStatus: GeneratorLifecycleStatus.AVAILABLE,
+        criticality: GeneratorCriticality.B,
+        clientId: client.id,
+      },
+      select: { id: true },
+    });
+  },
+};
+
+const CATALOG_IMPORT_DEFINITION: ImportDefinition = {
+  resource: 'catalog',
+  label: 'Catalogo',
+  mode: StudioImportMode.CREATE_ONLY,
+  resourceCreatePermission: 'catalog.create',
+  domain: AuditDomain.INVENTORY,
+  entityType: 'CatalogItem',
+  uniqueField: 'sku',
+  fields: [
+    {
+      key: 'sku',
+      label: 'Codigo',
+      aliases: ['codigo', 'código', 'sku', 'id produto', 'id do produto'],
+      required: true,
+      normalize: normalizeCatalogCode,
+    },
+    {
+      key: 'legacySequence',
+      label: 'Sequencia',
+      aliases: ['sequencia', 'sequência', 'sequence'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'name',
+      label: 'Descricao',
+      aliases: ['descricao', 'descrição', 'nome', 'produto', 'item'],
+      required: true,
+      normalize: normalizeText,
+    },
+    {
+      key: 'commercialDescription',
+      label: 'Descricao de faturamento',
+      aliases: [
+        'descricaofat',
+        'descricao fat',
+        'descrição faturamento',
+        'descricao comercial',
+      ],
+      normalize: normalizeText,
+    },
+    {
+      key: 'legacyDescription',
+      label: 'Descricao complementar',
+      aliases: [
+        'descricao_1',
+        'descricao 1',
+        'descrição 1',
+        'descricaocomplementar',
+        'descricao complementar',
+        'descrição complementar',
+      ],
+      normalize: normalizeText,
+    },
+    {
+      key: 'type',
+      label: 'Tipo do item',
+      aliases: ['tipodoitem', 'tipo do item', 'tipo', 'item type'],
+      required: true,
+      normalize: normalizeCatalogItemType,
+    },
+    {
+      key: 'itemClassification',
+      label: 'Tipo do item original',
+      aliases: [
+        'tipodoitem',
+        'tipo do item',
+        'classificacao',
+        'classificação do item',
+      ],
+      normalize: normalizeText,
+    },
+    {
+      key: 'unit',
+      label: 'Unidade',
+      aliases: ['unidade', 'un', 'unit'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'category',
+      label: 'Familia',
+      aliases: ['familia', 'família', 'categoria'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'subcategory',
+      label: 'Subfamilia',
+      aliases: ['subfamilia', 'subfamília', 'subcategoria'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'acquisitionOrigin',
+      label: 'Origem',
+      aliases: ['origem', 'origem do item', 'aquisicao', 'purchase origin'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'legacyCode',
+      label: 'Codigo legado',
+      aliases: [
+        'codigolegado',
+        'codigo legado',
+        'código legado',
+        'legacycode',
+        'legacy code',
+        'codigo_1',
+        'codigo 1',
+        'código 1',
+      ],
+      normalize: normalizeCatalogCode,
+    },
+    {
+      key: 'radarCode',
+      label: 'Codigo Radar',
+      aliases: ['codigoradar', 'codigo radar', 'código radar'],
+      normalize: normalizeCatalogCode,
+    },
+    {
+      key: 'alternativeCode',
+      label: 'Codigo alternativo',
+      aliases: ['alternativo', 'codigo alternativo', 'código alternativo'],
+      normalize: normalizeCatalogCode,
+    },
+    {
+      key: 'storageLocation',
+      label: 'Localizacao',
+      aliases: ['localizacao', 'localização', 'local'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'brand',
+      label: 'Marca',
+      aliases: ['marca', 'brand', 'fabricante'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'costPrice',
+      label: 'Preco de compra',
+      aliases: [
+        'precocompra',
+        'preco compra',
+        'preço de compra',
+        'purchaseprice',
+        'purchase price',
+        'costprice',
+        'custo',
+      ],
+      normalize: normalizeNumberInput,
+    },
+    {
+      key: 'stockMin',
+      label: 'Estoque minimo',
+      aliases: ['estoque minimo', 'estoque mínimo', 'stockmin', 'minimo'],
+      normalize: normalizeNumberInput,
+    },
+    {
+      key: 'stockMax',
+      label: 'Estoque maximo',
+      aliases: ['estoque maximo', 'estoque máximo', 'stockmax', 'maximo'],
+      normalize: normalizeNumberInput,
+    },
+    {
+      key: 'isActive',
+      label: 'Ativo',
+      aliases: ['ativo', 'isactive', 'status'],
+      normalize: normalizeCatalogActive,
+    },
+  ],
+  findDuplicates: async (tx, values) => {
+    const items = await tx.catalogItem.findMany({
+      where: { sku: { in: values } },
+      select: { sku: true },
+    });
+    return new Set(
+      items
+        .map((item) => item.sku)
+        .filter((sku): sku is string => Boolean(sku)),
+    );
+  },
+  createRecord: async (tx, data) => {
+    const sku = String(data.sku).trim().toUpperCase();
+    const policy = await tx.catalogPricingPolicy.findFirst({
+      where: { itemType: data.type as ItemType, isActive: true },
+      orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
+    });
+    const costPrice = Math.max(0, Number(data.costPrice || 0));
+    const icmsPercent = Number(policy?.icmsPercent || 0);
+    const pisPercent = Number(policy?.pisPercent || 0);
+    const cofinsPercent = Number(policy?.cofinsPercent || 0);
+    const ipiPercent = Number(policy?.ipiPercent || 0);
+    const issPercent = Number(policy?.issPercent || 0);
+    const irpjPercent = Number(policy?.irpjPercent || 0);
+    const csllPercent = Number(policy?.csllPercent || 0);
+    const cppPercent = Number(policy?.cppPercent || 0);
+    const componentTaxPercent =
+      icmsPercent +
+      pisPercent +
+      cofinsPercent +
+      ipiPercent +
+      issPercent +
+      irpjPercent +
+      csllPercent +
+      cppPercent;
+    const salesTaxPercent =
+      componentTaxPercent > 0
+        ? componentTaxPercent
+        : Number(policy?.salesTaxPercent || 0);
+    const commissionPercent = Number(policy?.commissionPercent || 0);
+    const profitMarginPercent = Number(policy?.profitMarginPercent || 0);
+    const operationalCostPercent = Number(policy?.operationalCostPercent || 0);
+    const suggestedSalePrice = Number(
+      Math.max(
+        costPrice,
+        costPrice *
+          (1 +
+            (salesTaxPercent +
+              commissionPercent +
+              profitMarginPercent +
+              operationalCostPercent) /
+              100),
+      ).toFixed(2),
+    );
+    const legacyDetails = compactObject({
+      sequencia: nullableString(data.legacySequence),
+      origem: nullableString(data.acquisitionOrigin),
+      tipoDoItem: nullableString(data.itemClassification),
+      descricaoComplementar: nullableString(data.legacyDescription),
+      codigoSecundario: nullableString(data.legacyCode),
+      codigoRadar: nullableString(data.radarCode),
+      codigoAlternativo: nullableString(data.alternativeCode),
+    });
+    const identifiers = [
+      catalogIdentifier(
+        sku,
+        CatalogIdentifierType.INTERNAL_SKU,
+        true,
+        'importacao_legada',
+      ),
+      catalogIdentifier(
+        nullableString(data.legacyCode),
+        CatalogIdentifierType.LEGACY_CODE,
+        false,
+        'codigo_1',
+      ),
+      catalogIdentifier(
+        nullableString(data.radarCode),
+        CatalogIdentifierType.CATALOG_CODE,
+        false,
+        'codigo_radar',
+      ),
+      catalogIdentifier(
+        nullableString(data.alternativeCode),
+        CatalogIdentifierType.INTERNAL_ALIAS,
+        false,
+        'codigo_alternativo',
+      ),
+    ].filter((identifier): identifier is NonNullable<typeof identifier> =>
+      Boolean(identifier),
+    );
+
+    return tx.catalogItem.create({
+      data: {
+        sku,
+        legacyCode: nullableString(data.legacyCode),
+        name: String(data.name).trim(),
+        commercialDescription: nullableString(data.commercialDescription),
+        description: nullableString(data.legacyDescription),
+        type: data.type as ItemType,
+        itemClassification:
+          nullableString(data.itemClassification) ||
+          (data.type === ItemType.SERVICE ? 'Servico' : 'Acabado'),
+        unit: nullableString(data.unit) || 'UN',
+        acquisitionOrigin: nullableString(data.acquisitionOrigin) || 'Comprado',
+        category: nullableString(data.category),
+        subcategory: nullableString(data.subcategory),
+        brand: nullableString(data.brand),
+        pricingPolicyId: policy?.id || null,
+        basePrice: suggestedSalePrice,
+        costPrice,
+        lastCost: costPrice,
+        taxPercentage: salesTaxPercent,
+        profitMargin: profitMarginPercent,
+        icmsPercent,
+        pisPercent,
+        cofinsPercent,
+        ipiPercent,
+        issPercent,
+        irpjPercent,
+        csllPercent,
+        cppPercent,
+        commissionPercent,
+        operationalCostPercent,
+        stockMin: Math.max(0, Number(data.stockMin || 0)),
+        stockMax: Math.max(0, Number(data.stockMax || 0)),
+        storageLocation: nullableString(data.storageLocation),
+        technicalSpecs:
+          Object.keys(legacyDetails).length > 0
+            ? (legacyDetails as Prisma.InputJsonValue)
+            : undefined,
+        taxProfile: {
+          icmsPercent,
+          pisPercent,
+          cofinsPercent,
+          ipiPercent,
+          issPercent,
+          irpjPercent,
+          csllPercent,
+          cppPercent,
+          salesTaxPercent,
+          commissionPercent,
+          profitMarginPercent,
+          operationalCostPercent,
+          suggestedSalePrice,
+          pricingSource: policy ? 'DEFAULT_POLICY' : 'SYSTEM_DEFAULT',
+        },
+        isActive: data.isActive !== false,
+        identifiers: { create: identifiers },
+      },
+      select: { id: true },
+    });
+  },
+};
+
 const IMPORT_DEFINITIONS: Record<string, ImportDefinition> = {
   clients: CLIENT_IMPORT_DEFINITION,
   suppliers: SUPPLIER_IMPORT_DEFINITION,
+  equipments: EQUIPMENT_IMPORT_DEFINITION,
+  catalog: CATALOG_IMPORT_DEFINITION,
 };
 
 @Injectable()
@@ -510,6 +1054,11 @@ export class StudioImportService {
     }
 
     const parsedRows = parseCsv(input.csv);
+    if (parsedRows.length > MAX_IMPORT_ROWS) {
+      throw new BadRequestException(
+        `A importacao aceita no maximo ${MAX_IMPORT_ROWS} linhas por arquivo.`,
+      );
+    }
     const analyzed = await this.analyzeRows(
       definition,
       parsedRows,
@@ -517,40 +1066,43 @@ export class StudioImportService {
     );
     const summary = summarizeRows(analyzed);
 
-    const batch = await this.prisma.$transaction(async (tx) => {
-      const createdBatch = await tx.studioImportBatch.create({
-        data: {
-          resource: definition.resource,
-          originalFileName: input.originalFileName,
-          mode: StudioImportMode.CREATE_ONLY,
-          status: StudioImportBatchStatus.PREVIEW,
-          totalRows: summary.total,
-          validRows: summary.valid,
-          warningRows: summary.warnings,
-          invalidRows: summary.invalid,
-          duplicateRows: summary.duplicates,
-          skippedRows: summary.duplicates,
-          summary: summary as any,
-          createdById: actor.sub,
-        },
-      });
-
-      if (analyzed.length > 0) {
-        await tx.studioImportRow.createMany({
-          data: analyzed.map((row) => ({
-            batchId: createdBatch.id,
-            rowNumber: row.rowNumber,
-            rawData: row.rawData as any,
-            normalizedData: row.normalizedData as any,
-            status: row.status,
-            errors: row.errors as any,
-            warnings: row.warnings as any,
-          })),
+    const batch = await this.prisma.$transaction(
+      async (tx) => {
+        const createdBatch = await tx.studioImportBatch.create({
+          data: {
+            resource: definition.resource,
+            originalFileName: input.originalFileName,
+            mode: StudioImportMode.CREATE_ONLY,
+            status: StudioImportBatchStatus.PREVIEW,
+            totalRows: summary.total,
+            validRows: summary.valid,
+            warningRows: summary.warnings,
+            invalidRows: summary.invalid,
+            duplicateRows: summary.duplicates,
+            skippedRows: summary.duplicates,
+            summary: summary as any,
+            createdById: actor.sub,
+          },
         });
-      }
 
-      return createdBatch;
-    });
+        if (analyzed.length > 0) {
+          await tx.studioImportRow.createMany({
+            data: analyzed.map((row) => ({
+              batchId: createdBatch.id,
+              rowNumber: row.rowNumber,
+              rawData: row.rawData as any,
+              normalizedData: row.normalizedData as any,
+              status: row.status,
+              errors: row.errors as any,
+              warnings: row.warnings as any,
+            })),
+          });
+        }
+
+        return createdBatch;
+      },
+      { maxWait: 10_000, timeout: 120_000 },
+    );
 
     return {
       batchId: batch.id,
@@ -590,110 +1142,114 @@ export class StudioImportService {
         row.status === StudioImportRowStatus.WARNING,
     );
 
-    const result = await this.prisma.$transaction(async (tx) => {
-      await tx.studioImportBatch.update({
-        where: { id: batchId },
-        data: {
-          status: StudioImportBatchStatus.PROCESSING,
-          startedAt: new Date(),
-        },
-      });
+    await this.prisma.studioImportBatch.update({
+      where: { id: batchId },
+      data: {
+        status: StudioImportBatchStatus.PROCESSING,
+        startedAt: new Date(),
+      },
+    });
 
-      let createdRows = 0;
-      let failedRows = 0;
-      const skippedRows = analyzed.filter(
-        (row) =>
-          row.status === StudioImportRowStatus.DUPLICATE ||
-          row.status === StudioImportRowStatus.INVALID,
-      ).length;
+    let createdRows = 0;
+    let failedRows = 0;
+    const skippedRows = analyzed.filter(
+      (row) =>
+        row.status === StudioImportRowStatus.DUPLICATE ||
+        row.status === StudioImportRowStatus.INVALID,
+    ).length;
 
-      for (const row of executable) {
-        try {
-          const created = await definition.createRecord(tx, row.normalizedData);
-          createdRows += 1;
-          await tx.studioImportRow.updateMany({
-            where: { batchId, rowNumber: row.rowNumber },
-            data: {
-              status: StudioImportRowStatus.CREATED,
-              normalizedData: row.normalizedData as any,
-              errors: [],
-              warnings: row.warnings as any,
-              recordId: created.id,
-            },
-          });
-          await tx.systemAuditLog.create({
-            data: {
-              domain: definition.domain,
-              entityType: definition.entityType,
-              entityId: created.id,
-              action: 'IMPORT_CREATE',
-              actorUserId: actor.sub,
-              afterPayload: {
-                source: 'MANITEC_STUDIO',
-                importBatchId: batchId,
-                resource: definition.resource,
-                rowNumber: row.rowNumber,
-                value: row.normalizedData,
-              } as any,
-              reason: `Registro criado pela importacao ${batchId}.`,
-            },
-          });
-        } catch (error: unknown) {
-          failedRows += 1;
-          await tx.studioImportRow.updateMany({
-            where: { batchId, rowNumber: row.rowNumber },
-            data: {
-              status: StudioImportRowStatus.FAILED,
-              errors: [
-                {
-                  code: 'CREATE_FAILED',
-                  message:
-                    error instanceof Error
-                      ? error.message
-                      : 'Falha ao criar registro.',
-                },
-              ] as any,
-            },
-          });
-        }
+    for (const row of executable) {
+      try {
+        await this.prisma.$transaction(
+          async (tx) => {
+            const created = await definition.createRecord(
+              tx,
+              row.normalizedData,
+            );
+            await tx.studioImportRow.updateMany({
+              where: { batchId, rowNumber: row.rowNumber },
+              data: {
+                status: StudioImportRowStatus.CREATED,
+                normalizedData: row.normalizedData as any,
+                errors: [],
+                warnings: row.warnings as any,
+                recordId: created.id,
+              },
+            });
+            await tx.systemAuditLog.create({
+              data: {
+                domain: definition.domain,
+                entityType: definition.entityType,
+                entityId: created.id,
+                action: 'IMPORT_CREATE',
+                actorUserId: actor.sub,
+                afterPayload: {
+                  source: 'MANITEC_STUDIO',
+                  importBatchId: batchId,
+                  resource: definition.resource,
+                  rowNumber: row.rowNumber,
+                  value: row.normalizedData,
+                } as any,
+                reason: `Registro criado pela importacao ${batchId}.`,
+              },
+            });
+          },
+          { maxWait: 10_000, timeout: 30_000 },
+        );
+        createdRows += 1;
+      } catch (error: unknown) {
+        failedRows += 1;
+        await this.prisma.studioImportRow.updateMany({
+          where: { batchId, rowNumber: row.rowNumber },
+          data: {
+            status: StudioImportRowStatus.FAILED,
+            errors: [
+              {
+                code: 'CREATE_FAILED',
+                message:
+                  error instanceof Error
+                    ? error.message
+                    : 'Falha ao criar registro.',
+              },
+            ] as any,
+          },
+        });
       }
+    }
 
-      const finalStatus =
-        failedRows > 0 || skippedRows > 0
-          ? StudioImportBatchStatus.COMPLETED_WITH_ERRORS
-          : StudioImportBatchStatus.COMPLETED;
+    const finalStatus =
+      failedRows > 0 || skippedRows > 0
+        ? StudioImportBatchStatus.COMPLETED_WITH_ERRORS
+        : StudioImportBatchStatus.COMPLETED;
 
-      const updatedBatch = await tx.studioImportBatch.update({
-        where: { id: batchId },
-        data: {
-          status: finalStatus,
-          totalRows: analyzed.length,
-          validRows: analyzed.filter(
-            (row) => row.status === StudioImportRowStatus.VALID,
-          ).length,
-          warningRows: analyzed.filter(
-            (row) => row.status === StudioImportRowStatus.WARNING,
-          ).length,
-          invalidRows: analyzed.filter(
-            (row) => row.status === StudioImportRowStatus.INVALID,
-          ).length,
-          duplicateRows: analyzed.filter(
-            (row) => row.status === StudioImportRowStatus.DUPLICATE,
-          ).length,
-          createdRows,
-          skippedRows,
-          failedRows,
-          completedAt: new Date(),
-          summary: {
-            ...summarizeRows(analyzed),
-            created: createdRows,
-            skipped: skippedRows,
-            failed: failedRows,
-          } as any,
-        },
-      });
-
-      return updatedBatch;
+    const result = await this.prisma.studioImportBatch.update({
+      where: { id: batchId },
+      data: {
+        status: finalStatus,
+        totalRows: analyzed.length,
+        validRows: analyzed.filter(
+          (row) => row.status === StudioImportRowStatus.VALID,
+        ).length,
+        warningRows: analyzed.filter(
+          (row) => row.status === StudioImportRowStatus.WARNING,
+        ).length,
+        invalidRows: analyzed.filter(
+          (row) => row.status === StudioImportRowStatus.INVALID,
+        ).length,
+        duplicateRows: analyzed.filter(
+          (row) => row.status === StudioImportRowStatus.DUPLICATE,
+        ).length,
+        createdRows,
+        skippedRows,
+        failedRows,
+        completedAt: new Date(),
+        summary: {
+          ...summarizeRows(analyzed),
+          created: createdRows,
+          skipped: skippedRows,
+          failed: failedRows,
+        } as any,
+      },
     });
 
     return this.findOne(result.id);
@@ -989,14 +1545,72 @@ function normalizeUf(value: string) {
 function normalizeNumberInput(value: string) {
   const text = String(value || '').trim();
   if (!text) return null;
-  const normalized = text.replace(/\./g, '').replace(',', '.');
+  const compact = text.replace(/\s/g, '');
+  const normalized = compact.includes(',')
+    ? compact.replace(/\./g, '').replace(',', '.')
+    : /^-?\d{1,3}(\.\d{3})+$/.test(compact)
+      ? compact.replace(/\./g, '')
+      : compact;
   const numberValue = Number(normalized);
   return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function normalizePowerInput(value: string) {
+  const match = String(value || '').match(/-?\d+(?:[.,]\d+)?/);
+  return match ? normalizeNumberInput(match[0]) : null;
+}
+
+function normalizeIntegerInput(value: string) {
+  const normalized = normalizePowerInput(value);
+  return typeof normalized === 'number' ? Math.trunc(normalized) : null;
+}
+
+function normalizeCatalogCode(value: string) {
+  return normalizeText(value)?.toUpperCase() ?? null;
+}
+
+function normalizeCatalogItemType(value: string) {
+  const comparable = comparableHeader(value);
+  if (!comparable) return null;
+  if (['service', 'servico', 'servicos'].includes(comparable)) {
+    return ItemType.SERVICE;
+  }
+  if (
+    [
+      'part',
+      'peca',
+      'pecas',
+      'acabado',
+      'componente',
+      'material consumo',
+      'material auxiliar',
+      'ferramenta',
+      'kit',
+    ].includes(comparable)
+  ) {
+    return ItemType.PART;
+  }
+  return null;
 }
 
 function normalizeBooleanInput(value: string) {
   const comparable = comparableHeader(value);
   return ['1', 'sim', 's', 'true', 'yes', 'y'].includes(comparable);
+}
+
+function normalizeActiveStatus(value: string) {
+  const comparable = comparableHeader(value);
+  if (!comparable) return true;
+  if (['inativo', 'inactive', '0', 'nao', 'n', 'false'].includes(comparable)) {
+    return false;
+  }
+  return ['ativo', 'active', '1', 'sim', 's', 'true', 'yes', 'y'].includes(
+    comparable,
+  );
+}
+
+function normalizeCatalogActive(value: string) {
+  return comparableHeader(value) ? normalizeBooleanInput(value) : true;
 }
 
 function normalizeClientType(value: string) {
@@ -1041,10 +1655,16 @@ function validateOptionalEmail(field: string) {
 }
 
 function clientAddressFields(
-  prefix: 'billing' | 'installation',
+  prefix: 'primary' | 'billing' | 'installation',
   label: string,
   aliasPrefix: string,
 ): ImportFieldDefinition[] {
+  const legacySuffix =
+    prefix === 'primary'
+      ? 'principal'
+      : prefix === 'billing'
+        ? 'cobranca'
+        : 'entrega';
   return [
     {
       key: `${prefix}Street`,
@@ -1054,6 +1674,7 @@ function clientAddressFields(
         `logradouro ${aliasPrefix}`,
         `${aliasPrefix} rua`,
         `${aliasPrefix} logradouro`,
+        `rua${legacySuffix}`,
       ],
       normalize: normalizeText,
     },
@@ -1064,13 +1685,18 @@ function clientAddressFields(
         `numero ${aliasPrefix}`,
         `n ${aliasPrefix}`,
         `${aliasPrefix} numero`,
+        `numero${legacySuffix}`,
       ],
       normalize: normalizeText,
     },
     {
       key: `${prefix}Complement`,
       label: `Complemento ${label}`,
-      aliases: [`complemento ${aliasPrefix}`, `${aliasPrefix} complemento`],
+      aliases: [
+        `complemento ${aliasPrefix}`,
+        `${aliasPrefix} complemento`,
+        `complemento${legacySuffix}`,
+      ],
       normalize: normalizeText,
     },
     {
@@ -1080,19 +1706,28 @@ function clientAddressFields(
         `bairro ${aliasPrefix}`,
         `${aliasPrefix} bairro`,
         `lote ${aliasPrefix}`,
+        `bairro${legacySuffix}`,
       ],
       normalize: normalizeText,
     },
     {
       key: `${prefix}ZipCode`,
       label: `CEP ${label}`,
-      aliases: [`cep ${aliasPrefix}`, `${aliasPrefix} cep`],
+      aliases: [
+        `cep ${aliasPrefix}`,
+        `${aliasPrefix} cep`,
+        `cep${legacySuffix}`,
+      ],
       normalize: normalizeText,
     },
     {
       key: `${prefix}City`,
       label: `Cidade ${label}`,
-      aliases: [`cidade ${aliasPrefix}`, `${aliasPrefix} cidade`],
+      aliases: [
+        `cidade ${aliasPrefix}`,
+        `${aliasPrefix} cidade`,
+        `cidade${legacySuffix}`,
+      ],
       normalize: normalizeText,
     },
     {
@@ -1102,14 +1737,16 @@ function clientAddressFields(
         `uf ${aliasPrefix}`,
         `estado ${aliasPrefix}`,
         `${aliasPrefix} uf`,
+        `uf${legacySuffix}`,
       ],
       normalize: normalizeUf,
     },
   ];
 }
 
-function clientContactFields(index: 1 | 2 | 3): ImportFieldDefinition[] {
+function clientContactFields(index: 1 | 2 | 3 | 4): ImportFieldDefinition[] {
   const padded = String(index).padStart(2, '0');
+  const legacySuffix = index === 1 ? '' : String(index);
   return [
     {
       key: `contact${padded}Name`,
@@ -1118,13 +1755,18 @@ function clientContactFields(index: 1 | 2 | 3): ImportFieldDefinition[] {
         `contato ${padded}`,
         `nome contato ${padded}`,
         `contato ${index}`,
+        `contatonome${legacySuffix}`,
       ],
       normalize: normalizeText,
     },
     {
       key: `contact${padded}Role`,
       label: `Cargo ${padded}`,
-      aliases: [`cargo ${padded}`, `funcao ${padded}`, `funÃ§Ã£o ${padded}`],
+      aliases: [
+        `cargo ${padded}`,
+        `funcao ${padded}`,
+        `contatocargo${legacySuffix}`,
+      ],
       normalize: normalizeText,
     },
     {
@@ -1134,13 +1776,19 @@ function clientContactFields(index: 1 | 2 | 3): ImportFieldDefinition[] {
         `telefone ${padded}`,
         `tel ${padded}`,
         `telefone contato ${padded}`,
+        `contatotel${legacySuffix}`,
       ],
       normalize: normalizeText,
     },
     {
       key: `contact${padded}Mobile`,
       label: `Celular ${padded}`,
-      aliases: [`celular ${padded}`, `whatsapp ${padded}`, `mobile ${padded}`],
+      aliases: [
+        `celular ${padded}`,
+        `whatsapp ${padded}`,
+        `mobile ${padded}`,
+        `contatocelular${legacySuffix}`,
+      ],
       normalize: normalizeText,
     },
     {
@@ -1150,6 +1798,7 @@ function clientContactFields(index: 1 | 2 | 3): ImportFieldDefinition[] {
         `email ${padded}`,
         `e-mail ${padded}`,
         `email contato ${padded}`,
+        `contatoemail${legacySuffix}`,
       ],
       normalize: (value) => normalizeText(value)?.toLowerCase() ?? null,
       validate: validateOptionalEmail(`contact${padded}Email`),
@@ -1159,14 +1808,14 @@ function clientContactFields(index: 1 | 2 | 3): ImportFieldDefinition[] {
 
 function buildClientAddress(
   data: Record<string, unknown>,
-  prefix: 'billing' | 'installation',
+  prefix: 'primary' | 'billing' | 'installation',
   type: ClientAddressType,
   fallbackCity: string,
   fallbackState: string,
 ) {
   const street =
     nullableString(data[`${prefix}Street`]) ||
-    (prefix === 'billing' ? nullableString(data.address) : undefined);
+    (prefix === 'primary' ? nullableString(data.address) : undefined);
   if (!street) return null;
   return {
     type,
@@ -1200,6 +1849,39 @@ function nullableString(value: unknown) {
   return text || undefined;
 }
 
+function compactObject(values: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(values).filter(
+      ([, value]) => value !== undefined && value !== null,
+    ),
+  );
+}
+
+function normalizeCatalogIdentifier(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .toUpperCase();
+}
+
+function catalogIdentifier(
+  code: string | undefined,
+  type: CatalogIdentifierType,
+  isPrimary: boolean,
+  source: string,
+) {
+  if (!code) return null;
+  return {
+    type,
+    code,
+    normalizedCode: normalizeCatalogIdentifier(code),
+    source,
+    isPrimary,
+    isActive: true,
+  };
+}
+
 function primitiveString(value: unknown) {
   if (
     typeof value === 'string' ||
@@ -1217,28 +1899,4 @@ function isValidBrazilDocument(value: string) {
   return (
     (digits.length === 11 || digits.length === 14) && !/^(\d)\1+$/.test(digits)
   );
-}
-
-function isValidCnpj(value: string) {
-  const cnpj = normalizeDigits(value);
-  if (cnpj.length !== 14 || /^(\d)\1+$/.test(cnpj)) return false;
-
-  const calculateDigit = (base: string, factors: number[]) => {
-    const sum = factors.reduce(
-      (acc, factor, index) => acc + Number(base[index]) * factor,
-      0,
-    );
-    const rest = sum % 11;
-    return rest < 2 ? 0 : 11 - rest;
-  };
-
-  const first = calculateDigit(
-    cnpj.slice(0, 12),
-    [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2],
-  );
-  const second = calculateDigit(
-    cnpj.slice(0, 13),
-    [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2],
-  );
-  return first === Number(cnpj[12]) && second === Number(cnpj[13]);
 }

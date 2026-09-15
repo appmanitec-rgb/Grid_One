@@ -717,10 +717,12 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         dashboard: true,
         contracts: true,
         clients: true,
+        catalog: true,
         finance: true,
         tickets: true,
       },
       clients: { view: true },
+      catalog: { view: true, viewCosts: true },
       contracts: { view: true },
       finance: {
         view: true,

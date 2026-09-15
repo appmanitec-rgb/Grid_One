@@ -67,16 +67,36 @@ export class ProposalsController {
   }
 
   @UseGuards(AuthGuard)
-  @RequireAccessPolicy('proposals.cancel')
+  @RequireAccessPolicy('proposals.approve')
+  @Post(':id/board-request-adjustments')
+  async boardRequestAdjustments(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Body() body: { reason?: string },
+  ) {
+    try {
+      const userId = (req['user'] as any)?.sub as string | undefined;
+      return await this.proposalsService.boardRequestAdjustments(
+        id,
+        userId,
+        body?.reason,
+      );
+    } catch (error: any) {
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('proposals.approve')
   @Post(':id/board-reject')
   async boardReject(
     @Param('id') id: string,
     @Req() req: Request,
-    @Body() body: { note?: string },
+    @Body() body: { reason?: string },
   ) {
     try {
       const userId = (req['user'] as any)?.sub as string | undefined;
-      return await this.proposalsService.boardReject(id, userId, body?.note);
+      return await this.proposalsService.boardReject(id, userId, body?.reason);
     } catch (error: any) {
       throw new BadRequestException(error.message);
     }
@@ -146,10 +166,14 @@ export class ProposalsController {
   @UseGuards(AuthGuard)
   @RequireAccessPolicy('proposals.update')
   @Post(':id/revise')
-  async revise(@Param('id') id: string, @Req() req: Request) {
+  async revise(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Body() body: { reason?: string },
+  ) {
     try {
       const userId = (req['user'] as any)?.sub as string | undefined;
-      return await this.proposalsService.revise(id, userId);
+      return await this.proposalsService.revise(id, userId, body?.reason);
     } catch (error: any) {
       throw new BadRequestException(error.message);
     }

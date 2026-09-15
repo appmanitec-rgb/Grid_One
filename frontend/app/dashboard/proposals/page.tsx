@@ -51,6 +51,12 @@ type ProposalListItem = {
   } | null;
 };
 
+const GOVERNED_REVISION_STATUSES = new Set([
+  "REVISION_REQUIRED",
+  "REJECTED",
+  "REVISED",
+]);
+
 type ViewMode = "list" | "kanban";
 type ProposalCategory = "ALL" | "GENERATORS" | "PARTS_SERVICES" | "CONTRACTS";
 type Tone = "blue" | "emerald" | "amber" | "rose" | "slate";
@@ -291,7 +297,7 @@ export default function ProposalsPage() {
   const stats = useMemo(() => {
     const active = proposals.filter((proposal) => {
       const step = statusToFlowStep(proposal.status);
-      return step !== "WON" && step !== "LOST";
+      return !["WON", "LOST", "REJECTED", "REVISED"].includes(step);
     });
     const boardReview = proposals.filter(
       (proposal) => statusToFlowStep(proposal.status) === "BOARD_REVIEW",
@@ -657,8 +663,12 @@ export default function ProposalsPage() {
               <DashboardKanban ariaLabel="Kanban comercial de propostas">
                 {flowColumns.map((column) => {
                   const canReceiveDrop = draggingProposal
-                    ? isAdmin ||
-                      canMoveForward(draggingProposal.status, column.key)
+                    ? !GOVERNED_REVISION_STATUSES.has(
+                        draggingProposal.status,
+                      ) &&
+                      !GOVERNED_REVISION_STATUSES.has(column.key) &&
+                      (isAdmin ||
+                        canMoveForward(draggingProposal.status, column.key))
                     : false;
 
                   return (
@@ -716,7 +726,10 @@ export default function ProposalsPage() {
                           <KanbanProposalCard
                             key={proposal.id}
                             proposal={proposal}
-                            disabled={Boolean(movingId)}
+                            disabled={
+                              Boolean(movingId) ||
+                              GOVERNED_REVISION_STATUSES.has(proposal.status)
+                            }
                             onDragStart={(event) => {
                               if (movingId) return;
 
@@ -1141,6 +1154,8 @@ function stepLabel(step: string) {
 function statusTone(status: string): Tone {
   const step = statusToFlowStep(status);
 
+  if (step === "REVISION_REQUIRED") return "amber";
+  if (step === "REJECTED") return "rose";
   if (step === "BOARD_REVIEW") return "blue";
   if (step === "CLIENT_REVIEW") return "amber";
   if (step === "WON") return "emerald";

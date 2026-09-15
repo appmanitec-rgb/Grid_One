@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -9,6 +8,20 @@ import { apiFetch, readApiErrorMessage } from "@/lib/api";
 import { loadControlOptions, optionLabel, type ControlOption } from "@/lib/control-options";
 
 type ItemType = "PART" | "SERVICE";
+
+const PRICING_PERCENT_ROWS = [
+  { label: "ICMS", name: "icms", policyKey: "icmsPercent" },
+  { label: "PIS", name: "pis", policyKey: "pisPercent" },
+  { label: "COFINS", name: "cofins", policyKey: "cofinsPercent" },
+  { label: "IPI", name: "ipi", policyKey: "ipiPercent" },
+  { label: "ISS", name: "iss", policyKey: "issPercent" },
+  { label: "IRPJ", name: "irpj", policyKey: "irpjPercent" },
+  { label: "CSLL", name: "csll", policyKey: "csllPercent" },
+  { label: "CPP", name: "cpp", policyKey: "cppPercent" },
+  { label: "Comissao", name: "commissionPercent", policyKey: "commissionPercent" },
+  { label: "Margem de lucro", name: "profitMargin", policyKey: "profitMarginPercent" },
+  { label: "Custo operacional", name: "operationalCostPercent", policyKey: "operationalCostPercent" },
+] as const;
 type ProductOrigin =
   | "NACIONAL"
   | "ESTRANGEIRA_IMPORTACAO_DIRETA"
@@ -112,6 +125,14 @@ type CatalogPricingPolicy = {
   name: string;
   itemType: ItemType;
   salesTaxPercent: number;
+  icmsPercent: number;
+  pisPercent: number;
+  cofinsPercent: number;
+  ipiPercent: number;
+  issPercent: number;
+  irpjPercent: number;
+  csllPercent: number;
+  cppPercent: number;
   commissionPercent: number;
   profitMarginPercent: number;
   operationalCostPercent: number;
@@ -214,16 +235,19 @@ export default function CatalogFormPage() {
 
   const [formData, setFormData] = useState({
     sku: "",
+    legacyCode: "",
     skuAreaId: "",
     skuFamilyId: "",
     skuApplicationId: "",
     name: "",
     type: "PART" as ItemType,
+    itemClassification: "Acabado",
     description: "",
     commercialDescription: "",
     category: "",
     subcategory: "",
     unit: "UN",
+    acquisitionOrigin: "Comprado",
     brand: "",
     manufacturerPartNumber: "",
     supplier: "",
@@ -283,7 +307,8 @@ export default function CatalogFormPage() {
 
     icms: "",
     iss: "",
-    pisCofins: "",
+    pis: "",
+    cofins: "",
     ipi: "",
     irpj: "",
     csll: "",
@@ -291,17 +316,18 @@ export default function CatalogFormPage() {
   });
 
   const totalTaxPercentage = useMemo(() => {
-    const policyTax = parseFloat(formData.salesTaxPercent);
-    if (Number.isFinite(policyTax) && policyTax > 0) return policyTax;
-    return (
+    const componentTotal =
       (parseFloat(formData.icms) || 0) +
       (parseFloat(formData.iss) || 0) +
-      (parseFloat(formData.pisCofins) || 0) +
+      (parseFloat(formData.pis) || 0) +
+      (parseFloat(formData.cofins) || 0) +
       (parseFloat(formData.ipi) || 0) +
       (parseFloat(formData.irpj) || 0) +
       (parseFloat(formData.csll) || 0) +
-      (parseFloat(formData.cpp) || 0)
-    );
+      (parseFloat(formData.cpp) || 0);
+    return componentTotal > 0
+      ? componentTotal
+      : parseFloat(formData.salesTaxPercent) || 0;
   }, [formData]);
 
   const purchaseTotal = useMemo(
@@ -393,15 +419,23 @@ export default function CatalogFormPage() {
   }, []);
 
   useEffect(() => {
-    if (!activePricingPolicy) return;
+    if (!activePricingPolicy || isEditing) return;
     setFormData((prev) => ({
       ...prev,
       salesTaxPercent: String(activePricingPolicy.salesTaxPercent || ""),
+      icms: String(activePricingPolicy.icmsPercent || ""),
+      pis: String(activePricingPolicy.pisPercent || ""),
+      cofins: String(activePricingPolicy.cofinsPercent || ""),
+      ipi: String(activePricingPolicy.ipiPercent || ""),
+      iss: String(activePricingPolicy.issPercent || ""),
+      irpj: String(activePricingPolicy.irpjPercent || ""),
+      csll: String(activePricingPolicy.csllPercent || ""),
+      cpp: String(activePricingPolicy.cppPercent || ""),
       commissionPercent: String(activePricingPolicy.commissionPercent || ""),
       profitMargin: String(activePricingPolicy.profitMarginPercent || ""),
       operationalCostPercent: String(activePricingPolicy.operationalCostPercent || ""),
     }));
-  }, [activePricingPolicy]);
+  }, [activePricingPolicy, isEditing]);
 
   useEffect(() => {
     if (!canViewCosts) return;
@@ -411,16 +445,14 @@ export default function CatalogFormPage() {
   useEffect(() => {
     if (!canViewCosts || activeTab === "suppliers") return;
     const cost = parseFloat(formData.costPrice) || 0;
-    const margin = parseFloat(formData.profitMargin) || 0;
-
     if (cost <= 0) {
       setFormData((prev) => ({ ...prev, basePrice: "" }));
       return;
     }
 
-    const finalPrice = cost * (1 + totalTaxPercentage / 100) * (1 + margin / 100);
+    const finalPrice = cost * (1 + pricingMarkupPercentage / 100);
     setFormData((prev) => ({ ...prev, basePrice: finalPrice.toFixed(2) }));
-  }, [activeTab, canViewCosts, formData.costPrice, formData.profitMargin, totalTaxPercentage]);
+  }, [activeTab, canViewCosts, formData.costPrice, pricingMarkupPercentage]);
 
   useEffect(() => {
     if (!canViewCosts || activeTab !== "suppliers" || purchaseTotal <= 0) return;
@@ -459,16 +491,19 @@ export default function CatalogFormPage() {
 
         setFormData({
           sku: item.sku || "",
+          legacyCode: item.legacyCode || "",
           skuAreaId: item.skuAreaId || item.skuArea?.id || "",
           skuFamilyId: item.skuFamilyId || item.skuFamily?.id || "",
           skuApplicationId: item.skuApplicationId || item.skuApplication?.id || "",
           name: item.name || "",
           type: item.type || "PART",
+          itemClassification: item.itemClassification || (item.type === "SERVICE" ? "Servico" : "Acabado"),
           description: item.description || "",
           commercialDescription: item.commercialDescription || "",
           category: item.category || "",
           subcategory: item.subcategory || "",
           unit: item.unit || "UN",
+          acquisitionOrigin: item.acquisitionOrigin || "Comprado",
           brand: item.brand || "",
           manufacturerPartNumber: item.manufacturerPartNumber || "",
           supplier: item.supplier || "",
@@ -507,8 +542,8 @@ export default function CatalogFormPage() {
           otherPurchaseCosts: primarySupplier?.otherPurchaseCosts != null ? String(primarySupplier.otherPurchaseCosts) : "",
           recoverableCreditAmount: "",
           salesTaxPercent: "",
-          commissionPercent: taxProfile.commissionPercent != null ? String(taxProfile.commissionPercent) : "",
-          operationalCostPercent: taxProfile.operationalCostPercent != null ? String(taxProfile.operationalCostPercent) : "",
+          commissionPercent: item.commissionPercent != null ? String(item.commissionPercent) : taxProfile.commissionPercent != null ? String(taxProfile.commissionPercent) : "",
+          operationalCostPercent: item.operationalCostPercent != null ? String(item.operationalCostPercent) : taxProfile.operationalCostPercent != null ? String(taxProfile.operationalCostPercent) : "",
           priceValidFrom: taxProfile.priceValidFrom ? String(taxProfile.priceValidFrom).slice(0, 10) : "",
           priceValidUntil: taxProfile.priceValidUntil ? String(taxProfile.priceValidUntil).slice(0, 10) : "",
           pricingNotes: "",
@@ -526,13 +561,14 @@ export default function CatalogFormPage() {
           grossWeight: item.grossWeight != null ? String(item.grossWeight) : "",
           netWeight: item.netWeight != null ? String(item.netWeight) : "",
 
-          icms: taxProfile.icms != null ? String(taxProfile.icms) : "",
-          iss: taxProfile.iss != null ? String(taxProfile.iss) : "",
-          pisCofins: taxProfile.pisCofins != null ? String(taxProfile.pisCofins) : item.taxPercentage != null ? String(item.taxPercentage) : "",
-          ipi: taxProfile.ipi != null ? String(taxProfile.ipi) : "",
-          irpj: taxProfile.irpj != null ? String(taxProfile.irpj) : "",
-          csll: taxProfile.csll != null ? String(taxProfile.csll) : "",
-          cpp: taxProfile.cpp != null ? String(taxProfile.cpp) : "",
+          icms: item.icmsPercent != null ? String(item.icmsPercent) : taxProfile.icmsPercent != null ? String(taxProfile.icmsPercent) : "",
+          iss: item.issPercent != null ? String(item.issPercent) : taxProfile.issPercent != null ? String(taxProfile.issPercent) : "",
+          pis: item.pisPercent != null ? String(item.pisPercent) : taxProfile.pisPercent != null ? String(taxProfile.pisPercent) : "",
+          cofins: item.cofinsPercent != null ? String(item.cofinsPercent) : taxProfile.cofinsPercent != null ? String(taxProfile.cofinsPercent) : "",
+          ipi: item.ipiPercent != null ? String(item.ipiPercent) : taxProfile.ipiPercent != null ? String(taxProfile.ipiPercent) : "",
+          irpj: item.irpjPercent != null ? String(item.irpjPercent) : taxProfile.irpjPercent != null ? String(taxProfile.irpjPercent) : "",
+          csll: item.csllPercent != null ? String(item.csllPercent) : taxProfile.csllPercent != null ? String(taxProfile.csllPercent) : "",
+          cpp: item.cppPercent != null ? String(item.cppPercent) : taxProfile.cppPercent != null ? String(taxProfile.cppPercent) : "",
         });
       } catch (loadError: unknown) {
         setError(
@@ -821,9 +857,62 @@ export default function CatalogFormPage() {
       }
 
       await refreshMasterData();
-      setPricingMessage(makePreferred ? "Cotacao registrada e definida como preferencial. Preco de venda marcado para revisao." : "Cotacao registrada no historico do fornecedor.");
+      setPricingMessage(
+        makePreferred
+          ? "Cotacao registrada como preferencial. O preco de compra e a venda sugerida foram recalculados sem criar aprovacao financeira."
+          : "Cotacao registrada no historico do fornecedor.",
+      );
     } catch (pricingError: unknown) {
       setError(pricingError instanceof Error ? pricingError.message : "Erro ao registrar cotacao.");
+    } finally {
+      setIsSavingPricing(false);
+    }
+  }
+
+  async function handleRequestPricingParameterChange() {
+    if (!isEditing) {
+      setPricingMessage("Salve o produto primeiro. Depois, qualquer alteracao dos parametros podera ser enviada ao Financeiro.");
+      return;
+    }
+    setError("");
+    setPricingMessage("");
+    setIsSavingPricing(true);
+    try {
+      const response = await apiFetch(`/catalogs/${editItemId}/pricing-parameters`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          icmsPercent: Number(formData.icms || 0),
+          pisPercent: Number(formData.pis || 0),
+          cofinsPercent: Number(formData.cofins || 0),
+          ipiPercent: Number(formData.ipi || 0),
+          issPercent: Number(formData.iss || 0),
+          irpjPercent: Number(formData.irpj || 0),
+          csllPercent: Number(formData.csll || 0),
+          cppPercent: Number(formData.cpp || 0),
+          commissionPercent: Number(formData.commissionPercent || 0),
+          profitMarginPercent: Number(formData.profitMargin || 0),
+          operationalCostPercent: Number(formData.operationalCostPercent || 0),
+          notes: formData.pricingNotes || undefined,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(
+          await readApiErrorMessage(
+            response,
+            "Nao foi possivel enviar a alteracao ao Financeiro.",
+          ),
+        );
+      }
+      setPricingMessage(
+        "Solicitacao enviada ao Financeiro. Os valores vigentes continuam inalterados ate a aprovacao.",
+      );
+    } catch (requestError: unknown) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Falha ao solicitar a alteracao dos parametros.",
+      );
     } finally {
       setIsSavingPricing(false);
     }
@@ -896,16 +985,6 @@ export default function CatalogFormPage() {
     setIsLoading(true);
     setError("");
 
-    const taxProfile = {
-      icms: toNumberOrUndefined(formData.icms),
-      iss: toNumberOrUndefined(formData.iss),
-      pisCofins: toNumberOrUndefined(formData.pisCofins),
-      ipi: toNumberOrUndefined(formData.ipi),
-      irpj: toNumberOrUndefined(formData.irpj),
-      csll: toNumberOrUndefined(formData.csll),
-      cpp: toNumberOrUndefined(formData.cpp),
-    };
-
     const technicalSpecs = {
       voltage: formData.technicalVoltage || undefined,
       current: formData.technicalCurrent || undefined,
@@ -915,32 +994,28 @@ export default function CatalogFormPage() {
 
     const payload = {
       sku: skuClassificationComplete ? undefined : formData.sku || undefined,
+      legacyCode: formData.legacyCode || undefined,
       skuAreaId: formData.skuAreaId || undefined,
       skuFamilyId: formData.skuFamilyId || undefined,
       skuApplicationId: formData.skuApplicationId || undefined,
       name: formData.name,
       type: formData.type,
+      itemClassification: formData.itemClassification || undefined,
       description: formData.description || undefined,
       commercialDescription: formData.commercialDescription || undefined,
       category: skuClassificationComplete ? undefined : formData.category || undefined,
       subcategory: skuClassificationComplete ? undefined : formData.subcategory || undefined,
       unit: formData.unit || undefined,
+      acquisitionOrigin: formData.acquisitionOrigin || undefined,
       brand: formData.brand || undefined,
       manufacturerPartNumber: formData.manufacturerPartNumber || undefined,
       supplier: formData.supplier || undefined,
       applicationNotes: formData.applicationNotes || undefined,
       technicalSpecs,
 
-      ...(canViewCosts
-        ? {
-            costPrice: toNumberOrUndefined(formData.costPrice),
-            averageCost: toNumberOrUndefined(formData.averageCost),
-            lastCost: toNumberOrUndefined(formData.lastCost),
-            taxPercentage: totalTaxPercentage,
-            profitMargin: toNumberOrUndefined(formData.profitMargin),
-          }
+      ...(!isEditing
+        ? { costPrice: toNumberOrUndefined(formData.costPrice) }
         : {}),
-      basePrice: Number(formData.basePrice || 0),
 
       stockMin: toNumberOrUndefined(formData.stockMin),
       stockMax: toNumberOrUndefined(formData.stockMax),
@@ -953,7 +1028,6 @@ export default function CatalogFormPage() {
       origin: formData.origin,
       grossWeight: toNumberOrUndefined(formData.grossWeight),
       netWeight: toNumberOrUndefined(formData.netWeight),
-      taxProfile,
     };
 
     try {
@@ -1073,6 +1147,20 @@ export default function CatalogFormPage() {
                   <option value="SERVICE">Servico / Mao de Obra</option>
                 </select>
               </div>
+              <Input
+                label="Tipo do item / classificacao"
+                name="itemClassification"
+                value={formData.itemClassification}
+                onChange={handleChange}
+                placeholder="Ex.: Acabado, Componente"
+              />
+              <Input
+                label="Origem do item"
+                name="acquisitionOrigin"
+                value={formData.acquisitionOrigin}
+                onChange={handleChange}
+                placeholder="Ex.: Comprado, Fabricado"
+              />
               <div>
                 <label className="mb-1 block text-sm font-bold text-zinc-700">Status</label>
                 <select name="isActive" value={formData.isActive} onChange={handleChange} className="w-full rounded-lg border border-zinc-300 p-3">
@@ -1081,6 +1169,18 @@ export default function CatalogFormPage() {
                 </select>
               </div>
               <Input label="Nome do Item" name="name" value={formData.name} onChange={handleChange} className="md:col-span-2" requiredMark required />
+              <Input label="Codigo legado" name="legacyCode" value={formData.legacyCode} onChange={handleChange} placeholder="Codigo do sistema antigo" />
+              {!isEditing && canViewCosts ? (
+                <Input
+                  label="Preco de compra inicial"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  name="costPrice"
+                  value={formData.costPrice}
+                  onChange={handleChange}
+                />
+              ) : null}
               <Input label="Descricao Comercial" name="commercialDescription" value={formData.commercialDescription} onChange={handleChange} className="md:col-span-2" />
               <TextArea label="Descricao interna" name="description" value={formData.description} onChange={handleChange} className="md:col-span-4" />
               <ControlOptionInput
@@ -1374,7 +1474,7 @@ export default function CatalogFormPage() {
                     <p className="text-xs font-bold uppercase tracking-wide text-blue-700">Resumo vigente</p>
                     <div className="mt-3 grid grid-cols-2 gap-3">
                       <SummaryTile label="Custo atual" value={formatCurrencyNumber(parseFloat(formData.costPrice) || 0)} />
-                      <SummaryTile label="Preco venda" value={formatCurrencyNumber(parseFloat(formData.basePrice) || 0)} />
+                      <SummaryTile label="Venda sugerida" value={formatCurrencyNumber(parseFloat(formData.basePrice) || 0)} />
                       <SummaryTile label="Impostos venda" value={`${totalTaxPercentage.toFixed(2)}%`} />
                       <SummaryTile label="Fornecedor" value={selectedSupplier?.companyName || formData.supplier || "-"} />
                     </div>
@@ -1438,36 +1538,89 @@ export default function CatalogFormPage() {
                       <Input label="Creditos recuperaveis (R$)" type="number" step="0.01" name="recoverableCreditAmount" value={formData.recoverableCreditAmount} onChange={handleChange} />
                     </div>
                     <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-                      <p className="text-xs font-bold uppercase text-zinc-500">Custo efetivo calculado</p>
+                      <p className="text-xs font-bold uppercase text-zinc-500">Preco minimo (custo total)</p>
                       <p className="mt-1 text-2xl font-bold text-zinc-900">{formatCurrencyNumber(purchaseTotal)}</p>
                     </div>
                   </section>
 
                   <section className="rounded-xl border border-zinc-200 p-4">
                     <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Formacao do preco de venda</p>
+                    <div className="mt-4 overflow-hidden rounded-lg border border-zinc-200">
+                      <table className="min-w-full divide-y divide-zinc-200 text-sm">
+                        <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
+                          <tr>
+                            <th className="px-3 py-2">Componente</th>
+                            <th className="px-3 py-2">Padrao Studio</th>
+                            <th className="px-3 py-2">Valor do produto</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-100 bg-white">
+                          {PRICING_PERCENT_ROWS.map((row) => (
+                            <tr key={row.name}>
+                              <td className="px-3 py-2 font-semibold text-zinc-700">{row.label}</td>
+                              <td className="px-3 py-2 text-zinc-500">
+                                {formatNumber(activePricingPolicy?.[row.policyKey] || 0)}%
+                              </td>
+                              <td className="px-3 py-2">
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    name={row.name}
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={formData[row.name]}
+                                    onChange={handleChange}
+                                    disabled={!isEditing}
+                                    className="w-28 rounded-lg border border-zinc-300 px-2 py-1.5 disabled:bg-zinc-100 disabled:text-zinc-600"
+                                  />
+                                  <span className="text-zinc-400">%</span>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="border-t border-zinc-200 bg-blue-50 font-bold text-blue-800">
+                          <tr>
+                            <td className="px-3 py-2">Total da formacao</td>
+                            <td className="px-3 py-2">{activePricingPolicy?.name || "Sem politica padrao"}</td>
+                            <td className="px-3 py-2">{pricingMarkupPercentage.toFixed(2)}%</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
                     <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-                      <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-                        <p className="text-xs font-bold uppercase text-zinc-500">Impostos de venda</p>
-                        <p className="mt-1 text-lg font-bold text-zinc-900">{totalTaxPercentage.toFixed(2)}%</p>
-                        <p className="mt-1 text-xs text-zinc-500">{activePricingPolicy ? `Politica: ${activePricingPolicy.name}` : "Definidos na aba Fiscal."}</p>
-                      </div>
-                      <Input label="Comissao (%)" type="number" step="0.01" name="commissionPercent" value={formData.commissionPercent} onChange={handleChange} />
-                      <Input label="Margem de lucro (%)" type="number" step="0.01" name="profitMargin" value={formData.profitMargin} onChange={handleChange} />
-                      <Input label="Custos operacionais (%)" type="number" step="0.01" name="operationalCostPercent" value={formData.operationalCostPercent} onChange={handleChange} />
                       <Input label="Inicio validade" type="date" name="priceValidFrom" value={formData.priceValidFrom} onChange={handleChange} />
                       <Input label="Fim validade" type="date" name="priceValidUntil" value={formData.priceValidUntil} onChange={handleChange} />
                     </div>
                     <div className="mt-4 rounded-lg border-2 border-blue-500 bg-blue-50 p-3">
-                      <p className="text-xs font-bold uppercase text-blue-700">Preco de venda calculado</p>
+                      <p className="text-xs font-bold uppercase text-blue-700">Venda sugerida</p>
                       <input
                         name="basePrice"
                         type="number"
                         step="0.01"
                         value={formData.basePrice}
-                        onChange={handleChange}
+                        readOnly
                         className="mt-2 w-full rounded-lg border border-blue-200 bg-white p-2 text-2xl font-bold text-blue-700"
                       />
-                      <p className="mt-1 text-xs text-blue-700">Markup total: {pricingMarkupPercentage.toFixed(2)}%</p>
+                      <p className="mt-1 text-xs text-blue-700">
+                        Recomendacao calculada com markup de {pricingMarkupPercentage.toFixed(2)}%. O valor nunca pode ser menor que o preco minimo de {formatCurrencyNumber(purchaseTotal)}.
+                      </p>
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                      <div>
+                        <p className="text-sm font-bold text-amber-950">Parametros comerciais protegidos</p>
+                        <p className="mt-1 text-xs text-amber-800">
+                          No cadastro novo, os valores vem da politica padrao. Depois de salvo, qualquer mudanca em impostos, comissao ou margem gera somente uma solicitacao ao Financeiro.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleRequestPricingParameterChange}
+                        disabled={isSavingPricing || !isEditing}
+                        className="rounded-lg bg-amber-700 px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
+                      >
+                        {isSavingPricing ? "Enviando..." : "Solicitar alteracao ao Financeiro"}
+                      </button>
                     </div>
                   </section>
                 </div>
@@ -1482,9 +1635,9 @@ export default function CatalogFormPage() {
 
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
                   <div>
-                    <p className="text-sm font-bold text-zinc-800">Aplicar preco no cadastro</p>
+                    <p className="text-sm font-bold text-zinc-800">Cotacoes de compra</p>
                     <p className="mt-1 text-sm text-zinc-500">
-                      Registra a cotacao do fornecedor. A opcao preferencial atualiza apenas o custo de reposicao e marca o preco de venda para revisao.
+                      Cotacoes nao passam pelo Financeiro. Ao marcar uma como preferencial, o custo de compra e a venda sugerida sao recalculados automaticamente.
                     </p>
                   </div>
                   <button
@@ -1549,20 +1702,8 @@ export default function CatalogFormPage() {
                   <option value="ESTRANGEIRA_MERCADO_INTERNO">Estrangeira - Mercado interno</option>
                 </select>
               </div>
-              <div className="md:col-span-4">
-                <p className="mb-2 text-sm font-bold text-zinc-700">Impostos (%)</p>
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-7">
-                  <Input label="ICMS" type="number" step="0.01" name="icms" value={formData.icms} onChange={handleChange} compact />
-                  <Input label="ISS" type="number" step="0.01" name="iss" value={formData.iss} onChange={handleChange} compact />
-                  <Input label="PIS/COFINS" type="number" step="0.01" name="pisCofins" value={formData.pisCofins} onChange={handleChange} compact />
-                  <Input label="IPI" type="number" step="0.01" name="ipi" value={formData.ipi} onChange={handleChange} compact />
-                  <Input label="IRPJ" type="number" step="0.01" name="irpj" value={formData.irpj} onChange={handleChange} compact />
-                  <Input label="CSLL" type="number" step="0.01" name="csll" value={formData.csll} onChange={handleChange} compact />
-                  <Input label="CPP" type="number" step="0.01" name="cpp" value={formData.cpp} onChange={handleChange} compact />
-                </div>
-              </div>
               <p className="md:col-span-4 text-xs text-zinc-500">
-                Campos fiscais avancados sao montados automaticamente pelo sistema a partir destes valores.
+                NCM, CEST e origem continuam no cadastro fiscal. Os percentuais que alteram preco ficam na tabela de formacao da aba Fornecedores e dependem de aprovacao financeira.
               </p>
             </div>
           </section>
@@ -1666,6 +1807,12 @@ function formatCurrencyNumber(value: number) {
     style: "currency",
     currency: "BRL",
   }).format(Number.isFinite(value) ? value : 0);
+}
+
+function formatNumber(value: number) {
+  return Number.isFinite(value)
+    ? value.toLocaleString("pt-BR", { maximumFractionDigits: 2 })
+    : "0";
 }
 
 function formatDate(value: string) {

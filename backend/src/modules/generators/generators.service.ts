@@ -122,6 +122,7 @@ export class GeneratorsService {
 
     return this.database.$transaction(async (tx) => {
       const createData: Prisma.GeneratorUncheckedCreateInput = {
+        legacyCode: data.legacyCode?.trim() || undefined,
         name: data.name,
         brand: data.brand,
         serialNumber: data.serialNumber,

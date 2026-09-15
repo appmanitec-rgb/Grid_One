@@ -1,5 +1,6 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { json, urlencoded } from 'express';
 import helmet from 'helmet';
 import { RequestLoggingInterceptor } from './common/interceptors/request-logging.interceptor';
 import { runDatabaseSafetyChecks } from './database/db-safety';
@@ -17,8 +18,16 @@ function parseCorsOrigins() {
 async function bootstrap() {
   await runDatabaseSafetyChecks();
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
   const allowedOrigins = parseCorsOrigins();
+
+  app.use(
+    json({ limit: process.env.JSON_BODY_LIMIT || '15mb' }),
+    urlencoded({
+      extended: true,
+      limit: process.env.JSON_BODY_LIMIT || '15mb',
+    }),
+  );
 
   app.use(
     helmet({

@@ -55,7 +55,9 @@ const LOSS_REASON_LABEL: Record<LossReason, string> = {
 const PROPOSAL_STATUS_LABEL: Record<string, string> = {
   DRAFT: "Rascunho",
   BOARD_REVIEW: "Análise Diretoria",
-  REVISION_REQUIRED: "Em Revisão",
+  REVISION_REQUIRED: "Ajustes solicitados",
+  REVISED: "Revisada",
+  REJECTED: "Reprovada pela Diretoria",
   CLIENT_REVIEW: "Análise Cliente",
   DISCOUNT_REVIEW: "Aguardando desconto",
   WON: "Ganha",

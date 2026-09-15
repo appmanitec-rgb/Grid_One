@@ -21,6 +21,7 @@ import { CreateCatalogIdentifierDto } from './dto/create-catalog-identifier.dto'
 import { CreateCatalogOfferDto } from './dto/create-catalog-offer.dto';
 import { CreateCatalogDto } from './dto/create-catalog.dto';
 import { UpdateCatalogPricingDto } from './dto/update-catalog-pricing.dto';
+import { UpdateCatalogPricingParametersDto } from './dto/update-catalog-pricing-parameters.dto';
 import { UpdateCatalogDto } from './dto/update-catalog.dto';
 
 @Controller('catalogs')
@@ -163,6 +164,13 @@ export class CatalogsController {
     return this.catalogsService.setPreferredOffer(id, offerId, dto, actor);
   }
 
+  @RequireAccessPolicy('catalog.viewCosts')
+  @Get(':id/pricing-approval')
+  pricingApprovalContext(@Param('id') id: string, @Req() req: Request) {
+    const actor = req['user'] as CatalogActor;
+    return this.catalogsService.pricingApprovalContext(id, actor);
+  }
+
   @RequireAccessPolicy('catalog.update', 'catalog.viewCosts')
   @Patch(':id/pricing')
   updatePricing(
@@ -172,6 +180,17 @@ export class CatalogsController {
   ) {
     const actor = req['user'] as CatalogActor;
     return this.catalogsService.updatePricing(id, dto, actor);
+  }
+
+  @RequireAccessPolicy('catalog.update', 'catalog.viewCosts')
+  @Patch(':id/pricing-parameters')
+  updatePricingParameters(
+    @Param('id') id: string,
+    @Body() dto: UpdateCatalogPricingParametersDto,
+    @Req() req: Request,
+  ) {
+    const actor = req['user'] as CatalogActor;
+    return this.catalogsService.updatePricingParameters(id, dto, actor);
   }
 
   @RequireAccessPolicy('catalog.update')

@@ -43,12 +43,14 @@ enum ApprovalType {
   BUDGET_DISCOUNT
   GENERATOR_PROPOSAL
   RVT_SIGNOFF
+  CATALOG_PRICING
 }
 
 enum ApprovalStatus {
   PENDING
   APPROVED
   REJECTED
+  ADJUSTMENTS_REQUESTED
 }
 
 enum AuditDomain {
@@ -183,6 +185,7 @@ enum ProposalTechnicianType {
 
 enum ProposalStatus {
   DRAFT
+  REVISED
   BOARD_REVIEW
   REVISION_REQUIRED
   CLIENT_REVIEW
@@ -962,6 +965,7 @@ model ApprovalRequest {
   approverUserId  String
   approverUser    User           @relation("ApprovalApprover", fields: [approverUserId], references: [id], onDelete: Cascade)
   requestNote     String?
+  requestPayload  Json?
   decisionNote    String?
   decidedAt       DateTime?
   createdAt       DateTime       @default(now())
@@ -1109,6 +1113,7 @@ model Technician {
 model Client {
   id                      String           @id @default(uuid())
   code                    String           @unique @default(dbgenerated())
+  legacyCode              String?          @unique
   companyName             String
   tradeName               String?
   cnpj                    String           @unique
@@ -1122,6 +1127,7 @@ model Client {
   municipalRegistration   String?
   cnae                    String?
   preferences             String?
+  notes                   String?
   segment                 String?
   clientType              ClientType       @default(NO_CONTRACT)
   personType              ClientPersonType @default(LEGAL_ENTITY)
@@ -1134,6 +1140,7 @@ model Client {
   blockedPaymentTerms     String[]         @default([])
   withholdsInss           Boolean          @default(false)
   withholdsIss            Boolean          @default(false)
+  isActive                Boolean          @default(true)
   salesOwnerId            String?
 
   salesOwner  User?  @relation("ClientSalesOwner", fields: [salesOwnerId], references: [id], onDelete: SetNull)
@@ -1284,6 +1291,7 @@ model GeneratorModelMaintenanceTemplate {
 model Generator {
   id                           String                     @id @default(uuid())
   code                         String                     @unique @default(dbgenerated())
+  legacyCode                   String?                    @unique
   name                         String
   brand                        String
   serialNumber                 String?                    @unique
@@ -1382,6 +1390,7 @@ model ClientAuditLog {
 model CatalogItem {
   id                     String         @id @default(uuid())
   sku                    String?        @unique
+  legacyCode             String?
   skuNumber              Int?           @unique
   skuAreaId              String?
   skuFamilyId            String?
@@ -1392,7 +1401,9 @@ model CatalogItem {
   category               String?
   subcategory            String?
   type                   ItemType
+  itemClassification     String?
   unit                   String?        @default("UN")
+  acquisitionOrigin      String?
   manufacturerPartNumber String?
   brand                  String?
   supplier               String?
@@ -1406,6 +1417,17 @@ model CatalogItem {
   lastCost               Float?         @default(0)
   taxPercentage          Float?         @default(0)
   profitMargin           Float?         @default(0)
+  icmsPercent            Float          @default(0)
+  pisPercent             Float          @default(0)
+  cofinsPercent          Float          @default(0)
+  ipiPercent             Float          @default(0)
+  issPercent             Float          @default(0)
+  irpjPercent            Float          @default(0)
+  csllPercent            Float          @default(0)
+  cppPercent             Float          @default(0)
+  commissionPercent      Float          @default(0)
+  operationalCostPercent Float          @default(0)
+  pricingPolicyId        String?
   basePrice              Float
   stockCurrent           Float?         @default(0)
   stockMin               Float?         @default(0)
@@ -1422,6 +1444,7 @@ model CatalogItem {
   skuArea                   CatalogSkuArea?            @relation(fields: [skuAreaId], references: [id], onDelete: SetNull)
   skuFamily                 CatalogSkuFamily?          @relation(fields: [skuFamilyId], references: [id], onDelete: SetNull)
   skuApplication            CatalogSkuApplication?     @relation(fields: [skuApplicationId], references: [id], onDelete: SetNull)
+  pricingPolicy             CatalogPricingPolicy?      @relation(fields: [pricingPolicyId], references: [id], onDelete: SetNull)
   generatorModels           GeneratorModel[]           @relation("ModelSuggestedItems")
   modelBaseItems            ModelBaseItem[]
   generatorBaseItems        GeneratorBaseItem[]
@@ -1441,6 +1464,8 @@ model CatalogItem {
   @@index([skuAreaId])
   @@index([skuFamilyId])
   @@index([skuApplicationId])
+  @@index([legacyCode])
+  @@index([pricingPolicyId])
   @@map("catalog_items")
 }
 
@@ -1606,6 +1631,14 @@ model CatalogPricingPolicy {
   name                   String
   itemType               ItemType
   salesTaxPercent        Float    @default(0)
+  icmsPercent            Float    @default(0)
+  pisPercent             Float    @default(0)
+  cofinsPercent          Float    @default(0)
+  ipiPercent             Float    @default(0)
+  issPercent             Float    @default(0)
+  irpjPercent            Float    @default(0)
+  csllPercent            Float    @default(0)
+  cppPercent             Float    @default(0)
   commissionPercent      Float    @default(0)
   profitMarginPercent    Float    @default(0)
   operationalCostPercent Float    @default(0)
@@ -1615,6 +1648,8 @@ model CatalogPricingPolicy {
   notes                  String?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
+
+  items CatalogItem[]
 
   @@index([itemType, isActive, isDefault])
   @@map("catalog_pricing_policies")
@@ -1670,6 +1705,7 @@ model CatalogItemIdentifier {
 
 model Supplier {
   id                    String   @id @default(uuid())
+  legacyCode            String?  @unique
   companyName           String
   tradeName             String?
   cnpj                  String?  @unique

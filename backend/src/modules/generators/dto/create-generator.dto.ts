@@ -17,6 +17,10 @@ import {
 
 export class CreateGeneratorDto {
   @IsString()
+  @IsOptional()
+  legacyCode?: string;
+
+  @IsString()
   @IsNotEmpty()
   name!: string;
 

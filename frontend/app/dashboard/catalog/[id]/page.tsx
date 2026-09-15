@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getAccessFromToken } from "@/lib/access";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
 import {
@@ -116,6 +116,30 @@ type PriceRevision = {
   createdBy?: { id: string; name?: string | null; email?: string | null } | null;
 };
 
+type PricingApproval = {
+  id: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "ADJUSTMENTS_REQUESTED";
+  requestNote?: string | null;
+  decisionNote?: string | null;
+  requestPayload?: Record<string, unknown> | null;
+  createdAt: string;
+  canDecide: boolean;
+  requesterUser: { id: string; name: string };
+  approverUser: { id: string; name: string };
+};
+
+type PricingContext = {
+  policy?: {
+    id: string;
+    name: string;
+    salesTaxPercent: number;
+    commissionPercent: number;
+    profitMarginPercent: number;
+    operationalCostPercent: number;
+  } | null;
+  approvals: PricingApproval[];
+};
+
 type CatalogOffer = {
   id: string;
   status: string;
@@ -175,10 +199,13 @@ type GeneratorBaseItem = {
 type Item = {
   id: string;
   sku?: string | null;
+  legacyCode?: string | null;
   name: string;
   description?: string | null;
   commercialDescription?: string | null;
   type: "PART" | "SERVICE";
+  itemClassification?: string | null;
+  acquisitionOrigin?: string | null;
   category?: string | null;
   subcategory?: string | null;
   unit?: string | null;
@@ -195,6 +222,16 @@ type Item = {
   lastCost?: number | null;
   taxPercentage?: number | null;
   profitMargin?: number | null;
+  icmsPercent?: number | null;
+  pisPercent?: number | null;
+  cofinsPercent?: number | null;
+  ipiPercent?: number | null;
+  issPercent?: number | null;
+  irpjPercent?: number | null;
+  csllPercent?: number | null;
+  cppPercent?: number | null;
+  commissionPercent?: number | null;
+  operationalCostPercent?: number | null;
   basePrice: number;
   stockCurrent?: number | null;
   stockMin?: number | null;
@@ -247,6 +284,19 @@ export default function CatalogItemDetailPage() {
   const [canEdit, setCanEdit] = useState(false);
   const [canAdjust, setCanAdjust] = useState(false);
   const [canViewCosts, setCanViewCosts] = useState(false);
+  const [pricingContext, setPricingContext] = useState<PricingContext | null>(null);
+  const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
+  const [pricingActionId, setPricingActionId] = useState("");
+  const [pricingMessage, setPricingMessage] = useState("");
+  const [pricingError, setPricingError] = useState("");
+
+  const loadPricingContext = useCallback(async () => {
+    if (!id) return;
+    const res = await apiFetch(`/catalogs/${id}/pricing-approval`, {
+      cache: "no-store",
+    });
+    if (res.ok) setPricingContext(await res.json());
+  }, [id]);
 
   useEffect(() => {
     const access = getAccessFromToken();
@@ -278,6 +328,55 @@ export default function CatalogItemDetailPage() {
       }
     })();
   }, [id]);
+
+  useEffect(() => {
+    if (!id || !canViewCosts) return;
+    void loadPricingContext();
+  }, [id, canViewCosts, loadPricingContext]);
+
+  async function handlePricingDecision(
+    approvalId: string,
+    action: "approve" | "reject",
+  ) {
+    const decisionNote = decisionNotes[approvalId]?.trim() || "";
+    if (action === "reject" && decisionNote.length < 5) {
+      setPricingError("Informe uma justificativa com pelo menos 5 caracteres para reprovar.");
+      return;
+    }
+    setPricingError("");
+    setPricingMessage("");
+    setPricingActionId(approvalId);
+    try {
+      const res = await apiFetch(`/approvals/${approvalId}/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decisionNote: decisionNote || undefined }),
+      });
+      if (!res.ok) {
+        throw new Error(
+          await readApiErrorMessage(res, "Nao foi possivel registrar a decisao."),
+        );
+      }
+      const [itemRes] = await Promise.all([
+        apiFetch(`/catalogs/${id}`, { cache: "no-store" }),
+        loadPricingContext(),
+      ]);
+      if (itemRes.ok) setItem(await itemRes.json());
+      setPricingMessage(
+        action === "approve"
+          ? "Parametros aprovados. A venda sugerida foi recalculada."
+          : "Formacao de preco reprovada.",
+      );
+    } catch (actionError: unknown) {
+      setPricingError(
+        actionError instanceof Error
+          ? actionError.message
+          : "Erro ao registrar decisao.",
+      );
+    } finally {
+      setPricingActionId("");
+    }
+  }
 
   const relatedGenerators = useMemo(() => {
     const fromOrders = (item?.maintenanceOrderMaterials || [])
@@ -347,7 +446,7 @@ export default function CatalogItemDetailPage() {
               {summary?.isLowStock ? <Badge tone="rose">Baixo estoque</Badge> : null}
             </div>
             <p className="mt-2 text-sm text-zinc-500">
-              SKU {item.sku || "-"} | PN {item.manufacturerPartNumber || "-"} | {item.category || "Sem categoria"}
+              SKU {item.sku || "-"} | Legado {item.legacyCode || "-"} | PN {item.manufacturerPartNumber || "-"} | {item.category || "Sem categoria"}
             </p>
             <p className="mt-3 max-w-4xl text-sm text-zinc-700">
               {item.description || item.commercialDescription || "Sem descricao cadastrada."}
@@ -426,13 +525,17 @@ export default function CatalogItemDetailPage() {
             <h2 className="text-lg font-bold text-zinc-900">Cadastro</h2>
             <div className="mt-4 grid gap-3">
               <Info label="Unidade" value={item.unit || "-"} />
+              <Info label="Tipo do item" value={item.itemClassification || (item.type === "SERVICE" ? "Servico" : "Acabado")} />
+              <Info label="Origem" value={item.acquisitionOrigin || "-"} />
+              <Info label="Codigo legado" value={item.legacyCode || "-"} />
               <Info label="Marca" value={item.brand || "-"} />
               <Info label="Localizacao" value={item.storageLocation || "-"} />
-              <Info label="Preco base" value={formatCurrency(item.basePrice)} />
+              <Info label="Venda sugerida" value={formatCurrency(item.basePrice)} />
               {canViewCosts ? (
                 <>
                   <Info label="Custo medio" value={item.averageCost == null ? "-" : formatCurrency(item.averageCost)} />
-                  <Info label="Ultimo custo" value={item.lastCost == null ? "-" : formatCurrency(item.lastCost)} />
+                  <Info label="Custo minimo vigente" value={item.costPrice == null ? "-" : formatCurrency(item.costPrice)} />
+                  <Info label="Ultimo custo recebido" value={item.lastCost == null ? "-" : formatCurrency(item.lastCost)} />
                 </>
               ) : (
                 <Info label="Custos" value="Restrito por permissao" />
@@ -444,6 +547,161 @@ export default function CatalogItemDetailPage() {
 
       {activeTab === "pricing" ? (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          {canViewCosts ? (
+            <section className="rounded-xl border border-blue-200 bg-blue-50 p-5 xl:col-span-2">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-blue-700">
+                    Formacao protegida
+                  </p>
+                  <h2 className="mt-1 text-lg font-bold text-zinc-900">
+                    Custo minimo, venda sugerida e aprovacao financeira
+                  </h2>
+                  <p className="mt-1 text-sm text-zinc-600">
+                    Os padroes vem do Studio. Somente alteracoes de impostos, comissao, margem e custos operacionais aguardam a decisao do Financeiro.
+                  </p>
+                </div>
+                {pricingContext?.policy ? (
+                  <div className="rounded-lg border border-blue-200 bg-white px-4 py-3 text-sm">
+                    <p className="font-bold text-zinc-900">{pricingContext.policy.name}</p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      Tributos {formatNumber(pricingContext.policy.salesTaxPercent)}% | Comissao {formatNumber(pricingContext.policy.commissionPercent)}% | Margem {formatNumber(pricingContext.policy.profitMarginPercent)}%
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+
+              {pricingMessage ? (
+                <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
+                  {pricingMessage}
+                </p>
+              ) : null}
+              {pricingError ? (
+                <p className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
+                  {pricingError}
+                </p>
+              ) : null}
+
+              <div className="mt-4 space-y-3">
+                <div className="rounded-xl border border-blue-200 bg-white p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-bold text-zinc-900">Valores vigentes deste produto</p>
+                      <p className="mt-1 text-xs text-zinc-500">
+                        Alteracoes nestes percentuais exigem aprovacao do Financeiro. Cotacoes de fornecedor nao entram neste fluxo.
+                      </p>
+                    </div>
+                    {canEdit ? (
+                      <Link
+                        href={`/dashboard/catalog/new?editItemId=${item.id}`}
+                        className="rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800"
+                      >
+                        Editar e solicitar alteracao
+                      </Link>
+                    ) : null}
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-zinc-600 sm:grid-cols-4 lg:grid-cols-6">
+                    <SmallPercent label="ICMS" value={item.icmsPercent} />
+                    <SmallPercent label="PIS" value={item.pisPercent} />
+                    <SmallPercent label="COFINS" value={item.cofinsPercent} />
+                    <SmallPercent label="IPI" value={item.ipiPercent} />
+                    <SmallPercent label="ISS" value={item.issPercent} />
+                    <SmallPercent label="Comissao" value={item.commissionPercent} />
+                    <SmallPercent label="Margem" value={item.profitMargin} />
+                    <SmallPercent label="Operacional" value={item.operationalCostPercent} />
+                  </div>
+                </div>
+                {(pricingContext?.approvals || []).map((approval) => {
+                  const payload = approval.requestPayload || {};
+                  return (
+                    <article key={approval.id} className="rounded-xl border border-blue-200 bg-white p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-bold text-zinc-900">
+                              Solicitacao de {approval.requesterUser.name}
+                            </p>
+                            <Badge tone={approval.status === "PENDING" ? "amber" : approval.status === "APPROVED" ? "emerald" : "rose"}>
+                              {approvalStatusLabel(approval.status)}
+                            </Badge>
+                          </div>
+                          <p className="mt-1 text-xs text-zinc-500">
+                            {formatDate(approval.createdAt)} | Aprovador: {approval.approverUser.name}
+                          </p>
+                          <p className="mt-2 text-sm text-zinc-600">
+                            {approval.requestNote || "Sem observacoes."}
+                          </p>
+                        </div>
+                        <div className="grid min-w-72 grid-cols-3 gap-2 text-center">
+                          <PriceTile label="Custo minimo" value={formatCurrency(payload.calculatedPurchaseCost as number)} />
+                          <PriceTile label="Venda sugerida" value={formatCurrency(payload.suggestedSalePrice as number)} />
+                          <PriceTile label="Preco solicitado" value={formatCurrency(payload.finalSalePrice as number)} />
+                        </div>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-zinc-600 sm:grid-cols-4 lg:grid-cols-8">
+                        <SmallPercent label="ICMS" value={payload.icmsPercent} />
+                        <SmallPercent label="PIS" value={payload.pisPercent} />
+                        <SmallPercent label="COFINS" value={payload.cofinsPercent} />
+                        <SmallPercent label="IPI" value={payload.ipiPercent} />
+                        <SmallPercent label="ISS" value={payload.issPercent} />
+                        <SmallPercent label="Comissao" value={payload.commissionPercent} />
+                        <SmallPercent label="Margem" value={payload.profitMarginPercent} />
+                        <SmallPercent label="Operacional" value={payload.operationalCostPercent} />
+                      </div>
+                      {approval.status === "PENDING" && approval.canDecide ? (
+                        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-4">
+                          <div className="min-w-64 flex-1">
+                            <input
+                              value={decisionNotes[approval.id] || ""}
+                              onChange={(event) => {
+                                setDecisionNotes((current) => ({
+                                  ...current,
+                                  [approval.id]: event.target.value,
+                                }));
+                                setPricingError("");
+                              }}
+                              placeholder="Parecer financeiro (obrigatorio para reprovar)"
+                              aria-describedby={`pricing-rejection-help-${approval.id}`}
+                              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+                            />
+                            <p
+                              id={`pricing-rejection-help-${approval.id}`}
+                              className="mt-1 text-xs text-zinc-500"
+                            >
+                              Digite pelo menos 5 caracteres para habilitar a reprovação.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={
+                              pricingActionId === approval.id ||
+                              (decisionNotes[approval.id]?.trim().length || 0) < 5
+                            }
+                            onClick={() => handlePricingDecision(approval.id, "reject")}
+                            className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Reprovar
+                          </button>
+                          <button
+                            type="button"
+                            disabled={pricingActionId === approval.id}
+                            onClick={() => handlePricingDecision(approval.id, "approve")}
+                            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+                          >
+                            Aprovar e aplicar
+                          </button>
+                        </div>
+                      ) : null}
+                    </article>
+                  );
+                })}
+                {(pricingContext?.approvals || []).length === 0 ? (
+                  <EmptyBlock text="Nenhuma formacao de preco enviada para aprovacao." />
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+
           <TraceSection title="Ofertas e cotacoes vigentes" empty="Nenhuma oferta registrada para este item.">
             {(item.supplierOffers || []).map((offer) => (
               <TraceRow
@@ -645,12 +903,13 @@ function Badge({
   tone,
 }: {
   children: ReactNode;
-  tone: "blue" | "purple" | "emerald" | "rose" | "slate";
+  tone: "blue" | "purple" | "emerald" | "amber" | "rose" | "slate";
 }) {
   const classes = {
     blue: "bg-blue-50 text-blue-700 border-blue-200",
     purple: "bg-purple-50 text-purple-700 border-purple-200",
     emerald: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    amber: "bg-amber-50 text-amber-700 border-amber-200",
     rose: "bg-rose-50 text-rose-700 border-rose-200",
     slate: "bg-slate-50 text-slate-700 border-slate-200",
   }[tone];
@@ -752,6 +1011,34 @@ function EmptyBlock({ text }: { text: string }) {
       {text}
     </div>
   );
+}
+
+function PriceTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-2">
+      <p className="text-[10px] font-bold uppercase text-zinc-500">{label}</p>
+      <p className="mt-1 text-sm font-bold text-zinc-900">{value}</p>
+    </div>
+  );
+}
+
+function SmallPercent({ label, value }: { label: string; value: unknown }) {
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-2">
+      <span className="font-bold text-zinc-700">{label}</span>{" "}
+      {formatNumber(Number(value || 0))}%
+    </div>
+  );
+}
+
+function approvalStatusLabel(value: PricingApproval["status"]) {
+  const labels: Record<PricingApproval["status"], string> = {
+    PENDING: "Aguardando Financeiro",
+    APPROVED: "Aprovado",
+    REJECTED: "Reprovado",
+    ADJUSTMENTS_REQUESTED: "Ajustes solicitados",
+  };
+  return labels[value];
 }
 
 function KeyValueList({ data, emptyLabel }: { data?: Record<string, unknown> | null; emptyLabel: string }) {
