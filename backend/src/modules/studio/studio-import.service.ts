@@ -877,8 +877,16 @@ const CATALOG_IMPORT_DEFINITION: ImportDefinition = {
   fields: [
     {
       key: 'legacySequence',
-      label: 'Sequencia Legada',
-      aliases: ['sequencia', 'sequência', 'sequence'],
+      label: 'Seq PX (legado)',
+      aliases: [
+        'sequencia',
+        'sequência',
+        'sequence',
+        'seq px',
+        'seqpx',
+        'sequencia px',
+        'sequência px',
+      ],
       required: true,
       normalize: normalizeText,
     },
@@ -957,13 +965,16 @@ const CATALOG_IMPORT_DEFINITION: ImportDefinition = {
     },
     {
       key: 'legacyCode',
-      label: 'Codigo legado',
+      label: 'Codigo PX (legado)',
       aliases: [
         'codigolegado',
         'codigo legado',
         'código legado',
         'legacycode',
         'legacy code',
+        'codigo px',
+        'código px',
+        'codigopx',
         'codigo',
         'código',
       ],
@@ -977,14 +988,40 @@ const CATALOG_IMPORT_DEFINITION: ImportDefinition = {
     },
     {
       key: 'radarCode',
-      label: 'Codigo Radar',
+      label: 'Codigo Radar (legado)',
       aliases: ['codigoradar', 'codigo radar', 'código radar'],
       normalize: normalizeCatalogCode,
     },
     {
       key: 'alternativeCode',
-      label: 'Codigo alternativo',
-      aliases: ['alternativo', 'codigo alternativo', 'código alternativo'],
+      label: 'Codigo alternativo/paralelo',
+      aliases: [
+        'alternativo',
+        'codigo alternativo',
+        'código alternativo',
+        'codigo paralelo',
+        'código paralelo',
+        'codigo alternativo/paralelo',
+        'código alternativo/paralelo',
+        'codigo alternativo paralelo',
+      ],
+      normalize: normalizeCatalogCode,
+    },
+    {
+      key: 'manufacturerPartNumber',
+      label: 'Part Number',
+      aliases: [
+        'part number',
+        'partnumber',
+        'part no',
+        'part no.',
+        'pn',
+        'p n',
+        'codigo fabricante',
+        'código fabricante',
+        'codigo do fabricante',
+        'código do fabricante',
+      ],
       normalize: normalizeCatalogCode,
     },
     {
@@ -1121,6 +1158,12 @@ const CATALOG_IMPORT_DEFINITION: ImportDefinition = {
         false,
         'codigo_alternativo',
       ),
+      catalogIdentifier(
+        nullableString(data.manufacturerPartNumber),
+        CatalogIdentifierType.MANUFACTURER_PART_NUMBER,
+        false,
+        'part_number',
+      ),
     ].filter((identifier): identifier is NonNullable<typeof identifier> =>
       Boolean(identifier),
     );
@@ -1144,6 +1187,7 @@ const CATALOG_IMPORT_DEFINITION: ImportDefinition = {
           (data.type === ItemType.SERVICE ? 'Servico' : 'Acabado'),
         unit: nullableString(data.unit) || 'UN',
         acquisitionOrigin: nullableString(data.acquisitionOrigin) || 'Comprado',
+        manufacturerPartNumber: nullableString(data.manufacturerPartNumber),
         category: nullableString(data.category),
         subcategory: nullableString(data.subcategory),
         brand: nullableString(data.brand),
@@ -1440,7 +1484,11 @@ export class StudioImportService {
     columnMapping?: Record<string, string>,
   ) {
     const normalizedRows = parsedRows
-      .filter((row) => !isEmptyRow(row.rawData))
+      .filter(
+        (row) =>
+          !isEmptyRow(row.rawData) &&
+          !isCatalogTemplateExampleRow(definition, row.rawData),
+      )
       .map((row) => {
         const normalizedData = normalizeRow(
           definition,
@@ -1703,6 +1751,33 @@ function parseCsvRecords(text: string, delimiter: string) {
 
 function isEmptyRow(row: Record<string, string>) {
   return Object.values(row).every((value) => !String(value || '').trim());
+}
+
+function isCatalogTemplateExampleRow(
+  definition: ImportDefinition,
+  row: Record<string, string>,
+) {
+  if (definition.resource !== 'catalog') return false;
+
+  const legacyCodeHeaders = new Set(
+    [
+      'legacyCode',
+      'Codigo PX (legado)',
+      'codigo px',
+      'codigopx',
+      'codigo legado',
+      'codigolegado',
+      'legacy code',
+      'legacycode',
+      'codigo',
+    ].map(comparableHeader),
+  );
+
+  return Object.entries(row).some(
+    ([header, value]) =>
+      legacyCodeHeaders.has(comparableHeader(header)) &&
+      /^EXEMPLO-PX(?:-|$)/i.test(String(value || '').trim()),
+  );
 }
 
 function comparableHeader(value: string) {

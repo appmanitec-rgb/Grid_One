@@ -297,10 +297,6 @@ export default function EquipmentsPage() {
         <State text="Nenhum equipamento encontrado para os filtros atuais." />
       ) : null}
 
-      {!loading && !error && filtered.length > 0 ? (
-        <ListPagination {...paginationProps} />
-      ) : null}
-
       <section className="grid gap-4 xl:grid-cols-2">
         {paginatedItems.map((item) => {
           const lastOrder = item.orders?.[0];
@@ -308,6 +304,8 @@ export default function EquipmentsPage() {
           const contract = getPrimaryContract(item);
           const openTickets = countOpenTickets(item);
           const firstOpenTicket = getFirstOpenTicket(item);
+          const displayTitle = equipmentTitle(item);
+          const serialNumber = equipmentTitlePart(item.serialNumber);
 
           return (
             <article
@@ -316,10 +314,13 @@ export default function EquipmentsPage() {
             >
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="break-words text-xl font-bold text-slate-950">
-                      {item.name}
-                    </h2>
+                  <h2
+                    className="break-words text-lg font-bold leading-snug text-slate-950"
+                    title={displayTitle}
+                  >
+                    {displayTitle}
+                  </h2>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
                     <Badge className={CRITICALITY_STYLES[item.criticality || ""]}>
                       Criticidade {item.criticality || "-"}
                     </Badge>
@@ -328,9 +329,11 @@ export default function EquipmentsPage() {
                     </Badge>
                   </div>
                   <p className="mt-1 text-sm text-slate-500">
-                    <span className="font-mono font-semibold text-slate-700">{item.code}</span>
-                    {" | "}{item.assetTag || "Sem tag"} | Serie{" "}
-                    {item.serialNumber || "nao informada"}
+                    Código interno{" "}
+                    <span className="font-mono font-semibold text-slate-700">
+                      {item.code}
+                    </span>
+                    {serialNumber ? <> | Série {serialNumber}</> : null}
                   </p>
                 </div>
 
@@ -415,6 +418,10 @@ export default function EquipmentsPage() {
           );
         })}
       </section>
+
+      {!loading && !error && filtered.length > 0 ? (
+        <ListPagination {...paginationProps} />
+      ) : null}
     </div>
   );
 }
@@ -513,6 +520,42 @@ function TimelineItem({
 
 function getPrimaryContract(item: EquipmentListItem) {
   return item.contractLinks?.find((link) => link.contract)?.contract || null;
+}
+
+function equipmentTitle(item: EquipmentListItem) {
+  const power =
+    typeof item.power === "number" &&
+    Number.isFinite(item.power) &&
+    item.power > 0
+      ? `${new Intl.NumberFormat("pt-BR", {
+          maximumFractionDigits: 2,
+        }).format(item.power)} kVA`
+      : null;
+
+  return [
+    power,
+    equipmentTitlePart(item.brand),
+    equipmentTitlePart(item.assetTag),
+    equipmentTitlePart(item.name),
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join(" - ") || "Equipamento";
+}
+
+function equipmentTitlePart(value: string | null | undefined) {
+  const normalized = value
+    ?.trim()
+    .replace(/^[\s\-|]+|[\s\-|]+$/g, "")
+    .replace(/\s+/g, " ");
+  if (
+    !normalized ||
+    /^(?:n[aã]o informad[oa]|sem informa[cç][aã]o|n\/?a|n\/?i)$/i.test(
+      normalized,
+    )
+  ) {
+    return null;
+  }
+  return normalized;
 }
 
 function countOpenTickets(item: EquipmentListItem) {

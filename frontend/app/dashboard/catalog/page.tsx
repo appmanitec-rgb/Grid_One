@@ -11,6 +11,7 @@ type CatalogItem = {
   legacyCode?: string | null;
   legacySequence?: string | null;
   radarCode?: string | null;
+  manufacturerPartNumber?: string | null;
   name: string;
   description?: string | null;
   commercialDescription?: string | null;
@@ -88,7 +89,7 @@ export default function CatalogPage() {
     return items.filter((item) => {
       if (!matchesCatalogGroup(item, activeGroup)) return false;
       if (!q) return true;
-      return `${item.name} ${item.sku || ""} ${item.legacyCode || ""} ${item.legacySequence || ""} ${item.radarCode || ""} ${item.category || ""} ${item.itemClassification || ""} ${item.acquisitionOrigin || ""} ${item.storageLocation || ""} ${item.description || ""} ${item.commercialDescription || ""}`
+      return `${item.name} ${item.sku || ""} ${item.legacyCode || ""} ${item.legacySequence || ""} ${item.radarCode || ""} ${item.manufacturerPartNumber || ""} ${item.category || ""} ${item.itemClassification || ""} ${item.acquisitionOrigin || ""} ${item.storageLocation || ""} ${item.description || ""} ${item.commercialDescription || ""}`
         .toLowerCase()
         .includes(q);
     });
@@ -229,9 +230,10 @@ export default function CatalogPage() {
                     <td className="p-4 text-zinc-600 text-sm max-w-md truncate">{item.description || item.commercialDescription || "Sem descricao"}</td>
                     <td className="p-4 text-sm text-zinc-600">
                       <p className="font-mono font-semibold text-zinc-800">SKU: {item.sku || "-"}</p>
-                      {item.legacyCode ? <p className="text-xs text-blue-700">Codigo legado: {item.legacyCode}</p> : null}
-                      {item.legacySequence ? <p className="text-xs text-zinc-500">Sequencia: {item.legacySequence}</p> : null}
-                      {item.radarCode ? <p className="text-xs text-zinc-500">Radar: {item.radarCode}</p> : null}
+                      {item.legacyCode ? <p className="text-xs text-blue-700">Codigo PX: {item.legacyCode}</p> : null}
+                      {item.legacySequence ? <p className="text-xs text-zinc-500">Seq. PX (legado): {item.legacySequence}</p> : null}
+                      {item.radarCode ? <p className="text-xs text-zinc-500">Codigo Radar: {item.radarCode}</p> : null}
+                      {item.manufacturerPartNumber ? <p className="text-xs text-zinc-500">Part Number: {item.manufacturerPartNumber}</p> : null}
                       <p className="text-xs text-zinc-500">{item.storageLocation || "Sem localizacao"}</p>
                     </td>
                     <td className="p-4">

@@ -50,6 +50,7 @@ const catalogListSelect = {
   category: true,
   subcategory: true,
   unit: true,
+  manufacturerPartNumber: true,
   brand: true,
   ncm: true,
   basePrice: true,

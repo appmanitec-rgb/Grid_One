@@ -503,9 +503,9 @@ export default function CatalogItemDetailPage() {
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <Info label="SKU interno" value={item.sku || "-"} />
-              <Info label="Codigo legado" value={item.legacyCode || "-"} />
-              <Info label="Sequencia legada" value={item.legacySequence || "-"} />
-              <Info label="Codigo Radar" value={item.radarCode || "-"} />
+              <Info label="Codigo PX (legado)" value={item.legacyCode || "-"} />
+              <Info label="Seq. PX (legado)" value={item.legacySequence || "-"} />
+              <Info label="Codigo Radar (legado)" value={item.radarCode || "-"} />
             </div>
           </section>
           <section className="rounded-xl border border-zinc-200 bg-white p-5 xl:col-span-2">

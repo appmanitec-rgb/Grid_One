@@ -1183,9 +1183,9 @@ export default function CatalogFormPage() {
                   Estes codigos servem para rastreabilidade e nao fazem parte dos dados tecnicos.
                 </p>
                 <div className="mt-3 grid gap-3 md:grid-cols-3">
-                  <Input label="Codigo legado" name="legacyCode" value={formData.legacyCode} onChange={handleChange} placeholder="Coluna CODIGO" />
-                  <Input label="Sequencia legada" name="legacySequence" value={formData.legacySequence} onChange={handleChange} placeholder="Coluna SEQUENCIA" />
-                  <Input label="Codigo Radar" name="radarCode" value={formData.radarCode} onChange={handleChange} placeholder="Coluna CODIGORADAR" />
+                  <Input label="Codigo PX (legado)" name="legacyCode" value={formData.legacyCode} onChange={handleChange} placeholder="Coluna CODIGO PX" />
+                  <Input label="Seq. PX (legado)" name="legacySequence" value={formData.legacySequence} onChange={handleChange} placeholder="Coluna SEQ PX" />
+                  <Input label="Codigo Radar (legado)" name="radarCode" value={formData.radarCode} onChange={handleChange} placeholder="Coluna CODIGO RADAR" />
                 </div>
               </div>
               {!isEditing && canViewCosts ? (

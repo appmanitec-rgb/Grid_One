@@ -133,6 +133,47 @@ describe('StudioImportService - catalog import', () => {
     expect(tx.catalogItem.create).not.toHaveBeenCalled();
   });
 
+  it('accepts the Portuguese PX headers and ignores intact template examples', async () => {
+    const { service, tx, getPreviewRows } = setup();
+    const csv = [
+      'DESCRICAO;CODIGO PX;TIPO DO ITEM;FAMILIA;SUBFAMILIA;UNIDADE;ORIGEM;MARCA;DESCRICAO COMPLEMENTAR;SEQ PX;CODIGO RADAR;NCM;CODIGO ALTERNATIVO/PARALELO;PART NUMBER;DESCRICAO FATURAMENTO;PRECO DE COMPRA;ESTOQUE MINIMO;ESTOQUE MAXIMO;LOCALIZACAO;ATIVO',
+      'EXEMPLO - FILTRO;EXEMPLO-PX-0001;PECA;PECAS MECANICAS;FILTROS;PC;Comprado;FLEETGUARD;Linha guia;EXEMPLO-SEQ-PX-0001;EXEMPLO-RADAR-0001;84212300;ALT-EXEMPLO;LF9009;FILTRO EXEMPLO;10;1;5;A-01;SIM',
+      'Filtro real;PX-000042;PECA;PECAS MECANICAS;FILTROS;PC;Comprado;FLEETGUARD;Filtro diesel;000123;RAD-009;84212300;ALT-42;LF-009;FILTRO DE OLEO;189,90;2;10;A-01-01;SIM',
+    ].join('\n');
+
+    const preview = await service.preview(
+      { resource: 'catalog', originalFileName: 'modelo-catalogo.csv', csv },
+      { role: 'ADMIN' },
+    );
+
+    expect(preview.summary).toMatchObject({
+      total: 1,
+      valid: 1,
+      warnings: 0,
+      invalid: 0,
+      duplicates: 0,
+    });
+    expect(preview.rows[0].normalizedData).toMatchObject({
+      name: 'Filtro real',
+      legacyCode: 'PX-000042',
+      legacySequence: '000123',
+      radarCode: 'RAD-009',
+      ncm: '84212300',
+      alternativeCode: 'ALT-42',
+      manufacturerPartNumber: 'LF-009',
+      category: 'PECAS MECANICAS',
+      subcategory: 'FILTROS',
+      unit: 'PC',
+      type: 'PART',
+      costPrice: 189.9,
+    });
+    expect(tx.catalogItem.findMany).toHaveBeenCalledWith({
+      where: { legacySequence: { in: ['000123'] } },
+      select: { legacySequence: true },
+    });
+    expect(getPreviewRows()).toHaveLength(1);
+  });
+
   it('marks a repeated legacy sequence as duplicate', async () => {
     const { service } = setup();
     const csv = [
@@ -167,10 +208,10 @@ describe('StudioImportService - catalog import', () => {
   it('creates only valid catalog rows when the preview is confirmed', async () => {
     const { service, prisma, tx, getPreviewRows } = setup();
     const csv = [
-      'CODIGO;SKU INTERNO;SEQUENCIA;DESCRICAO;TIPODOITEM;CUSTO;CODIGORADAR;ALTERNATIVO',
-      'P-010;999XXX;10;Peca valida;Kit;25,90;RAD-10;ALT-10',
-      ';IGNORAR;11;Ignorar sem codigo;Componente;10,00;;',
-      'S-010;123SSS;12;Servico valido;Serviço;80,00;;',
+      'CODIGO;SKU INTERNO;SEQUENCIA;DESCRICAO;TIPODOITEM;CUSTO;CODIGORADAR;ALTERNATIVO;PART NUMBER',
+      'P-010;999XXX;10;Peca valida;Kit;25,90;RAD-10;ALT-10;PN-010',
+      ';IGNORAR;11;Ignorar sem codigo;Componente;10,00;;;',
+      'S-010;123SSS;12;Servico valido;Serviço;80,00;;;',
     ].join('\n');
 
     await service.preview(
@@ -198,6 +239,7 @@ describe('StudioImportService - catalog import', () => {
       legacyCode: 'P-010',
       legacySequence: '10',
       radarCode: 'RAD-10',
+      manufacturerPartNumber: 'PN-010',
       name: 'Peca valida',
       type: 'PART',
       basePrice: 46.43,
@@ -218,6 +260,11 @@ describe('StudioImportService - catalog import', () => {
         expect.objectContaining({ code: '10' }),
         expect.objectContaining({ code: 'RAD-10' }),
         expect.objectContaining({ code: 'ALT-10' }),
+        expect.objectContaining({
+          code: 'PN-010',
+          type: 'MANUFACTURER_PART_NUMBER',
+          source: 'part_number',
+        }),
       ]),
     );
     const finalUpdate = prisma.studioImportBatch.update.mock.calls.at(-1)?.[0];

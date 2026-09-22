@@ -343,7 +343,7 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
 
   function downloadTemplate() {
     if (!canImportData) return;
-    const csv = buildCsv([], importFields, true);
+    const csv = buildCsv(resource.importExamples ?? [], importFields, true);
     downloadTextFile(`modelo-importacao-${resource.key}.csv`, csv);
   }
 
@@ -564,6 +564,11 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
                 <p className="mt-1 text-sm leading-6 text-amber-900">
                   O Studio le CSV ou XLSX, mostra a previa e so grava depois da confirmacao. Linhas sem os campos obrigatorios e duplicados sao ignoradas, com validacao e auditoria.
                 </p>
+                {resource.importExamples?.length ? (
+                  <p className="mt-2 text-sm font-semibold leading-6 text-amber-950">
+                    O modelo inclui {resource.importExamples.length} linhas marcadas como EXEMPLO. Elas sao ignoradas automaticamente na importacao; substitua ou exclua essas linhas antes de enviar seus dados.
+                  </p>
+                ) : null}
               </div>
               <div className="flex flex-wrap gap-2">
                 <button
@@ -1015,12 +1020,27 @@ function buildCsv(
     fields
       .map((field) =>
         escapeCsv(
-          formatStudioValue(field.render ? field.render(row) : getFieldValue(row, field.key), field),
+          formatCsvValue(
+            field.render ? field.render(row) : getFieldValue(row, field.key),
+            field,
+            useImportHeaders,
+          ),
         ),
       )
       .join(";"),
   );
   return ["\uFEFF" + header, ...body].join("\n");
+}
+
+function formatCsvValue(
+  value: unknown,
+  field: StudioField,
+  preserveEmptyValues: boolean,
+) {
+  if (preserveEmptyValues && (value === null || value === undefined || value === "")) {
+    return "";
+  }
+  return formatStudioValue(value, field);
 }
 
 function spreadsheetRowsToCsv(rows: unknown[][]) {

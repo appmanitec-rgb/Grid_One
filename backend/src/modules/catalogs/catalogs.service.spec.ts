@@ -239,6 +239,7 @@ describe('CatalogsService', () => {
         'category',
         'subcategory',
         'unit',
+        'manufacturerPartNumber',
         'brand',
         'ncm',
         'basePrice',

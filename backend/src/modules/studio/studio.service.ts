@@ -371,6 +371,7 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
       subcategory: 'string',
       unit: 'string',
       acquisitionOrigin: 'string',
+      manufacturerPartNumber: 'string',
       brand: 'string',
       stockMin: 'number',
       stockMax: 'number',
