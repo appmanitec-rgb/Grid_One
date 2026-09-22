@@ -79,7 +79,7 @@ describe('StudioImportService - catalog import', () => {
     return { service, prisma, tx, getPreviewRows: () => previewRows };
   }
 
-  it('maps legacy columns and marks missing required fields and duplicates to skip', async () => {
+  it('uses legacy sequence as identity and accepts repeated legacy codes', async () => {
     const { service, tx, getPreviewRows } = setup();
     const csv = [
       'CODIGO;DESCRICAO;DESCRICAOFAT;TIPODOITEM;PRECO;CUSTO;ORIGEM;SEQUENCIA',
@@ -98,10 +98,10 @@ describe('StudioImportService - catalog import', () => {
 
     expect(preview.summary).toMatchObject({
       total: 6,
-      valid: 3,
+      valid: 5,
       warnings: 0,
-      invalid: 2,
-      duplicates: 1,
+      invalid: 1,
+      duplicates: 0,
     });
     expect(preview.rows[0].normalizedData).toMatchObject({
       legacyCode: 'P-001',
@@ -114,8 +114,54 @@ describe('StudioImportService - catalog import', () => {
       legacySequence: '100',
     });
     expect(preview.rows[0].normalizedData).not.toHaveProperty('basePrice');
+    expect(preview.rows[1]).toMatchObject({
+      status: 'VALID',
+      normalizedData: {
+        legacyCode: 'P-001',
+        legacySequence: '101',
+      },
+    });
+    expect(tx.catalogItem.findMany).toHaveBeenCalledWith({
+      where: {
+        legacySequence: {
+          in: ['100', '101', '102', '103', '104', '105'],
+        },
+      },
+      select: { legacySequence: true },
+    });
     expect(getPreviewRows()).toHaveLength(6);
     expect(tx.catalogItem.create).not.toHaveBeenCalled();
+  });
+
+  it('marks a repeated legacy sequence as duplicate', async () => {
+    const { service } = setup();
+    const csv = [
+      'CODIGO;SEQUENCIA;DESCRICAO;TIPODOITEM',
+      'P-001;200;Filtro principal;Componente',
+      'P-002;200;Filtro repetido;Componente',
+    ].join('\n');
+
+    const preview = await service.preview(
+      { resource: 'catalog', originalFileName: 'Produtos.xlsx', csv },
+      { role: 'ADMIN' },
+    );
+
+    expect(preview.summary).toMatchObject({
+      total: 2,
+      valid: 1,
+      invalid: 0,
+      duplicates: 1,
+    });
+    expect(preview.rows[0].status).toBe('VALID');
+    expect(preview.rows[1]).toMatchObject({
+      status: 'DUPLICATE',
+      errors: [
+        expect.objectContaining({
+          code: 'DUPLICATE_RECORD',
+          field: 'legacySequence',
+        }),
+      ],
+    });
   });
 
   it('creates only valid catalog rows when the preview is confirmed', async () => {
@@ -146,7 +192,7 @@ describe('StudioImportService - catalog import', () => {
 
     await service.execute('batch-1', { role: 'ADMIN' });
 
-    expect(tx.catalogItem.create).toHaveBeenCalledTimes(2);
+    expect(tx.catalogItem.create).toHaveBeenCalledTimes(3);
     expect(tx.catalogItem.create.mock.calls[0][0].data).toMatchObject({
       sku: '123456789OOO',
       legacyCode: 'P-010',
@@ -176,8 +222,8 @@ describe('StudioImportService - catalog import', () => {
     );
     const finalUpdate = prisma.studioImportBatch.update.mock.calls.at(-1)?.[0];
     expect(finalUpdate.data).toMatchObject({
-      createdRows: 2,
-      skippedRows: 1,
+      createdRows: 3,
+      skippedRows: 0,
       failedRows: 0,
     });
   });
@@ -209,8 +255,9 @@ describe('StudioImportService - supplier import', () => {
         originalFileName: 'Agentes-fornecedores.csv',
         csv: [
           'Razao Social;CNPJ/CPF;Telefone;Endereco;Cidade;Estado;Inscricao Estadual;Inscricao Municipal;Observacoes;Ativo',
-          'Prestador Individual;12345678901;11999999999;Rua Um, 10;Sao Paulo;SP;ISENTO;123;Codigo legado: 42;Inativo',
-        ].join('\n'),
+          'Prestador Individual;12345678901;11999999999;Rua Um, 10;Sao Paulo;SP;ISENTO;123;"Codigo legado: 42',
+          'Atendimento prioritario";Inativo',
+        ].join('\r\n'),
       },
       { role: 'ADMIN' },
     );
@@ -222,8 +269,192 @@ describe('StudioImportService - supplier import', () => {
       address: 'Rua Um, 10',
       stateRegistration: 'ISENTO',
       municipalRegistration: '123',
-      notes: 'Codigo legado: 42',
+      notes: 'Codigo legado: 42\nAtendimento prioritario',
       isActive: false,
+      legacyData: expect.objectContaining({
+        Observacoes: 'Codigo legado: 42\nAtendimento prioritario',
+      }),
+    });
+  });
+});
+
+describe('StudioImportService - client import', () => {
+  it('infers an individual client from CPF and preserves the complete legacy row', async () => {
+    let previewRows: any[] = [];
+    const tx = {
+      client: {
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn().mockResolvedValue({ id: 'client-1' }),
+      },
+      studioImportBatch: {
+        create: jest.fn().mockResolvedValue({ id: 'client-batch-1' }),
+      },
+      studioImportRow: {
+        createMany: jest.fn().mockImplementation(({ data }) => {
+          previewRows = data;
+          return Promise.resolve({ count: data.length });
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      systemAuditLog: {
+        create: jest.fn().mockResolvedValue({ id: 'audit-client-1' }),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback) => callback(tx)),
+      studioImportBatch: {
+        findUnique: jest.fn(),
+        update: jest
+          .fn()
+          .mockImplementation(({ data }) =>
+            Promise.resolve({ id: 'client-batch-1', ...data }),
+          ),
+      },
+      studioImportRow: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    const service = new StudioImportService(prisma as never);
+    const csv = [
+      'CODIGO;NOME;CNPJCPF;TEL1;CIDADEPRINCIPAL;UFPRINCIPAL;EMAILFINANC',
+      '42;Cliente Pessoa Fisica;12345678901;11999999999;Sao Paulo;SP;financeiro@cliente.test',
+    ].join('\n');
+
+    const preview = await service.preview(
+      { resource: 'clients', originalFileName: 'Agentes.xlsx', csv },
+      { role: 'ADMIN' },
+    );
+    expect(preview.summary).toMatchObject({ total: 1, valid: 1, invalid: 0 });
+
+    prisma.studioImportBatch.findUnique
+      .mockResolvedValueOnce({
+        id: 'client-batch-1',
+        resource: 'clients',
+        status: StudioImportBatchStatus.PREVIEW,
+        rows: previewRows.map((row) => ({
+          rowNumber: row.rowNumber,
+          rawData: row.rawData,
+        })),
+      })
+      .mockResolvedValueOnce({ id: 'client-batch-1', rows: [] });
+
+    await service.execute('client-batch-1', { role: 'ADMIN' });
+
+    expect(tx.client.create).toHaveBeenCalledTimes(1);
+    expect(tx.client.create.mock.calls[0][0].data).toMatchObject({
+      legacyCode: '42',
+      companyName: 'Cliente Pessoa Fisica',
+      cnpj: '12345678901',
+      personType: 'INDIVIDUAL',
+      legacyData: {
+        CODIGO: '42',
+        NOME: 'Cliente Pessoa Fisica',
+        CNPJCPF: '12345678901',
+        TEL1: '11999999999',
+        CIDADEPRINCIPAL: 'Sao Paulo',
+        UFPRINCIPAL: 'SP',
+        EMAILFINANC: 'financeiro@cliente.test',
+      },
+    });
+  });
+});
+
+describe('StudioImportService - equipment import', () => {
+  it('resolves the client by owner name without a document and preserves technical legacy data', async () => {
+    let previewRows: any[] = [];
+    const tx = {
+      generator: {
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn().mockResolvedValue({ id: 'generator-1' }),
+      },
+      client: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([{ id: 'client-1' }]),
+      },
+      studioImportBatch: {
+        create: jest.fn().mockResolvedValue({ id: 'equipment-batch-1' }),
+      },
+      studioImportRow: {
+        createMany: jest.fn().mockImplementation(({ data }) => {
+          previewRows = data;
+          return Promise.resolve({ count: data.length });
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      systemAuditLog: {
+        create: jest.fn().mockResolvedValue({ id: 'audit-equipment-1' }),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback) => callback(tx)),
+      studioImportBatch: {
+        findUnique: jest.fn(),
+        update: jest
+          .fn()
+          .mockImplementation(({ data }) =>
+            Promise.resolve({ id: 'equipment-batch-1', ...data }),
+          ),
+      },
+      studioImportRow: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    const service = new StudioImportService(prisma as never);
+    const csv = [
+      'SEQUENCIA;EQUIPAMENTO;MOTOR;POTENCIAALTERNADOR;PROPRIETARIO;MODELOMOTOR;CAMPOEXTRA',
+      '9001;GERADOR 100 KVA;MWM;100 KVA;CLIENTE TESTE;4.10 TCA;valor preservado',
+    ].join('\n');
+
+    const preview = await service.preview(
+      {
+        resource: 'equipments',
+        originalFileName: 'Equipamento sem acessorios.xlsx',
+        csv,
+      },
+      { role: 'ADMIN' },
+    );
+    expect(preview.summary).toMatchObject({ total: 1, valid: 1, invalid: 0 });
+
+    prisma.studioImportBatch.findUnique
+      .mockResolvedValueOnce({
+        id: 'equipment-batch-1',
+        resource: 'equipments',
+        status: StudioImportBatchStatus.PREVIEW,
+        rows: previewRows.map((row) => ({
+          rowNumber: row.rowNumber,
+          rawData: row.rawData,
+        })),
+      })
+      .mockResolvedValueOnce({ id: 'equipment-batch-1', rows: [] });
+
+    await service.execute('equipment-batch-1', { role: 'ADMIN' });
+
+    expect(tx.client.findMany).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { companyName: { equals: 'CLIENTE TESTE', mode: 'insensitive' } },
+          { tradeName: { equals: 'CLIENTE TESTE', mode: 'insensitive' } },
+        ],
+      },
+      select: { id: true },
+      take: 2,
+    });
+    expect(tx.generator.create).toHaveBeenCalledTimes(1);
+    expect(tx.generator.create.mock.calls[0][0].data).toMatchObject({
+      legacyCode: '9001',
+      clientId: 'client-1',
+      brand: 'MWM',
+      power: 100,
+      engineModelName: '4.10 TCA',
+      legacyTechnicalData: {
+        SEQUENCIA: '9001',
+        EQUIPAMENTO: 'GERADOR 100 KVA',
+        MOTOR: 'MWM',
+        POTENCIAALTERNADOR: '100 KVA',
+        PROPRIETARIO: 'CLIENTE TESTE',
+        MODELOMOTOR: '4.10 TCA',
+        CAMPOEXTRA: 'valor preservado',
+      },
     });
   });
 });

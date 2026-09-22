@@ -10,7 +10,7 @@ export class HealthService {
   ) {}
 
   async status() {
-    const database = await this.databaseStatus();
+    await this.database.$queryRawUnsafe('SELECT 1;');
     const storage = this.storageStatus();
 
     return {
@@ -19,7 +19,7 @@ export class HealthService {
       uptimeSeconds: Number(process.uptime().toFixed(2)),
       version: process.env.npm_package_version ?? '0.0.0',
       environment: process.env.NODE_ENV ?? 'development',
-      database: database.status,
+      database: 'ok',
       storage: storage.status,
     };
   }

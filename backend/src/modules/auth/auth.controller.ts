@@ -8,6 +8,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import { Throttle } from '@nestjs/throttler';
 import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -23,6 +24,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 8, ttl: 60_000 } })
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto.email, dto.password, dto.mfaCode, {
@@ -32,6 +34,7 @@ export class AuthController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 8, ttl: 60_000 } })
   @Post('mfa/verify')
   verifyMfa(@Body() dto: MfaVerifyChallengeDto) {
     return this.authService.verifyMfaChallenge(dto.challengeToken, dto.code, {
@@ -60,6 +63,7 @@ export class AuthController {
   }
 
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Post('refresh')
   refresh(@Body() dto: RefreshSessionDto) {
     return this.authService.refreshSession(dto.refreshToken, {

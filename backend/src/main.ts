@@ -1,5 +1,6 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import compression from 'compression';
 import { json, urlencoded } from 'express';
 import helmet from 'helmet';
 import { RequestLoggingInterceptor } from './common/interceptors/request-logging.interceptor';
@@ -28,6 +29,7 @@ async function bootstrap() {
       limit: process.env.JSON_BODY_LIMIT || '15mb',
     }),
   );
+  app.use(compression({ threshold: 1024 }));
 
   app.use(
     helmet({

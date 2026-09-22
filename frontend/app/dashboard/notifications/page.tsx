@@ -196,11 +196,6 @@ export default function NotificationsPage() {
     [summary],
   );
 
-  const backAction =
-    viewerRole === "CLIENT"
-      ? { href: "/dashboard/client-portal", label: "Voltar ao portal" }
-      : { href: "/dashboard", label: "Voltar ao painel" };
-
   return (
     <div className="space-y-6">
       <PageHero

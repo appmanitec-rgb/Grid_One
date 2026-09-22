@@ -486,13 +486,33 @@ export default function EpisToolsPage() {
     }
   }
 
-  function handleCatalogSelect(option: SearchOption) {
+  async function handleCatalogSelect(option: SearchOption) {
     const item = catalogItems.find((catalog) => catalog.id === option.id);
     if (!item) return;
     setCatalogItemId(item.id);
     setCatalogSearch(item.name);
     setTitle(getCatalogDescription(item));
     setCaCode(getCatalogControlCode(item, assetType));
+
+    // A listagem do catalogo e propositalmente compacta. Carregue a ficha
+    // completa somente quando o item for escolhido para obter CA/especificacoes.
+    try {
+      const response = await apiFetch(`/catalogs/${item.id}`, {
+        cache: "no-store",
+      });
+      if (!response.ok) return;
+
+      const detailedItem = (await response.json()) as CatalogItem;
+      setCatalogItems((current) =>
+        current.map((catalog) =>
+          catalog.id === detailedItem.id ? { ...catalog, ...detailedItem } : catalog,
+        ),
+      );
+      setTitle(getCatalogDescription(detailedItem));
+      setCaCode(getCatalogControlCode(detailedItem, assetType));
+    } catch {
+      // Os campos basicos da lista ainda permitem concluir a atribuicao.
+    }
   }
 
   function handleAssetTypeChange(type: AssetType) {

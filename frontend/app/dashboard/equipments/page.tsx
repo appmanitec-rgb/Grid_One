@@ -19,36 +19,29 @@ type EquipmentListItem = {
   power?: number | null;
   hourMeter?: number | null;
   operationalStatus?: string | null;
-  lifecycleStatus?: string | null;
   criticality?: string | null;
   voltage?: string | null;
-  currentSite?: { id: string; name?: string | null; code?: string | null } | null;
-  model?: { id: string; name?: string | null; brand?: string | null } | null;
+  currentSite?: { id: string; name?: string | null } | null;
+  model?: { id: string; name?: string | null } | null;
   client?: { id: string; companyName?: string | null } | null;
   orders?: Array<{
     id: string;
     title?: string | null;
     status?: string | null;
-    openedAt?: string | null;
     finishedAt?: string | null;
     updatedAt?: string | null;
   }>;
   contractSchedules?: Array<{
-    id: string;
     scheduledDate?: string | null;
-    status?: string | null;
     contract?: { id: string; code?: string | null; status?: string | null } | null;
   }>;
   contractLinks?: Array<{
-    id: string;
     contract?: { id: string; code?: string | null; status?: string | null } | null;
   }>;
   serviceTickets?: Array<{
     id: string;
-    code?: string | null;
     title?: string | null;
     status?: string | null;
-    priority?: string | null;
   }>;
 };
 

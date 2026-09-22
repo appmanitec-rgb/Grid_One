@@ -106,14 +106,14 @@ export default function CatalogPage() {
   ].filter(Boolean).length;
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
+    <div className="p-4 sm:p-6 lg:p-8">
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold text-zinc-800">Catalogo de Pecas e Servicos</h1>
           <p className="text-zinc-500 mt-1">Controle de itens e precificacao por perfil de usuario.</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {hydrated && canManageItems && (
             <Link
               href="/dashboard/suppliers"
@@ -133,7 +133,14 @@ export default function CatalogPage() {
         </div>
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</div>}
+      {error && (
+        <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
+          <span>{error}</span>
+          <button type="button" onClick={() => window.location.reload()} className="text-sm font-bold underline">
+            Tentar novamente
+          </button>
+        </div>
+      )}
 
       <section className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-4">
         <Metric title="Itens ativos" value={String(metrics.total)} />
@@ -144,7 +151,7 @@ export default function CatalogPage() {
 
       <section className="mb-4 rounded-xl border border-zinc-200 bg-white p-4">
         <div className="mb-3 flex items-center gap-2">
-          <label className="block flex-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          <label htmlFor="catalog-search" className="block flex-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
             Buscar item
           </label>
           <button
@@ -156,6 +163,7 @@ export default function CatalogPage() {
           </button>
         </div>
         <input
+          id="catalog-search"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Item, SKU, codigo legado, categoria, descricao ou localizacao..."

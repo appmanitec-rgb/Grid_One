@@ -35,6 +35,42 @@ export type CatalogActor = {
   };
 };
 
+const catalogListSelect = {
+  id: true,
+  sku: true,
+  legacyCode: true,
+  legacySequence: true,
+  radarCode: true,
+  name: true,
+  description: true,
+  commercialDescription: true,
+  type: true,
+  itemClassification: true,
+  acquisitionOrigin: true,
+  category: true,
+  subcategory: true,
+  unit: true,
+  brand: true,
+  ncm: true,
+  basePrice: true,
+  costPrice: true,
+  averageCost: true,
+  profitMargin: true,
+  stockCurrent: true,
+  stockMin: true,
+  stockMax: true,
+  storageLocation: true,
+  isActive: true,
+  inventoryBalances: {
+    select: {
+      physicalQty: true,
+      reservedQty: true,
+      minQty: true,
+      reorderPoint: true,
+    },
+  },
+} satisfies Prisma.CatalogItemSelect;
+
 @Injectable()
 export class CatalogsService {
   constructor(private readonly prisma: DatabaseService) {}
@@ -101,7 +137,10 @@ export class CatalogsService {
       });
       const skuWrite = await this.prepareSkuForCreate(tx, createCatalogDto);
       Object.assign(catalogData, skuWrite.data);
-      await this.assertLegacyCodeAvailable(tx, createCatalogDto.legacyCode);
+      await this.assertLegacySequenceAvailable(
+        tx,
+        createCatalogDto.legacySequence,
+      );
 
       const created = await tx.catalogItem.create({ data: catalogData });
       await this.syncSkuIdentifiers(tx, created.id, null, created.sku);
@@ -127,28 +166,18 @@ export class CatalogsService {
 
     const items = await this.prisma.catalogItem.findMany({
       where: { isActive: true },
-      include: {
-        inventoryBalances: {
-          include: {
-            warehouse: {
-              select: { id: true, code: true, name: true, type: true },
-            },
-          },
-        },
-        supplierItems: {
-          include: {
-            supplier: {
-              select: { id: true, companyName: true },
-            },
-          },
-          orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
-          take: 3,
-        },
-      },
+      select: catalogListSelect,
       orderBy: { name: 'asc' },
     });
 
-    return items.map((item) => this.maskCatalogValues(item, canViewCosts));
+    return items.map((item) => {
+      const summarized = this.withOperationalSummary(item) as Record<
+        string,
+        unknown
+      >;
+      delete summarized.inventoryBalances;
+      return this.maskCatalogValues(summarized, canViewCosts);
+    });
   }
 
   async findOne(id: string, actor?: CatalogActor) {
@@ -421,11 +450,11 @@ export class CatalogsService {
       );
       Object.assign(catalogData, skuWrite.data);
       if (
-        Object.prototype.hasOwnProperty.call(updateCatalogDto, 'legacyCode')
+        Object.prototype.hasOwnProperty.call(updateCatalogDto, 'legacySequence')
       ) {
-        await this.assertLegacyCodeAvailable(
+        await this.assertLegacySequenceAvailable(
           tx,
-          updateCatalogDto.legacyCode,
+          updateCatalogDto.legacySequence,
           id,
         );
       }
@@ -1671,21 +1700,21 @@ export class CatalogsService {
     }
   }
 
-  private async assertLegacyCodeAvailable(
+  private async assertLegacySequenceAvailable(
     tx: Prisma.TransactionClient,
-    legacyCode?: string | null,
+    legacySequence?: string | null,
     currentItemId?: string,
   ) {
-    const normalizedCode = legacyCode?.trim() || null;
-    if (!normalizedCode) return;
+    const normalizedSequence = legacySequence?.trim() || null;
+    if (!normalizedSequence) return;
 
-    const existing = await tx.catalogItem.findFirst({
-      where: { legacyCode: normalizedCode },
+    const existing = await tx.catalogItem.findUnique({
+      where: { legacySequence: normalizedSequence },
       select: { id: true },
     });
     if (existing && existing.id !== currentItemId) {
       throw new ConflictException(
-        `O codigo legado ${normalizedCode} ja esta registrado.`,
+        `A sequencia legada ${normalizedSequence} ja esta registrada.`,
       );
     }
   }
@@ -2528,7 +2557,10 @@ export class CatalogsService {
         minQty,
         maxQty,
         reorderPoint,
-        isLowStock: availableQty <= Number(effectiveTrigger || 0),
+        isLowStock:
+          item.type !== ItemType.SERVICE &&
+          Number(effectiveTrigger || 0) > 0 &&
+          availableQty <= Number(effectiveTrigger || 0),
         warehouseCount: balances.length,
         movementCount: catalogItem.inventoryMovements?.length || 0,
         purchaseOrderCount: catalogItem.purchaseOrderItems?.length || 0,

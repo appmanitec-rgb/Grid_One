@@ -189,6 +189,74 @@ describe('ClientsService', () => {
     );
   });
 
+  it('lista somente os campos consumidos pela carteira de clientes', async () => {
+    database.client.findMany.mockResolvedValue([]);
+
+    await service.findAll();
+
+    expect(database.client.findMany).toHaveBeenCalledWith({
+      select: {
+        id: true,
+        code: true,
+        legacyCode: true,
+        companyName: true,
+        tradeName: true,
+        cnpj: true,
+        email: true,
+        phone: true,
+        address: true,
+        city: true,
+        state: true,
+        stateRegistration: true,
+        municipalRegistration: true,
+        cnae: true,
+        segment: true,
+        preferences: true,
+        notes: true,
+        clientType: true,
+        personType: true,
+        paymentTermDefault: true,
+        creditLimit: true,
+        priceTableCode: true,
+        isProvisional: true,
+        isDelinquent: true,
+        isActive: true,
+        proposalCreationBlocked: true,
+        proposalBlockReason: true,
+        withholdsInss: true,
+        withholdsIss: true,
+        contacts: {
+          select: {
+            name: true,
+            role: true,
+            phone: true,
+            mobile: true,
+            email: true,
+          },
+        },
+        addresses: {
+          select: {
+            type: true,
+            street: true,
+            number: true,
+            complement: true,
+            district: true,
+            city: true,
+            state: true,
+            zipCode: true,
+          },
+        },
+      },
+      orderBy: { companyName: 'asc' },
+    });
+
+    const query = database.client.findMany.mock.calls[0][0];
+    expect(query).not.toHaveProperty('include');
+    expect(query.select).not.toHaveProperty('legacyData');
+    expect(query.select).not.toHaveProperty('auditLogs');
+    expect(query.select).not.toHaveProperty('generators');
+  });
+
   it('busca clientes para lookup com limite e campos minimos', async () => {
     database.client.findMany.mockResolvedValue([]);
 

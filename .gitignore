@@ -1,4 +1,6 @@
 /runtime-logs/
+/.runtime-logs/
+/.runtime-imports/
 /backend/backups/
 *.pid
 *.pid.lock

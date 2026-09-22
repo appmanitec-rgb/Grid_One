@@ -134,7 +134,6 @@ export default function DocumentSharePanel({
     [
       defaultRecipientName,
       documentLabel,
-      preferences?.companyLabel,
       preferences,
       recipientName,
       shareUrl,

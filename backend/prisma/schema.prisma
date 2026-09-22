@@ -1116,7 +1116,7 @@ model Client {
   legacyCode              String?          @unique
   companyName             String
   tradeName               String?
-  cnpj                    String           @unique
+  cnpj                    String?          @unique
   email                   String?
   contactName             String?
   phone                   String
@@ -1128,6 +1128,7 @@ model Client {
   cnae                    String?
   preferences             String?
   notes                   String?
+  legacyData              Json?
   segment                 String?
   clientType              ClientType       @default(NO_CONTRACT)
   personType              ClientPersonType @default(LEGAL_ENTITY)
@@ -1135,6 +1136,7 @@ model Client {
   creditLimit             Float?
   priceTableCode          String?
   isDelinquent            Boolean          @default(false)
+  isProvisional           Boolean          @default(false)
   proposalCreationBlocked Boolean          @default(false)
   proposalBlockReason     String?
   blockedPaymentTerms     String[]         @default([])
@@ -1310,6 +1312,7 @@ model Generator {
   hasMaintenanceContract       Boolean                    @default(false)
   application                  String?
   notes                        String?
+  legacyTechnicalData          Json?
   voltage                      String?
   ratedCurrent                 String?
   powerFactor                  Float?
@@ -1390,8 +1393,8 @@ model ClientAuditLog {
 model CatalogItem {
   id                     String         @id @default(uuid())
   sku                    String?        @unique
-  legacyCode             String?        @unique
-  legacySequence         String?
+  legacyCode             String?
+  legacySequence         String?        @unique
   radarCode              String?
   skuNumber              Int?           @unique
   skuAreaId              String?
@@ -1466,7 +1469,7 @@ model CatalogItem {
   @@index([skuAreaId])
   @@index([skuFamilyId])
   @@index([skuApplicationId])
-  @@index([legacySequence])
+  @@index([legacyCode])
   @@index([radarCode])
   @@index([pricingPolicyId])
   @@map("catalog_items")
@@ -1725,6 +1728,7 @@ model Supplier {
   qualityScore          Int?
   punctualityScore      Int?
   notes                 String?
+  legacyData            Json?
   isActive              Boolean  @default(true)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt

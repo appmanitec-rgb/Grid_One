@@ -135,9 +135,15 @@ function refreshPagination(table: HTMLTableElement) {
   const select = controls.querySelector<HTMLSelectElement>("select");
   if (select) select.value = String(pageSize);
   const summary = controls.querySelector<HTMLElement>("[data-pagination-summary]");
-  if (summary) summary.textContent = `Exibindo ${start + 1}-${end} de ${rows.length}`;
+  const nextSummary = `Exibindo ${start + 1}-${end} de ${rows.length}`;
+  if (summary && summary.textContent !== nextSummary) {
+    summary.textContent = nextSummary;
+  }
   const pageLabel = controls.querySelector<HTMLElement>("[data-pagination-page-label]");
-  if (pageLabel) pageLabel.textContent = `${page} de ${totalPages}`;
+  const nextPageLabel = `${page} de ${totalPages}`;
+  if (pageLabel && pageLabel.textContent !== nextPageLabel) {
+    pageLabel.textContent = nextPageLabel;
+  }
   const previous = controls.querySelector<HTMLButtonElement>("[data-pagination-previous]");
   if (previous) previous.disabled = page <= 1;
   const next = controls.querySelector<HTMLButtonElement>("[data-pagination-next]");

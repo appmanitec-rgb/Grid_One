@@ -34,6 +34,9 @@
     "db:backup": "node scripts/db-backup.js",
     "db:restore": "node scripts/db-restore.js",
     "db:reset": "node scripts/db-block-reset.js",
+    "db:clean:operational": "node scripts/clean-operational-data.js",
+    "legacy:import:check": "node scripts/import-legacy-workbooks.js --dry-run",
+    "legacy:import": "node scripts/import-legacy-workbooks.js",
     "templates:sync:proposal": "node scripts/sync-proposal-template.js",
     "prisma:ensure:local": "node scripts/prisma-ensure-local-client.js",
     "prisma:generate:safe": "node scripts/prisma-generate-safe.js",
@@ -62,12 +65,14 @@
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.3",
+    "compression": "^1.8.2",
     "helmet": "^8.1.0",
     "otplib": "^13.3.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "passport-local": "^1.0.0",
     "qrcode": "^1.5.4",
+    "read-excel-file": "^9.3.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "speakeasy": "^2.0.0"
@@ -79,6 +84,7 @@
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
     "@types/bcrypt": "^6.0.0",
+    "@types/compression": "^1.8.1",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.10.7",
@@ -118,5 +124,8 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
+  },
+  "overrides": {
+    "multer": "2.3.0"
   }
 }

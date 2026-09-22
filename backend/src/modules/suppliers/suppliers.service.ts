@@ -66,7 +66,6 @@ export class SuppliersService {
   findAll() {
     return this.prisma.supplier.findMany({
       where: { isActive: true },
-      include: { items: { include: { catalogItem: true } } },
       orderBy: { companyName: 'asc' },
     });
   }

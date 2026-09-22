@@ -101,7 +101,11 @@ type ClientTicket = {
   status: string;
   priority?: string | null;
   createdAt?: string | null;
-  generator?: { id: string; name?: string | null; serialNumber?: string | null } | null;
+  generator?: {
+    id: string;
+    name?: string | null;
+    serialNumber?: string | null;
+  } | null;
   maintenanceOrder?: { id: string; title: string; status: string } | null;
 };
 
@@ -112,7 +116,11 @@ type ClientReport = {
   status: string;
   createdAt?: string | null;
   maintenanceOrder?: { id: string; title: string; status: string } | null;
-  generator?: { id: string; name?: string | null; serialNumber?: string | null } | null;
+  generator?: {
+    id: string;
+    name?: string | null;
+    serialNumber?: string | null;
+  } | null;
   generatedDocument?: {
     id: string;
     documentCode?: string | null;
@@ -127,7 +135,8 @@ type ClientProfile = {
   code: string;
   companyName: string;
   tradeName?: string | null;
-  cnpj: string;
+  cnpj?: string | null;
+  isProvisional?: boolean | null;
   personType: "INDIVIDUAL" | "LEGAL_ENTITY";
   clientType: "CONTRACT" | "NO_CONTRACT";
   email?: string | null;
@@ -238,9 +247,16 @@ export default function ClientProfilePage() {
     return (
       <div className="p-8">
         <div className="bg-white border border-zinc-200 rounded-xl p-8 text-center">
-          <h1 className="text-2xl font-bold text-zinc-800 mb-2">Cliente nao encontrado</h1>
-          <p className="text-zinc-500 mb-6">{error || "Verifique se o cliente existe ou se foi removido."}</p>
-          <Link href="/dashboard/clients" className="inline-flex px-4 py-2 rounded-lg bg-zinc-900 text-white font-semibold">
+          <h1 className="text-2xl font-bold text-zinc-800 mb-2">
+            Cliente nao encontrado
+          </h1>
+          <p className="text-zinc-500 mb-6">
+            {error || "Verifique se o cliente existe ou se foi removido."}
+          </p>
+          <Link
+            href="/dashboard/clients"
+            className="inline-flex px-4 py-2 rounded-lg bg-zinc-900 text-white font-semibold"
+          >
             Voltar para clientes
           </Link>
         </div>
@@ -285,17 +301,26 @@ export default function ClientProfilePage() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-3 mb-2">
-            <Link href="/dashboard/clients" className="w-9 h-9 flex items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50">
+            <Link
+              href="/dashboard/clients"
+              className="w-9 h-9 flex items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+            >
               ←
             </Link>
-            <h1 className="text-3xl font-bold text-zinc-800">Perfil do Cliente</h1>
+            <h1 className="text-3xl font-bold text-zinc-800">
+              Perfil do Cliente
+            </h1>
           </div>
-          <p className="text-zinc-500">Visao completa cadastral, operacional e comercial.</p>
+          <p className="text-zinc-500">
+            Visao completa cadastral, operacional e comercial.
+          </p>
         </div>
       </div>
 
       <section className="bg-white border border-zinc-200 rounded-xl p-6">
-        <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">Acoes rapidas</h2>
+        <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">
+          Acoes rapidas
+        </h2>
         <QuickActions
           items={[
             {
@@ -340,7 +365,9 @@ export default function ClientProfilePage() {
       </section>
 
       <section className="bg-white border border-zinc-200 rounded-xl p-6">
-        <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">Mapa de relacionamentos</h2>
+        <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">
+          Mapa de relacionamentos
+        </h2>
         <RelatedEntityGrid
           items={[
             ...generators.slice(0, 6).map((generator) => ({
@@ -389,44 +416,100 @@ export default function ClientProfilePage() {
       </section>
 
       <section className="bg-white border border-zinc-200 rounded-xl p-6">
-        <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">Dados gerais</h2>
+        {client.isProvisional ? (
+          <div className="mb-5 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+            <p className="font-bold">Vinculo importado aguardando revisao</p>
+            <p className="mt-1">
+              Este cadastro agrupa maquinas cujo proprietario nao pode ser
+              associado com seguranca a uma filial. Confirme o cliente correto
+              antes de ativar ou usar estes dados comercialmente.
+            </p>
+          </div>
+        ) : null}
+        <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">
+          Dados gerais
+        </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
           <Info label="Codigo do cliente" value={client.code} />
           <Info label="Razao social / Nome" value={client.companyName} />
           <Info label="Nome fantasia" value={client.tradeName || "-"} />
-          <Info label="Documento" value={client.cnpj} />
-          <Info label="Tipo de pessoa" value={mapPersonType(client.personType)} />
-          <Info label="Tipo de cliente" value={mapClientType(client.clientType)} />
+          <Info label="Documento" value={client.cnpj || "Nao informado"} />
+          <Info
+            label="Tipo de pessoa"
+            value={mapPersonType(client.personType)}
+          />
+          <Info
+            label="Tipo de cliente"
+            value={mapClientType(client.clientType)}
+          />
           <Info label="Ramo" value={client.segment || "-"} />
           <Info label="E-mail" value={client.email || "-"} />
           <Info label="Telefone" value={client.phone || "-"} />
-          <Info label="Inscricao Estadual" value={client.stateRegistration || "-"} />
-          <Info label="Inscricao Municipal" value={client.municipalRegistration || "-"} />
-          <Info label="Retem INSS" value={client.withholdsInss ? "Sim" : "Nao"} />
+          <Info
+            label="Inscricao Estadual"
+            value={client.stateRegistration || "-"}
+          />
+          <Info
+            label="Inscricao Municipal"
+            value={client.municipalRegistration || "-"}
+          />
+          <Info
+            label="Retem INSS"
+            value={client.withholdsInss ? "Sim" : "Nao"}
+          />
           <Info label="Retem ISS" value={client.withholdsIss ? "Sim" : "Nao"} />
-          <Info label="Endereco principal" value={client.address ? `${client.address} - ${client.city}/${client.state}` : `${client.city}/${client.state}`} />
-          <Info label="Cadastrado em" value={new Date(client.createdAt).toLocaleString("pt-BR")} />
+          <Info
+            label="Endereco principal"
+            value={
+              client.address
+                ? `${client.address} - ${client.city}/${client.state}`
+                : `${client.city}/${client.state}`
+            }
+          />
+          <Info
+            label="Cadastrado em"
+            value={new Date(client.createdAt).toLocaleString("pt-BR")}
+          />
         </div>
         <div className="mt-4 bg-zinc-50 border border-zinc-200 rounded-lg p-4">
-          <p className="text-xs font-bold text-zinc-500 uppercase mb-1">Preferencias</p>
-          <p className="text-sm text-zinc-700 whitespace-pre-wrap">{client.preferences || "Sem preferencias registradas."}</p>
+          <p className="text-xs font-bold text-zinc-500 uppercase mb-1">
+            Preferencias
+          </p>
+          <p className="text-sm text-zinc-700 whitespace-pre-wrap">
+            {client.preferences || "Sem preferencias registradas."}
+          </p>
         </div>
       </section>
 
       <section className="bg-white border border-zinc-200 rounded-xl p-6">
-        <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">Enderecos</h2>
+        <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">
+          Enderecos
+        </h2>
         {addresses.length === 0 ? (
           <p className="text-sm text-zinc-500">Nenhum endereco cadastrado.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {addresses.map((addr) => (
-              <div key={addr.id} className="border border-zinc-200 rounded-lg p-4 bg-zinc-50/50">
-                <p className="text-xs font-bold text-emerald-700 uppercase mb-2">{mapAddressType(addr.type)}</p>
-                <p className="text-sm text-zinc-800 font-semibold">{addr.street}{addr.number ? `, ${addr.number}` : ""}</p>
+              <div
+                key={addr.id}
+                className="border border-zinc-200 rounded-lg p-4 bg-zinc-50/50"
+              >
+                <p className="text-xs font-bold text-emerald-700 uppercase mb-2">
+                  {mapAddressType(addr.type)}
+                </p>
+                <p className="text-sm text-zinc-800 font-semibold">
+                  {addr.street}
+                  {addr.number ? `, ${addr.number}` : ""}
+                </p>
                 <p className="text-sm text-zinc-600">{addr.complement || ""}</p>
                 <p className="text-sm text-zinc-600">{addr.district || ""}</p>
-                <p className="text-sm text-zinc-600">{addr.city}/{addr.state} {addr.zipCode ? `- ${addr.zipCode}` : ""}</p>
-                <p className="text-xs text-zinc-500 mt-1">{addr.country || "BR"}</p>
+                <p className="text-sm text-zinc-600">
+                  {addr.city}/{addr.state}{" "}
+                  {addr.zipCode ? `- ${addr.zipCode}` : ""}
+                </p>
+                <p className="text-xs text-zinc-500 mt-1">
+                  {addr.country || "BR"}
+                </p>
               </div>
             ))}
           </div>
@@ -434,7 +517,9 @@ export default function ClientProfilePage() {
       </section>
 
       <section className="bg-white border border-zinc-200 rounded-xl p-6">
-        <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">Contatos</h2>
+        <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">
+          Contatos
+        </h2>
         {contacts.length === 0 ? (
           <p className="text-sm text-zinc-500">Nenhum contato cadastrado.</p>
         ) : (
@@ -453,7 +538,9 @@ export default function ClientProfilePage() {
               <tbody>
                 {contacts.map((contact) => (
                   <tr key={contact.id} className="border-b border-zinc-100">
-                    <td className="py-2 font-medium text-zinc-800">{contact.name}</td>
+                    <td className="py-2 font-medium text-zinc-800">
+                      {contact.name}
+                    </td>
                     <td className="py-2">{mapContactStatus(contact.status)}</td>
                     <td className="py-2">{contact.role || "-"}</td>
                     <td className="py-2">{contact.phone || "-"}</td>
@@ -468,7 +555,9 @@ export default function ClientProfilePage() {
       </section>
 
       <section className="bg-white border border-zinc-200 rounded-xl p-6">
-        <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">Maquinas vinculadas</h2>
+        <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">
+          Maquinas vinculadas
+        </h2>
         {generators.length === 0 ? (
           <p className="text-sm text-zinc-500">Nenhuma maquina vinculada.</p>
         ) : (
@@ -483,12 +572,19 @@ export default function ClientProfilePage() {
               >
                 <p className="font-semibold text-zinc-800">{gen.name}</p>
                 <p className="text-sm text-zinc-600">Marca: {gen.brand}</p>
-                <p className="text-sm text-zinc-600">Potencia: {gen.power} kVA</p>
-                <p className="text-sm text-zinc-600">Codigo: {gen.code} | Serie: {gen.serialNumber || "-"}</p>
                 <p className="text-sm text-zinc-600">
-                  Cadastrada por: {gen.createdByUser?.name || "Nao identificado"}
+                  Potencia: {gen.power} kVA
                 </p>
-                <p className="mt-2 text-xs font-semibold text-blue-700">Abrir dados gerais do equipamento</p>
+                <p className="text-sm text-zinc-600">
+                  Codigo: {gen.code} | Serie: {gen.serialNumber || "-"}
+                </p>
+                <p className="text-sm text-zinc-600">
+                  Cadastrada por:{" "}
+                  {gen.createdByUser?.name || "Nao identificado"}
+                </p>
+                <p className="mt-2 text-xs font-semibold text-blue-700">
+                  Abrir dados gerais do equipamento
+                </p>
               </PermissionAwareLink>
             ))}
           </div>
@@ -496,7 +592,9 @@ export default function ClientProfilePage() {
       </section>
 
       <section className="bg-white border border-zinc-200 rounded-xl p-6">
-        <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">Contratos</h2>
+        <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">
+          Contratos
+        </h2>
         {contracts.length === 0 ? (
           <p className="text-sm text-zinc-500">Nenhum contrato vinculado.</p>
         ) : (
@@ -515,9 +613,15 @@ export default function ClientProfilePage() {
               <tbody>
                 {contracts.map((contract) => (
                   <tr key={contract.id} className="border-b border-zinc-100">
-                    <td className="py-2 font-semibold text-zinc-800">{contract.code}</td>
-                    <td className="py-2">{new Date(contract.startDate).toLocaleDateString("pt-BR")}</td>
-                    <td className="py-2">{new Date(contract.endDate).toLocaleDateString("pt-BR")}</td>
+                    <td className="py-2 font-semibold text-zinc-800">
+                      {contract.code}
+                    </td>
+                    <td className="py-2">
+                      {new Date(contract.startDate).toLocaleDateString("pt-BR")}
+                    </td>
+                    <td className="py-2">
+                      {new Date(contract.endDate).toLocaleDateString("pt-BR")}
+                    </td>
                     <td className="py-2">{contract.preventiveRecurrence}</td>
                     <td className="py-2">{contract.status}</td>
                     <td className="py-2">
@@ -539,7 +643,9 @@ export default function ClientProfilePage() {
       </section>
 
       <section className="bg-white border border-zinc-200 rounded-xl p-6">
-        <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">Propostas</h2>
+        <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">
+          Propostas
+        </h2>
         {proposals.length === 0 ? (
           <p className="text-sm text-zinc-500">Nenhuma proposta cadastrada.</p>
         ) : (
@@ -567,8 +673,12 @@ export default function ClientProfilePage() {
                       </PermissionAwareLink>
                     </td>
                     <td className="py-2">{proposal.status}</td>
-                    <td className="py-2">R$ {Number(proposal.totalValue || 0).toFixed(2)}</td>
-                    <td className="py-2">{new Date(proposal.createdAt).toLocaleDateString("pt-BR")}</td>
+                    <td className="py-2">
+                      R$ {Number(proposal.totalValue || 0).toFixed(2)}
+                    </td>
+                    <td className="py-2">
+                      {new Date(proposal.createdAt).toLocaleDateString("pt-BR")}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -578,15 +688,24 @@ export default function ClientProfilePage() {
       </section>
 
       <section className="bg-white border border-zinc-200 rounded-xl p-6">
-        <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">Logs</h2>
+        <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">
+          Logs
+        </h2>
         {logItems.length === 0 ? (
           <p className="text-sm text-zinc-500">Sem registros de log.</p>
         ) : (
           <div className="space-y-3">
             {logItems.map((item, index) => (
-              <div key={item.id || `${item.title}-${index}`} className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-                <p className="text-sm font-semibold text-zinc-800">{item.title}</p>
-                <p className="text-xs text-zinc-500">{new Date(item.date).toLocaleString("pt-BR")}</p>
+              <div
+                key={item.id || `${item.title}-${index}`}
+                className="rounded-lg border border-zinc-200 bg-zinc-50 p-3"
+              >
+                <p className="text-sm font-semibold text-zinc-800">
+                  {item.title}
+                </p>
+                <p className="text-xs text-zinc-500">
+                  {new Date(item.date).toLocaleString("pt-BR")}
+                </p>
                 <p className="mt-1 text-sm text-zinc-700">{item.details}</p>
                 <p className="mt-1 text-xs text-zinc-500">Por: {item.actor}</p>
               </div>

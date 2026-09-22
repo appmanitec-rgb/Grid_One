@@ -18,6 +18,20 @@ describe('HealthService', () => {
     service = new HealthService(database as never, fileStorage as never);
   });
 
+  it('keeps the public health check lightweight', async () => {
+    const result = await service.status();
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'ok',
+        database: 'ok',
+        storage: 'ok',
+      }),
+    );
+    expect(database.$queryRawUnsafe).toHaveBeenCalledTimes(1);
+    expect(database.$queryRawUnsafe).toHaveBeenCalledWith('SELECT 1;');
+  });
+
   it('returns database migration diagnostics without exposing secrets', async () => {
     const result = await service.databaseStatus();
 

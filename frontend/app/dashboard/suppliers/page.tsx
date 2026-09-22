@@ -20,12 +20,15 @@ type Supplier = {
 export default function SuppliersPage() {
   const [items, setItems] = useState<Supplier[]>([]);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     void load();
   }, []);
 
   async function load() {
+    setLoading(true);
+    setError("");
     try {
       const res = await apiFetch("/suppliers");
 
@@ -41,11 +44,13 @@ export default function SuppliersPage() {
           ? loadError.message
           : "Erro ao carregar fornecedores.",
       );
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold text-zinc-800">Cadastro de Fornecedores</h1>
@@ -58,7 +63,14 @@ export default function SuppliersPage() {
         </div>
       </div>
 
-      {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">{error}</div>}
+      {error && (
+        <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
+          <span>{error}</span>
+          <button type="button" onClick={() => void load()} className="text-sm font-bold underline">
+            Tentar novamente
+          </button>
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
@@ -73,7 +85,7 @@ export default function SuppliersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200">
-              {items.map((supplier) => (
+              {!loading && items.map((supplier) => (
                 <tr key={supplier.id} className="transition-colors hover:bg-zinc-50">
                   <td className="p-4">
                     <p className="font-bold text-zinc-800">{supplier.companyName}</p>
@@ -95,7 +107,12 @@ export default function SuppliersPage() {
                   </td>
                 </tr>
               ))}
-              {items.length === 0 && (
+              {loading ? (
+                <tr>
+                  <td colSpan={5} className="p-8 text-center text-zinc-500">Carregando fornecedores...</td>
+                </tr>
+              ) : null}
+              {!loading && items.length === 0 && (
                 <tr>
                   <td colSpan={5} className="p-8 text-center text-zinc-500">Nenhum fornecedor cadastrado.</td>
                 </tr>

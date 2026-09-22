@@ -75,6 +75,81 @@ const generatorModelInclude = {
   },
 } satisfies Prisma.GeneratorModelInclude;
 
+const buildGeneratorListSelect = (today: Date) =>
+  ({
+    id: true,
+    code: true,
+    legacyCode: true,
+    name: true,
+    brand: true,
+    serialNumber: true,
+    power: true,
+    hourMeter: true,
+    assetTag: true,
+    installationSite: true,
+    operationalStatus: true,
+    criticality: true,
+    voltage: true,
+    engineModelName: true,
+    notes: true,
+    clientId: true,
+    client: { select: { id: true, companyName: true } },
+    model: { select: { id: true, name: true } },
+    currentSite: { select: { id: true, name: true } },
+    orders: {
+      orderBy: { updatedAt: 'desc' as const },
+      take: 1,
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        finishedAt: true,
+        updatedAt: true,
+      },
+    },
+    contractSchedules: {
+      where: {
+        scheduledDate: { gte: today },
+        status: 'PLANNED' as const,
+      },
+      orderBy: { scheduledDate: 'asc' as const },
+      take: 1,
+      select: {
+        scheduledDate: true,
+        contract: { select: { id: true, code: true, status: true } },
+      },
+    },
+    contractLinks: {
+      orderBy: { createdAt: 'desc' as const },
+      take: 1,
+      select: {
+        contract: { select: { id: true, code: true, status: true } },
+      },
+    },
+    serviceTickets: {
+      where: {
+        status: {
+          in: [
+            TicketStatus.OPEN,
+            TicketStatus.TRIAGE,
+            TicketStatus.WAITING_CUSTOMER,
+            TicketStatus.WAITING_INTERNAL,
+            TicketStatus.SCHEDULED,
+            TicketStatus.IN_PROGRESS,
+            TicketStatus.CONVERTING_TO_ORDER,
+          ],
+        },
+      },
+      orderBy: { updatedAt: 'desc' as const },
+      take: 3,
+      select: {
+        id: true,
+        title: true,
+        status: true,
+      },
+    },
+  }) satisfies Prisma.GeneratorSelect;
+
 @Injectable()
 export class GeneratorsService {
   constructor(private readonly database: DatabaseService) {}
@@ -160,70 +235,7 @@ export class GeneratorsService {
     const today = new Date();
     return this.database.generator.findMany({
       orderBy: [{ criticality: 'asc' }, { name: 'asc' }],
-      include: {
-        client: { select: { id: true, companyName: true } },
-        model: { select: { id: true, name: true, brand: true } },
-        currentSite: { select: { id: true, name: true, code: true } },
-        orders: {
-          orderBy: { updatedAt: 'desc' },
-          take: 1,
-          select: {
-            id: true,
-            title: true,
-            status: true,
-            type: true,
-            openedAt: true,
-            finishedAt: true,
-            updatedAt: true,
-          },
-        },
-        contractSchedules: {
-          where: {
-            scheduledDate: { gte: today },
-            status: 'PLANNED',
-          },
-          orderBy: { scheduledDate: 'asc' },
-          take: 1,
-          select: {
-            id: true,
-            scheduledDate: true,
-            status: true,
-            contract: { select: { id: true, code: true, status: true } },
-          },
-        },
-        contractLinks: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-          select: {
-            id: true,
-            contract: { select: { id: true, code: true, status: true } },
-          },
-        },
-        serviceTickets: {
-          where: {
-            status: {
-              in: [
-                TicketStatus.OPEN,
-                TicketStatus.TRIAGE,
-                TicketStatus.WAITING_CUSTOMER,
-                TicketStatus.WAITING_INTERNAL,
-                TicketStatus.SCHEDULED,
-                TicketStatus.IN_PROGRESS,
-                TicketStatus.CONVERTING_TO_ORDER,
-              ],
-            },
-          },
-          orderBy: { updatedAt: 'desc' },
-          take: 3,
-          select: {
-            id: true,
-            code: true,
-            title: true,
-            status: true,
-            priority: true,
-          },
-        },
-      },
+      select: buildGeneratorListSelect(today),
     });
   }
 

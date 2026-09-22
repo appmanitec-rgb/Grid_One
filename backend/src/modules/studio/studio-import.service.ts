@@ -52,6 +52,7 @@ type ImportDefinition = {
   domain: AuditDomain;
   entityType: string;
   uniqueField: string;
+  rawDataField?: string;
   fields: ImportFieldDefinition[];
   findDuplicates: (
     tx: Prisma.TransactionClient,
@@ -81,6 +82,7 @@ const SUPPLIER_IMPORT_DEFINITION: ImportDefinition = {
   domain: AuditDomain.PURCHASE_ORDERS,
   entityType: 'Supplier',
   uniqueField: 'cnpj',
+  rawDataField: 'legacyData',
   fields: [
     {
       key: 'legacyCode',
@@ -243,6 +245,7 @@ const SUPPLIER_IMPORT_DEFINITION: ImportDefinition = {
         municipalRegistration: nullableString(data.municipalRegistration),
         paymentTerm: nullableString(data.paymentTerm),
         notes: nullableString(data.notes),
+        legacyData: jsonObjectOrUndefined(data.legacyData),
         isActive: data.isActive !== false,
         categories: [],
         representedBrands: [],
@@ -259,6 +262,7 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
   domain: AuditDomain.USERS,
   entityType: 'Client',
   uniqueField: 'cnpj',
+  rawDataField: 'legacyData',
   fields: [
     {
       key: 'legacyCode',
@@ -475,7 +479,11 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
       where: { cnpj: { in: values } },
       select: { cnpj: true },
     });
-    return new Set(clients.map((client) => client.cnpj));
+    return new Set(
+      clients
+        .map((client) => client.cnpj)
+        .filter((document): document is string => Boolean(document)),
+    );
   },
   createRecord: (tx, data) => {
     const city = (
@@ -540,12 +548,15 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
         segment: nullableString(data.segment),
         preferences: nullableString(data.preferences),
         notes: nullableString(data.notes),
+        legacyData: jsonObjectOrUndefined(data.legacyData),
         isActive: data.isActive !== false,
         clientType:
           (data.clientType as ClientType | undefined) ?? ClientType.NO_CONTRACT,
         personType:
           (data.personType as ClientPersonType | undefined) ??
-          ClientPersonType.LEGAL_ENTITY,
+          (String(data.cnpj).length === 11
+            ? ClientPersonType.INDIVIDUAL
+            : ClientPersonType.LEGAL_ENTITY),
         paymentTermDefault: nullableString(data.paymentTermDefault),
         creditLimit:
           typeof data.creditLimit === 'number' ? data.creditLimit : undefined,
@@ -569,6 +580,7 @@ const EQUIPMENT_IMPORT_DEFINITION: ImportDefinition = {
   domain: AuditDomain.MAINTENANCE_ORDERS,
   entityType: 'Generator',
   uniqueField: 'legacyCode',
+  rawDataField: 'legacyTechnicalData',
   fields: [
     {
       key: 'legacyCode',
@@ -599,14 +611,14 @@ const EQUIPMENT_IMPORT_DEFINITION: ImportDefinition = {
     {
       key: 'brand',
       label: 'Marca',
-      aliases: ['descricao 1', 'fabricante'],
+      aliases: ['descricao 1', 'fabricante', 'motor'],
       required: true,
       normalize: normalizeText,
     },
     {
       key: 'power',
       label: 'Potencia kVA',
-      aliases: ['potencia', 'potencia alternador'],
+      aliases: ['potencia', 'potencia alternador', 'potenciaalternador'],
       required: true,
       normalize: normalizePowerInput,
     },
@@ -620,10 +632,22 @@ const EQUIPMENT_IMPORT_DEFINITION: ImportDefinition = {
       key: 'clientDocument',
       label: 'CNPJCPF Cliente',
       aliases: ['documento cliente', 'cnpj cliente', 'cpf cliente'],
-      required: true,
       normalize: normalizeDigits,
-      validate: (value) =>
-        isValidBrazilDocument(primitiveString(value))
+      validate: (value, row) => {
+        const document = primitiveString(value);
+        if (!document) {
+          return row.clientLegacyCode || row.ownerName
+            ? []
+            : [
+                {
+                  code: 'MISSING_CLIENT_REFERENCE',
+                  field: 'clientDocument',
+                  message:
+                    'Informe CNPJ/CPF, codigo legado ou proprietario do cliente.',
+                },
+              ];
+        }
+        return isValidBrazilDocument(document)
           ? []
           : [
               {
@@ -631,12 +655,19 @@ const EQUIPMENT_IMPORT_DEFINITION: ImportDefinition = {
                 field: 'clientDocument',
                 message: 'CNPJ/CPF do cliente invalido ou incompleto.',
               },
-            ],
+            ];
+      },
     },
     {
       key: 'clientLegacyCode',
       label: 'Codigo Legado Cliente',
-      aliases: ['codigo cliente'],
+      aliases: ['codigo cliente', 'codigo legado cliente'],
+      normalize: normalizeText,
+    },
+    {
+      key: 'ownerName',
+      label: 'Proprietario',
+      aliases: ['proprietario', 'cliente', 'razao social cliente'],
       normalize: normalizeText,
     },
     {
@@ -660,67 +691,76 @@ const EQUIPMENT_IMPORT_DEFINITION: ImportDefinition = {
     {
       key: 'engineModelName',
       label: 'Modelo Motor',
-      aliases: ['motor modelo'],
+      aliases: ['motor modelo', 'modelomotor'],
       normalize: normalizeText,
     },
     {
       key: 'engineSerialNumber',
       label: 'Serie Motor',
-      aliases: ['numero serie motor'],
+      aliases: ['numero serie motor', 'seriemotor'],
       normalize: normalizeText,
     },
     {
       key: 'manufactureYear',
       label: 'Ano Fabricacao',
-      aliases: ['ano fabricacao motor'],
+      aliases: ['ano fabricacao motor', 'anofabricacaomotor'],
       normalize: normalizeIntegerInput,
     },
     {
       key: 'alternatorBrand',
       label: 'Fabricante Alternador',
-      aliases: ['marca alternador'],
+      aliases: ['marca alternador', 'fabricantealternador'],
       normalize: normalizeText,
     },
     {
       key: 'alternatorModelName',
       label: 'Modelo Alternador',
-      aliases: ['alternador modelo'],
+      aliases: ['alternador modelo', 'modeloalternador'],
       normalize: normalizeText,
     },
     {
       key: 'alternatorSerialNumber',
       label: 'Serie Alternador',
-      aliases: ['nserie alternador'],
+      aliases: ['nserie alternador', 'nseriealternador'],
       normalize: normalizeText,
     },
     {
       key: 'alternatorVoltage',
       label: 'Tensao Alternador',
-      aliases: ['tensao nominal alternador'],
+      aliases: ['tensao nominal alternador', 'tensaonominalalternador'],
       normalize: normalizeText,
     },
     {
       key: 'transferSwitchBrand',
       label: 'Fabricante QTA',
-      aliases: ['fabricante quadro transferencia'],
+      aliases: [
+        'fabricante quadro transferencia',
+        'fabricantequadrotransferencia',
+      ],
       normalize: normalizeText,
     },
     {
       key: 'transferSwitchModel',
       label: 'Modelo QTA',
-      aliases: ['modelo quadro transferencia'],
+      aliases: ['modelo quadro transferencia', 'modeloquadrotransferencia'],
       normalize: normalizeText,
     },
     {
       key: 'transferSwitchCommandVoltage',
       label: 'Tensao Comando QTA',
-      aliases: ['tensao comando quadro transferencia'],
+      aliases: [
+        'tensao comando quadro transferencia',
+        'tensaocomandoquadrotransferenci',
+      ],
       normalize: normalizeText,
     },
     {
       key: 'transferSwitchRatedCurrent',
       label: 'Corrente Nominal QTA',
-      aliases: ['corrente nominal quadro transferencia'],
+      aliases: [
+        'corrente nominal quadro transferencia',
+        'correntenominalquadrotransferen',
+      ],
       normalize: normalizeText,
     },
     {
@@ -749,15 +789,36 @@ const EQUIPMENT_IMPORT_DEFINITION: ImportDefinition = {
   },
   createRecord: async (tx, data) => {
     const clientLegacyCode = nullableString(data.clientLegacyCode);
-    const client = await tx.client.findFirst({
-      where: {
-        OR: [
-          { cnpj: String(data.clientDocument) },
-          ...(clientLegacyCode ? [{ legacyCode: clientLegacyCode }] : []),
-        ],
-      },
-      select: { id: true },
-    });
+    const clientDocument = nullableString(data.clientDocument);
+    const ownerName = nullableString(data.ownerName);
+    const directReferences = [
+      ...(clientDocument ? [{ cnpj: clientDocument }] : []),
+      ...(clientLegacyCode ? [{ legacyCode: clientLegacyCode }] : []),
+    ];
+    let client = directReferences.length
+      ? await tx.client.findFirst({
+          where: { OR: directReferences },
+          select: { id: true },
+        })
+      : null;
+    if (!client && ownerName) {
+      const ownerMatches = await tx.client.findMany({
+        where: {
+          OR: [
+            { companyName: { equals: ownerName, mode: 'insensitive' } },
+            { tradeName: { equals: ownerName, mode: 'insensitive' } },
+          ],
+        },
+        select: { id: true },
+        take: 2,
+      });
+      if (ownerMatches.length === 1) client = ownerMatches[0];
+      if (ownerMatches.length > 1) {
+        throw new BadRequestException(
+          'Proprietario da maquina corresponde a mais de um cliente. Informe CNPJ/CPF ou codigo legado.',
+        );
+      }
+    }
     if (!client)
       throw new BadRequestException(
         'Cliente da maquina nao encontrado pelo CNPJ/CPF ou codigo legado.',
@@ -793,6 +854,7 @@ const EQUIPMENT_IMPORT_DEFINITION: ImportDefinition = {
           data.transferSwitchRatedCurrent,
         ),
         notes: nullableString(data.notes),
+        legacyTechnicalData: jsonObjectOrUndefined(data.legacyTechnicalData),
         hasMaintenanceContract: Boolean(data.hasMaintenanceContract),
         operationalStatus: GeneratorOperationalStatus.OPERATING,
         lifecycleStatus: GeneratorLifecycleStatus.AVAILABLE,
@@ -811,7 +873,7 @@ const CATALOG_IMPORT_DEFINITION: ImportDefinition = {
   resourceCreatePermission: 'catalog.create',
   domain: AuditDomain.INVENTORY,
   entityType: 'CatalogItem',
-  uniqueField: 'legacyCode',
+  uniqueField: 'legacySequence',
   fields: [
     {
       key: 'legacySequence',
@@ -905,7 +967,6 @@ const CATALOG_IMPORT_DEFINITION: ImportDefinition = {
         'codigo',
         'código',
       ],
-      required: true,
       normalize: normalizeCatalogCode,
     },
     {
@@ -973,13 +1034,13 @@ const CATALOG_IMPORT_DEFINITION: ImportDefinition = {
   ],
   findDuplicates: async (tx, values) => {
     const items = await tx.catalogItem.findMany({
-      where: { legacyCode: { in: values } },
-      select: { legacyCode: true },
+      where: { legacySequence: { in: values } },
+      select: { legacySequence: true },
     });
     return new Set(
       items
-        .map((item) => item.legacyCode)
-        .filter((code): code is string => Boolean(code)),
+        .map((item) => item.legacySequence)
+        .filter((sequence): sequence is string => Boolean(sequence)),
     );
   },
   createRecord: async (tx, data) => {
@@ -1509,6 +1570,14 @@ function normalizeRow(
       : normalizeText(rawValue);
   }
 
+  if (definition.rawDataField) {
+    normalized[definition.rawDataField] = Object.fromEntries(
+      Object.entries(rawData)
+        .map(([key, value]) => [key.trim(), String(value ?? '').trim()])
+        .filter(([key, value]) => Boolean(key) && Boolean(value)),
+    );
+  }
+
   return normalized;
 }
 
@@ -1557,25 +1626,24 @@ function parseCsv(text: string) {
     .replace(/^\uFEFF/, '')
     .trim();
   if (!clean) throw new BadRequestException('CSV vazio.');
-  const lines = clean.split(/\r?\n/).filter((line) => line.trim());
-  const delimiter = detectDelimiter(lines[0]);
-  const headers = splitCsvLine(lines[0], delimiter).map((header) =>
-    header.trim(),
-  );
+  const delimiter = detectDelimiter(clean.split(/\r?\n/, 1)[0]);
+  const records = parseCsvRecords(clean, delimiter);
+  const headers = (records.shift() ?? []).map((header) => header.trim());
   if (headers.length === 0)
     throw new BadRequestException('Cabecalho do CSV ausente.');
 
-  return lines.slice(1).map((line, index) => {
-    const values = splitCsvLine(line, delimiter);
-    const rawData = headers.reduce<Record<string, string>>(
-      (row, header, headerIndex) => {
-        row[header] = values[headerIndex]?.trim() ?? '';
-        return row;
-      },
-      {},
-    );
-    return { rowNumber: index + 2, rawData };
-  });
+  return records
+    .filter((values) => values.some((value) => value.trim()))
+    .map((values, index) => {
+      const rawData = headers.reduce<Record<string, string>>(
+        (row, header, headerIndex) => {
+          row[header] = values[headerIndex]?.trim() ?? '';
+          return row;
+        },
+        {},
+      );
+      return { rowNumber: index + 2, rawData };
+    });
 }
 
 function detectDelimiter(headerLine: string) {
@@ -1584,14 +1652,15 @@ function detectDelimiter(headerLine: string) {
   return semicolonCount >= commaCount ? ';' : ',';
 }
 
-function splitCsvLine(line: string, delimiter: string) {
-  const values: string[] = [];
+function parseCsvRecords(text: string, delimiter: string) {
+  const rows: string[][] = [];
+  let values: string[] = [];
   let current = '';
   let quoted = false;
 
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index];
-    const next = line[index + 1];
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
     if (char === '"' && quoted && next === '"') {
       current += '"';
       index += 1;
@@ -1606,10 +1675,30 @@ function splitCsvLine(line: string, delimiter: string) {
       current = '';
       continue;
     }
+    if ((char === '\r' || char === '\n') && !quoted) {
+      values.push(current);
+      rows.push(values);
+      values = [];
+      current = '';
+      if (char === '\r' && next === '\n') index += 1;
+      continue;
+    }
+    if (char === '\r' && quoted) {
+      current += '\n';
+      if (next === '\n') index += 1;
+      continue;
+    }
     current += char;
   }
+
+  if (quoted) {
+    throw new BadRequestException(
+      'CSV possui campo com aspas nao finalizadas.',
+    );
+  }
   values.push(current);
-  return values;
+  rows.push(values);
+  return rows;
 }
 
 function isEmptyRow(row: Record<string, string>) {
@@ -1731,6 +1820,7 @@ function normalizeClientType(value: string) {
 
 function normalizePersonType(value: string) {
   const comparable = comparableHeader(value);
+  if (!comparable) return null;
   if (
     comparable.includes('fisica') ||
     comparable.includes('cpf') ||
@@ -1943,6 +2033,13 @@ function buildClientContact(data: Record<string, unknown>, index: number) {
 function nullableString(value: unknown) {
   const text = primitiveString(value).trim();
   return text || undefined;
+}
+
+function jsonObjectOrUndefined(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Prisma.InputJsonObject;
 }
 
 async function generateProvisionalCatalogSku(

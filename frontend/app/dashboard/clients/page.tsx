@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { apiFetch, apiUrl } from "@/lib/api";
+import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
 
 type ClientListItem = {
   id: string;
@@ -17,6 +17,7 @@ type ClientListItem = {
   state?: string | null;
   preferences?: string | null;
   clientType?: "CONTRACT" | "NO_CONTRACT" | null;
+  isProvisional?: boolean | null;
   isDelinquent?: boolean | null;
   proposalCreationBlocked?: boolean | null;
   proposalBlockReason?: string | null;
@@ -45,6 +46,8 @@ type ContractFilter = "ALL" | "CONTRACT" | "NO_CONTRACT";
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<ClientListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [inssFilter, setInssFilter] = useState<FilterOption>("ALL");
@@ -59,12 +62,28 @@ export default function ClientsPage() {
   }, []);
 
   async function loadClients() {
+    setLoading(true);
+    setError("");
     try {
       const res = await apiFetch(apiUrl("/clients"), { cache: "no-store" });
-      if (!res.ok) return;
+      if (!res.ok) {
+        throw new Error(
+          await readApiErrorMessage(
+            res,
+            "Nao foi possivel carregar os clientes.",
+          ),
+        );
+      }
       setClients((await res.json()) as ClientListItem[]);
-    } catch {
+    } catch (loadError: unknown) {
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Nao foi possivel carregar os clientes.",
+      );
       setClients([]);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -73,10 +92,14 @@ export default function ClientsPage() {
     return clients.filter((client) => {
       const matchesInss =
         inssFilter === "ALL" ||
-        (inssFilter === "YES" ? Boolean(client.withholdsInss) : !client.withholdsInss);
+        (inssFilter === "YES"
+          ? Boolean(client.withholdsInss)
+          : !client.withholdsInss);
       const matchesRetention =
         retentionFilter === "ALL" ||
-        (retentionFilter === "YES" ? Boolean(client.withholdsIss) : !client.withholdsIss);
+        (retentionFilter === "YES"
+          ? Boolean(client.withholdsIss)
+          : !client.withholdsIss);
       const matchesDelinquent =
         delinquentFilter === "ALL" ||
         (delinquentFilter === "YES"
@@ -151,22 +174,48 @@ export default function ClientsPage() {
   ]);
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-zinc-800">Carteira de Clientes</h1>
-          <p className="mt-1 text-zinc-500">Faca a gestao das empresas, contatos e equipamentos associados.</p>
+          <h1 className="text-3xl font-bold text-zinc-800">
+            Carteira de Clientes
+          </h1>
+          <p className="mt-1 text-zinc-500">
+            Faca a gestao das empresas, contatos e equipamentos associados.
+          </p>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/dashboard/clients/new" className="ml-2 flex items-center rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white shadow-sm transition-colors hover:bg-blue-500">
+          <Link
+            href="/dashboard/clients/new"
+            className="ml-2 flex items-center rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white shadow-sm transition-colors hover:bg-blue-500"
+          >
             <span className="mr-2">+</span> Novo Cliente
           </Link>
         </div>
       </div>
 
+      {error ? (
+        <div
+          role="alert"
+          className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700"
+        >
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => void loadClients()}
+            className="text-sm font-bold underline"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      ) : null}
+
       <div className="mb-4 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center gap-2">
-          <label className="block flex-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          <label
+            htmlFor="client-search"
+            className="block flex-1 text-xs font-semibold uppercase tracking-wide text-zinc-500"
+          >
             Buscar cliente
           </label>
           <button
@@ -178,6 +227,7 @@ export default function ClientsPage() {
           </button>
         </div>
         <input
+          id="client-search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="CNPJ, nome, razao social, endereco, contato, e-mail, telefone..."
@@ -228,7 +278,9 @@ export default function ClientsPage() {
             <SelectFilter
               label="Bloqueio de propostas"
               value={proposalBlockFilter}
-              onChange={(value) => setProposalBlockFilter(value as FilterOption)}
+              onChange={(value) =>
+                setProposalBlockFilter(value as FilterOption)
+              }
               options={[
                 { value: "ALL", label: "Todos" },
                 { value: "YES", label: "Bloqueados" },
@@ -256,41 +308,72 @@ export default function ClientsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200">
-              {filteredClients.map((client) => (
-                <tr key={client.id} className="transition-colors hover:bg-zinc-50">
-                  <td className="p-4 font-mono text-sm font-bold text-zinc-700">
-                    {client.code}
-                  </td>
-                  <td className="p-4">
-                    <p className="font-bold text-zinc-800">{client.companyName}</p>
-                    <p className="text-xs text-zinc-500">{client.tradeName || "---"}</p>
-                    {client.proposalCreationBlocked ? (
-                      <span
-                        className="mt-2 inline-flex rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700"
-                        title={client.proposalBlockReason || "Propostas bloqueadas"}
+              {!loading &&
+                filteredClients.map((client) => (
+                  <tr
+                    key={client.id}
+                    className="transition-colors hover:bg-zinc-50"
+                  >
+                    <td className="p-4 font-mono text-sm font-bold text-zinc-700">
+                      {client.code}
+                    </td>
+                    <td className="p-4">
+                      <p className="font-bold text-zinc-800">
+                        {client.companyName}
+                      </p>
+                      <p className="text-xs text-zinc-500">
+                        {client.tradeName || "---"}
+                      </p>
+                      {client.proposalCreationBlocked ? (
+                        <span
+                          className="mt-2 inline-flex rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700"
+                          title={
+                            client.proposalBlockReason || "Propostas bloqueadas"
+                          }
+                        >
+                          Propostas bloqueadas
+                        </span>
+                      ) : null}
+                      {client.isProvisional ? (
+                        <span className="mt-2 inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800">
+                          Vinculo de maquina pendente
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="p-4 font-medium text-zinc-600">
+                      {client.cnpj || "Nao informado"}
+                    </td>
+                    <td className="p-4 text-sm text-zinc-600">
+                      <p>{client.email || "Sem e-mail"}</p>
+                      <p>{client.phone || "Sem telefone"}</p>
+                    </td>
+                    <td className="max-w-xs truncate p-4 text-sm text-zinc-600">
+                      {client.address
+                        ? `${client.address} - ${client.city || ""}/${client.state || ""}`
+                        : `${client.city || ""}/${client.state || ""}`}
+                    </td>
+                    <td className="p-4 text-right">
+                      <Link
+                        href={`/dashboard/clients/${client.id}`}
+                        className="text-sm font-semibold text-zinc-600 hover:text-blue-700 hover:underline"
                       >
-                        Propostas bloqueadas
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="p-4 font-medium text-zinc-600">{client.cnpj || "Nao informado"}</td>
-                  <td className="p-4 text-sm text-zinc-600">
-                    <p>{client.email || "Sem e-mail"}</p>
-                    <p>{client.phone || "Sem telefone"}</p>
-                  </td>
-                  <td className="max-w-xs truncate p-4 text-sm text-zinc-600">
-                    {client.address ? `${client.address} - ${client.city || ""}/${client.state || ""}` : `${client.city || ""}/${client.state || ""}`}
-                  </td>
-                  <td className="p-4 text-right">
-                    <Link href={`/dashboard/clients/${client.id}`} className="text-sm font-semibold text-zinc-600 hover:text-blue-700 hover:underline">
-                      Ver detalhes
-                    </Link>
+                        Ver detalhes
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="p-8 text-center text-zinc-500">
+                    Carregando clientes...
                   </td>
                 </tr>
-              ))}
-              {filteredClients.length === 0 && (
+              ) : null}
+              {!loading && filteredClients.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-zinc-500">Nenhum cliente registrado.</td>
+                  <td colSpan={6} className="p-8 text-center text-zinc-500">
+                    Nenhum cliente registrado.
+                  </td>
                 </tr>
               )}
             </tbody>

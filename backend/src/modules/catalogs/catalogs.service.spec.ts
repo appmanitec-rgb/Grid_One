@@ -186,6 +186,105 @@ describe('CatalogsService', () => {
     expect(result.lastCost).toBe(115);
   });
 
+  it('returns a compact catalog list with an accurate stock summary', async () => {
+    prisma.catalogItem.findMany.mockResolvedValue([
+      catalogItemFixture({
+        stockMin: 5,
+        inventoryBalances: [
+          {
+            physicalQty: 4,
+            reservedQty: 1,
+            minQty: 5,
+            maxQty: 20,
+            reorderPoint: 5,
+          },
+        ],
+      }),
+    ]);
+
+    const result = await service.findAll({
+      role: UserRole.ADMIN,
+      accessPolicy: { catalog: { viewCosts: true } },
+    });
+
+    const listQuery = prisma.catalogItem.findMany.mock.calls[0][0];
+    expect(listQuery).not.toHaveProperty('include');
+    expect(listQuery).toMatchObject({
+      where: { isActive: true },
+      orderBy: { name: 'asc' },
+      select: {
+        inventoryBalances: {
+          select: {
+            physicalQty: true,
+            reservedQty: true,
+            minQty: true,
+            reorderPoint: true,
+          },
+        },
+      },
+    });
+    expect(Object.keys(listQuery.select).sort()).toEqual(
+      [
+        'id',
+        'sku',
+        'legacyCode',
+        'legacySequence',
+        'radarCode',
+        'name',
+        'description',
+        'commercialDescription',
+        'type',
+        'itemClassification',
+        'acquisitionOrigin',
+        'category',
+        'subcategory',
+        'unit',
+        'brand',
+        'ncm',
+        'basePrice',
+        'costPrice',
+        'averageCost',
+        'profitMargin',
+        'stockCurrent',
+        'stockMin',
+        'stockMax',
+        'storageLocation',
+        'isActive',
+        'inventoryBalances',
+      ].sort(),
+    );
+    expect(listQuery.select).not.toHaveProperty('technicalSpecs');
+    expect(listQuery.select).not.toHaveProperty('taxProfile');
+    expect(result[0]).not.toHaveProperty('inventoryBalances');
+    expect(result[0].operationalSummary).toMatchObject({
+      physicalQty: 4,
+      reservedQty: 1,
+      availableQty: 3,
+      isLowStock: true,
+    });
+  });
+
+  it('masks list cost fields while keeping the suggested sale price', async () => {
+    prisma.catalogItem.findMany.mockResolvedValue([
+      catalogItemFixture({
+        basePrice: 250,
+        costPrice: 120,
+        averageCost: 110,
+        profitMargin: 30,
+      }),
+    ]);
+
+    const result = await service.findAll({
+      role: UserRole.SALES,
+      accessPolicy: { catalog: { viewCosts: false } },
+    });
+
+    expect(result[0].basePrice).toBe(250);
+    expect(result[0].costPrice).toBeNull();
+    expect(result[0].averageCost).toBeNull();
+    expect(result[0].profitMargin).toBeNull();
+  });
+
   it('blocks direct stock balance mutation through catalog update', async () => {
     await expect(
       service.update('cat-1', { stockCurrent: 50 } as any),

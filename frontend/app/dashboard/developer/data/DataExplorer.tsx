@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAccessFromToken } from "@/lib/access";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
@@ -55,7 +54,6 @@ type ImportPreviewResult = {
 const PAGE_SIZE = 50;
 
 export default function DataExplorer({ resource }: { resource: StudioResource }) {
-  const router = useRouter();
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const [rows, setRows] = useState<StudioRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -341,14 +339,6 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
       `manitec-studio-${resource.key}-${new Date().toISOString().slice(0, 10)}.csv`,
       csv,
     );
-  }
-
-  function goBack() {
-    if (window.history.length > 1) {
-      router.back();
-      return;
-    }
-    router.push("/dashboard/developer/data");
   }
 
   function downloadTemplate() {

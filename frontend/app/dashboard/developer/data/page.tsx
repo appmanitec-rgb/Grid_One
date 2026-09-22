@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { STUDIO_RESOURCES } from "./resources";
@@ -11,17 +10,8 @@ type ResourceCount = Record<string, number>;
 const categoryOrder = ["Comercial", "Operacao", "Ativos", "Suprimentos", "Financeiro", "RH"];
 
 export default function StudioDataPage() {
-  const router = useRouter();
   const [query, setQuery] = useState("");
   const [counts, setCounts] = useState<ResourceCount>({});
-
-  function goBack() {
-    if (window.history.length > 1) {
-      router.back();
-      return;
-    }
-    router.push("/dashboard");
-  }
 
   useEffect(() => {
     let cancelled = false;

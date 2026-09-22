@@ -169,24 +169,54 @@ describe('GeneratorsService', () => {
     });
   });
 
-  it('lists operational summary with limited relationships', async () => {
+  it('lists a compact operational summary without legacy technical data', async () => {
     db.generator.findMany.mockResolvedValue([]);
 
     await service.findAll();
 
-    expect(db.generator.findMany).toHaveBeenCalledWith(
+    const query = db.generator.findMany.mock.calls[0][0];
+    expect(query).not.toHaveProperty('include');
+    expect(query.select).toEqual(
       expect.objectContaining({
-        include: expect.objectContaining({
-          client: expect.any(Object),
-          model: expect.any(Object),
-          currentSite: expect.any(Object),
-          orders: expect.objectContaining({ take: 1 }),
-          contractSchedules: expect.objectContaining({ take: 1 }),
-          contractLinks: expect.objectContaining({ take: 1 }),
-          serviceTickets: expect.objectContaining({ take: 3 }),
+        id: true,
+        code: true,
+        legacyCode: true,
+        name: true,
+        brand: true,
+        serialNumber: true,
+        power: true,
+        hourMeter: true,
+        assetTag: true,
+        installationSite: true,
+        operationalStatus: true,
+        criticality: true,
+        voltage: true,
+        engineModelName: true,
+        notes: true,
+        clientId: true,
+        client: { select: { id: true, companyName: true } },
+        model: { select: { id: true, name: true } },
+        currentSite: { select: { id: true, name: true } },
+        orders: expect.objectContaining({
+          take: 1,
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            finishedAt: true,
+            updatedAt: true,
+          },
+        }),
+        contractSchedules: expect.objectContaining({ take: 1 }),
+        contractLinks: expect.objectContaining({ take: 1 }),
+        serviceTickets: expect.objectContaining({
+          take: 3,
+          select: { id: true, title: true, status: true },
         }),
       }),
     );
+    expect(query.select).not.toHaveProperty('legacyTechnicalData');
+    expect(query.select).not.toHaveProperty('engineSerialNumber');
   });
 
   it('loads an old generator model even when it has no maintenance plan', async () => {
