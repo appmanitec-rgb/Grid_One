@@ -261,9 +261,9 @@ describe('ProposalsService', () => {
       linkedClientId: null,
     });
 
-    await expect(service.revise('proposal-00', 'seller-1', '  ')).rejects.toThrow(
-      'Informe o motivo da revisao',
-    );
+    await expect(
+      service.revise('proposal-00', 'seller-1', '  '),
+    ).rejects.toThrow('Informe o motivo da revisao');
     expect(db.$transaction).not.toHaveBeenCalled();
   });
 
@@ -1030,6 +1030,90 @@ describe('ProposalsService', () => {
         }),
       }),
     );
+  });
+
+  it('does not create an order when a contract proposal is marked as won', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      role: UserRole.ADMIN,
+      linkedClientId: null,
+    });
+    db.proposal.findUnique.mockResolvedValue({
+      id: 'proposal-1',
+      code: 'PROP-00001',
+      status: ProposalStatus.CLIENT_REVIEW,
+      type: ProposalType.CONTRACT,
+      clientId: 'client-1',
+      generatorId: 'generator-1',
+      salesOpportunityId: 'opportunity-1',
+      totalValue: 1200,
+    });
+    db.proposal.update.mockResolvedValue({
+      id: 'proposal-1',
+      status: ProposalStatus.WON,
+    });
+
+    const result = await service.clientApprove('proposal-1', 'admin-1');
+
+    expect(result).toMatchObject({
+      message: 'Proposta aprovada pelo cliente.',
+    });
+    expect(result).not.toHaveProperty('ordemDeServico');
+    expect(db.salesOpportunity.update).toHaveBeenCalledWith({
+      where: { id: 'opportunity-1' },
+      data: expect.objectContaining({
+        stage: 'WON',
+        wonAt: expect.any(Date),
+      }),
+    });
+  });
+
+  it('marks the opportunity as proposal sent after board approval', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      role: UserRole.ADMIN,
+      linkedClientId: null,
+    });
+    db.proposal.findUnique.mockResolvedValue({
+      id: 'proposal-1',
+      status: ProposalStatus.BOARD_REVIEW,
+      type: ProposalType.CONTRACT,
+      clientId: 'client-1',
+      salesOpportunityId: 'opportunity-1',
+      paymentTerm: null,
+    });
+    db.proposal.update.mockResolvedValue({
+      id: 'proposal-1',
+      status: ProposalStatus.CLIENT_REVIEW,
+    });
+
+    await service.boardApprove('proposal-1', 'admin-1');
+
+    expect(db.salesOpportunity.update).toHaveBeenCalledWith({
+      where: { id: 'opportunity-1' },
+      data: expect.objectContaining({ stage: 'PROPOSAL_SENT' }),
+    });
+  });
+
+  it('rejects contract conversion for a won service proposal', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      role: UserRole.ADMIN,
+      linkedClientId: null,
+    });
+    db.proposal.findUnique.mockResolvedValue({
+      id: 'proposal-1',
+      status: ProposalStatus.WON,
+      type: ProposalType.SERVICES,
+      generatorId: 'generator-1',
+    });
+
+    await expect(
+      service.convertWonProposalToContract('proposal-1', 'admin-1'),
+    ).rejects.toThrow(
+      'Apenas propostas do tipo contrato podem ser convertidas em contrato.',
+    );
+    expect(db.serviceContract.create).not.toHaveBeenCalled();
   });
 
   it('does not duplicate receivable when proposal contract automation finds one', async () => {

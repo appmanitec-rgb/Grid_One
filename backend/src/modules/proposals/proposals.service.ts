@@ -343,18 +343,6 @@ export class ProposalsService {
         tx,
       );
 
-      if (
-        linkedOpportunity &&
-        (linkedOpportunity.stage === SalesOpportunityStage.PROSPECTION ||
-          linkedOpportunity.stage ===
-            SalesOpportunityStage.SITE_SURVEY_SCHEDULED)
-      ) {
-        await tx.salesOpportunity.update({
-          where: { id: linkedOpportunity.id },
-          data: { stage: SalesOpportunityStage.PROPOSAL_SENT },
-        });
-      }
-
       return tx.proposal.findUnique({
         where: { id: proposal.id },
         include: {
@@ -719,8 +707,7 @@ export class ProposalsService {
     if (
       proposal.generatorId &&
       (proposal.type === ProposalType.PARTS_AND_SERVICES ||
-        proposal.type === ProposalType.SERVICES ||
-        proposal.type === ProposalType.CONTRACT)
+        proposal.type === ProposalType.SERVICES)
     ) {
       const os = await this.prisma.maintenanceOrder.create({
         data: {
@@ -874,6 +861,11 @@ export class ProposalsService {
       if (proposal.status !== ProposalStatus.WON) {
         throw new Error(
           'Apenas propostas ganhas podem ser convertidas em contrato.',
+        );
+      }
+      if (proposal.type !== ProposalType.CONTRACT) {
+        throw new BadRequestException(
+          'Apenas propostas do tipo contrato podem ser convertidas em contrato.',
         );
       }
       if (!proposal.generatorId) {
@@ -1209,6 +1201,7 @@ export class ProposalsService {
           select: COMMERCIAL_GENERATOR_PROPOSAL_SELECT,
         },
         postSaleGenerator: { select: { id: true, name: true } },
+        generatedContract: { select: { id: true, code: true, status: true } },
         salesOpportunity: {
           select: {
             id: true,
@@ -1561,10 +1554,7 @@ export class ProposalsService {
     const contentFields = Object.keys(updateProposalDto).filter(
       (field) => field !== 'status',
     );
-    if (
-      current.status !== ProposalStatus.DRAFT &&
-      contentFields.length > 0
-    ) {
+    if (current.status !== ProposalStatus.DRAFT && contentFields.length > 0) {
       throw new BadRequestException(
         `A proposta ${current.code} esta em ${current.status} e e imutavel. Gere uma nova revisao para alterar o conteudo.`,
       );
@@ -1919,7 +1909,9 @@ export class ProposalsService {
     if (!salesOpportunityId) return;
 
     let nextStage: SalesOpportunityStage | null = null;
-    if (proposalStatus === ProposalStatus.WON) {
+    if (proposalStatus === ProposalStatus.CLIENT_REVIEW) {
+      nextStage = SalesOpportunityStage.PROPOSAL_SENT;
+    } else if (proposalStatus === ProposalStatus.WON) {
       nextStage = SalesOpportunityStage.WON;
     } else if (proposalStatus === ProposalStatus.LOST) {
       nextStage = SalesOpportunityStage.LOST;
@@ -1929,7 +1921,19 @@ export class ProposalsService {
 
     await tx.salesOpportunity.update({
       where: { id: salesOpportunityId },
-      data: { stage: nextStage },
+      data: {
+        stage: nextStage,
+        ...(proposalStatus === ProposalStatus.WON
+          ? {
+              wonAt: new Date(),
+              lostAt: null,
+              lossReason: null,
+              lossReasonDetail: null,
+            }
+          : proposalStatus === ProposalStatus.LOST
+            ? { lostAt: new Date(), wonAt: null }
+            : {}),
+      },
     });
   }
 

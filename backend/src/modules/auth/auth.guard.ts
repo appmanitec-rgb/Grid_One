@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
+import { DatabaseService } from '../../database/database.service';
+import { allAccessPolicy, effectiveAccessPolicy } from '../users/access-policy';
 
 type AuthPayload = {
   sub: string;
@@ -16,7 +18,10 @@ const MFA_AUTH_ENABLED = process.env.MFA_AUTH_ENABLED === 'true';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly database: DatabaseService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
@@ -48,7 +53,32 @@ export class AuthGuard implements CanActivate {
       );
     }
 
-    request['user'] = payload;
+    const user = await this.database.user.findUnique({
+      where: { id: payload.sub },
+      select: {
+        id: true,
+        role: true,
+        isActive: true,
+        isSystemMaster: true,
+        accessPolicy: true,
+        linkedClientId: true,
+      },
+    });
+    if (!user?.isActive) {
+      throw new UnauthorizedException(
+        'Usuario indisponivel para autenticacao.',
+      );
+    }
+
+    request['user'] = {
+      ...payload,
+      role: user.role,
+      isSystemMaster: user.isSystemMaster,
+      linkedClientId: user.linkedClientId,
+      accessPolicy: user.isSystemMaster
+        ? allAccessPolicy
+        : effectiveAccessPolicy(user.role, user.accessPolicy),
+    };
     return true;
   }
 

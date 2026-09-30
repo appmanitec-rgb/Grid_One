@@ -81,14 +81,15 @@ export default function SuppliersPage() {
                 <th className="p-4 font-medium">CNPJ</th>
                 <th className="p-4 font-medium">Contato</th>
                 <th className="p-4 font-medium">Atuacao</th>
-                <th className="p-4 text-right font-medium">Acoes</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200">
               {!loading && items.map((supplier) => (
                 <tr key={supplier.id} className="transition-colors hover:bg-zinc-50">
                   <td className="p-4">
-                    <p className="font-bold text-zinc-800">{supplier.companyName}</p>
+                    <Link href={`/dashboard/suppliers/${supplier.id}`} className="dashboard-record-link font-bold" title="Abrir cadastro do fornecedor">
+                      {supplier.companyName}
+                    </Link>
                     <p className="text-xs text-zinc-500">{supplier.tradeName || "-"}</p>
                   </td>
                   <td className="p-4 text-sm text-zinc-600">{supplier.cnpj || "Nao informado"}</td>
@@ -100,21 +101,16 @@ export default function SuppliersPage() {
                     <p>{supplier.city || "-"}{supplier.state ? `/${supplier.state}` : ""}</p>
                     <p className="truncate">{(supplier.categories || []).slice(0, 2).join(", ") || "Sem categorias"}</p>
                   </td>
-                  <td className="p-4 text-right">
-                    <Link href={`/dashboard/suppliers/${supplier.id}`} className="text-sm font-semibold text-zinc-600 hover:text-blue-700 hover:underline">
-                      Ver detalhes
-                    </Link>
-                  </td>
                 </tr>
               ))}
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-zinc-500">Carregando fornecedores...</td>
+                  <td colSpan={4} className="p-8 text-center text-zinc-500">Carregando fornecedores...</td>
                 </tr>
               ) : null}
               {!loading && items.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-zinc-500">Nenhum fornecedor cadastrado.</td>
+                  <td colSpan={4} className="p-8 text-center text-zinc-500">Nenhum fornecedor cadastrado.</td>
                 </tr>
               )}
             </tbody>

@@ -212,7 +212,6 @@ export default function InventoryPage() {
                 <th className="px-2 py-2">Reservado</th>
                 <th className="px-2 py-2">Disponivel</th>
                 <th className="px-2 py-2">Min / Max</th>
-                <th className="px-2 py-2 text-right">Acao</th>
               </tr>
             </thead>
             <tbody>
@@ -221,20 +220,16 @@ export default function InventoryPage() {
                 return (
                   <tr key={row.id} className="border-b border-zinc-100">
                     <td className="px-2 py-2 text-zinc-700">{row.warehouse}</td>
-                    <td className="px-2 py-2 font-semibold text-zinc-800">{row.item}</td>
+                    <td className="px-2 py-2 font-semibold text-zinc-800">
+                      <Link href={`/dashboard/catalog/${row.catalogItemId}`} className="dashboard-record-link" title="Abrir cadastro do item">
+                        {row.item}
+                      </Link>
+                    </td>
                     <td className="px-2 py-2 text-zinc-700">{row.sku || "-"} / {row.partNumber || "-"}</td>
                     <td className="px-2 py-2 text-zinc-700">{row.physicalQty}</td>
                     <td className="px-2 py-2 text-zinc-700">{row.reservedQty}</td>
                     <td className={`px-2 py-2 font-semibold ${low ? "text-red-600" : "text-zinc-800"}`}>{row.availableQty}</td>
                     <td className="px-2 py-2 text-zinc-700">{row.minQty} / {row.maxQty}</td>
-                    <td className="px-2 py-2 text-right">
-                      <Link
-                        href={`/dashboard/catalog/${row.catalogItemId}`}
-                        className="text-xs font-semibold text-blue-700 hover:underline"
-                      >
-                        Abrir
-                      </Link>
-                    </td>
                   </tr>
                 );
               })}

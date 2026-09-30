@@ -63,7 +63,7 @@ export class MaintenanceOrdersController {
     return this.maintenanceOrdersService.update(id, dto, actorUserId);
   }
 
-  @RequireAccessPolicy('orders.finish')
+  @RequireAccessPolicy('maintenanceOrders.submitVisitReport')
   @Post(':id/visit-report/submit')
   submitVisitReport(
     @Req() req: Request,

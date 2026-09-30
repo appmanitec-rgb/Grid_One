@@ -512,7 +512,7 @@ export default function ContractDetailPage() {
                     <th className="px-3 py-3 font-semibold">Vencimento</th>
                     <th className="px-3 py-3 font-semibold">Valor</th>
                     <th className="px-3 py-3 font-semibold">Status</th>
-                    <th className="px-3 py-3 font-semibold">Acao</th>
+                    <th className="dashboard-sticky-actions px-3 py-3 font-semibold">Acao</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -540,7 +540,7 @@ export default function ContractDetailPage() {
                             {invoiceStatusLabel(invoice.status)}
                           </DataPill>
                         </td>
-                        <td className="px-3 py-3">
+                        <td className="dashboard-sticky-actions px-3 py-3">
                           {canOpenReceivable ? (
                             <PermissionAwareLink
                               href="/dashboard/finance/accounts-receivable"

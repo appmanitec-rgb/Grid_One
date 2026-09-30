@@ -27,6 +27,8 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/dashboard/commercial-inspections": { title: "Vistorias Comerciais", subtitle: "Checklists técnicos e mídias para dimensionamento." },
   "/dashboard/proposals": { title: "Central de Propostas", subtitle: "Controle completo por fase e revisões." },
   "/dashboard/orders": { title: "Centro de Ordens", subtitle: "Execução técnica com SLA e prioridade." },
+  "/dashboard/operation/downtimes": { title: "Máquinas Paradas", subtitle: "Resposta a falhas, retorno à operação e causa raiz." },
+  "/dashboard/operation/warranties": { title: "Gestão de Garantias", subtitle: "Cobertura própria, fábrica e acompanhamento de fornecedores." },
   "/dashboard/contracts": { title: "Gestão de Contratos", subtitle: "Vigência, SLA, faturamento e preventiva automática." },
   "/dashboard/reports": { title: "Relatórios Gerenciais", subtitle: "Indicadores consolidados de performance e operação." },
   "/dashboard/monitoring": { title: "Monitoramento Operacional", subtitle: "Telemetria, alertas, automações e resposta de campo." },
@@ -77,7 +79,7 @@ function getRouteFamily(pathname: string) {
   if (pathname.startsWith("/dashboard/clients") || pathname.startsWith("/dashboard/opportunities") || pathname.startsWith("/dashboard/commercial-inspections") || pathname.startsWith("/dashboard/proposals") || pathname.startsWith("/dashboard/contracts")) {
     return "Comercial";
   }
-  if (pathname.startsWith("/dashboard/orders") || pathname.startsWith("/dashboard/dispatch") || pathname.startsWith("/dashboard/technicians") || pathname.startsWith("/dashboard/monitoring") || pathname.startsWith("/dashboard/sites") || pathname.startsWith("/dashboard/equipments")) {
+  if (pathname.startsWith("/dashboard/orders") || pathname.startsWith("/dashboard/operation") || pathname.startsWith("/dashboard/dispatch") || pathname.startsWith("/dashboard/technicians") || pathname.startsWith("/dashboard/monitoring") || pathname.startsWith("/dashboard/sites") || pathname.startsWith("/dashboard/equipments")) {
     return "Operação";
   }
   if (pathname.startsWith("/dashboard/control") || pathname.startsWith("/dashboard/management") || pathname.startsWith("/dashboard/company-settings") || pathname.startsWith("/dashboard/profile") || pathname.startsWith("/dashboard/automation") || pathname.startsWith("/dashboard/reports")) {

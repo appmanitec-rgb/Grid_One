@@ -505,7 +505,7 @@ export default function TechniciansPage() {
                       <th className="px-4 py-3">Carga</th>
                       <th className="px-4 py-3">Certificacoes</th>
                       <th className="px-4 py-3">Posicao</th>
-                      <th className="px-4 py-3 text-right">Acoes</th>
+                      <th className="dashboard-sticky-actions px-4 py-3 text-right">Acoes</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
@@ -528,9 +528,9 @@ export default function TechniciansPage() {
                           className="align-top transition hover:bg-slate-50/70"
                         >
                           <td className="px-4 py-4">
-                            <p className="font-semibold text-slate-900">
+                            <button type="button" onClick={() => fillFormFromRow(row)} className="dashboard-record-link text-left font-semibold" title="Abrir cadastro do técnico">
                               {row.user.name}
-                            </p>
+                            </button>
                             <p className="mt-1 text-xs text-slate-500">
                               {row.user.code} · {row.user.email}
                             </p>
@@ -594,7 +594,7 @@ export default function TechniciansPage() {
                               <span className="text-slate-500">Nao informado</span>
                             )}
                           </td>
-                          <td className="px-4 py-4 text-right">
+                          <td className="dashboard-sticky-actions px-4 py-4 text-right">
                             <div className="flex justify-end gap-2">
                               <button
                                 type="button"

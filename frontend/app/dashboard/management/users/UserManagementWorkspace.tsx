@@ -349,8 +349,8 @@ const CATALOG_ITEMS = [
   PermissionItem<keyof AccessPolicy["catalog"]>
 >;
 const USER_ITEMS = [
-  { key: "manage", label: "Gerenciar usuarios" },
-  { key: "manageSecurity", label: "Seguranca" },
+  { key: "manage", label: "Gerenciar cadastros de usuários" },
+  { key: "manageSecurity", label: "Alterar cargos e permissões" },
   { key: "manageCertifications", label: "Certificacoes" },
   { key: "manageSpecialties", label: "Especialidades" },
   { key: "manageHierarchy", label: "Hierarquia e gestores" },
@@ -360,13 +360,13 @@ const PROPOSAL_ITEMS = [
   { key: "view", label: "Visualizar propostas" },
   { key: "create", label: "Criar propostas" },
   { key: "update", label: "Editar propostas" },
-  { key: "approve", label: "Aprovar proposta" },
+  { key: "approve", label: "Aprovar fluxo de proposta" },
   { key: "cancel", label: "Cancelar/reprovar proposta" },
   {
     key: "requestDiscountAboveLimit",
     label: "Solicitar desconto acima do limite",
   },
-  { key: "approveBudget", label: "Aprovar proposta" },
+  { key: "approveBudget", label: "Aprovar orçamento" },
 ] as const satisfies ReadonlyArray<
   PermissionItem<keyof AccessPolicy["proposals"]>
 >;
@@ -503,6 +503,182 @@ const STUDIO_ITEMS = [
   PermissionItem<keyof AccessPolicy["studio"]>
 >;
 
+type PermissionGroup =
+  | "access"
+  | "commercial"
+  | "operations"
+  | "supply"
+  | "governance";
+type PermissionSectionDefinition = {
+  section: keyof AccessPolicy;
+  title: string;
+  description: string;
+  group: PermissionGroup;
+  items: ReadonlyArray<PermissionItem<string>>;
+};
+
+const PERMISSION_GROUPS: ReadonlyArray<{
+  key: PermissionGroup | "all";
+  label: string;
+}> = [
+  { key: "all", label: "Todas as áreas" },
+  { key: "access", label: "Acesso e cadastros" },
+  { key: "commercial", label: "Comercial" },
+  { key: "operations", label: "Operação" },
+  { key: "supply", label: "Suprimentos" },
+  { key: "governance", label: "Gestão e dados" },
+];
+
+const PERMISSION_SECTIONS: ReadonlyArray<PermissionSectionDefinition> = [
+  {
+    section: "pages",
+    title: "Acesso às páginas",
+    description: "Áreas visíveis no menu e rotas do sistema.",
+    group: "access",
+    items: PAGE_ITEMS,
+  },
+  {
+    section: "clients",
+    title: "Clientes",
+    description: "Cadastro e manutenção de clientes.",
+    group: "access",
+    items: CLIENT_ITEMS,
+  },
+  {
+    section: "equipments",
+    title: "Equipamentos",
+    description: "Ficha técnica, cadastro e modelos.",
+    group: "access",
+    items: EQUIPMENT_ITEMS,
+  },
+  {
+    section: "proposals",
+    title: "Propostas",
+    description: "Criação, negociação e aprovação comercial.",
+    group: "commercial",
+    items: PROPOSAL_ITEMS,
+  },
+  {
+    section: "contracts",
+    title: "Contratos",
+    description: "Criação, ativação e gestão contratual.",
+    group: "commercial",
+    items: CONTRACT_ITEMS,
+  },
+  {
+    section: "orders",
+    title: "Ordens de serviço",
+    description: "Criação, despacho e conclusão.",
+    group: "operations",
+    items: ORDER_ACTION_ITEMS,
+  },
+  {
+    section: "maintenanceOrders",
+    title: "Visitas e relatórios",
+    description: "Relatórios de visita e alocação excepcional.",
+    group: "operations",
+    items: ORDER_ITEMS,
+  },
+  {
+    section: "tickets",
+    title: "Atendimento",
+    description: "Chamados, SLA e conversão em OS.",
+    group: "operations",
+    items: TICKET_ITEMS,
+  },
+  {
+    section: "serviceReports",
+    title: "Laudos técnicos",
+    description: "Evidências, assinaturas e liberação.",
+    group: "operations",
+    items: SERVICE_REPORT_ITEMS,
+  },
+  {
+    section: "technicians",
+    title: "Técnicos",
+    description: "Agenda e despacho da equipe.",
+    group: "operations",
+    items: TECHNICIAN_ITEMS,
+  },
+  {
+    section: "technicianWork",
+    title: "Campo técnico",
+    description: "Fila individual e apontamento em campo.",
+    group: "operations",
+    items: TECHNICIAN_WORK_ITEMS,
+  },
+  {
+    section: "catalog",
+    title: "Catálogo",
+    description: "Itens, custos e margens.",
+    group: "supply",
+    items: CATALOG_ITEMS,
+  },
+  {
+    section: "inventory",
+    title: "Estoque",
+    description: "Reserva, consumo e ajuste de materiais.",
+    group: "supply",
+    items: INVENTORY_ITEMS,
+  },
+  {
+    section: "purchaseOrders",
+    title: "Compras",
+    description: "Pedidos, aprovação e recebimento.",
+    group: "supply",
+    items: PURCHASE_ORDER_ITEMS,
+  },
+  {
+    section: "users",
+    title: "Usuários",
+    description: "Perfis, segurança e hierarquia.",
+    group: "governance",
+    items: USER_ITEMS,
+  },
+  {
+    section: "finance",
+    title: "Financeiro",
+    description: "Lançamentos e conciliação.",
+    group: "governance",
+    items: FINANCE_ITEMS,
+  },
+  {
+    section: "people",
+    title: "Pessoas",
+    description: "RH e dados sensíveis.",
+    group: "governance",
+    items: PEOPLE_ITEMS,
+  },
+  {
+    section: "reports",
+    title: "Relatórios",
+    description: "Consulta e exportação de indicadores.",
+    group: "governance",
+    items: REPORT_ITEMS,
+  },
+  {
+    section: "settings",
+    title: "Configurações",
+    description: "Parâmetros da empresa e automações.",
+    group: "governance",
+    items: SETTINGS_ITEMS,
+  },
+  {
+    section: "studio",
+    title: "Manitec Studio",
+    description: "Dados, importação e auditoria.",
+    group: "governance",
+    items: STUDIO_ITEMS,
+  },
+  {
+    section: "audit",
+    title: "Auditoria",
+    description: "Leitura do histórico de eventos.",
+    group: "governance",
+    items: [{ key: "read", label: "Visualizar auditoria" }],
+  },
+];
+
 const PRIMARY_BUTTON =
   "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
 const SECONDARY_BUTTON =
@@ -561,6 +737,9 @@ export function UserManagementWorkspace({
   const router = useRouter();
   const viewerAccess = useMemo(() => getAccessFromToken(), []);
   const canManageSensitivePeople = viewerAccess.people.manageSensitive;
+  const canManageSecurity = viewerAccess.users.manageSecurity;
+  const canManageHierarchy =
+    viewerAccess.users.manageHierarchy || canManageSecurity;
   const [users, setUsers] = useState<UserRow[]>([]);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
@@ -600,6 +779,14 @@ export function UserManagementWorkspace({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  useEffect(() => {
+    if (area !== "permissions") return;
+    const requestedUserId = new URLSearchParams(window.location.search).get(
+      "user",
+    );
+    if (requestedUserId) setSelectedUserId(requestedUserId);
+  }, [area]);
 
   const isSelectedMaster = Boolean(selectedUser?.isSystemMaster);
   const departments = useMemo(
@@ -704,6 +891,7 @@ export function UserManagementWorkspace({
         normalizeEditableAccessPolicy(
           (record.accessPolicy as AccessPolicy) ||
             defaultAccessByRole(record.role),
+          record.role,
         ),
       );
     }
@@ -856,6 +1044,14 @@ export function UserManagementWorkspace({
     setSuccess("");
 
     if (
+      !canManageSecurity &&
+      (newUser.role === "ADMIN" || newUser.role === "MANAGER")
+    ) {
+      setError("Seu perfil não pode criar contas de administrador ou gestor.");
+      return;
+    }
+
+    if (
       !newUser.name.trim() ||
       !newUser.email.trim() ||
       !newUser.password.trim()
@@ -919,7 +1115,9 @@ export function UserManagementWorkspace({
               hourCost: toNumberOrUndefined(newUser.hourCost),
             }
           : {}),
-        accessPolicy: defaultAccessByRole(newUser.role),
+        ...(canManageSecurity
+          ? { accessPolicy: defaultAccessByRole(newUser.role) }
+          : {}),
       };
 
       const res = await apiFetch("/users", {
@@ -990,7 +1188,7 @@ export function UserManagementWorkspace({
       const payload = {
         name: selectedUser.name.trim(),
         email: selectedUser.email.trim(),
-        role: selectedUser.role,
+        ...(canManageSecurity ? { role: selectedUser.role } : {}),
         isActive: selectedUser.isActive,
         linkedClientId:
           selectedUser.role === "CLIENT"
@@ -1011,13 +1209,15 @@ export function UserManagementWorkspace({
           : {}),
         functionalId: (selectedUser.functionalId || "").trim() || undefined,
         documentId: (selectedUser.documentId || "").trim() || undefined,
-        managerId: selectedUser.managerId || undefined,
+        ...(canManageHierarchy
+          ? { managerId: selectedUser.managerId || null }
+          : {}),
         availabilityStatus: selectedUser.availabilityStatus || undefined,
         skillLevel: selectedUser.skillLevel || undefined,
         regionTags: splitTags(selectedUser.regionTags || []),
         mfaEnabled: Boolean(selectedUser.mfaEnabled),
         ...(trimmedPassword ? { password: trimmedPassword } : {}),
-        accessPolicy: policy,
+        ...(canManageSecurity ? { accessPolicy: policy } : {}),
       };
 
       const res = await apiFetch(`/users/${selectedUser.id}`, {
@@ -1130,10 +1330,7 @@ export function UserManagementWorkspace({
           )
         : null;
     if (decision !== "approve" && decisionReason === null) return;
-    if (
-      decision !== "approve" &&
-      (decisionReason?.trim().length ?? 0) < 5
-    ) {
+    if (decision !== "approve" && (decisionReason?.trim().length ?? 0) < 5) {
       setError("Informe uma justificativa com pelo menos 5 caracteres.");
       return;
     }
@@ -1203,6 +1400,7 @@ export function UserManagementWorkspace({
     setPolicy(
       normalizeEditableAccessPolicy(
         (base.accessPolicy as AccessPolicy) || defaultAccessByRole(base.role),
+        base.role,
       ),
     );
     setSuccess("");
@@ -1343,87 +1541,24 @@ export function UserManagementWorkspace({
     }
   }
 
-  function setPagePermission(key: keyof AccessPolicy["pages"], value: boolean) {
-    setPolicy((prev) =>
-      normalizeEditableAccessPolicy({
-        ...prev,
-        pages: { ...prev.pages, [key]: value },
-      }),
-    );
-  }
-
-  function setCatalogPermission(
-    key: keyof AccessPolicy["catalog"],
-    value: boolean,
-  ) {
-    setPolicy((prev) =>
-      normalizeEditableAccessPolicy({
-        ...prev,
-        catalog: { ...prev.catalog, [key]: value },
-      }),
-    );
-  }
-
-  function setUsersPermission(
-    key: keyof AccessPolicy["users"],
-    value: boolean,
-  ) {
-    setPolicy((prev) =>
-      normalizeEditableAccessPolicy({
-        ...prev,
-        users: { ...prev.users, [key]: value },
-      }),
-    );
-  }
-
-  function setProposalPermission(
-    key: keyof AccessPolicy["proposals"],
-    value: boolean,
-  ) {
-    setPolicy((prev) =>
-      normalizeEditableAccessPolicy({
-        ...prev,
-        proposals: { ...prev.proposals, [key]: value },
-      }),
-    );
-  }
-
-  function setOrderPermission(
-    key: keyof AccessPolicy["maintenanceOrders"],
-    value: boolean,
-  ) {
-    setPolicy((prev) =>
-      normalizeEditableAccessPolicy({
-        ...prev,
-        maintenanceOrders: { ...prev.maintenanceOrders, [key]: value },
-      }),
-    );
-  }
-
   const setSectionPermission: PermissionSectionSetter = (
     section,
     key,
     value,
   ) => {
     setPolicy((prev) =>
-      normalizeEditableAccessPolicy({
-        ...prev,
-        [section]: {
-          ...prev[section],
-          [key]: value,
+      normalizeEditableAccessPolicy(
+        {
+          ...prev,
+          [section]: {
+            ...prev[section],
+            [key]: value,
+          },
         },
-      }),
+        selectedUser?.role || "NORMAL",
+      ),
     );
   };
-
-  function setAuditRead(value: boolean) {
-    setPolicy((prev) =>
-      normalizeEditableAccessPolicy({
-        ...prev,
-        audit: { read: value },
-      }),
-    );
-  }
 
   function toggleSelectAllFiltered() {
     const visibleIds = filteredUsers
@@ -1473,6 +1608,8 @@ export function UserManagementWorkspace({
     saving,
     isSelectedMaster,
     canManageSensitivePeople,
+    canManageSecurity,
+    canManageHierarchy,
     onQueryChange: setQuery,
     onRoleFilterChange: setRoleFilter,
     onStatusFilterChange: setStatusFilter,
@@ -1493,13 +1630,7 @@ export function UserManagementWorkspace({
     onDeleteCertification: deleteCertification,
     onResetSelectedUser: resetSelectedUserDraft,
     onSaveSelectedUser: saveSelectedUser,
-    onSetPagePermission: setPagePermission,
-    onSetCatalogPermission: setCatalogPermission,
-    onSetUsersPermission: setUsersPermission,
-    onSetProposalPermission: setProposalPermission,
-    onSetOrderPermission: setOrderPermission,
     onSetSectionPermission: setSectionPermission,
-    onSetAuditRead: setAuditRead,
     onPolicyChange: setPolicy,
   };
 
@@ -1540,6 +1671,7 @@ export function UserManagementWorkspace({
             clients={clients}
             saving={saving}
             canManageSensitivePeople={canManageSensitivePeople}
+            canManageSecurity={canManageSecurity}
             onChange={setNewUser}
             onSubmit={handleCreateUser}
           />
@@ -1569,6 +1701,7 @@ export function UserManagementWorkspace({
       {area === "permissions" ? (
         <ManagementSection
           {...managementSectionProps}
+          permissionsOnly
           eyebrow="Permissoes"
           title="Permissoes por usuario"
           description="Selecione uma conta e ajuste a matriz de acesso com contexto de cargo, hierarquia e areas sensiveis."
@@ -1747,10 +1880,7 @@ function UserManagementOverview({
   auditDomainFilter: "ALL" | AuditDomain;
   saving: boolean;
   onChangeAuditDomain: Dispatch<SetStateAction<"ALL" | AuditDomain>>;
-  onApprovalDecision: (
-    id: string,
-    decision: ApprovalDecision,
-  ) => Promise<void>;
+  onApprovalDecision: (id: string, decision: ApprovalDecision) => Promise<void>;
 }) {
   return (
     <div className="grid gap-6 2xl:grid-cols-[minmax(0,0.82fr)_minmax(380px,0.78fr)]">
@@ -1997,6 +2127,7 @@ function ProvisioningCard({
   clients,
   saving,
   canManageSensitivePeople,
+  canManageSecurity,
   onChange,
   onSubmit,
 }: {
@@ -2004,6 +2135,7 @@ function ProvisioningCard({
   clients: ClientOption[];
   saving: boolean;
   canManageSensitivePeople: boolean;
+  canManageSecurity: boolean;
   onChange: Dispatch<SetStateAction<NewUserForm>>;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 }) {
@@ -2069,7 +2201,10 @@ function ProvisioningCard({
                 }))
               }
             >
-              {ROLE_OPTIONS.map((role) => (
+              {ROLE_OPTIONS.filter(
+                (role) =>
+                  canManageSecurity || (role !== "ADMIN" && role !== "MANAGER"),
+              ).map((role) => (
                 <option key={role} value={role}>
                   {ROLE_LABELS[role]}
                 </option>
@@ -2272,10 +2407,7 @@ function GovernanceRadar({
   auditDomainFilter: "ALL" | AuditDomain;
   saving: boolean;
   onChangeAuditDomain: Dispatch<SetStateAction<"ALL" | AuditDomain>>;
-  onApprovalDecision: (
-    id: string,
-    decision: ApprovalDecision,
-  ) => Promise<void>;
+  onApprovalDecision: (id: string, decision: ApprovalDecision) => Promise<void>;
 }) {
   return (
     <SectionCard
@@ -2366,38 +2498,53 @@ function GovernanceRadar({
                       </p>
                     </div>
                     <div className="flex gap-2">
-                      {row.type === "GENERATOR_PROPOSAL" ? (
-                        <button
-                          type="button"
-                          className="inline-flex items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-100"
-                          onClick={() =>
-                            void onApprovalDecision(row.id, "adjust")
-                          }
-                          disabled={saving}
-                        >
-                          Solicitar ajustes
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        className={SECONDARY_BUTTON}
-                        onClick={() =>
-                          void onApprovalDecision(row.id, "reject")
-                        }
-                        disabled={saving}
-                      >
-                        Rejeitar
-                      </button>
-                      <button
-                        type="button"
-                        className={PRIMARY_BUTTON}
-                        onClick={() =>
-                          void onApprovalDecision(row.id, "approve")
-                        }
-                        disabled={saving}
-                      >
-                        Aprovar
-                      </button>
+                      {(
+                        row.type === "GENERATOR_PROPOSAL"
+                          ? viewerAccess.proposals.approve
+                          : row.type === "BUDGET_DISCOUNT"
+                            ? viewerAccess.proposals.approveBudget
+                            : row.type === "RVT_SIGNOFF"
+                              ? viewerAccess.maintenanceOrders
+                                  .approveVisitReport
+                              : viewerAccess.finance.update
+                      ) ? (
+                        <>
+                          {row.type === "GENERATOR_PROPOSAL" ? (
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-100"
+                              onClick={() =>
+                                void onApprovalDecision(row.id, "adjust")
+                              }
+                              disabled={saving}
+                            >
+                              Solicitar ajustes
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            className={SECONDARY_BUTTON}
+                            onClick={() =>
+                              void onApprovalDecision(row.id, "reject")
+                            }
+                            disabled={saving}
+                          >
+                            Rejeitar
+                          </button>
+                          <button
+                            type="button"
+                            className={PRIMARY_BUTTON}
+                            onClick={() =>
+                              void onApprovalDecision(row.id, "approve")
+                            }
+                            disabled={saving}
+                          >
+                            Aprovar
+                          </button>
+                        </>
+                      ) : (
+                        <DataPill tone="slate">Somente leitura</DataPill>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2517,6 +2664,7 @@ function GovernanceRadar({
 }
 
 function ManagementSection({
+  permissionsOnly = false,
   eyebrow = "Operacao",
   title = "Usuarios e permissoes",
   description = "A lista principal ficou mais limpa para triagem, enquanto o editor lateral concentra regras, hierarquia e postura de acesso.",
@@ -2545,6 +2693,8 @@ function ManagementSection({
   saving,
   isSelectedMaster,
   canManageSensitivePeople,
+  canManageSecurity,
+  canManageHierarchy,
   onQueryChange,
   onRoleFilterChange,
   onStatusFilterChange,
@@ -2565,15 +2715,10 @@ function ManagementSection({
   onDeleteCertification,
   onResetSelectedUser,
   onSaveSelectedUser,
-  onSetPagePermission,
-  onSetCatalogPermission,
-  onSetUsersPermission,
-  onSetProposalPermission,
-  onSetOrderPermission,
   onSetSectionPermission,
-  onSetAuditRead,
   onPolicyChange,
 }: {
+  permissionsOnly?: boolean;
   eyebrow?: string;
   title?: string;
   description?: string;
@@ -2602,6 +2747,8 @@ function ManagementSection({
   saving: boolean;
   isSelectedMaster: boolean;
   canManageSensitivePeople: boolean;
+  canManageSecurity: boolean;
+  canManageHierarchy: boolean;
   onQueryChange: Dispatch<SetStateAction<string>>;
   onRoleFilterChange: Dispatch<SetStateAction<"ALL" | UserRole>>;
   onStatusFilterChange: Dispatch<SetStateAction<"ALL" | "ACTIVE" | "INACTIVE">>;
@@ -2624,30 +2771,35 @@ function ManagementSection({
   onDeleteCertification: (certId: string) => Promise<void>;
   onResetSelectedUser: () => void;
   onSaveSelectedUser: () => Promise<void>;
-  onSetPagePermission: (
-    key: keyof AccessPolicy["pages"],
-    value: boolean,
-  ) => void;
-  onSetCatalogPermission: (
-    key: keyof AccessPolicy["catalog"],
-    value: boolean,
-  ) => void;
-  onSetUsersPermission: (
-    key: keyof AccessPolicy["users"],
-    value: boolean,
-  ) => void;
-  onSetProposalPermission: (
-    key: keyof AccessPolicy["proposals"],
-    value: boolean,
-  ) => void;
-  onSetOrderPermission: (
-    key: keyof AccessPolicy["maintenanceOrders"],
-    value: boolean,
-  ) => void;
   onSetSectionPermission: PermissionSectionSetter;
-  onSetAuditRead: (value: boolean) => void;
   onPolicyChange: Dispatch<SetStateAction<AccessPolicy>>;
 }) {
+  if (permissionsOnly) {
+    return (
+      <UserPermissionsPanel
+        query={query}
+        roleFilter={roleFilter}
+        statusFilter={statusFilter}
+        filteredUsers={filteredUsers}
+        selectedUserId={selectedUserId}
+        selectedUser={selectedUser}
+        policy={policy}
+        saving={saving}
+        isLoading={isLoading}
+        isSelectedMaster={isSelectedMaster}
+        canManageSecurity={canManageSecurity}
+        onQueryChange={onQueryChange}
+        onRoleFilterChange={onRoleFilterChange}
+        onStatusFilterChange={onStatusFilterChange}
+        onSelectUser={onSelectUser}
+        onSave={onSaveSelectedUser}
+        onReset={onResetSelectedUser}
+        onPolicyChange={onPolicyChange}
+        onSetPermission={onSetSectionPermission}
+      />
+    );
+  }
+
   return (
     <SectionCard
       eyebrow={eyebrow}
@@ -2799,7 +2951,9 @@ function ManagementSection({
                   accessPolicy: defaultAccessByRole(user.role),
                 }))
               }
-              disabled={saving || selectedIds.length === 0}
+              disabled={
+                saving || selectedIds.length === 0 || !canManageSecurity
+              }
             >
               Resetar permissoes
             </button>
@@ -2824,10 +2978,11 @@ function ManagementSection({
             certificationsLoading={certificationsLoading}
             clients={clients}
             managers={managers}
-            policy={policy}
             saving={saving}
             isSelectedMaster={isSelectedMaster}
             canManageSensitivePeople={canManageSensitivePeople}
+            canManageSecurity={canManageSecurity}
+            canManageHierarchy={canManageHierarchy}
             onUpdateSelectedUser={onUpdateSelectedUser}
             onSelectedPasswordChange={onSelectedPasswordChange}
             onCertificationFormChange={onCertificationFormChange}
@@ -2837,19 +2992,379 @@ function ManagementSection({
             onDeleteCertification={onDeleteCertification}
             onResetSelectedUser={onResetSelectedUser}
             onSaveSelectedUser={onSaveSelectedUser}
-            onSetPagePermission={onSetPagePermission}
-            onSetCatalogPermission={onSetCatalogPermission}
-            onSetUsersPermission={onSetUsersPermission}
-            onSetProposalPermission={onSetProposalPermission}
-            onSetOrderPermission={onSetOrderPermission}
-            onSetSectionPermission={onSetSectionPermission}
-            onSetAuditRead={onSetAuditRead}
             onPolicyChange={onPolicyChange}
           />
         </div>
       </div>
     </SectionCard>
   );
+}
+
+function UserPermissionsPanel({
+  query,
+  roleFilter,
+  statusFilter,
+  filteredUsers,
+  selectedUserId,
+  selectedUser,
+  policy,
+  saving,
+  isLoading,
+  isSelectedMaster,
+  canManageSecurity,
+  onQueryChange,
+  onRoleFilterChange,
+  onStatusFilterChange,
+  onSelectUser,
+  onSave,
+  onReset,
+  onPolicyChange,
+  onSetPermission,
+}: {
+  query: string;
+  roleFilter: "ALL" | UserRole;
+  statusFilter: "ALL" | "ACTIVE" | "INACTIVE";
+  filteredUsers: UserRow[];
+  selectedUserId: string;
+  selectedUser: UserRow | null;
+  policy: AccessPolicy;
+  saving: boolean;
+  isLoading: boolean;
+  isSelectedMaster: boolean;
+  canManageSecurity: boolean;
+  onQueryChange: Dispatch<SetStateAction<string>>;
+  onRoleFilterChange: Dispatch<SetStateAction<"ALL" | UserRole>>;
+  onStatusFilterChange: Dispatch<SetStateAction<"ALL" | "ACTIVE" | "INACTIVE">>;
+  onSelectUser: Dispatch<SetStateAction<string>>;
+  onSave: () => Promise<void>;
+  onReset: () => void;
+  onPolicyChange: Dispatch<SetStateAction<AccessPolicy>>;
+  onSetPermission: PermissionSectionSetter;
+}) {
+  const [permissionQuery, setPermissionQuery] = useState("");
+  const [group, setGroup] = useState<PermissionGroup | "all">("all");
+  const [permissionState, setPermissionState] = useState<
+    "all" | "enabled" | "disabled"
+  >("all");
+  const search = normalizePermissionSearch(permissionQuery);
+  const activeCount = Object.values(policy).reduce(
+    (total, section) => total + Object.values(section).filter(Boolean).length,
+    0,
+  );
+  const totalCount = PERMISSION_SECTIONS.reduce(
+    (total, section) => total + section.items.length,
+    0,
+  );
+  const originalPolicy = selectedUser
+    ? normalizeEditableAccessPolicy(
+        selectedUser.accessPolicy || defaultAccessByRole(selectedUser.role),
+        selectedUser.role,
+      )
+    : null;
+  const hasChanges = Boolean(
+    originalPolicy && JSON.stringify(originalPolicy) !== JSON.stringify(policy),
+  );
+  const visibleSections = PERMISSION_SECTIONS.map((section) => {
+    const values = policy[section.section] as Record<string, boolean>;
+    const sectionMatches = normalizePermissionSearch(
+      `${section.title} ${section.description}`,
+    ).includes(search);
+    const items = section.items.filter((item) => {
+      const enabled = values[item.key];
+      if (permissionState === "enabled" && !enabled) return false;
+      if (permissionState === "disabled" && enabled) return false;
+      return (
+        !search ||
+        sectionMatches ||
+        normalizePermissionSearch(item.label).includes(search)
+      );
+    });
+    return { ...section, items, values };
+  }).filter(
+    (section) =>
+      section.items.length > 0 && (group === "all" || section.group === group),
+  );
+
+  return (
+    <div className="space-y-5">
+      <SectionCard
+        eyebrow="1 · Escolha a conta"
+        title="Usuários e perfis"
+        description="Busque pelo nome, email ou código e selecione a conta que terá o acesso revisado."
+        actions={
+          <DataPill tone="slate">{filteredUsers.length} resultado(s)</DataPill>
+        }
+      >
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(180px,0.28fr)_minmax(150px,0.22fr)_auto] md:items-end">
+          <FormField label="Buscar usuário">
+            <TextInput
+              type="search"
+              value={query}
+              onChange={(event) => onQueryChange(event.target.value)}
+              placeholder="Nome, email, código ou departamento"
+            />
+          </FormField>
+          <FormField label="Cargo">
+            <SelectInput
+              value={roleFilter}
+              onChange={(event) =>
+                onRoleFilterChange(event.target.value as "ALL" | UserRole)
+              }
+            >
+              <option value="ALL">Todos os cargos</option>
+              {ROLE_OPTIONS.map((role) => (
+                <option key={role} value={role}>
+                  {ROLE_LABELS[role]}
+                </option>
+              ))}
+            </SelectInput>
+          </FormField>
+          <FormField label="Situação">
+            <SelectInput
+              value={statusFilter}
+              onChange={(event) =>
+                onStatusFilterChange(
+                  event.target.value as "ALL" | "ACTIVE" | "INACTIVE",
+                )
+              }
+            >
+              <option value="ALL">Todos</option>
+              <option value="ACTIVE">Ativos</option>
+              <option value="INACTIVE">Inativos</option>
+            </SelectInput>
+          </FormField>
+          <button
+            type="button"
+            className={SECONDARY_BUTTON}
+            onClick={() => {
+              onQueryChange("");
+              onRoleFilterChange("ALL");
+              onStatusFilterChange("ALL");
+            }}
+          >
+            Limpar filtros
+          </button>
+        </div>
+
+        {isLoading ? (
+          <div className="mt-4">
+            <FieldBox>Carregando usuários...</FieldBox>
+          </div>
+        ) : filteredUsers.length === 0 ? (
+          <div className="mt-4">
+            <EmptyState
+              title="Nenhum usuário encontrado"
+              description="Ajuste a busca ou limpe os filtros."
+            />
+          </div>
+        ) : (
+          <div className="mt-4 grid max-h-[310px] gap-2 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {filteredUsers.map((user) => (
+              <button
+                key={user.id}
+                type="button"
+                onClick={() => onSelectUser(user.id)}
+                aria-pressed={user.id === selectedUserId}
+                className={`min-w-0 rounded-2xl border px-4 py-3 text-left transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 ${user.id === selectedUserId ? "border-sky-400 bg-sky-50 shadow-sm" : "border-slate-200 bg-white hover:border-sky-300 hover:bg-slate-50"}`}
+              >
+                <span className="flex items-center justify-between gap-2">
+                  <span className="truncate text-sm font-bold text-slate-950">
+                    {user.name}
+                  </span>
+                  <span
+                    className={`h-2.5 w-2.5 shrink-0 rounded-full ${user.isActive ? "bg-emerald-500" : "bg-slate-400"}`}
+                    aria-label={user.isActive ? "Ativo" : "Inativo"}
+                  />
+                </span>
+                <span className="mt-1 block truncate text-xs text-slate-600">
+                  {user.email}
+                </span>
+                <span className="mt-2 block text-[11px] font-semibold text-sky-800">
+                  {ROLE_LABELS[user.role]} · {user.code}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </SectionCard>
+
+      {!selectedUser ? (
+        <EmptyState
+          title="Selecione um usuário"
+          description="A matriz de permissões aparece após selecionar uma conta."
+        />
+      ) : (
+        <section className="space-y-4">
+          <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-slate-200 bg-white/95 px-5 py-4 shadow-sm backdrop-blur">
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-sky-700">
+                2 · Revise o acesso
+              </p>
+              <h2 className="truncate text-lg font-bold text-slate-950">
+                {selectedUser.name}
+              </h2>
+              <p className="text-xs text-slate-600">
+                {ROLE_LABELS[selectedUser.role]} · {activeCount} de {totalCount}{" "}
+                permissões ativas {hasChanges ? "· Alterações pendentes" : ""}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={SECONDARY_BUTTON}
+                onClick={onReset}
+                disabled={!hasChanges || saving}
+              >
+                Descartar
+              </button>
+              <button
+                type="button"
+                className={PRIMARY_BUTTON}
+                onClick={() => void onSave()}
+                disabled={
+                  !hasChanges ||
+                  saving ||
+                  isSelectedMaster ||
+                  !canManageSecurity
+                }
+              >
+                {saving ? "Salvando..." : "Salvar permissões"}
+              </button>
+            </div>
+          </div>
+
+          {isSelectedMaster ? (
+            <InlineMessage tone="warning">
+              A conta master é protegida e não pode ser alterada nesta tela.
+            </InlineMessage>
+          ) : null}
+          {!canManageSecurity ? (
+            <InlineMessage tone="warning">
+              Seu perfil permite consultar a matriz. A edição de permissões
+              exige acesso à segurança de usuários.
+            </InlineMessage>
+          ) : null}
+
+          <SectionCard
+            eyebrow="Matriz de acesso"
+            title="Permissões por área"
+            description="Filtre por módulo, ação ou estado. As alterações são aplicadas à conta ao salvar."
+          >
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+              <FormField label="Localizar permissão">
+                <TextInput
+                  type="search"
+                  value={permissionQuery}
+                  onChange={(event) => setPermissionQuery(event.target.value)}
+                  placeholder="Ex.: desconto, contratos, custos, exportar..."
+                />
+              </FormField>
+              <div
+                className="flex flex-wrap gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1"
+                role="group"
+                aria-label="Filtrar pelo estado da permissão"
+              >
+                {(
+                  [
+                    ["all", "Todas"],
+                    ["enabled", "Permitidas"],
+                    ["disabled", "Bloqueadas"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={permissionState === value}
+                    onClick={() => setPermissionState(value)}
+                    className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${permissionState === value ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-white"}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div
+              className="mt-4 flex flex-wrap gap-2"
+              role="group"
+              aria-label="Filtrar por área"
+            >
+              {PERMISSION_GROUPS.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  aria-pressed={group === item.key}
+                  onClick={() => setGroup(item.key)}
+                  className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${group === item.key ? "border-sky-700 bg-sky-700 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-sky-300"}`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-4 text-xs font-medium text-slate-600">
+              {visibleSections.length} área(s) encontrada(s). {activeCount}{" "}
+              permissões ativas no perfil.
+            </p>
+
+            {visibleSections.length === 0 ? (
+              <div className="mt-5">
+                <EmptyState
+                  title="Nenhuma permissão encontrada"
+                  description="Tente outra busca, área ou estado."
+                />
+              </div>
+            ) : (
+              <div className="mt-5 grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+                {visibleSections.map((section) => (
+                  <PermissionBlock
+                    key={section.section}
+                    title={section.title}
+                    description={section.description}
+                    items={section.items}
+                    values={section.values}
+                    onToggle={(key, value) =>
+                      onSetPermission(section.section, key as never, value)
+                    }
+                    disabled={isSelectedMaster || !canManageSecurity}
+                  />
+                ))}
+              </div>
+            )}
+          </SectionCard>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4">
+            <p className="text-sm text-slate-600">
+              {hasChanges
+                ? "Revise as opções alteradas antes de salvar."
+                : "Permissões sincronizadas com o cadastro."}
+            </p>
+            <button
+              type="button"
+              className={SECONDARY_BUTTON}
+              onClick={() =>
+                onPolicyChange(
+                  normalizeEditableAccessPolicy(
+                    defaultAccessByRole(selectedUser.role),
+                    selectedUser.role,
+                  ),
+                )
+              }
+              disabled={saving || isSelectedMaster || !canManageSecurity}
+            >
+              Reaplicar padrão do cargo
+            </button>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function normalizePermissionSearch(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
 }
 
 function UserListPanel({
@@ -2981,10 +3496,11 @@ function UserEditorCard({
   certificationsLoading,
   clients,
   managers,
-  policy,
   saving,
   isSelectedMaster,
   canManageSensitivePeople,
+  canManageSecurity,
+  canManageHierarchy,
   onUpdateSelectedUser,
   onSelectedPasswordChange,
   onCertificationFormChange,
@@ -2994,13 +3510,6 @@ function UserEditorCard({
   onDeleteCertification,
   onResetSelectedUser,
   onSaveSelectedUser,
-  onSetPagePermission,
-  onSetCatalogPermission,
-  onSetUsersPermission,
-  onSetProposalPermission,
-  onSetOrderPermission,
-  onSetSectionPermission,
-  onSetAuditRead,
   onPolicyChange,
 }: {
   selectedUser: UserRow | null;
@@ -3010,10 +3519,11 @@ function UserEditorCard({
   certificationsLoading: boolean;
   clients: ClientOption[];
   managers: UserRow[];
-  policy: AccessPolicy;
   saving: boolean;
   isSelectedMaster: boolean;
   canManageSensitivePeople: boolean;
+  canManageSecurity: boolean;
+  canManageHierarchy: boolean;
   onUpdateSelectedUser: (changes: Partial<UserRow>) => void;
   onSelectedPasswordChange: Dispatch<SetStateAction<string>>;
   onCertificationFormChange: Dispatch<SetStateAction<CertificationForm>>;
@@ -3023,28 +3533,6 @@ function UserEditorCard({
   onDeleteCertification: (certId: string) => Promise<void>;
   onResetSelectedUser: () => void;
   onSaveSelectedUser: () => Promise<void>;
-  onSetPagePermission: (
-    key: keyof AccessPolicy["pages"],
-    value: boolean,
-  ) => void;
-  onSetCatalogPermission: (
-    key: keyof AccessPolicy["catalog"],
-    value: boolean,
-  ) => void;
-  onSetUsersPermission: (
-    key: keyof AccessPolicy["users"],
-    value: boolean,
-  ) => void;
-  onSetProposalPermission: (
-    key: keyof AccessPolicy["proposals"],
-    value: boolean,
-  ) => void;
-  onSetOrderPermission: (
-    key: keyof AccessPolicy["maintenanceOrders"],
-    value: boolean,
-  ) => void;
-  onSetSectionPermission: PermissionSectionSetter;
-  onSetAuditRead: (value: boolean) => void;
   onPolicyChange: Dispatch<SetStateAction<AccessPolicy>>;
 }) {
   if (!selectedUser) {
@@ -3167,10 +3655,13 @@ function UserEditorCard({
                   manager: nextRole === "CLIENT" ? null : selectedUser.manager,
                 });
                 onPolicyChange(
-                  normalizeEditableAccessPolicy(defaultAccessByRole(nextRole)),
+                  normalizeEditableAccessPolicy(
+                    defaultAccessByRole(nextRole),
+                    nextRole,
+                  ),
                 );
               }}
-              disabled={isSelectedMaster}
+              disabled={isSelectedMaster || !canManageSecurity}
             >
               {ROLE_OPTIONS.map((role) => (
                 <option key={role} value={role}>
@@ -3264,7 +3755,7 @@ function UserEditorCard({
                       : null,
                   });
                 }}
-                disabled={isSelectedMaster}
+                disabled={isSelectedMaster || !canManageHierarchy}
               >
                 <option value="">Sem gestor</option>
                 {managers
@@ -3631,217 +4122,21 @@ function UserEditorCard({
         </div>
       </div>
 
-      <div className="grid gap-4 2xl:grid-cols-2">
-        <PermissionBlock
-          title="Paginas"
-          description="Macroareas do dashboard."
-          items={PAGE_ITEMS}
-          values={policy.pages}
-          onToggle={onSetPagePermission}
-          disabled={isSelectedMaster}
-        />
-        <PermissionBlock
-          title="Clientes"
-          description="Cadastro e manutencao de clientes."
-          items={CLIENT_ITEMS}
-          values={policy.clients}
-          onToggle={(key, value) =>
-            onSetSectionPermission("clients", key, value)
-          }
-          disabled={isSelectedMaster}
-        />
-        <PermissionBlock
-          title="Equipamentos"
-          description="Cadastro tecnico, modelos e ficha operacional."
-          items={EQUIPMENT_ITEMS}
-          values={policy.equipments}
-          onToggle={(key, value) =>
-            onSetSectionPermission("equipments", key, value)
-          }
-          disabled={isSelectedMaster}
-        />
-        <PermissionBlock
-          title="Catalogo"
-          description="Custos, margem e manutencao de itens."
-          items={CATALOG_ITEMS}
-          values={policy.catalog}
-          onToggle={onSetCatalogPermission}
-          disabled={isSelectedMaster}
-        />
-        <PermissionBlock
-          title="Usuarios"
-          description="Perfis, certificacoes, hierarquia e localizacao."
-          items={USER_ITEMS}
-          values={policy.users}
-          onToggle={onSetUsersPermission}
-          disabled={isSelectedMaster}
-        />
-        <PermissionBlock
-          title="Propostas"
-          description="Fluxos de desconto e aprovacao comercial."
-          items={PROPOSAL_ITEMS}
-          values={policy.proposals}
-          onToggle={onSetProposalPermission}
-          disabled={isSelectedMaster}
-        />
-        <PermissionBlock
-          title="Contratos"
-          description="Cadastro, ativacao e cancelamento contratual."
-          items={CONTRACT_ITEMS}
-          values={policy.contracts}
-          onToggle={(key, value) =>
-            onSetSectionPermission("contracts", key, value)
-          }
-          disabled={isSelectedMaster}
-        />
-        <PermissionBlock
-          title="Ordens - acoes"
-          description="Criacao, despacho, finalizacao e cancelamento de OS."
-          items={ORDER_ACTION_ITEMS}
-          values={policy.orders}
-          onToggle={(key, value) =>
-            onSetSectionPermission("orders", key, value)
-          }
-          disabled={isSelectedMaster}
-        />
-        <PermissionBlock
-          title="Ordens"
-          description="Visita, relatorio e override de alocacao."
-          items={ORDER_ITEMS}
-          values={policy.maintenanceOrders}
-          onToggle={onSetOrderPermission}
-          disabled={isSelectedMaster}
-        />
-        <PermissionBlock
-          title="Atendimento"
-          description="Chamados, SLA, comentarios e conversao para OS."
-          items={TICKET_ITEMS}
-          values={policy.tickets}
-          onToggle={(key, value) =>
-            onSetSectionPermission("tickets", key, value)
-          }
-          disabled={isSelectedMaster}
-        />
-        <PermissionBlock
-          title="Laudos tecnicos"
-          description="Checklist, evidencias, assinatura e liberacao ao portal."
-          items={SERVICE_REPORT_ITEMS}
-          values={policy.serviceReports}
-          onToggle={(key, value) =>
-            onSetSectionPermission("serviceReports", key, value)
-          }
-          disabled={isSelectedMaster}
-        />
-        <PermissionBlock
-          title="Estoque"
-          description="Reserva, consumo e ajuste de materiais."
-          items={INVENTORY_ITEMS}
-          values={policy.inventory}
-          onToggle={(key, value) =>
-            onSetSectionPermission("inventory", key, value)
-          }
-          disabled={isSelectedMaster}
-        />
-        <PermissionBlock
-          title="Compras"
-          description="Pedidos, aprovacao e recebimento."
-          items={PURCHASE_ORDER_ITEMS}
-          values={policy.purchaseOrders}
-          onToggle={(key, value) =>
-            onSetSectionPermission("purchaseOrders", key, value)
-          }
-          disabled={isSelectedMaster}
-        />
-        <PermissionBlock
-          title="Financeiro"
-          description="Titulos, pagamentos, cancelamentos e conciliacao."
-          items={FINANCE_ITEMS}
-          values={policy.finance}
-          onToggle={(key, value) =>
-            onSetSectionPermission("finance", key, value)
-          }
-          disabled={isSelectedMaster}
-        />
-        <PermissionBlock
-          title="Pessoas"
-          description="Colaboradores, comissoes, banco de horas e ativos."
-          items={PEOPLE_ITEMS}
-          values={policy.people}
-          onToggle={(key, value) =>
-            onSetSectionPermission("people", key, value)
-          }
-          disabled={isSelectedMaster}
-        />
-        <PermissionBlock
-          title="Tecnicos"
-          description="Visualizacao, despacho e agenda tecnica."
-          items={TECHNICIAN_ITEMS}
-          values={policy.technicians}
-          onToggle={(key, value) =>
-            onSetSectionPermission("technicians", key, value)
-          }
-          disabled={isSelectedMaster}
-        />
-        <PermissionBlock
-          title="Campo tecnico"
-          description="Fila propria do tecnico e apontamento de presenca."
-          items={TECHNICIAN_WORK_ITEMS}
-          values={policy.technicianWork}
-          onToggle={(key, value) =>
-            onSetSectionPermission("technicianWork", key, value)
-          }
-          disabled={isSelectedMaster}
-        />
-        <PermissionBlock
-          title="Relatorios"
-          description="Leitura e exportacao de indicadores."
-          items={REPORT_ITEMS}
-          values={policy.reports}
-          onToggle={(key, value) =>
-            onSetSectionPermission("reports", key, value)
-          }
-          disabled={isSelectedMaster}
-        />
-        <PermissionBlock
-          title="Configuracoes"
-          description="Empresa, automacoes e parametros administrativos."
-          items={SETTINGS_ITEMS}
-          values={policy.settings}
-          onToggle={(key, value) =>
-            onSetSectionPermission("settings", key, value)
-          }
-          disabled={isSelectedMaster}
-        />
-        <PermissionBlock
-          title="Manitec Studio"
-          description="Dados, exportacao, importacao e auditoria administrativa."
-          items={STUDIO_ITEMS}
-          values={policy.studio}
-          onToggle={(key, value) =>
-            onSetSectionPermission("studio", key, value)
-          }
-          disabled={isSelectedMaster}
-        />
-        <div className="rounded-[24px] border border-slate-200 bg-white/92 p-4 shadow-[0_18px_40px_-34px_rgba(15,31,50,0.25)]">
-          <div>
-            <p className="text-sm font-semibold text-slate-950">Auditoria</p>
-            <p className="mt-1 text-sm leading-6 text-slate-600">
-              Leitura do trilho de eventos e rastreabilidade.
-            </p>
-          </div>
-          <label className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-700">
-            <span>Liberar leitura do feed de auditoria</span>
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-200"
-              checked={policy.audit.read}
-              onChange={(event) => onSetAuditRead(event.target.checked)}
-              disabled={isSelectedMaster}
-            />
-          </label>
-        </div>
+      <div className="rounded-[24px] border border-sky-200 bg-sky-50/70 px-5 py-4">
+        <p className="text-sm font-semibold text-slate-950">
+          Permissões em uma área própria
+        </p>
+        <p className="mt-1 text-sm text-slate-600">
+          Revise a matriz de acesso em largura total, com busca por ação e
+          filtros por módulo.
+        </p>
+        <Link
+          href={`/dashboard/management/users/permissions?user=${encodeURIComponent(selectedUser.id)}`}
+          className="mt-3 inline-flex text-sm font-bold text-sky-700 hover:underline"
+        >
+          Abrir permissões →
+        </Link>
       </div>
-
       <div className="flex flex-wrap gap-3">
         <button
           type="button"
@@ -3857,20 +4152,6 @@ function UserEditorCard({
           onClick={onResetSelectedUser}
         >
           Descartar rascunho
-        </button>
-        <button
-          type="button"
-          className={SECONDARY_BUTTON}
-          onClick={() =>
-            onPolicyChange(
-              normalizeEditableAccessPolicy(
-                defaultAccessByRole(selectedUser.role),
-              ),
-            )
-          }
-          disabled={isSelectedMaster}
-        >
-          Reaplicar padrao do cargo
         </button>
         <Link href="/dashboard/profile" className={SECONDARY_BUTTON}>
           Ver perfil proprio
@@ -3895,8 +4176,11 @@ function sortUsers(rows: UserRow[]) {
   });
 }
 
-function normalizeEditableAccessPolicy(access: AccessPolicy): AccessPolicy {
-  const base = defaultAccessByRole("NORMAL");
+function normalizeEditableAccessPolicy(
+  access: AccessPolicy,
+  role: UserRole,
+): AccessPolicy {
+  const base = defaultAccessByRole(role);
 
   return {
     pages: {

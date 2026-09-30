@@ -27,6 +27,7 @@ import {
   decodeJwtPayload,
   ensureValidSession,
   getStoredAccessToken,
+  refreshAccessSession,
 } from "@/lib/auth-session";
 
 type VisiblePages = SidebarAccess;
@@ -104,9 +105,7 @@ export default function DashboardLayout({
     if (!canAccessDashboardPath(pathname, visiblePages)) {
       const access = getAccessFromToken();
       router.replace(
-        currentRole === "CLIENT"
-          ? "/portal"
-          : getDefaultDashboardPath(access),
+        currentRole === "CLIENT" ? "/portal" : getDefaultDashboardPath(access),
       );
     }
   }, [accessReady, currentRole, pathname, router, visiblePages]);
@@ -130,8 +129,10 @@ export default function DashboardLayout({
 
     let cancelled = false;
 
-    async function syncSession() {
-      const hasSession = await ensureValidSession();
+    async function syncSession(forceRefresh = false) {
+      const hasSession =
+        (forceRefresh && (await refreshAccessSession())) ||
+        (await ensureValidSession());
       const token = getStoredAccessToken();
       if (cancelled) return;
 
@@ -157,14 +158,14 @@ export default function DashboardLayout({
     }
 
     const intervalId = window.setInterval(() => {
-      void syncSession();
-    }, 60_000);
+      void syncSession(true);
+    }, 300_000);
     const handleFocus = () => {
-      void syncSession();
+      void syncSession(true);
     };
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        void syncSession();
+        void syncSession(true);
       }
     };
 
@@ -385,7 +386,9 @@ export default function DashboardLayout({
           appearanceTheme={appearanceTheme}
           onChangeAppearanceTheme={handleThemeChange}
         />
-        <main className="dashboard-main flex-1 overflow-y-auto px-4 pb-24 pt-5 md:px-6 md:pb-10 md:pt-6">
+        <main
+          className={`dashboard-main flex-1 overflow-y-auto px-4 pb-24 pt-5 md:px-6 md:pb-10 md:pt-6 ${pathname === "/dashboard/management/users/permissions" ? "dashboard-main--wide" : ""}`}
+        >
           <div className="dashboard-container w-full">
             <div className="slide-fade-in">{children}</div>
           </div>

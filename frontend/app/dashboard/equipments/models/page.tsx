@@ -758,7 +758,6 @@ export default function EquipmentModelsPage() {
                   <th className="px-3 py-3">Frequencia</th>
                   <th className="px-3 py-3">Status</th>
                   <th className="px-3 py-3">Plano</th>
-                  <th className="px-3 py-3">Acoes</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -768,9 +767,15 @@ export default function EquipmentModelsPage() {
                   return (
                     <tr key={model.id} className="align-top">
                       <td className="px-3 py-3">
-                        <p className="font-semibold text-slate-900">
-                          {model.brand ? `${model.brand} - ` : ""}{model.name}
-                        </p>
+                        {canManageModels ? (
+                          <button type="button" onClick={() => void startEdit(model)} className="dashboard-record-link text-left font-semibold" title="Abrir cadastro do modelo">
+                            {model.brand ? `${model.brand} - ` : ""}{model.name}
+                          </button>
+                        ) : (
+                          <p className="font-semibold text-slate-900">
+                            {model.brand ? `${model.brand} - ` : ""}{model.name}
+                          </p>
+                        )}
                         <p className="text-xs text-slate-500">
                           {model.category || model.description || "Sem descricao tecnica"}
                         </p>
@@ -796,19 +801,6 @@ export default function EquipmentModelsPage() {
                             {item.name} - {describeMaintenance(item)}
                           </p>
                         ))}
-                      </td>
-                      <td className="px-3 py-3">
-                        {canManageModels ? (
-                          <button
-                            type="button"
-                            onClick={() => void startEdit(model)}
-                            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                          >
-                            Abrir cadastro
-                          </button>
-                        ) : (
-                          <span className="text-xs text-slate-500">Somente leitura</span>
-                        )}
                       </td>
                     </tr>
                   );

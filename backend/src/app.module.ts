@@ -38,6 +38,8 @@ import { StudioModule } from './modules/studio/studio.module';
 import { ManufacturersModule } from './modules/manufacturers/manufacturers.module';
 import { OperationalCostsModule } from './modules/operational-costs/operational-costs.module';
 import { CommercialSizingModule } from './modules/commercial-sizing/commercial-sizing.module';
+import { TeamModule } from './modules/team/team.module';
+import { OperationsModule } from './modules/operations/operations.module';
 
 @Module({
   imports: [
@@ -87,6 +89,8 @@ import { CommercialSizingModule } from './modules/commercial-sizing/commercial-s
     ManufacturersModule,
     OperationalCostsModule,
     CommercialSizingModule,
+    TeamModule,
+    OperationsModule,
   ],
   controllers: [],
   providers: [

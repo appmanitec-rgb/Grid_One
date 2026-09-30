@@ -11,10 +11,12 @@ import {
   OrderStatus,
   Prisma,
   ProposalStatus,
+  SalesOpportunityStage,
   UserRole,
 } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { effectiveAccessPolicy } from '../users/access-policy';
 
 type CreateApprovalInput = {
   type: ApprovalType;
@@ -150,9 +152,15 @@ export class ApprovalsService {
   ) {
     const actor = await this.prisma.user.findUnique({
       where: { id: actorUserId },
-      select: { id: true, role: true },
+      select: {
+        id: true,
+        role: true,
+        isActive: true,
+        isSystemMaster: true,
+        accessPolicy: true,
+      },
     });
-    if (!actor) throw new ForbiddenException('Usuario nao encontrado.');
+    if (!actor?.isActive) throw new ForbiddenException('Usuario indisponivel.');
 
     const approval = await this.prisma.approvalRequest.findUnique({
       where: { id },
@@ -163,11 +171,30 @@ export class ApprovalsService {
     }
 
     const canDecide =
-      actor.role === UserRole.ADMIN || approval.approverUserId === actorUserId;
+      actor.role === UserRole.ADMIN ||
+      actor.isSystemMaster ||
+      approval.approverUserId === actorUserId;
     if (!canDecide) {
       throw new ForbiddenException(
         'Apenas o aprovador designado (ou admin) pode decidir.',
       );
+    }
+
+    if (actor.role !== UserRole.ADMIN && !actor.isSystemMaster) {
+      const access = effectiveAccessPolicy(actor.role, actor.accessPolicy);
+      const allowed =
+        approval.type === ApprovalType.GENERATOR_PROPOSAL
+          ? access.proposals.approve
+          : approval.type === ApprovalType.BUDGET_DISCOUNT
+            ? access.proposals.approveBudget
+            : approval.type === ApprovalType.RVT_SIGNOFF
+              ? access.maintenanceOrders.approveVisitReport
+              : access.finance.update;
+      if (!allowed) {
+        throw new ForbiddenException(
+          'Seu perfil nao possui permissao para esta aprovacao.',
+        );
+      }
     }
 
     const isCatalogPricingApproval =
@@ -259,7 +286,7 @@ export class ApprovalsService {
     ) {
       const proposal = await this.prisma.proposal.findUnique({
         where: { id: approval.entityId },
-        select: { id: true, status: true },
+        select: { id: true, status: true, salesOpportunityId: true },
       });
       if (!proposal) return;
 
@@ -272,6 +299,15 @@ export class ApprovalsService {
           where: { id: proposal.id },
           data: { status: nextStatus },
         });
+        if (
+          nextStatus === ProposalStatus.CLIENT_REVIEW &&
+          proposal.salesOpportunityId
+        ) {
+          await tx.salesOpportunity.update({
+            where: { id: proposal.salesOpportunityId },
+            data: { stage: SalesOpportunityStage.PROPOSAL_SENT },
+          });
+        }
         await tx.proposalMovement.create({
           data: {
             proposalId: proposal.id,
@@ -302,7 +338,7 @@ export class ApprovalsService {
     ) {
       const proposal = await this.prisma.proposal.findUnique({
         where: { id: approval.entityId },
-        select: { id: true, status: true },
+        select: { id: true, status: true, salesOpportunityId: true },
       });
       if (!proposal) return;
 
@@ -311,12 +347,23 @@ export class ApprovalsService {
           ? ProposalStatus.CLIENT_REVIEW
           : ProposalStatus.REVISION_REQUIRED;
 
-      if (proposal.status !== nextStatus) {
-        await this.prisma.proposal.update({
-          where: { id: proposal.id },
-          data: { status: nextStatus },
-        });
-      }
+      await this.prisma.$transaction(async (tx) => {
+        if (proposal.status !== nextStatus) {
+          await tx.proposal.update({
+            where: { id: proposal.id },
+            data: { status: nextStatus },
+          });
+        }
+        if (
+          nextStatus === ProposalStatus.CLIENT_REVIEW &&
+          proposal.salesOpportunityId
+        ) {
+          await tx.salesOpportunity.update({
+            where: { id: proposal.salesOpportunityId },
+            data: { stage: SalesOpportunityStage.PROPOSAL_SENT },
+          });
+        }
+      });
 
       await this.auditLogsService.record({
         domain: AuditDomain.PROPOSALS,

@@ -363,25 +363,21 @@ function ClientsTable({ rows }: { rows: ClientAgent[] }) {
           <th className="px-3 py-3">Cliente</th>
           <th className="px-3 py-3">Contato</th>
           <th className="px-3 py-3">Portal</th>
-          <th className="px-3 py-3">Ação</th>
         </tr>
       </thead>
       <tbody>
         {rows.map((row) => (
           <tr key={row.id} className="border-b border-zinc-100">
             <td className="px-3 py-3">
-              <p className="font-semibold text-zinc-900">{row.tradeName || row.companyName}</p>
+              <Link href={`/dashboard/clients/${row.id}`} className="dashboard-record-link font-semibold" title="Abrir cadastro do cliente">
+                {row.tradeName || row.companyName}
+              </Link>
               <p className="text-xs text-zinc-500">{row.code} · {row.cnpj || "-"}</p>
             </td>
             <td className="px-3 py-3 text-zinc-700">
               {row.contactName || row.email || row.phone || "-"}
             </td>
             <td className="px-3 py-3 text-zinc-700">{row.portalUsers?.length || 0} usuário(s)</td>
-            <td className="px-3 py-3">
-              <Link href={`/dashboard/clients/${row.id}`} className="text-sm font-semibold text-blue-700 hover:underline">
-                Abrir cliente
-              </Link>
-            </td>
           </tr>
         ))}
       </tbody>

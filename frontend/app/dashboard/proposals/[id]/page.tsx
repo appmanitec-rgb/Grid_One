@@ -9,6 +9,7 @@ import {
   statusToFlowStep,
 } from "../flow";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
+import { getAccessFromToken } from "@/lib/access";
 import {
   clearAuthSession,
   decodeJwtPayload,
@@ -144,6 +145,11 @@ export default function ProposalDetailPage() {
   const [reasonedAction, setReasonedAction] = useState<ReasonedAction | null>(null);
   const [actionReason, setActionReason] = useState("");
   const [actionReasonError, setActionReasonError] = useState("");
+  const [canCreateContract, setCanCreateContract] = useState(false);
+
+  useEffect(() => {
+    setCanCreateContract(getAccessFromToken().contracts.create);
+  }, []);
 
   const tokenPayload = useMemo(() => {
     const token = getStoredAccessToken();
@@ -584,7 +590,7 @@ export default function ProposalDetailPage() {
             {proposal.status === "WON" &&
             proposal.type === "CONTRACT" &&
             !proposal.generatedContract &&
-            !isClient ? (
+            canCreateContract ? (
               <ActionButton
                 busy={isBusy}
                 onClick={() => {
@@ -656,6 +662,27 @@ export default function ProposalDetailPage() {
       />
       {notice ? <StatusBanner tone="emerald">{notice}</StatusBanner> : null}
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
+
+      {proposal.status === "WON" &&
+      proposal.type === "CONTRACT" &&
+      !proposal.generatedContract &&
+      !isClient ? (
+        <SectionCard
+          eyebrow="Passagem comercial"
+          title="Proposta aceita, contrato pendente"
+          description={
+            canCreateContract
+              ? "Revise cliente, equipamento e condições comerciais antes de converter a proposta."
+              : "A proposta foi aceita. Solicite a revisão e a conversão a alguém com acesso à criação de contratos."
+          }
+        >
+          <div className="flex flex-wrap gap-2">
+            <DataPill tone="amber">Aguardando conversão</DataPill>
+            <DataPill tone="slate">{proposal.client?.companyName || "Cliente não vinculado"}</DataPill>
+            <DataPill tone="slate">{proposal.generator?.name || "Equipamento não vinculado"}</DataPill>
+          </div>
+        </SectionCard>
+      ) : null}
 
       {showPostSaleForm && proposal.type === "GENERATOR_SALE" ? (
         <SectionCard

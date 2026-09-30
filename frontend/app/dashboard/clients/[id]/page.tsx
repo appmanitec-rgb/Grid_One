@@ -607,14 +607,20 @@ export default function ClientProfilePage() {
                   <th className="py-2">Fim</th>
                   <th className="py-2">Periodicidade</th>
                   <th className="py-2">Status</th>
-                  <th className="py-2">Acoes</th>
                 </tr>
               </thead>
               <tbody>
                 {contracts.map((contract) => (
                   <tr key={contract.id} className="border-b border-zinc-100">
                     <td className="py-2 font-semibold text-zinc-800">
-                      {contract.code}
+                      <PermissionAwareLink
+                        href={`/dashboard/contracts/${contract.id}`}
+                        permission="contracts.view"
+                        className="dashboard-record-link"
+                        fallbackClassName="font-semibold text-zinc-500"
+                      >
+                        {contract.code}
+                      </PermissionAwareLink>
                     </td>
                     <td className="py-2">
                       {new Date(contract.startDate).toLocaleDateString("pt-BR")}
@@ -624,16 +630,6 @@ export default function ClientProfilePage() {
                     </td>
                     <td className="py-2">{contract.preventiveRecurrence}</td>
                     <td className="py-2">{contract.status}</td>
-                    <td className="py-2">
-                      <PermissionAwareLink
-                        href={`/dashboard/contracts/${contract.id}`}
-                        permission="contracts.view"
-                        className="font-semibold text-blue-700 hover:underline"
-                        fallbackClassName="font-semibold text-zinc-500"
-                      >
-                        Ver contrato
-                      </PermissionAwareLink>
-                    </td>
                   </tr>
                 ))}
               </tbody>

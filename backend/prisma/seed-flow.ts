@@ -93,10 +93,12 @@ function hashToken(token: string) {
 }
 
 function ensureSeedFile(storageKey: string, buffer: Buffer) {
+  const storageRoot =
+    process.env.FILE_STORAGE_LOCAL_PATH ||
+    process.env.FILE_STORAGE_DIR ||
+    join(process.cwd(), 'storage', 'private');
   const fullPath = join(
-    process.cwd(),
-    'storage',
-    'private',
+    storageRoot,
     ...storageKey.split('/'),
   );
   mkdirSync(dirname(fullPath), { recursive: true });
@@ -206,6 +208,16 @@ async function upsertUser(input: {
 async function main() {
   const now = new Date();
   const passwordHash = await bcrypt.hash(mustPassword(), 10);
+  await prisma.controlOption.upsert({
+    where: { type_code: { type: 'PAYMENT_TERM', code: 'Mensal' } },
+    update: { isActive: true },
+    create: {
+      group: 'COMMERCIAL',
+      type: 'PAYMENT_TERM',
+      code: 'Mensal',
+      name: 'Mensal',
+    },
+  });
   const demoMfaSecretEncrypted = encryptMfaSecret(E2E_MFA_SECRET);
 
   const adminUser = await upsertUser({

@@ -304,7 +304,6 @@ export default function ClientsPage() {
                 <th className="p-4 font-medium">CNPJ/CPF</th>
                 <th className="p-4 font-medium">Contatos</th>
                 <th className="p-4 font-medium">Endereco</th>
-                <th className="p-4 text-right font-medium">Acoes</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200">
@@ -318,9 +317,9 @@ export default function ClientsPage() {
                       {client.code}
                     </td>
                     <td className="p-4">
-                      <p className="font-bold text-zinc-800">
+                      <Link href={`/dashboard/clients/${client.id}`} className="dashboard-record-link font-bold" title="Abrir cadastro do cliente">
                         {client.companyName}
-                      </p>
+                      </Link>
                       <p className="text-xs text-zinc-500">
                         {client.tradeName || "---"}
                       </p>
@@ -352,26 +351,18 @@ export default function ClientsPage() {
                         ? `${client.address} - ${client.city || ""}/${client.state || ""}`
                         : `${client.city || ""}/${client.state || ""}`}
                     </td>
-                    <td className="p-4 text-right">
-                      <Link
-                        href={`/dashboard/clients/${client.id}`}
-                        className="text-sm font-semibold text-zinc-600 hover:text-blue-700 hover:underline"
-                      >
-                        Ver detalhes
-                      </Link>
-                    </td>
                   </tr>
                 ))}
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-zinc-500">
+                  <td colSpan={5} className="p-8 text-center text-zinc-500">
                     Carregando clientes...
                   </td>
                 </tr>
               ) : null}
               {!loading && filteredClients.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-zinc-500">
+                  <td colSpan={5} className="p-8 text-center text-zinc-500">
                     Nenhum cliente registrado.
                   </td>
                 </tr>

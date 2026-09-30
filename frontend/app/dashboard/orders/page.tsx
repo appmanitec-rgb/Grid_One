@@ -278,7 +278,9 @@ function OrderCard({ order }: { order: OrderListItem }) {
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-lg font-bold text-slate-950">{order.title}</p>
+            <Link href={`/dashboard/orders/${order.id}`} className="dashboard-record-link text-lg font-bold" title="Abrir ordem de serviço">
+              {order.title}
+            </Link>
             <DataPill tone={orderStatusTone(order.status)}>{orderStatusLabel(order.status)}</DataPill>
             <DataPill tone={priorityTone(order.priority)}>{priorityLabel(order.priority)}</DataPill>
             {order.contract ? <DataPill tone="blue">{order.contract.code}</DataPill> : null}

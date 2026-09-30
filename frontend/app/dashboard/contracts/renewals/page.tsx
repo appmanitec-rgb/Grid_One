@@ -236,14 +236,16 @@ export default function ContractRenewalsPage() {
                   <th className="px-4 py-3 font-semibold">Pecas</th>
                   <th className="px-4 py-3 font-semibold">Mensalidade</th>
                   <th className="px-4 py-3 font-semibold">Renovacao</th>
-                  <th className="px-4 py-3 font-semibold">Acoes</th>
+                  <th className="dashboard-sticky-actions px-4 py-3 font-semibold">Acoes</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((item) => (
                   <tr key={item.id} className="border-t border-slate-100 align-middle">
                     <td className="px-4 py-3">
-                      <p className="font-semibold text-slate-900">{item.code}</p>
+                      <Link href={`/dashboard/contracts/${item.id}`} className="dashboard-record-link font-semibold" title="Abrir cadastro do contrato">
+                        {item.code}
+                      </Link>
                       <p className="mt-1 max-w-[220px] truncate text-xs text-slate-500">{item.title || "Contrato de manutencao"}</p>
                     </td>
                     <td className="px-4 py-3 text-slate-700">{item.client.companyName}</td>
@@ -259,7 +261,7 @@ export default function ContractRenewalsPage() {
                         <span className="text-slate-400">Nao iniciada</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="dashboard-sticky-actions px-4 py-3">
                       {item.activeRenewal ? (
                         <Link href={`/dashboard/contracts/${item.id}?renewalId=${item.activeRenewal.id}`} className={SECONDARY_BUTTON}>
                           Abrir renovacao

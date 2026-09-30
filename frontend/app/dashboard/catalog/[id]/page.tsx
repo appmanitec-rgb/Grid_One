@@ -45,7 +45,12 @@ type InventoryBalance = {
   minQty: number;
   maxQty: number;
   reorderPoint?: number | null;
-  warehouse: { id: string; code?: string | null; name: string; type?: string | null };
+  warehouse: {
+    id: string;
+    code?: string | null;
+    name: string;
+    type?: string | null;
+  };
 };
 
 type InventoryMovement = {
@@ -113,7 +118,11 @@ type PriceRevision = {
   notes?: string | null;
   createdAt: string;
   supplier?: { id: string; companyName: string } | null;
-  createdBy?: { id: string; name?: string | null; email?: string | null } | null;
+  createdBy?: {
+    id: string;
+    name?: string | null;
+    email?: string | null;
+  } | null;
 };
 
 type PricingApproval = {
@@ -276,7 +285,12 @@ type Item = {
   };
 };
 
-type TabKey = "summary" | "pricing" | "traceability" | "suppliers" | "technical";
+type TabKey =
+  | "summary"
+  | "pricing"
+  | "traceability"
+  | "suppliers"
+  | "technical";
 
 export default function CatalogItemDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -286,8 +300,12 @@ export default function CatalogItemDetailPage() {
   const [canEdit, setCanEdit] = useState(false);
   const [canAdjust, setCanAdjust] = useState(false);
   const [canViewCosts, setCanViewCosts] = useState(false);
-  const [pricingContext, setPricingContext] = useState<PricingContext | null>(null);
-  const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
+  const [pricingContext, setPricingContext] = useState<PricingContext | null>(
+    null,
+  );
+  const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>(
+    {},
+  );
   const [pricingActionId, setPricingActionId] = useState("");
   const [pricingMessage, setPricingMessage] = useState("");
   const [pricingError, setPricingError] = useState("");
@@ -302,7 +320,7 @@ export default function CatalogItemDetailPage() {
 
   useEffect(() => {
     const access = getAccessFromToken();
-    setCanEdit(access.catalog.update || access.catalog.manageItems);
+    setCanEdit(access.catalog.update);
     setCanAdjust(access.inventory.adjust);
     setCanViewCosts(access.catalog.viewCosts);
   }, []);
@@ -342,7 +360,9 @@ export default function CatalogItemDetailPage() {
   ) {
     const decisionNote = decisionNotes[approvalId]?.trim() || "";
     if (action === "reject" && decisionNote.length < 5) {
-      setPricingError("Informe uma justificativa com pelo menos 5 caracteres para reprovar.");
+      setPricingError(
+        "Informe uma justificativa com pelo menos 5 caracteres para reprovar.",
+      );
       return;
     }
     setPricingError("");
@@ -356,7 +376,10 @@ export default function CatalogItemDetailPage() {
       });
       if (!res.ok) {
         throw new Error(
-          await readApiErrorMessage(res, "Nao foi possivel registrar a decisao."),
+          await readApiErrorMessage(
+            res,
+            "Nao foi possivel registrar a decisao.",
+          ),
         );
       }
       const [itemRes] = await Promise.all([
@@ -384,7 +407,9 @@ export default function CatalogItemDetailPage() {
     const fromOrders = (item?.maintenanceOrderMaterials || [])
       .map((material) => material.order.generator)
       .filter(Boolean);
-    const fromBase = (item?.generatorBaseItems || []).map((entry) => entry.generator);
+    const fromBase = (item?.generatorBaseItems || []).map(
+      (entry) => entry.generator,
+    );
     const byId = new Map<string, GeneratorBaseItem["generator"]>();
     for (const generator of [...fromOrders, ...fromBase]) {
       if (generator?.id) byId.set(generator.id, generator);
@@ -393,10 +418,13 @@ export default function CatalogItemDetailPage() {
   }, [item]);
 
   if (error) return <div className="p-8 text-red-600">{error}</div>;
-  if (!item) return <div className="p-8 text-zinc-500">Carregando ficha do item...</div>;
+  if (!item)
+    return <div className="p-8 text-zinc-500">Carregando ficha do item...</div>;
 
   const summary = item.operationalSummary;
-  const primarySupplier = item.supplierItems?.find((entry) => entry.isPrimary) || item.supplierItems?.[0];
+  const primarySupplier =
+    item.supplierItems?.find((entry) => entry.isPrimary) ||
+    item.supplierItems?.[0];
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
@@ -413,25 +441,44 @@ export default function CatalogItemDetailPage() {
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">
             Estoque operacional
           </p>
-          <h1 className="mt-1 text-3xl font-bold text-zinc-900">Ficha operacional do item</h1>
+          <h1 className="mt-1 text-3xl font-bold text-zinc-900">
+            Ficha operacional do item
+          </h1>
           <p className="mt-1 max-w-3xl text-sm text-zinc-500">
-            Cadastro, saldo, movimentacoes, compras, OS e fornecedores em uma trilha navegavel.
+            Cadastro, saldo, movimentacoes, compras, OS e fornecedores em uma
+            trilha navegavel.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <PermissionAwareLink href="/dashboard/catalog" permission="catalog.view" className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50">
+          <PermissionAwareLink
+            href="/dashboard/catalog"
+            permission="catalog.view"
+            className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
+          >
             Catalogo
           </PermissionAwareLink>
-          <PermissionAwareLink href="/dashboard/inventory" permission="inventory.view" className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50">
+          <PermissionAwareLink
+            href="/dashboard/inventory"
+            permission="inventory.view"
+            className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
+          >
             Estoque
           </PermissionAwareLink>
           {canAdjust ? (
-            <PermissionAwareLink href="/dashboard/inventory" permission="inventory.adjust" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100">
+            <PermissionAwareLink
+              href="/dashboard/inventory"
+              permission="inventory.adjust"
+              className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+            >
               Ajustar saldo
             </PermissionAwareLink>
           ) : null}
           {canEdit ? (
-            <PermissionAwareLink href={`/dashboard/catalog/new?editItemId=${item.id}`} permission="catalog.update" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500">
+            <PermissionAwareLink
+              href={`/dashboard/catalog/new?editItemId=${item.id}`}
+              permission="catalog.update"
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
+            >
               Editar cadastro
             </PermissionAwareLink>
           ) : null}
@@ -443,50 +490,106 @@ export default function CatalogItemDetailPage() {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-2xl font-bold text-zinc-900">{item.name}</h2>
-              <Badge tone={item.isActive ? "emerald" : "slate"}>{item.isActive ? "Ativo" : "Inativo"}</Badge>
-              <Badge tone={item.type === "PART" ? "blue" : "purple"}>{item.type === "PART" ? "Peca" : "Servico"}</Badge>
-              {summary?.isLowStock ? <Badge tone="rose">Baixo estoque</Badge> : null}
+              <Badge tone={item.isActive ? "emerald" : "slate"}>
+                {item.isActive ? "Ativo" : "Inativo"}
+              </Badge>
+              <Badge tone={item.type === "PART" ? "blue" : "purple"}>
+                {item.type === "PART" ? "Peca" : "Servico"}
+              </Badge>
+              {summary?.isLowStock ? (
+                <Badge tone="rose">Baixo estoque</Badge>
+              ) : null}
             </div>
             <p className="mt-2 text-sm text-zinc-500">
-              SKU interno {item.sku || "-"} | PN {item.manufacturerPartNumber || "-"} | {item.category || "Sem categoria"}
+              SKU interno {item.sku || "-"} | PN{" "}
+              {item.manufacturerPartNumber || "-"} |{" "}
+              {item.category || "Sem categoria"}
             </p>
             <p className="mt-3 max-w-4xl text-sm text-zinc-700">
-              {item.description || item.commercialDescription || "Sem descricao cadastrada."}
+              {item.description ||
+                item.commercialDescription ||
+                "Sem descricao cadastrada."}
             </p>
           </div>
           <div className="min-w-48 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-            <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Fornecedor principal</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">
+              Fornecedor principal
+            </p>
             {primarySupplier ? (
-              <Link href={`/dashboard/suppliers/${primarySupplier.supplier.id}`} className="mt-1 block text-sm font-bold text-blue-700 hover:underline">
+              <Link
+                href={`/dashboard/suppliers/${primarySupplier.supplier.id}`}
+                className="mt-1 block text-sm font-bold text-blue-700 hover:underline"
+              >
                 {primarySupplier.supplier.companyName}
               </Link>
             ) : (
-              <p className="mt-1 text-sm font-semibold text-zinc-700">{item.supplier || "Nao definido"}</p>
+              <p className="mt-1 text-sm font-semibold text-zinc-700">
+                {item.supplier || "Nao definido"}
+              </p>
             )}
             <p className="mt-1 text-xs text-zinc-500">
-              Prazo: {primarySupplier?.leadTimeDays != null ? `${primarySupplier.leadTimeDays} dia(s)` : "-"}
+              Prazo:{" "}
+              {primarySupplier?.leadTimeDays != null
+                ? `${primarySupplier.leadTimeDays} dia(s)`
+                : "-"}
             </p>
           </div>
         </div>
       </section>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Metric title="Saldo atual" value={formatNumber(summary?.physicalQty ?? item.stockCurrent ?? 0)} />
-        <Metric title="Reservado" value={formatNumber(summary?.reservedQty ?? 0)} />
+        <Metric
+          title="Saldo atual"
+          value={formatNumber(summary?.physicalQty ?? item.stockCurrent ?? 0)}
+        />
+        <Metric
+          title="Reservado"
+          value={formatNumber(summary?.reservedQty ?? 0)}
+        />
         <Metric
           title="Disponivel"
-          value={formatNumber(summary?.availableQty ?? Number(item.stockCurrent || 0))}
+          value={formatNumber(
+            summary?.availableQty ?? Number(item.stockCurrent || 0),
+          )}
           tone={summary?.isLowStock ? "rose" : "emerald"}
         />
-        <Metric title="Min / Max / Reposicao" value={`${formatNumber(summary?.minQty ?? item.stockMin ?? 0)} / ${formatNumber(summary?.maxQty ?? item.stockMax ?? 0)} / ${formatNumber(summary?.reorderPoint ?? 0)}`} />
+        <Metric
+          title="Min / Max / Reposicao"
+          value={`${formatNumber(summary?.minQty ?? item.stockMin ?? 0)} / ${formatNumber(summary?.maxQty ?? item.stockMax ?? 0)} / ${formatNumber(summary?.reorderPoint ?? 0)}`}
+        />
       </section>
 
       <div className="flex flex-wrap gap-2">
-        <TabButton label="Resumo" value="summary" active={activeTab} onClick={setActiveTab} />
-        <TabButton label="Precos" value="pricing" active={activeTab} onClick={setActiveTab} />
-        <TabButton label="Rastreabilidade" value="traceability" active={activeTab} onClick={setActiveTab} />
-        <TabButton label="Fornecedores" value="suppliers" active={activeTab} onClick={setActiveTab} />
-        <TabButton label="Tecnico/Fiscal" value="technical" active={activeTab} onClick={setActiveTab} />
+        <TabButton
+          label="Resumo"
+          value="summary"
+          active={activeTab}
+          onClick={setActiveTab}
+        />
+        <TabButton
+          label="Precos"
+          value="pricing"
+          active={activeTab}
+          onClick={setActiveTab}
+        />
+        <TabButton
+          label="Rastreabilidade"
+          value="traceability"
+          active={activeTab}
+          onClick={setActiveTab}
+        />
+        <TabButton
+          label="Fornecedores"
+          value="suppliers"
+          active={activeTab}
+          onClick={setActiveTab}
+        />
+        <TabButton
+          label="Tecnico/Fiscal"
+          value="technical"
+          active={activeTab}
+          onClick={setActiveTab}
+        />
       </div>
 
       {activeTab === "summary" ? (
@@ -494,9 +597,12 @@ export default function CatalogItemDetailPage() {
           <section className="rounded-xl border border-amber-200 bg-amber-50 p-5 xl:col-span-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h2 className="text-lg font-bold text-zinc-900">Identificacao e codigos</h2>
+                <h2 className="text-lg font-bold text-zinc-900">
+                  Identificacao e codigos
+                </h2>
                 <p className="mt-1 text-sm text-amber-800">
-                  O SKU pertence a Manitec; os demais identificadores vieram dos sistemas anteriores.
+                  O SKU pertence a Manitec; os demais identificadores vieram dos
+                  sistemas anteriores.
                 </p>
               </div>
               <Badge tone="amber">Rastreabilidade</Badge>
@@ -504,32 +610,74 @@ export default function CatalogItemDetailPage() {
             <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <Info label="SKU interno" value={item.sku || "-"} />
               <Info label="Codigo PX (legado)" value={item.legacyCode || "-"} />
-              <Info label="Seq. PX (legado)" value={item.legacySequence || "-"} />
-              <Info label="Codigo Radar (legado)" value={item.radarCode || "-"} />
+              <Info
+                label="Seq. PX (legado)"
+                value={item.legacySequence || "-"}
+              />
+              <Info
+                label="Codigo Radar (legado)"
+                value={item.radarCode || "-"}
+              />
             </div>
           </section>
           <section className="rounded-xl border border-zinc-200 bg-white p-5 xl:col-span-2">
-            <h2 className="text-lg font-bold text-zinc-900">Saldo por almoxarifado</h2>
+            <h2 className="text-lg font-bold text-zinc-900">
+              Saldo por almoxarifado
+            </h2>
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
               {(item.inventoryBalances || []).map((balance) => {
-                const available = Number(balance.physicalQty || 0) - Number(balance.reservedQty || 0);
-                const trigger = Number(balance.reorderPoint ?? balance.minQty ?? 0);
+                const available =
+                  Number(balance.physicalQty || 0) -
+                  Number(balance.reservedQty || 0);
+                const trigger = Number(
+                  balance.reorderPoint ?? balance.minQty ?? 0,
+                );
                 return (
-                  <article key={balance.id} className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+                  <article
+                    key={balance.id}
+                    className="rounded-xl border border-zinc-200 bg-zinc-50 p-4"
+                  >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-sm font-bold text-zinc-900">{balance.warehouse.name}</p>
-                        <p className="text-xs text-zinc-500">{balance.warehouse.code || "-"} | {balance.warehouse.type || "-"}</p>
+                        <p className="text-sm font-bold text-zinc-900">
+                          {balance.warehouse.name}
+                        </p>
+                        <p className="text-xs text-zinc-500">
+                          {balance.warehouse.code || "-"} |{" "}
+                          {balance.warehouse.type || "-"}
+                        </p>
                       </div>
-                      {available <= trigger ? <Badge tone="rose">Reposicao</Badge> : <Badge tone="emerald">OK</Badge>}
+                      {available <= trigger ? (
+                        <Badge tone="rose">Reposicao</Badge>
+                      ) : (
+                        <Badge tone="emerald">OK</Badge>
+                      )}
                     </div>
                     <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
-                      <Info label="Fisico" value={formatNumber(balance.physicalQty)} />
-                      <Info label="Reservado" value={formatNumber(balance.reservedQty)} />
-                      <Info label="Disponivel" value={formatNumber(available)} />
-                      <Info label="Minimo" value={formatNumber(balance.minQty)} />
-                      <Info label="Maximo" value={formatNumber(balance.maxQty)} />
-                      <Info label="Reposicao" value={formatNumber(balance.reorderPoint ?? 0)} />
+                      <Info
+                        label="Fisico"
+                        value={formatNumber(balance.physicalQty)}
+                      />
+                      <Info
+                        label="Reservado"
+                        value={formatNumber(balance.reservedQty)}
+                      />
+                      <Info
+                        label="Disponivel"
+                        value={formatNumber(available)}
+                      />
+                      <Info
+                        label="Minimo"
+                        value={formatNumber(balance.minQty)}
+                      />
+                      <Info
+                        label="Maximo"
+                        value={formatNumber(balance.maxQty)}
+                      />
+                      <Info
+                        label="Reposicao"
+                        value={formatNumber(balance.reorderPoint ?? 0)}
+                      />
                     </div>
                   </article>
                 );
@@ -544,16 +692,46 @@ export default function CatalogItemDetailPage() {
             <h2 className="text-lg font-bold text-zinc-900">Cadastro</h2>
             <div className="mt-4 grid gap-3">
               <Info label="Unidade" value={item.unit || "-"} />
-              <Info label="Tipo do item" value={item.itemClassification || (item.type === "SERVICE" ? "Servico" : "Acabado")} />
+              <Info
+                label="Tipo do item"
+                value={
+                  item.itemClassification ||
+                  (item.type === "SERVICE" ? "Servico" : "Acabado")
+                }
+              />
               <Info label="Origem" value={item.acquisitionOrigin || "-"} />
               <Info label="Marca" value={item.brand || "-"} />
               <Info label="Localizacao" value={item.storageLocation || "-"} />
-              <Info label="Venda sugerida" value={formatCurrency(item.basePrice)} />
+              <Info
+                label="Venda sugerida"
+                value={formatCurrency(item.basePrice)}
+              />
               {canViewCosts ? (
                 <>
-                  <Info label="Custo medio" value={item.averageCost == null ? "-" : formatCurrency(item.averageCost)} />
-                  <Info label="Custo minimo vigente" value={item.costPrice == null ? "-" : formatCurrency(item.costPrice)} />
-                  <Info label="Ultimo custo recebido" value={item.lastCost == null ? "-" : formatCurrency(item.lastCost)} />
+                  <Info
+                    label="Custo medio"
+                    value={
+                      item.averageCost == null
+                        ? "-"
+                        : formatCurrency(item.averageCost)
+                    }
+                  />
+                  <Info
+                    label="Custo minimo vigente"
+                    value={
+                      item.costPrice == null
+                        ? "-"
+                        : formatCurrency(item.costPrice)
+                    }
+                  />
+                  <Info
+                    label="Ultimo custo recebido"
+                    value={
+                      item.lastCost == null
+                        ? "-"
+                        : formatCurrency(item.lastCost)
+                    }
+                  />
                 </>
               ) : (
                 <Info label="Custos" value="Restrito por permissao" />
@@ -576,14 +754,23 @@ export default function CatalogItemDetailPage() {
                     Custo minimo, venda sugerida e aprovacao financeira
                   </h2>
                   <p className="mt-1 text-sm text-zinc-600">
-                    Os padroes vem do Studio. Somente alteracoes de impostos, comissao, margem e custos operacionais aguardam a decisao do Financeiro.
+                    Os padroes vem do Studio. Somente alteracoes de impostos,
+                    comissao, margem e custos operacionais aguardam a decisao do
+                    Financeiro.
                   </p>
                 </div>
                 {pricingContext?.policy ? (
                   <div className="rounded-lg border border-blue-200 bg-white px-4 py-3 text-sm">
-                    <p className="font-bold text-zinc-900">{pricingContext.policy.name}</p>
+                    <p className="font-bold text-zinc-900">
+                      {pricingContext.policy.name}
+                    </p>
                     <p className="mt-1 text-xs text-zinc-500">
-                      Tributos {formatNumber(pricingContext.policy.salesTaxPercent)}% | Comissao {formatNumber(pricingContext.policy.commissionPercent)}% | Margem {formatNumber(pricingContext.policy.profitMarginPercent)}%
+                      Tributos{" "}
+                      {formatNumber(pricingContext.policy.salesTaxPercent)}% |
+                      Comissao{" "}
+                      {formatNumber(pricingContext.policy.commissionPercent)}% |
+                      Margem{" "}
+                      {formatNumber(pricingContext.policy.profitMarginPercent)}%
                     </p>
                   </div>
                 ) : null}
@@ -604,9 +791,13 @@ export default function CatalogItemDetailPage() {
                 <div className="rounded-xl border border-blue-200 bg-white p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="font-bold text-zinc-900">Valores vigentes deste produto</p>
+                      <p className="font-bold text-zinc-900">
+                        Valores vigentes deste produto
+                      </p>
                       <p className="mt-1 text-xs text-zinc-500">
-                        Alteracoes nestes percentuais exigem aprovacao do Financeiro. Cotacoes de fornecedor nao entram neste fluxo.
+                        Alteracoes nestes percentuais exigem aprovacao do
+                        Financeiro. Cotacoes de fornecedor nao entram neste
+                        fluxo.
                       </p>
                     </div>
                     {canEdit ? (
@@ -624,47 +815,95 @@ export default function CatalogItemDetailPage() {
                     <SmallPercent label="COFINS" value={item.cofinsPercent} />
                     <SmallPercent label="IPI" value={item.ipiPercent} />
                     <SmallPercent label="ISS" value={item.issPercent} />
-                    <SmallPercent label="Comissao" value={item.commissionPercent} />
+                    <SmallPercent
+                      label="Comissao"
+                      value={item.commissionPercent}
+                    />
                     <SmallPercent label="Margem" value={item.profitMargin} />
-                    <SmallPercent label="Operacional" value={item.operationalCostPercent} />
+                    <SmallPercent
+                      label="Operacional"
+                      value={item.operationalCostPercent}
+                    />
                   </div>
                 </div>
                 {(pricingContext?.approvals || []).map((approval) => {
                   const payload = approval.requestPayload || {};
                   return (
-                    <article key={approval.id} className="rounded-xl border border-blue-200 bg-white p-4">
+                    <article
+                      key={approval.id}
+                      className="rounded-xl border border-blue-200 bg-white p-4"
+                    >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="font-bold text-zinc-900">
                               Solicitacao de {approval.requesterUser.name}
                             </p>
-                            <Badge tone={approval.status === "PENDING" ? "amber" : approval.status === "APPROVED" ? "emerald" : "rose"}>
+                            <Badge
+                              tone={
+                                approval.status === "PENDING"
+                                  ? "amber"
+                                  : approval.status === "APPROVED"
+                                    ? "emerald"
+                                    : "rose"
+                              }
+                            >
                               {approvalStatusLabel(approval.status)}
                             </Badge>
                           </div>
                           <p className="mt-1 text-xs text-zinc-500">
-                            {formatDate(approval.createdAt)} | Aprovador: {approval.approverUser.name}
+                            {formatDate(approval.createdAt)} | Aprovador:{" "}
+                            {approval.approverUser.name}
                           </p>
                           <p className="mt-2 text-sm text-zinc-600">
                             {approval.requestNote || "Sem observacoes."}
                           </p>
                         </div>
                         <div className="grid min-w-72 grid-cols-3 gap-2 text-center">
-                          <PriceTile label="Custo minimo" value={formatCurrency(payload.calculatedPurchaseCost as number)} />
-                          <PriceTile label="Venda sugerida" value={formatCurrency(payload.suggestedSalePrice as number)} />
-                          <PriceTile label="Preco solicitado" value={formatCurrency(payload.finalSalePrice as number)} />
+                          <PriceTile
+                            label="Custo minimo"
+                            value={formatCurrency(
+                              payload.calculatedPurchaseCost as number,
+                            )}
+                          />
+                          <PriceTile
+                            label="Venda sugerida"
+                            value={formatCurrency(
+                              payload.suggestedSalePrice as number,
+                            )}
+                          />
+                          <PriceTile
+                            label="Preco solicitado"
+                            value={formatCurrency(
+                              payload.finalSalePrice as number,
+                            )}
+                          />
                         </div>
                       </div>
                       <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-zinc-600 sm:grid-cols-4 lg:grid-cols-8">
-                        <SmallPercent label="ICMS" value={payload.icmsPercent} />
+                        <SmallPercent
+                          label="ICMS"
+                          value={payload.icmsPercent}
+                        />
                         <SmallPercent label="PIS" value={payload.pisPercent} />
-                        <SmallPercent label="COFINS" value={payload.cofinsPercent} />
+                        <SmallPercent
+                          label="COFINS"
+                          value={payload.cofinsPercent}
+                        />
                         <SmallPercent label="IPI" value={payload.ipiPercent} />
                         <SmallPercent label="ISS" value={payload.issPercent} />
-                        <SmallPercent label="Comissao" value={payload.commissionPercent} />
-                        <SmallPercent label="Margem" value={payload.profitMarginPercent} />
-                        <SmallPercent label="Operacional" value={payload.operationalCostPercent} />
+                        <SmallPercent
+                          label="Comissao"
+                          value={payload.commissionPercent}
+                        />
+                        <SmallPercent
+                          label="Margem"
+                          value={payload.profitMarginPercent}
+                        />
+                        <SmallPercent
+                          label="Operacional"
+                          value={payload.operationalCostPercent}
+                        />
                       </div>
                       {approval.status === "PENDING" && approval.canDecide ? (
                         <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-4">
@@ -686,16 +925,20 @@ export default function CatalogItemDetailPage() {
                               id={`pricing-rejection-help-${approval.id}`}
                               className="mt-1 text-xs text-zinc-500"
                             >
-                              Digite pelo menos 5 caracteres para habilitar a reprovação.
+                              Digite pelo menos 5 caracteres para habilitar a
+                              reprovação.
                             </p>
                           </div>
                           <button
                             type="button"
                             disabled={
                               pricingActionId === approval.id ||
-                              (decisionNotes[approval.id]?.trim().length || 0) < 5
+                              (decisionNotes[approval.id]?.trim().length || 0) <
+                                5
                             }
-                            onClick={() => handlePricingDecision(approval.id, "reject")}
+                            onClick={() =>
+                              handlePricingDecision(approval.id, "reject")
+                            }
                             className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             Reprovar
@@ -703,7 +946,9 @@ export default function CatalogItemDetailPage() {
                           <button
                             type="button"
                             disabled={pricingActionId === approval.id}
-                            onClick={() => handlePricingDecision(approval.id, "approve")}
+                            onClick={() =>
+                              handlePricingDecision(approval.id, "approve")
+                            }
                             className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
                           >
                             Aprovar e aplicar
@@ -720,7 +965,10 @@ export default function CatalogItemDetailPage() {
             </section>
           ) : null}
 
-          <TraceSection title="Ofertas e cotacoes vigentes" empty="Nenhuma oferta registrada para este item.">
+          <TraceSection
+            title="Ofertas e cotacoes vigentes"
+            empty="Nenhuma oferta registrada para este item."
+          >
             {(item.supplierOffers || []).map((offer) => (
               <TraceRow
                 key={offer.id}
@@ -733,20 +981,30 @@ export default function CatalogItemDetailPage() {
             ))}
           </TraceSection>
 
-          <TraceSection title="Historico de revisoes de preco" empty="Nenhuma revisao de preco registrada.">
+          <TraceSection
+            title="Historico de revisoes de preco"
+            empty="Nenhuma revisao de preco registrada."
+          >
             {(item.priceRevisions || []).map((revision) => (
               <TraceRow
                 key={revision.id}
                 title={`${formatCurrency(revision.finalSalePrice)} - ${revision.supplier?.companyName || "Fornecedor nao informado"}`}
                 subtitle={`${formatDate(revision.createdAt)} | Custo ${formatCurrency(revision.calculatedPurchaseCost)} | Validade ${formatDate(revision.validFrom)} ate ${formatDate(revision.validUntil)}`}
                 value={`M ${formatNumber(revision.profitMarginPercent)}%`}
-                extraHref={revision.supplier?.id ? `/dashboard/suppliers/${revision.supplier.id}` : undefined}
+                extraHref={
+                  revision.supplier?.id
+                    ? `/dashboard/suppliers/${revision.supplier.id}`
+                    : undefined
+                }
                 extraLabel="Fornecedor"
               />
             ))}
           </TraceSection>
 
-          <TraceSection title="Historico de vendas" empty="Nenhuma proposta utilizou este item ainda.">
+          <TraceSection
+            title="Historico de vendas"
+            empty="Nenhuma proposta utilizou este item ainda."
+          >
             {(item.proposalItems || []).map((entry) => (
               <TraceRow
                 key={entry.id}
@@ -754,7 +1012,11 @@ export default function CatalogItemDetailPage() {
                 subtitle={`${entry.proposal.status} | ${entry.proposal.client?.companyName || "Cliente nao informado"} | ${formatDate(entry.proposal.createdAt)}`}
                 value={`${formatNumber(entry.quantity)} x ${formatCurrency(entry.unitPrice)} = ${formatCurrency(entry.totalPrice)}`}
                 href={`/dashboard/proposals/${entry.proposal.id}`}
-                extraHref={entry.proposal.client?.id ? `/dashboard/clients/${entry.proposal.client.id}` : undefined}
+                extraHref={
+                  entry.proposal.client?.id
+                    ? `/dashboard/clients/${entry.proposal.client.id}`
+                    : undefined
+                }
                 extraLabel="Cliente"
               />
             ))}
@@ -764,19 +1026,30 @@ export default function CatalogItemDetailPage() {
 
       {activeTab === "traceability" ? (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <TraceSection title="Movimentos recentes" empty="Nenhum movimento encontrado.">
+          <TraceSection
+            title="Movimentos recentes"
+            empty="Nenhum movimento encontrado."
+          >
             {(item.inventoryMovements || []).map((movement) => (
               <TraceRow
                 key={movement.id}
                 title={movementLabel(movement.movementType)}
                 subtitle={`${movement.warehouse.name} | ${formatDate(movement.createdAt)} | Ref: ${movement.referenceType || "-"}`}
                 value={`${formatNumber(movement.quantity)} ${item.unit || ""}`}
-                href={movement.referenceType === "MAINTENANCE_ORDER" && movement.referenceId ? `/dashboard/orders/${movement.referenceId}` : undefined}
+                href={
+                  movement.referenceType === "MAINTENANCE_ORDER" &&
+                  movement.referenceId
+                    ? `/dashboard/orders/${movement.referenceId}`
+                    : undefined
+                }
               />
             ))}
           </TraceSection>
 
-          <TraceSection title="Compras relacionadas" empty="Nenhuma compra relacionada.">
+          <TraceSection
+            title="Compras relacionadas"
+            empty="Nenhuma compra relacionada."
+          >
             {(item.purchaseOrderItems || []).map((entry) => (
               <TraceRow
                 key={entry.id}
@@ -790,7 +1063,10 @@ export default function CatalogItemDetailPage() {
             ))}
           </TraceSection>
 
-          <TraceSection title="OS relacionadas" empty="Nenhuma OS consumiu ou reservou este item.">
+          <TraceSection
+            title="OS relacionadas"
+            empty="Nenhuma OS consumiu ou reservou este item."
+          >
             {(item.maintenanceOrderMaterials || []).map((material) => (
               <TraceRow
                 key={material.id}
@@ -804,7 +1080,10 @@ export default function CatalogItemDetailPage() {
             ))}
           </TraceSection>
 
-          <TraceSection title="Equipamentos relacionados" empty="Nenhum equipamento relacionado via OS ou itens base.">
+          <TraceSection
+            title="Equipamentos relacionados"
+            empty="Nenhum equipamento relacionado via OS ou itens base."
+          >
             {relatedGenerators.map((generator) => (
               <TraceRow
                 key={generator.id}
@@ -812,7 +1091,11 @@ export default function CatalogItemDetailPage() {
                 subtitle={`${generator.client?.companyName || "Sem cliente"} | Serie ${generator.serialNumber || "-"}`}
                 value={generator.assetTag || "Sem tag"}
                 href={`/dashboard/equipments/${generator.id}`}
-                extraHref={generator.client?.id ? `/dashboard/clients/${generator.client.id}` : undefined}
+                extraHref={
+                  generator.client?.id
+                    ? `/dashboard/clients/${generator.client.id}`
+                    : undefined
+                }
                 extraLabel="Cliente"
               />
             ))}
@@ -822,26 +1105,70 @@ export default function CatalogItemDetailPage() {
 
       {activeTab === "suppliers" ? (
         <section className="rounded-xl border border-zinc-200 bg-white p-5">
-          <h2 className="text-lg font-bold text-zinc-900">Fornecedores vinculados</h2>
+          <h2 className="text-lg font-bold text-zinc-900">
+            Fornecedores vinculados
+          </h2>
           <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
             {(item.supplierItems || []).map((supplierItem) => (
-              <article key={supplierItem.id} className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+              <article
+                key={supplierItem.id}
+                className="rounded-xl border border-zinc-200 bg-zinc-50 p-4"
+              >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <Link href={`/dashboard/suppliers/${supplierItem.supplier.id}`} className="font-bold text-blue-700 hover:underline">
+                    <Link
+                      href={`/dashboard/suppliers/${supplierItem.supplier.id}`}
+                      className="font-bold text-blue-700 hover:underline"
+                    >
                       {supplierItem.supplier.companyName}
                     </Link>
-                    <p className="mt-1 text-xs text-zinc-500">{supplierItem.supplier.cnpj || supplierItem.supplier.tradeName || "-"}</p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {supplierItem.supplier.cnpj ||
+                        supplierItem.supplier.tradeName ||
+                        "-"}
+                    </p>
                   </div>
-                  {supplierItem.isPrimary ? <Badge tone="emerald">Principal</Badge> : null}
+                  {supplierItem.isPrimary ? (
+                    <Badge tone="emerald">Principal</Badge>
+                  ) : null}
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-2">
-                  <Info label="SKU fornecedor" value={supplierItem.supplierSku || "-"} />
-                  <Info label="Lead time" value={supplierItem.leadTimeDays != null ? `${supplierItem.leadTimeDays} dia(s)` : "-"} />
-                  <Info label="Preco" value={supplierItem.supplierPrice == null ? "Restrito" : formatCurrency(supplierItem.supplierPrice)} />
-                  <Info label="Pagamento" value={supplierItem.purchasePaymentTerm || supplierItem.supplier.paymentTerm || "-"} />
-                  <Info label="Imposto compra" value={formatPurchaseTax(supplierItem)} />
-                  <Info label="Validade" value={`${formatDate(supplierItem.priceValidFrom)} ate ${formatDate(supplierItem.priceValidUntil)}`} />
+                  <Info
+                    label="SKU fornecedor"
+                    value={supplierItem.supplierSku || "-"}
+                  />
+                  <Info
+                    label="Lead time"
+                    value={
+                      supplierItem.leadTimeDays != null
+                        ? `${supplierItem.leadTimeDays} dia(s)`
+                        : "-"
+                    }
+                  />
+                  <Info
+                    label="Preco"
+                    value={
+                      supplierItem.supplierPrice == null
+                        ? "Restrito"
+                        : formatCurrency(supplierItem.supplierPrice)
+                    }
+                  />
+                  <Info
+                    label="Pagamento"
+                    value={
+                      supplierItem.purchasePaymentTerm ||
+                      supplierItem.supplier.paymentTerm ||
+                      "-"
+                    }
+                  />
+                  <Info
+                    label="Imposto compra"
+                    value={formatPurchaseTax(supplierItem)}
+                  />
+                  <Info
+                    label="Validade"
+                    value={`${formatDate(supplierItem.priceValidFrom)} ate ${formatDate(supplierItem.priceValidUntil)}`}
+                  />
                 </div>
                 {supplierItem.priceNotes ? (
                   <p className="mt-3 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-600">
@@ -861,21 +1188,34 @@ export default function CatalogItemDetailPage() {
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           <section className="rounded-xl border border-zinc-200 bg-white p-5">
             <h2 className="text-lg font-bold text-zinc-900">Dados tecnicos</h2>
-            <p className="mt-2 text-sm text-zinc-600">{item.applicationNotes || "Sem observacoes de aplicacao."}</p>
+            <p className="mt-2 text-sm text-zinc-600">
+              {item.applicationNotes || "Sem observacoes de aplicacao."}
+            </p>
             <div className="mt-4">
-              <KeyValueList data={item.technicalSpecs} emptyLabel="Sem especificacoes tecnicas adicionais." />
+              <KeyValueList
+                data={item.technicalSpecs}
+                emptyLabel="Sem especificacoes tecnicas adicionais."
+              />
             </div>
           </section>
           <section className="rounded-xl border border-zinc-200 bg-white p-5">
-            <h2 className="text-lg font-bold text-zinc-900">Fiscal e logistica</h2>
+            <h2 className="text-lg font-bold text-zinc-900">
+              Fiscal e logistica
+            </h2>
             <div className="mt-4 grid grid-cols-2 gap-2">
               <Info label="NCM" value={item.ncm || "-"} />
               <Info label="CEST" value={item.cest || "-"} />
               <Info label="Origem" value={item.origin || "-"} />
-              <Info label="Peso B/L" value={`${item.grossWeight ?? "-"} / ${item.netWeight ?? "-"}`} />
+              <Info
+                label="Peso B/L"
+                value={`${item.grossWeight ?? "-"} / ${item.netWeight ?? "-"}`}
+              />
             </div>
             <div className="mt-4">
-              <KeyValueList data={item.taxProfile} emptyLabel="Sem regras fiscais adicionais." />
+              <KeyValueList
+                data={item.taxProfile}
+                emptyLabel="Sem regras fiscais adicionais."
+              />
             </div>
           </section>
         </div>
@@ -901,7 +1241,9 @@ function Metric({
         : "border-zinc-200 bg-white text-zinc-900";
   return (
     <div className={`rounded-xl border p-4 ${toneClass}`}>
-      <p className="text-xs font-bold uppercase tracking-wide opacity-70">{title}</p>
+      <p className="text-xs font-bold uppercase tracking-wide opacity-70">
+        {title}
+      </p>
       <p className="mt-1 text-2xl font-bold">{value}</p>
     </div>
   );
@@ -910,8 +1252,12 @@ function Metric({
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-500">{label}</p>
-      <p className="mt-1 break-words text-sm font-semibold text-zinc-800">{value}</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-500">
+        {label}
+      </p>
+      <p className="mt-1 break-words text-sm font-semibold text-zinc-800">
+        {value}
+      </p>
     </div>
   );
 }
@@ -931,7 +1277,13 @@ function Badge({
     rose: "bg-rose-50 text-rose-700 border-rose-200",
     slate: "bg-slate-50 text-slate-700 border-slate-200",
   }[tone];
-  return <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${classes}`}>{children}</span>;
+  return (
+    <span
+      className={`rounded-full border px-2.5 py-1 text-xs font-bold ${classes}`}
+    >
+      {children}
+    </span>
+  );
 }
 
 function TabButton({
@@ -1004,7 +1356,10 @@ function TraceRow({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           {href ? (
-            <Link href={href} className="font-bold text-blue-700 hover:underline">
+            <Link
+              href={href}
+              className="font-bold text-blue-700 hover:underline"
+            >
               {title}
             </Link>
           ) : (
@@ -1012,10 +1367,15 @@ function TraceRow({
           )}
           <p className="mt-1 text-xs text-zinc-500">{subtitle}</p>
         </div>
-        <p className="rounded-lg bg-white px-3 py-1 text-sm font-bold text-zinc-800">{value}</p>
+        <p className="rounded-lg bg-white px-3 py-1 text-sm font-bold text-zinc-800">
+          {value}
+        </p>
       </div>
       {extraHref ? (
-        <Link href={extraHref} className="mt-3 inline-flex text-xs font-bold text-zinc-600 hover:text-blue-700 hover:underline">
+        <Link
+          href={extraHref}
+          className="mt-3 inline-flex text-xs font-bold text-zinc-600 hover:text-blue-700 hover:underline"
+        >
           {extraLabel || "Abrir vinculo"}
         </Link>
       ) : null}
@@ -1059,8 +1419,16 @@ function approvalStatusLabel(value: PricingApproval["status"]) {
   return labels[value];
 }
 
-function KeyValueList({ data, emptyLabel }: { data?: Record<string, unknown> | null; emptyLabel: string }) {
-  const entries = Object.entries(data || {}).filter(([, value]) => value !== null && value !== undefined && value !== "");
+function KeyValueList({
+  data,
+  emptyLabel,
+}: {
+  data?: Record<string, unknown> | null;
+  emptyLabel: string;
+}) {
+  const entries = Object.entries(data || {}).filter(
+    ([, value]) => value !== null && value !== undefined && value !== "",
+  );
 
   if (entries.length === 0) {
     return <p className="text-sm text-zinc-500">{emptyLabel}</p>;
@@ -1091,7 +1459,9 @@ function formatCurrency(value: number | string | null | undefined) {
 
 function formatDate(value?: string | null) {
   if (!value) return "-";
-  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(new Date(value));
+  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(
+    new Date(value),
+  );
 }
 
 function formatPurchaseTax(item: {

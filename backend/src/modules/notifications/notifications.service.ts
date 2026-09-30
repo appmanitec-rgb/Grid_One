@@ -117,6 +117,7 @@ export class NotificationsService {
       approvals,
       proposalAlerts,
       postSaleAlerts,
+      contractHandoffAlerts,
       proposalUpdates,
       contractAlerts,
       orderAlerts,
@@ -129,6 +130,9 @@ export class NotificationsService {
         : Promise.resolve([]),
       input.access.pages.proposals
         ? this.fetchGeneratorPostSaleAlerts()
+        : Promise.resolve([]),
+      input.access.pages.proposals
+        ? this.fetchContractHandoffAlerts(input.id, input.role)
         : Promise.resolve([]),
       input.access.pages.proposals && input.role !== UserRole.ADMIN
         ? this.fetchProposalUpdates(input.id)
@@ -154,6 +158,9 @@ export class NotificationsService {
       ),
       ...postSaleAlerts.map((proposal) =>
         this.mapGeneratorPostSaleNotification(proposal),
+      ),
+      ...contractHandoffAlerts.map((proposal) =>
+        this.mapContractHandoffNotification(proposal),
       ),
       ...proposalUpdates.map((movement) =>
         this.mapProposalUpdateNotification(movement),
@@ -447,6 +454,24 @@ export class NotificationsService {
     });
   }
 
+  private async fetchContractHandoffAlerts(userId: string, role: UserRole) {
+    return this.prisma.proposal.findMany({
+      where: {
+        type: ProposalType.CONTRACT,
+        status: ProposalStatus.WON,
+        generatedContract: { is: null },
+        ...(role === UserRole.ADMIN || role === UserRole.MANAGER
+          ? {}
+          : { userId }),
+      },
+      include: {
+        client: { select: { companyName: true, tradeName: true } },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 8,
+    });
+  }
+
   private async fetchContractAlerts() {
     return this.prisma.serviceContract.findMany({
       where: {
@@ -654,6 +679,29 @@ export class NotificationsService {
       priority: 'high',
       statusLabel: 'Pos-venda pendente',
       actionLabel: 'Converter venda',
+    };
+  }
+
+  private mapContractHandoffNotification(proposal: {
+    id: string;
+    code: string;
+    updatedAt: Date;
+    client: { companyName: string; tradeName: string | null };
+  }): NotificationItem {
+    const clientName = proposal.client.tradeName || proposal.client.companyName;
+    return {
+      id: `contract-handoff:${proposal.id}`,
+      category: 'proposal',
+      title: 'Contrato aguardando revisao comercial',
+      message: `${proposal.code} foi aceita por ${clientName}. Revise os dados antes de converter em contrato.`,
+      createdAt: proposal.updatedAt.toISOString(),
+      href: `/dashboard/proposals/${proposal.id}`,
+      entityType: 'PROPOSAL',
+      entityId: proposal.id,
+      tone: 'amber',
+      priority: 'high',
+      statusLabel: 'Conversao pendente',
+      actionLabel: 'Revisar proposta',
     };
   }
 

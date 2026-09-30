@@ -1098,7 +1098,7 @@ export default function BankReconciliationPage() {
                   <th className="px-3 py-3 text-right">Valor</th>
                   <th className="px-3 py-3">Status</th>
                   <th className="px-3 py-3">Movimento interno</th>
-                  <th className="px-3 py-3">Ações</th>
+                  <th className="dashboard-sticky-actions px-3 py-3">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1217,7 +1217,7 @@ export default function BankReconciliationPage() {
                         </div>
                       )}
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="dashboard-sticky-actions max-w-[17rem] px-3 py-3">
                       <div className="flex flex-wrap gap-2">
                         {!entry.matchedMovementId &&
                         entry.matchStatus !== "IGNORED" ? (

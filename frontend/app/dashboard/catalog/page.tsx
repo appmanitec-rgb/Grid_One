@@ -12,6 +12,7 @@ type CatalogItem = {
   legacySequence?: string | null;
   radarCode?: string | null;
   manufacturerPartNumber?: string | null;
+  identifiers?: Array<{ code: string }>;
   name: string;
   description?: string | null;
   commercialDescription?: string | null;
@@ -21,10 +22,6 @@ type CatalogItem = {
   category?: string | null;
   unit?: string | null;
   basePrice: number;
-  costPrice?: number | null;
-  averageCost?: number | null;
-  taxPercentage?: number | null;
-  profitMargin?: number | null;
   stockCurrent?: number | null;
   stockMin?: number | null;
   stockMax?: number | null;
@@ -49,16 +46,16 @@ export default function CatalogPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [hydrated, setHydrated] = useState(false);
-  const [canViewCosts, setCanViewCosts] = useState(false);
-  const [canManageItems, setCanManageItems] = useState(false);
+  const [canCreateItem, setCanCreateItem] = useState(false);
+  const [canViewSuppliers, setCanViewSuppliers] = useState(false);
   const [search, setSearch] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [activeGroup, setActiveGroup] = useState<CatalogGroupKey>("all");
 
   useEffect(() => {
     const access = getAccessFromToken();
-    setCanViewCosts(access.catalog.viewCosts);
-    setCanManageItems(access.catalog.manageItems);
+    setCanCreateItem(access.catalog.create);
+    setCanViewSuppliers(access.purchaseOrders.view);
     setHydrated(true);
   }, []);
 
@@ -67,7 +64,9 @@ export default function CatalogPage() {
       try {
         const res = await apiFetch("/catalogs");
         if (!res.ok) {
-          throw new Error(await readApiErrorMessage(res, "Falha ao carregar catalogo."));
+          throw new Error(
+            await readApiErrorMessage(res, "Falha ao carregar catalogo."),
+          );
         }
         setItems(await res.json());
       } catch (loadError: unknown) {
@@ -89,7 +88,7 @@ export default function CatalogPage() {
     return items.filter((item) => {
       if (!matchesCatalogGroup(item, activeGroup)) return false;
       if (!q) return true;
-      return `${item.name} ${item.sku || ""} ${item.legacyCode || ""} ${item.legacySequence || ""} ${item.radarCode || ""} ${item.manufacturerPartNumber || ""} ${item.category || ""} ${item.itemClassification || ""} ${item.acquisitionOrigin || ""} ${item.storageLocation || ""} ${item.description || ""} ${item.commercialDescription || ""}`
+      return `${item.name} ${item.sku || ""} ${item.legacyCode || ""} ${item.legacySequence || ""} ${item.radarCode || ""} ${item.manufacturerPartNumber || ""} ${(item.identifiers || []).map((identifier) => identifier.code).join(" ")} ${item.category || ""} ${item.itemClassification || ""} ${item.acquisitionOrigin || ""} ${item.storageLocation || ""} ${item.description || ""} ${item.commercialDescription || ""}`
         .toLowerCase()
         .includes(q);
     });
@@ -98,7 +97,9 @@ export default function CatalogPage() {
   const metrics = useMemo(() => {
     const parts = items.filter((item) => item.type === "PART").length;
     const services = items.filter((item) => item.type === "SERVICE").length;
-    const lowStock = items.filter((item) => item.operationalSummary?.isLowStock).length;
+    const lowStock = items.filter(
+      (item) => item.operationalSummary?.isLowStock,
+    ).length;
     return { total: items.length, parts, services, lowStock };
   }, [items]);
   const activeFilterCount = [
@@ -110,12 +111,16 @@ export default function CatalogPage() {
     <div className="p-4 sm:p-6 lg:p-8">
       <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-zinc-800">Catalogo de Pecas e Servicos</h1>
-          <p className="text-zinc-500 mt-1">Controle de itens e precificacao por perfil de usuario.</p>
+          <h1 className="text-3xl font-bold text-zinc-800">
+            Catalogo de Pecas e Servicos
+          </h1>
+          <p className="text-zinc-500 mt-1">
+            Controle de itens e precificacao por perfil de usuario.
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {hydrated && canManageItems && (
+          {hydrated && canViewSuppliers && (
             <Link
               href="/dashboard/suppliers"
               className="ml-2 rounded-lg border border-zinc-300 bg-white px-4 py-2.5 font-semibold text-zinc-700 transition-colors hover:bg-zinc-100"
@@ -123,7 +128,7 @@ export default function CatalogPage() {
               Fornecedores
             </Link>
           )}
-          {hydrated && canManageItems && (
+          {hydrated && canCreateItem && (
             <Link
               href="/dashboard/catalog/new"
               className="ml-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-lg font-semibold transition-colors shadow-sm"
@@ -135,9 +140,16 @@ export default function CatalogPage() {
       </div>
 
       {error && (
-        <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
+        <div
+          role="alert"
+          className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700"
+        >
           <span>{error}</span>
-          <button type="button" onClick={() => window.location.reload()} className="text-sm font-bold underline">
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="text-sm font-bold underline"
+          >
             Tentar novamente
           </button>
         </div>
@@ -147,12 +159,19 @@ export default function CatalogPage() {
         <Metric title="Itens ativos" value={String(metrics.total)} />
         <Metric title="Pecas" value={String(metrics.parts)} />
         <Metric title="Servicos" value={String(metrics.services)} />
-        <Metric title="Baixo estoque" value={String(metrics.lowStock)} tone={metrics.lowStock > 0 ? "amber" : "emerald"} />
+        <Metric
+          title="Baixo estoque"
+          value={String(metrics.lowStock)}
+          tone={metrics.lowStock > 0 ? "amber" : "emerald"}
+        />
       </section>
 
       <section className="mb-4 rounded-xl border border-zinc-200 bg-white p-4">
         <div className="mb-3 flex items-center gap-2">
-          <label htmlFor="catalog-search" className="block flex-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          <label
+            htmlFor="catalog-search"
+            className="block flex-1 text-xs font-semibold uppercase tracking-wide text-zinc-500"
+          >
             Buscar item
           </label>
           <button
@@ -167,7 +186,7 @@ export default function CatalogPage() {
           id="catalog-search"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Item, SKU, codigo legado, categoria, descricao ou localizacao..."
+          placeholder="Item, SKU, PN, outros codigos, descricao ou localizacao..."
           className="w-full rounded-lg border border-zinc-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
         />
         {showFilters ? (
@@ -186,7 +205,9 @@ export default function CatalogPage() {
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-zinc-500">
             {filteredItems.length} resultado(s)
-            {activeFilterCount ? ` | ${activeFilterCount} filtro(s) ativo(s)` : ""}
+            {activeFilterCount
+              ? ` | ${activeFilterCount} filtro(s) ativo(s)`
+              : ""}
           </p>
           {activeFilterCount ? (
             <button
@@ -210,63 +231,78 @@ export default function CatalogPage() {
               <tr className="bg-zinc-50 text-zinc-500 text-sm border-b border-zinc-200">
                 <th className="p-4 font-medium">Item</th>
                 <th className="p-4 font-medium">Descricao</th>
-                <th className="p-4 font-medium">Identificacao / Local</th>
+                <th className="p-4 font-medium">SKU / PN</th>
                 <th className="p-4 font-medium">Tipo</th>
                 <th className="p-4 font-medium">Saldo</th>
                 <th className="p-4 font-medium">Venda sugerida</th>
-                {hydrated && canViewCosts && <th className="p-4 font-medium">Custo</th>}
-                {hydrated && canViewCosts && <th className="p-4 font-medium">Margem</th>}
-                <th className="p-4 font-medium text-right">Acoes</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200">
               {!loading &&
                 filteredItems.map((item) => {
-                  const availableQty = item.operationalSummary?.availableQty ?? Number(item.stockCurrent || 0);
+                  const availableQty =
+                    item.operationalSummary?.availableQty ??
+                    Number(item.stockCurrent || 0);
                   const low = item.operationalSummary?.isLowStock === true;
                   return (
-                  <tr key={item.id} className="hover:bg-zinc-50 transition-colors">
-                    <td className="p-4 font-bold text-zinc-800">{item.name}</td>
-                    <td className="p-4 text-zinc-600 text-sm max-w-md truncate">{item.description || item.commercialDescription || "Sem descricao"}</td>
-                    <td className="p-4 text-sm text-zinc-600">
-                      <p className="font-mono font-semibold text-zinc-800">SKU: {item.sku || "-"}</p>
-                      {item.legacyCode ? <p className="text-xs text-blue-700">Codigo PX: {item.legacyCode}</p> : null}
-                      {item.legacySequence ? <p className="text-xs text-zinc-500">Seq. PX (legado): {item.legacySequence}</p> : null}
-                      {item.radarCode ? <p className="text-xs text-zinc-500">Codigo Radar: {item.radarCode}</p> : null}
-                      {item.manufacturerPartNumber ? <p className="text-xs text-zinc-500">Part Number: {item.manufacturerPartNumber}</p> : null}
-                      <p className="text-xs text-zinc-500">{item.storageLocation || "Sem localizacao"}</p>
-                    </td>
-                    <td className="p-4">
-                      <span
-                        className={`px-3 py-1 text-xs rounded-full font-semibold ${
-                          item.type === "SERVICE" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
-                        }`}
+                    <tr
+                      key={item.id}
+                      className="hover:bg-zinc-50 transition-colors"
+                    >
+                      <td className="p-4 font-bold text-zinc-800">
+                        <Link
+                          href={`/dashboard/catalog/${item.id}`}
+                          className="dashboard-record-link"
+                          title="Abrir cadastro do item"
+                        >
+                          {item.name}
+                        </Link>
+                      </td>
+                      <td className="p-4 text-zinc-600 text-sm max-w-md truncate">
+                        {item.description ||
+                          item.commercialDescription ||
+                          "Sem descricao"}
+                      </td>
+                      <td className="p-4 text-sm text-zinc-600">
+                        <p className="font-mono font-semibold text-zinc-800">
+                          SKU: {item.sku || "-"}
+                        </p>
+                        <p className="mt-1 font-mono text-xs text-zinc-600">
+                          PN: {item.manufacturerPartNumber || "-"}
+                        </p>
+                      </td>
+                      <td className="p-4">
+                        <span
+                          className={`px-3 py-1 text-xs rounded-full font-semibold ${
+                            item.type === "SERVICE"
+                              ? "bg-purple-100 text-purple-700"
+                              : "bg-blue-100 text-blue-700"
+                          }`}
+                        >
+                          {item.type === "SERVICE" ? "SERVICO" : "PECA"}
+                        </span>
+                        <p className="mt-2 text-xs font-semibold text-zinc-500">
+                          {catalogGroupLabel(classifyCatalogItem(item))}
+                        </p>
+                      </td>
+                      <td
+                        className={`p-4 text-sm font-semibold ${low ? "text-red-600" : "text-zinc-800"}`}
                       >
-                        {item.type === "SERVICE" ? "SERVICO" : "PECA"}
-                      </span>
-                      <p className="mt-2 text-xs font-semibold text-zinc-500">
-                        {catalogGroupLabel(classifyCatalogItem(item))}
-                      </p>
-                    </td>
-                    <td className={`p-4 text-sm font-semibold ${low ? "text-red-600" : "text-zinc-800"}`}>
-                      {availableQty}
-                      <p className="text-xs font-normal text-zinc-500">Min/Max {item.stockMin ?? 0}/{item.stockMax ?? 0}</p>
-                    </td>
-                    <td className="p-4 text-zinc-800 font-medium">R$ {Number(item.basePrice).toFixed(2)}</td>
-                    {hydrated && canViewCosts && <td className="p-4 text-zinc-700">{item.averageCost != null ? `R$ ${Number(item.averageCost).toFixed(2)}` : item.costPrice != null ? `R$ ${Number(item.costPrice).toFixed(2)}` : "-"}</td>}
-                    {hydrated && canViewCosts && <td className="p-4 text-zinc-700">{item.profitMargin != null ? `${Number(item.profitMargin).toFixed(2)}%` : "-"}</td>}
-                    <td className="p-4 text-right">
-                      <Link href={`/dashboard/catalog/${item.id}`} className="text-sm font-semibold text-zinc-600 hover:text-zinc-900 hover:underline">
-                        Abrir cadastro
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })}
+                        {availableQty}
+                        <p className="text-xs font-normal text-zinc-500">
+                          Min/Max {item.stockMin ?? 0}/{item.stockMax ?? 0}
+                        </p>
+                      </td>
+                      <td className="p-4 text-zinc-800 font-medium">
+                        R$ {Number(item.basePrice).toFixed(2)}
+                      </td>
+                    </tr>
+                  );
+                })}
 
               {loading && (
                 <tr>
-                  <td colSpan={hydrated && canViewCosts ? 9 : 7} className="p-8 text-center text-zinc-500">
+                  <td colSpan={6} className="p-8 text-center text-zinc-500">
                     Carregando catalogo...
                   </td>
                 </tr>
@@ -274,7 +310,7 @@ export default function CatalogPage() {
 
               {!loading && filteredItems.length === 0 && (
                 <tr>
-                  <td colSpan={hydrated && canViewCosts ? 9 : 7} className="p-8 text-center text-zinc-500">
+                  <td colSpan={6} className="p-8 text-center text-zinc-500">
                     Nenhum item encontrado para o filtro atual.
                   </td>
                 </tr>
@@ -304,7 +340,9 @@ function Metric({
         : "border-zinc-200 bg-white text-zinc-900";
   return (
     <div className={`rounded-xl border p-4 ${toneClass}`}>
-      <p className="text-xs font-bold uppercase tracking-wide opacity-70">{title}</p>
+      <p className="text-xs font-bold uppercase tracking-wide opacity-70">
+        {title}
+      </p>
       <p className="mt-1 text-2xl font-bold">{value}</p>
     </div>
   );
@@ -345,17 +383,22 @@ function buildCatalogGroups(items: CatalogItem[]) {
     {
       key: "internal" as const,
       label: "Uso interno",
-      count: items.filter((item) => classifyCatalogItem(item) === "internal").length,
+      count: items.filter((item) => classifyCatalogItem(item) === "internal")
+        .length,
     },
     {
       key: "technicalTools" as const,
       label: "Ferramentas tecnicas",
-      count: items.filter((item) => classifyCatalogItem(item) === "technicalTools").length,
+      count: items.filter(
+        (item) => classifyCatalogItem(item) === "technicalTools",
+      ).length,
     },
     {
       key: "generatorParts" as const,
       label: "Pecas de geradores",
-      count: items.filter((item) => classifyCatalogItem(item) === "generatorParts").length,
+      count: items.filter(
+        (item) => classifyCatalogItem(item) === "generatorParts",
+      ).length,
     },
     {
       key: "services" as const,
@@ -377,7 +420,9 @@ function matchesCatalogGroup(item: CatalogItem, group: CatalogGroupKey) {
   return classifyCatalogItem(item) === group;
 }
 
-function classifyCatalogItem(item: CatalogItem): Exclude<CatalogGroupKey, "all" | "lowStock"> {
+function classifyCatalogItem(
+  item: CatalogItem,
+): Exclude<CatalogGroupKey, "all" | "lowStock"> {
   if (item.type === "SERVICE") return "services";
 
   const haystack = [
@@ -397,7 +442,9 @@ function classifyCatalogItem(item: CatalogItem): Exclude<CatalogGroupKey, "all" 
   return "generatorParts";
 }
 
-function catalogGroupLabel(group: Exclude<CatalogGroupKey, "all" | "lowStock">) {
+function catalogGroupLabel(
+  group: Exclude<CatalogGroupKey, "all" | "lowStock">,
+) {
   const labels = {
     internal: "Uso interno",
     technicalTools: "Ferramenta tecnica",

@@ -43,6 +43,7 @@ type ProposalListItem = {
   externalReference?: string | null;
   externalCurrency?: string | null;
   postSaleGeneratorId?: string | null;
+  generatedContract?: { id: string; code: string; status: string } | null;
   client?: { companyName?: string | null } | null;
   generator?: { name?: string | null } | null;
   commercialGenerator?: {
@@ -322,6 +323,28 @@ export default function ProposalsPage() {
     };
   }, [proposals]);
 
+  const commercialHandoffs = useMemo(
+    () =>
+      proposals.flatMap((proposal) => {
+        if (
+          proposal.status === "WON" &&
+          proposal.type === "CONTRACT" &&
+          !proposal.generatedContract
+        ) {
+          return [{ proposal, action: "Revisar e converter contrato" }];
+        }
+        if (
+          proposal.status === "WON" &&
+          proposal.type === "GENERATOR_SALE" &&
+          !proposal.postSaleGeneratorId
+        ) {
+          return [{ proposal, action: "Preparar pós-venda" }];
+        }
+        return [];
+      }),
+    [proposals],
+  );
+
   return (
     <div className="space-y-6">
       <PageHero
@@ -466,6 +489,40 @@ export default function ProposalsPage() {
 
       {notice ? <StatusBanner tone="emerald">{notice}</StatusBanner> : null}
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
+
+      {!isClient && commercialHandoffs.length > 0 ? (
+        <SectionCard
+          eyebrow="Passagem comercial"
+          title="Vendas ganhas aguardando o próximo passo"
+          description="O aceite do cliente atualiza a proposta. A continuidade aparece aqui até o contrato ou o pré-cadastro de pós-venda estar vinculado."
+          actions={<DataPill tone="amber">{commercialHandoffs.length} pendente(s)</DataPill>}
+        >
+          <div className="grid gap-3 lg:grid-cols-2">
+            {commercialHandoffs.slice(0, 6).map(({ proposal, action }) => (
+              <Link
+                key={proposal.id}
+                href={`/dashboard/proposals/${proposal.id}`}
+                className="group flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 transition hover:border-amber-400 hover:bg-amber-50"
+              >
+                <span>
+                  <span className="block text-sm font-bold text-slate-900">
+                    {proposal.code} · {proposal.client?.companyName || "Cliente sem nome"}
+                  </span>
+                  <span className="mt-1 block text-xs text-slate-600">{action}</span>
+                </span>
+                <span className="text-xs font-bold text-amber-800 group-hover:underline">
+                  Abrir proposta →
+                </span>
+              </Link>
+            ))}
+          </div>
+          {commercialHandoffs.length > 6 ? (
+            <p className="mt-3 text-xs text-slate-500">
+              Mostrando as 6 mais recentes. As demais seguem identificadas na carteira abaixo.
+            </p>
+          ) : null}
+        </SectionCard>
+      ) : null}
 
       <SectionCard
         eyebrow="Carteiras comerciais"
@@ -908,7 +965,9 @@ function ProposalPortfolioCard({ proposal }: { proposal: ProposalListItem }) {
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-lg font-bold text-slate-950">{proposal.code}</p>
+            <Link href={`/dashboard/proposals/${proposal.id}`} className="dashboard-record-link text-lg font-bold" title="Abrir proposta">
+              {proposal.code}
+            </Link>
             <DataPill tone={statusToneValue}>
               {statusLabel(proposal.status)}
             </DataPill>
@@ -920,6 +979,11 @@ function ProposalPortfolioCard({ proposal }: { proposal: ProposalListItem }) {
             proposal.status === "WON" &&
             !proposal.postSaleGeneratorId ? (
               <DataPill tone="amber">Pós-venda pendente</DataPill>
+            ) : null}
+            {proposal.type === "CONTRACT" &&
+            proposal.status === "WON" &&
+            !proposal.generatedContract ? (
+              <DataPill tone="amber">Contrato pendente</DataPill>
             ) : null}
             {proposal.status !== step ? (
               <DataPill tone="amber">Retorno para diretoria</DataPill>
@@ -1049,7 +1113,9 @@ function KanbanProposalCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-bold text-slate-950">{proposal.code}</p>
+          <Link href={`/dashboard/proposals/${proposal.id}`} draggable={false} className="dashboard-record-link text-sm font-bold" title="Abrir proposta">
+            {proposal.code}
+          </Link>
           <p className="mt-1 text-sm text-slate-700">
             {proposal.client?.companyName || "Sem cliente"}
           </p>

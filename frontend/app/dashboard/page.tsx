@@ -20,8 +20,6 @@ import {
 import {
   DataPill,
   EmptyState,
-  FieldBox,
-  PageHero,
   SectionCard,
   StatusBanner,
 } from "./components/DashboardPageKit";
@@ -87,6 +85,14 @@ const PIPELINE_COLUMNS: StageColumn[] = [
   { key: "REJECTED", label: "Reprovadas" },
   { key: "REVISED", label: "Revisadas" },
 ];
+
+const ACTIVE_PROPOSAL_STATUSES = new Set([
+  "DRAFT",
+  "BOARD_REVIEW",
+  "REVISION_REQUIRED",
+  "CLIENT_REVIEW",
+  "DISCOUNT_REVIEW",
+]);
 
 const ACTION_TONES: Record<
   Tone,
@@ -209,15 +215,15 @@ const SECONDARY_BUTTON =
   "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white/96 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-[0_14px_28px_-24px_rgba(15,23,42,0.26)] transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0";
 const PANEL_TOGGLE_BUTTON =
   "inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-[0_12px_24px_-22px_rgba(15,23,42,0.28)] transition hover:border-slate-300 hover:bg-slate-50";
-const DASHBOARD_PANELS_STORAGE_KEY = "manitec_dashboard_home_panels";
+const DASHBOARD_PANELS_STORAGE_KEY = "manitec_dashboard_home_panels_v2";
 const DEFAULT_DASHBOARD_PANELS: DashboardPanelsState = {
   priorities: true,
   actions: true,
-  processes: true,
+  processes: false,
   pipeline: true,
-  board: true,
-  updates: true,
-  governance: true,
+  board: false,
+  updates: false,
+  governance: false,
 };
 
 export default function DashboardPage() {
@@ -234,12 +240,15 @@ export default function DashboardPage() {
   const [canCreateClient, setCanCreateClient] = useState(false);
   const [canCreateContract, setCanCreateContract] = useState(false);
   const [canViewOrders, setCanViewOrders] = useState(false);
+  const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [apiWarning, setApiWarning] = useState("");
-  const [uiNotice, setUiNotice] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [pipelineQuery, setPipelineQuery] = useState("");
   const [pipelineStatusFilter, setPipelineStatusFilter] = useState("ALL");
+  const [showEmptyPipelineStages, setShowEmptyPipelineStages] = useState(false);
   const [panelsReady, setPanelsReady] = useState(false);
   const [panelState, setPanelState] = useState<DashboardPanelsState>(
     DEFAULT_DASHBOARD_PANELS,
@@ -264,8 +273,8 @@ export default function DashboardPage() {
         proposal.status === "WON" &&
         !proposal.postSaleGeneratorId,
     ).length;
-    const active = proposals.filter(
-      (proposal) => proposal.status !== "WON" && proposal.status !== "LOST",
+    const active = proposals.filter((proposal) =>
+      ACTIVE_PROPOSAL_STATUSES.has(proposal.status),
     ).length;
     const conversion =
       won + lost > 0 ? ((won / (won + lost)) * 100).toFixed(1) : "0.0";
@@ -287,7 +296,10 @@ export default function DashboardPage() {
       proposals.reduce(
         (sum, proposal) =>
           sum +
-          (Number.isFinite(proposal.totalValue) ? proposal.totalValue : 0),
+          (ACTIVE_PROPOSAL_STATUSES.has(proposal.status) &&
+          Number.isFinite(proposal.totalValue)
+            ? proposal.totalValue
+            : 0),
         0,
       ),
     [proposals],
@@ -440,7 +452,7 @@ export default function DashboardPage() {
     }
 
     const access = getAccessFromToken();
-    setIsBoard(payload.role === "ADMIN");
+    setIsBoard(access.proposals.approve);
     setCanManageUsers(access.users.manage);
     setCanCreateProposal(access.proposals.create);
     setCanCreateClient(access.clients.create);
@@ -476,6 +488,7 @@ export default function DashboardPage() {
     if (!hydrated) return;
 
     (async () => {
+      setDashboardLoading(true);
       setApiWarning("");
       setBoardPending([]);
       setAdminUsers([]);
@@ -489,7 +502,9 @@ export default function DashboardPage() {
           usersResult,
         ] = await Promise.allSettled([
           apiFetch("/proposals", { cache: "no-store" }),
-          apiFetch("/maintenance-orders", { cache: "no-store" }),
+          canViewOrders
+            ? apiFetch("/maintenance-orders", { cache: "no-store" })
+            : Promise.resolve(new Response(null, { status: 204 })),
           apiFetch("/proposals/my/updates", { cache: "no-store" }),
           isBoard
             ? apiFetch("/proposals/board/pending", {
@@ -547,7 +562,7 @@ export default function DashboardPage() {
 
         const hasNetworkFailure =
           proposalsResult.status === "rejected" ||
-          ordersResult.status === "rejected" ||
+          (canViewOrders && ordersResult.status === "rejected") ||
           updatesResult.status === "rejected" ||
           (isBoard && boardResult.status === "rejected") ||
           (canManageUsers && usersResult.status === "rejected");
@@ -569,18 +584,23 @@ export default function DashboardPage() {
           setApiWarning(
             "Não foi possível carregar todo o cockpit agora. Verifique a conexão com a API e tente novamente.",
           );
+        } else {
+          setLastUpdatedAt(new Date());
         }
       } catch {
         setApiWarning(
           "Falha ao carregar o dashboard. Verifique a conexão com a API.",
         );
+      } finally {
+        setDashboardLoading(false);
       }
     })().catch(() => {
+      setDashboardLoading(false);
       setApiWarning(
         "Falha ao carregar o dashboard. Verifique a conexão com a API.",
       );
     });
-  }, [hydrated, isBoard, canManageUsers, router]);
+  }, [hydrated, isBoard, canManageUsers, canViewOrders, refreshKey, router]);
 
   async function moveProposalToStatus(proposalId: string, nextStatus: string) {
     const current = proposals.find((proposal) => proposal.id === proposalId);
@@ -622,189 +642,77 @@ export default function DashboardPage() {
 
   function togglePanel(panel: DashboardPanelKey) {
     setPanelState((current) => ({ ...current, [panel]: !current[panel] }));
-    setUiNotice("");
   }
 
-  function setAllPanels(expanded: boolean) {
-    setPanelState({
-      priorities: expanded,
-      actions: expanded,
-      processes: expanded,
-      pipeline: expanded,
-      board: expanded,
-      updates: expanded,
-      governance: expanded,
-    });
-    setUiNotice(expanded ? "Home expandida." : "Home compactada.");
-  }
-
-  const allPanelsExpanded = Object.values(panelState).every(Boolean);
-  const allPanelsCollapsed = Object.values(panelState).every((value) => !value);
+  const priorityItems = [
+    { title: "Aprovações da diretoria", count: isBoard ? boardPending.length : 0, href: "/dashboard/proposals", tone: "rose" as Tone },
+    { title: "Descontos para revisar", count: isBoard ? stats.discountQueue : 0, href: "/dashboard/proposals", tone: "amber" as Tone },
+    { title: "Ordens em andamento", count: canViewOrders ? stats.openOrders : 0, href: "/dashboard/orders", tone: "blue" as Tone },
+    { title: "Pós-venda pendente", count: stats.postSaleQueue, href: "/dashboard/proposals", tone: "emerald" as Tone },
+  ].filter((item) => item.count > 0);
 
   return (
-    <div className="space-y-6 pb-10">
+    <div className="dashboard-home space-y-5 pb-10">
       {apiWarning ? (
         <StatusBanner tone="amber">{apiWarning}</StatusBanner>
       ) : null}
-      {uiNotice ? <StatusBanner tone="emerald">{uiNotice}</StatusBanner> : null}
+      <header className="flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-5 shadow-sm">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">Painel geral</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">Visão geral</h1>
+          <p className="mt-1 text-sm text-slate-600">Propostas, execução e decisões que precisam de atenção.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {lastUpdatedAt ? (
+            <span className="text-xs text-slate-600">
+              Atualizado às {lastUpdatedAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setRefreshKey((value) => value + 1)}
+            disabled={dashboardLoading}
+            className={SECONDARY_BUTTON}
+          >
+            {dashboardLoading ? "Atualizando..." : "Atualizar dados"}
+          </button>
+          {canCreateProposal ? (
+            <Link href="/dashboard/proposals/new" className={PRIMARY_BUTTON}>Nova proposta</Link>
+          ) : null}
+        </div>
+      </header>
 
-      <PageHero
-        compact
-        eyebrow="Dashboard"
-        title="Resumo comercial e operacional."
-        description="Visão rápida do que exige decisão agora."
-        stats={[
-          {
-            label: "Propostas",
-            value: String(stats.total),
-            helper: "carteira",
-            tone: "slate",
-          },
-          {
-            label: "Ativas",
-            value: String(stats.active),
-            helper: "em andamento",
-            tone: "blue",
-          },
-          {
-            label: "Pipeline",
-            value: formatCurrency(totalPipelineValue),
-            helper: "valor total",
-            tone: "emerald",
-          },
-          {
-            label: "Conversão",
-            value: `${stats.conversion}%`,
-            helper: `${stats.won} ganhas`,
-            tone: "amber",
-          },
-        ]}
-        actions={
-          <>
-            {canCreateProposal ? (
-              <Link href="/dashboard/proposals/new" className={PRIMARY_BUTTON}>
-                Nova proposta
-              </Link>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => setAllPanels(false)}
-              disabled={allPanelsCollapsed}
-              className={SECONDARY_BUTTON}
-            >
-              {allPanelsCollapsed ? "Home compacta" : "Compactar seções"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setAllPanels(true)}
-              disabled={allPanelsExpanded}
-              className={SECONDARY_BUTTON}
-            >
-              {allPanelsExpanded ? "Home expandida" : "Expandir seções"}
-            </button>
-          </>
-        }
-        asideLayout="stacked"
-        aside={
-          <DailySnapshotPanel
-            isBoard={isBoard}
-            stats={stats}
-            boardPending={boardPending.length}
-            updates={myUpdates.length}
-            openOrders={stats.openOrders}
-          />
-        }
-      />
+      <div className="dashboard-home-metrics grid gap-3">
+        <OverviewStat label="Propostas" value={dashboardLoading ? "—" : String(stats.total)} helper="na carteira" />
+        <OverviewStat label="Em andamento" value={dashboardLoading ? "—" : String(stats.active)} helper="propostas ativas" />
+        <OverviewStat label="Valor do pipeline" value={dashboardLoading ? "—" : formatCurrency(totalPipelineValue)} helper="propostas em andamento" />
+        <OverviewStat label="Conversão" value={dashboardLoading ? "—" : `${stats.conversion}%`} helper={`${stats.won} ganhas`} />
+      </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(330px,0.95fr)]">
+      <div className="dashboard-home-primary-grid grid gap-5">
         <DashboardSection
           panelKey="priorities"
           expanded={panelState.priorities}
           onToggle={togglePanel}
           eyebrow="Hoje"
           title="Prioridades"
-          description="Fila do dia."
-          summary={`Ativas ${stats.active}  |  Aprovações ${boardPending.length}  |  Pós-venda ${stats.postSaleQueue}`}
+          description="O que precisa de acompanhamento agora."
+          summary={priorityItems.length > 0 ? `${priorityItems.length} assuntos para acompanhar` : "Nenhuma pendência no momento"}
         >
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(260px,0.9fr)]">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <PriorityCard
-                title="Ativas"
-                value={String(stats.active)}
-                subtitle="pipeline"
-                tone="blue"
-              />
-              <PriorityCard
-                title="Desconto"
-                value={String(stats.discountQueue)}
-                subtitle="pendentes"
-                tone="amber"
-              />
-              <PriorityCard
-                title={isBoard ? "Board" : "Atualizacoes"}
-                value={String(isBoard ? boardPending.length : myUpdates.length)}
-                subtitle={isBoard ? "aguardando decisao" : "novos registros"}
-                tone={isBoard ? "rose" : "slate"}
-              />
-              <PriorityCard
-                title="Ordens"
-                value={String(stats.openOrders)}
-                subtitle="em andamento"
-                tone="emerald"
-              />
-              <PriorityCard
-                title="Pós-venda"
-                value={String(stats.postSaleQueue)}
-                subtitle="geradores para converter"
-                tone="amber"
-              />
+          {dashboardLoading ? (
+            <p className="text-sm text-slate-600">Carregando prioridades...</p>
+          ) : apiWarning && priorityItems.length === 0 ? (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950">Não foi possível confirmar as prioridades. Atualize a página para tentar novamente.</p>
+          ) : priorityItems.length === 0 ? (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4">
+              <p className="font-semibold text-emerald-950">Tudo em dia</p>
+              <p className="mt-1 text-sm text-emerald-900">Nenhuma pendência exige atenção agora.</p>
             </div>
-
-            <FieldBox className="space-y-4 bg-white/90">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                  Pipeline
-                </p>
-                <h3 className="mt-2 text-lg font-bold text-slate-950">
-                  Etapas com maior volume
-                </h3>
-              </div>
-
-              {topStages.length === 0 ? (
-                <EmptyState
-                  title="Sem etapas ativas"
-                  description="O resumo aparece quando houver propostas em andamento."
-                />
-              ) : (
-                <div className="space-y-3">
-                  {topStages.map((stage) => (
-                    <div
-                      key={stage.key}
-                      className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">
-                            {stage.label}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {stage.total} proposta(s)
-                          </p>
-                        </div>
-                        <DataPill
-                          tone={
-                            (STAGE_STYLES[stage.key] ?? STAGE_STYLES.DRAFT).tone
-                          }
-                        >
-                          {stage.total}
-                        </DataPill>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </FieldBox>
-          </div>
+          ) : (
+            <div className="grid gap-2">
+              {priorityItems.map((item) => <PriorityRow key={item.title} {...item} />)}
+            </div>
+          )}
         </DashboardSection>
 
         <DashboardSection
@@ -816,7 +724,7 @@ export default function DashboardPage() {
           description="Entradas principais."
           summary={`${quickActions.length} atalhos`}
         >
-          <div className="grid gap-3">
+          <div className="dashboard-home-actions grid gap-2">
             {quickActions.map((action) => (
               <QuickActionCard key={action.href} {...action} />
             ))}
@@ -833,7 +741,7 @@ export default function DashboardPage() {
         description="Trilhas principais."
         summary="Comercial -> operacao -> financeiro"
       >
-        <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
+        <div className="dashboard-home-process-grid grid gap-3">
           <ProcessPathCard
             title="Venda avulsa"
             steps={[
@@ -890,7 +798,7 @@ export default function DashboardPage() {
           title="Propostas por etapa"
           description="Lista e arraste."
           summary={`${stats.total} propostas  |  ${topStages[0]?.label || "Sem fila"}`}
-          actions={
+          actions={panelState.pipeline && stats.total > 0 ?
             <div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center xl:justify-end">
               <input
                 value={pipelineQuery}
@@ -926,8 +834,19 @@ export default function DashboardPage() {
                   </DataPill>
                 ))}
             </div>
-          }
+          : undefined}
         >
+          {dashboardLoading ? (
+            <p className="text-sm text-slate-600">Carregando propostas...</p>
+          ) : apiWarning && stats.total === 0 ? (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950">Alguns dados do painel não carregaram. Atualize a página antes de concluir que o pipeline está vazio.</p>
+          ) : stats.total === 0 ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-6">
+              <p className="font-semibold text-slate-900">Ainda não há propostas no pipeline</p>
+              <p className="mt-1 text-sm text-slate-600">Quando uma proposta for criada, suas etapas aparecerão aqui.</p>
+              {canCreateProposal ? <Link href="/dashboard/proposals/new" className="dashboard-record-link mt-3 inline-block font-semibold">Criar proposta</Link> : null}
+            </div>
+          ) : (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm leading-6 text-slate-600">
@@ -943,10 +862,15 @@ export default function DashboardPage() {
               >
                 {filteredPipelineProposals.length} resultado(s)
               </DataPill>
+              <button type="button" onClick={() => setShowEmptyPipelineStages((value) => !value)} className="text-sm font-semibold text-blue-700 hover:underline">
+                {showEmptyPipelineStages ? "Ocultar etapas vazias" : "Mostrar todas as etapas"}
+              </button>
             </div>
 
-            <DashboardKanban ariaLabel="Kanban de propostas por etapa">
-              {pipelineCounts.map((column) => (
+            {filteredPipelineProposals.length === 0 ? (
+              <EmptyState title="Nenhuma proposta encontrada" description="Ajuste a busca ou o filtro de etapa." />
+            ) : <DashboardKanban ariaLabel="Kanban de propostas por etapa">
+              {pipelineCounts.filter((column) => showEmptyPipelineStages || column.total > 0 || pipelineStatusFilter === column.key).map((column) => (
                 <PipelineColumnCard
                   key={column.key}
                   column={column}
@@ -957,11 +881,12 @@ export default function DashboardPage() {
                   onMove={moveProposalToStatus}
                 />
               ))}
-            </DashboardKanban>
+            </DashboardKanban>}
           </div>
+          )}
         </DashboardSection>
 
-        <div className="grid gap-6 xl:grid-cols-3">
+        <div className="dashboard-home-bottom-grid grid gap-5">
           {isBoard ? (
             <BoardPendingCard
               boardPending={boardPending}
@@ -988,115 +913,24 @@ export default function DashboardPage() {
   );
 }
 
-function DailySnapshotPanel({
-  isBoard,
-  stats,
-  boardPending,
-  updates,
-  openOrders,
-}: {
-  isBoard: boolean;
-  stats: {
-    total: number;
-    won: number;
-    lost: number;
-    openOrders: number;
-    discountQueue: number;
-    active: number;
-    conversion: string;
-  };
-  boardPending: number;
-  updates: number;
-  openOrders: number;
-}) {
+function OverviewStat({ label, value, helper }: { label: string; value: string; helper: string }) {
   return (
-    <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-sm md:p-4">
-      <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-slate-200">
-        Resumo
-      </p>
-      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <SnapshotLine
-          label="Desconto"
-          value={String(stats.discountQueue)}
-          helper="pendentes"
-          tone="amber"
-        />
-        <SnapshotLine
-          label={isBoard ? "Board" : "Feed"}
-          value={String(isBoard ? boardPending : updates)}
-          helper={isBoard ? "aguardando decisao" : "novidades"}
-          tone={isBoard ? "rose" : "slate"}
-        />
-        <SnapshotLine
-          label="Ordens"
-          value={String(openOrders)}
-          helper="abertas"
-          tone="emerald"
-        />
-        <SnapshotLine
-          label="Win rate"
-          value={`${stats.conversion}%`}
-          helper={`${stats.won} ganhas`}
-          tone="blue"
-        />
-      </div>
-    </div>
-  );
-}
-
-function SnapshotLine({
-  label,
-  value,
-  helper,
-  tone,
-}: {
-  label: string;
-  value: string;
-  helper: string;
-  tone: Tone;
-}) {
-  return (
-    <div className="min-w-0 rounded-2xl border border-white/10 bg-white/6 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-      <div className="flex items-center justify-between gap-3">
-        <p className="min-w-0 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-200">
-          {label}
-        </p>
-        <DataPill tone={tone}>{value}</DataPill>
-      </div>
-      <p className="mt-2 text-xs leading-5 text-slate-200">{helper}</p>
-    </div>
-  );
-}
-
-function PriorityCard({
-  title,
-  value,
-  subtitle,
-  tone,
-}: {
-  title: string;
-  value: string;
-  subtitle: string;
-  tone: Tone;
-}) {
-  const style = ACTION_TONES[tone];
-
-  return (
-    <article
-      className={`relative overflow-hidden rounded-[24px] border px-4 py-4 shadow-[0_22px_42px_-34px_rgba(15,23,42,0.3)] ${style.shell}`}
-    >
-      <div className={`absolute inset-x-0 top-0 h-1.5 ${style.accent}`} />
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-            {title}
-          </p>
-          <p className="mt-2 text-3xl font-bold text-slate-950">{value}</p>
-        </div>
-        <span className={`mt-1 h-3 w-3 rounded-full ${style.accent}`} />
-      </div>
-      <p className="mt-3 text-sm text-slate-600">{subtitle}</p>
+    <article className="min-w-0 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+      <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-600">{label}</p>
+      <p className="mt-2 truncate text-2xl font-bold text-slate-950" title={value}>{value}</p>
+      <p className="mt-1 text-sm text-slate-600">{helper}</p>
     </article>
+  );
+}
+
+function PriorityRow({ title, count, href, tone }: { title: string; count: number; href: string; tone: Tone }) {
+  const style = ACTION_TONES[tone];
+  return (
+    <Link href={href} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 transition hover:border-blue-300 hover:bg-blue-50/50">
+      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${style.accent}`} />
+      <span className="flex-1 text-sm font-semibold text-slate-900">{title}</span>
+      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-sm font-bold text-slate-900">{count}</span>
+    </Link>
   );
 }
 
@@ -1116,23 +950,14 @@ function QuickActionCard({
   return (
     <Link
       href={href}
-      className={`group relative overflow-hidden rounded-[24px] border px-4 py-4 shadow-[0_18px_40px_-34px_rgba(15,31,50,0.28)] transition hover:-translate-y-1 ${style.shell}`}
+      className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 transition hover:border-blue-300 hover:bg-blue-50/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
     >
-      <div className={`absolute inset-y-0 left-0 w-1.5 ${style.accent}`} />
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-bold text-slate-950">{title}</p>
-          <p className="mt-1 text-sm text-slate-600">{subtitle}</p>
-        </div>
-        <span
-          className={`mt-1 h-3 w-3 rounded-full ${style.accent} shadow-[0_0_0_6px_rgba(255,255,255,0.45)]`}
-        />
+      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${style.accent}`} />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-bold text-slate-950">{title}</p>
+        <p className="text-sm text-slate-600">{subtitle}</p>
       </div>
-      <span
-        className={`mt-4 inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.16em] ${style.badge}`}
-      >
-        Abrir
-      </span>
+      <span aria-hidden="true" className="text-lg text-slate-500 transition group-hover:translate-x-0.5 group-hover:text-blue-700">→</span>
     </Link>
   );
 }
@@ -1452,30 +1277,8 @@ function GovernanceSnapshotCard({
       ) : (
         <>
           <div className="grid gap-3 sm:grid-cols-2">
-            <SnapshotLine
-              label="Ativos"
-              value={String(adminStats.active)}
-              helper="disponiveis"
-              tone="emerald"
-            />
-            <SnapshotLine
-              label="Inativos"
-              value={String(adminStats.inactive)}
-              helper="bloqueados"
-              tone="amber"
-            />
-            <SnapshotLine
-              label="Admins"
-              value={String(adminStats.admins)}
-              helper="com gestao"
-              tone="blue"
-            />
-            <SnapshotLine
-              label="Masters"
-              value={String(adminStats.masters)}
-              helper="protegidos"
-              tone="slate"
-            />
+            <OverviewStat label="Ativos" value={String(adminStats.active)} helper="usuários disponíveis" />
+            <OverviewStat label="Administradores" value={String(adminStats.admins)} helper="com acesso à gestão" />
           </div>
 
           <div className="mt-4 space-y-3">

@@ -318,7 +318,9 @@ export default function EquipmentsPage() {
                     className="break-words text-lg font-bold leading-snug text-slate-950"
                     title={displayTitle}
                   >
-                    {displayTitle}
+                    <Link href={`/dashboard/equipments/${item.id}`} className="dashboard-record-link" title="Abrir ficha do equipamento">
+                      {displayTitle}
+                    </Link>
                   </h2>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <Badge className={CRITICALITY_STYLES[item.criticality || ""]}>

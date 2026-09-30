@@ -3,6 +3,7 @@ import {
   ApprovalStatus,
   ApprovalType,
   ProposalStatus,
+  SalesOpportunityStage,
   UserRole,
 } from '@prisma/client';
 import { ApprovalsService } from './approvals.service';
@@ -18,6 +19,7 @@ describe('ApprovalsService proposal decisions', () => {
         findUnique: jest.fn().mockResolvedValue({
           id: 'admin-1',
           role: UserRole.ADMIN,
+          isActive: true,
         }),
       },
       approvalRequest: {
@@ -43,6 +45,7 @@ describe('ApprovalsService proposal decisions', () => {
         update: jest.fn(),
       },
       proposalMovement: { create: jest.fn() },
+      salesOpportunity: { update: jest.fn() },
       $transaction: jest.fn((callback: (tx: any) => unknown) => callback(db)),
     };
     audit = { record: jest.fn() };
@@ -68,6 +71,57 @@ describe('ApprovalsService proposal decisions', () => {
         }),
       }),
     );
+  });
+
+  it('moves the linked opportunity when a generator proposal is released to the client', async () => {
+    db.proposal.findUnique.mockResolvedValue({
+      id: 'proposal-1',
+      status: ProposalStatus.BOARD_REVIEW,
+      salesOpportunityId: 'opportunity-1',
+    });
+
+    await service.approve('approval-1', 'admin-1', 'Proposta liberada.');
+
+    expect(db.proposal.update).toHaveBeenCalledWith({
+      where: { id: 'proposal-1' },
+      data: { status: ProposalStatus.CLIENT_REVIEW },
+    });
+    expect(db.salesOpportunity.update).toHaveBeenCalledWith({
+      where: { id: 'opportunity-1' },
+      data: { stage: SalesOpportunityStage.PROPOSAL_SENT },
+    });
+  });
+
+  it('moves the linked opportunity after a proposal discount is approved', async () => {
+    db.approvalRequest.findUnique.mockResolvedValue({
+      id: 'approval-discount-1',
+      type: ApprovalType.BUDGET_DISCOUNT,
+      entityType: 'PROPOSAL',
+      entityId: 'proposal-1',
+      requesterUserId: 'seller-1',
+      approverUserId: 'admin-1',
+      status: ApprovalStatus.PENDING,
+    });
+    db.proposal.findUnique.mockResolvedValue({
+      id: 'proposal-1',
+      status: ProposalStatus.BOARD_REVIEW,
+      salesOpportunityId: 'opportunity-1',
+    });
+
+    await service.approve(
+      'approval-discount-1',
+      'admin-1',
+      'Desconto aprovado.',
+    );
+
+    expect(db.proposal.update).toHaveBeenCalledWith({
+      where: { id: 'proposal-1' },
+      data: { status: ProposalStatus.CLIENT_REVIEW },
+    });
+    expect(db.salesOpportunity.update).toHaveBeenCalledWith({
+      where: { id: 'opportunity-1' },
+      data: { stage: SalesOpportunityStage.PROPOSAL_SENT },
+    });
   });
 
   it('keeps an adjustment request distinct from rejection', async () => {
@@ -102,6 +156,29 @@ describe('ApprovalsService proposal decisions', () => {
     await expect(
       service.reject('approval-1', 'admin-1', 'nao'),
     ).rejects.toThrow('justificativa com pelo menos 5 caracteres');
+    expect(db.approvalRequest.update).not.toHaveBeenCalled();
+  });
+
+  it('blocks a designated approver without the permission for the approval type', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'manager-1',
+      role: UserRole.MANAGER,
+      isActive: true,
+      isSystemMaster: false,
+      accessPolicy: { proposals: { approveBudget: false } },
+    });
+    db.approvalRequest.findUnique.mockResolvedValue({
+      id: 'approval-discount-1',
+      type: ApprovalType.BUDGET_DISCOUNT,
+      entityType: 'PROPOSAL',
+      entityId: 'proposal-1',
+      approverUserId: 'manager-1',
+      status: ApprovalStatus.PENDING,
+    });
+
+    await expect(
+      service.approve('approval-discount-1', 'manager-1'),
+    ).rejects.toThrow('nao possui permissao para esta aprovacao');
     expect(db.approvalRequest.update).not.toHaveBeenCalled();
   });
 

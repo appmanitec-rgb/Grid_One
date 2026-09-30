@@ -565,7 +565,7 @@ export default function BankMovementsPage() {
                   <th className="px-3 py-3 text-right">Saida</th>
                   <th className="px-3 py-3 text-right">Saldo</th>
                   <th className="px-3 py-3">Status</th>
-                  <th className="px-3 py-3">Acoes</th>
+                  <th className="dashboard-sticky-actions px-3 py-3">Acoes</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -625,7 +625,7 @@ export default function BankMovementsPage() {
                           ) : null}
                         </div>
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="dashboard-sticky-actions px-3 py-3">
                         {movement.reconciledAt ? (
                           <button
                             type="button"

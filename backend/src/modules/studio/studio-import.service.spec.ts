@@ -301,8 +301,9 @@ describe('StudioImportService - supplier import', () => {
         resource: 'suppliers',
         originalFileName: 'Agentes-fornecedores.csv',
         csv: [
-          'Razao Social;CNPJ/CPF;Telefone;Endereco;Cidade;Estado;Inscricao Estadual;Inscricao Municipal;Observacoes;Ativo',
-          'Prestador Individual;12345678901;11999999999;Rua Um, 10;Sao Paulo;SP;ISENTO;123;"Codigo legado: 42',
+          'Codigo Legado;Razao Social;CNPJ/CPF;TELEFONE PRINCIPAL;Endereco;CIDADE PRINCIPAL;UF PRINCIPAL;Inscricao Estadual;Inscricao Municipal;Observacoes;Ativo',
+          'EXEMPLO-FORNECEDOR-001;Linha de orientacao;documento-exemplo;;;;;;;;;',
+          'FOR-42;EXEMPLO - Prestador Individual;12345678901;11999999999;Rua Um, 10;Sao Paulo;SP;ISENTO;123;"Codigo legado: 42',
           'Atendimento prioritario";Inativo',
         ].join('\r\n'),
       },
@@ -311,7 +312,8 @@ describe('StudioImportService - supplier import', () => {
 
     expect(preview.summary).toMatchObject({ total: 1, valid: 1, invalid: 0 });
     expect(previewRows[0].normalizedData).toMatchObject({
-      companyName: 'Prestador Individual',
+      legacyCode: 'FOR-42',
+      companyName: 'EXEMPLO - Prestador Individual',
       cnpj: '12345678901',
       address: 'Rua Um, 10',
       stateRegistration: 'ISENTO',
@@ -363,8 +365,9 @@ describe('StudioImportService - client import', () => {
     };
     const service = new StudioImportService(prisma as never);
     const csv = [
-      'CODIGO;NOME;CNPJCPF;TEL1;CIDADEPRINCIPAL;UFPRINCIPAL;EMAILFINANC',
-      '42;Cliente Pessoa Fisica;12345678901;11999999999;Sao Paulo;SP;financeiro@cliente.test',
+      'CODIGO;NOME;CNPJCPF;TELEFONE PRINCIPAL;TIPO DE PESSOA;TIPO DE CLIENTE;CONDICAO DE PAGAMENTO;LIMITE DE CREDITO;TABELA DE PRECO;CIDADE PRINCIPAL;UF PRINCIPAL;EMAILFINANC',
+      'EXEMPLO-CLIENTE-001;Linha de orientacao;documento-exemplo;;;;;;;;;',
+      '42;Cliente Pessoa Fisica;12345678901;11999999999;Fisica;Com contrato;30 DIAS;12.500,50;ATACADO;Sao Paulo;SP;financeiro@cliente.test',
     ].join('\n');
 
     const preview = await service.preview(
@@ -393,13 +396,25 @@ describe('StudioImportService - client import', () => {
       companyName: 'Cliente Pessoa Fisica',
       cnpj: '12345678901',
       personType: 'INDIVIDUAL',
+      clientType: 'CONTRACT',
+      phone: '11999999999',
+      paymentTermDefault: '30 DIAS',
+      creditLimit: 12500.5,
+      priceTableCode: 'ATACADO',
+      city: 'Sao Paulo',
+      state: 'SP',
       legacyData: {
         CODIGO: '42',
         NOME: 'Cliente Pessoa Fisica',
         CNPJCPF: '12345678901',
-        TEL1: '11999999999',
-        CIDADEPRINCIPAL: 'Sao Paulo',
-        UFPRINCIPAL: 'SP',
+        'TELEFONE PRINCIPAL': '11999999999',
+        'TIPO DE PESSOA': 'Fisica',
+        'TIPO DE CLIENTE': 'Com contrato',
+        'CONDICAO DE PAGAMENTO': '30 DIAS',
+        'LIMITE DE CREDITO': '12.500,50',
+        'TABELA DE PRECO': 'ATACADO',
+        'CIDADE PRINCIPAL': 'Sao Paulo',
+        'UF PRINCIPAL': 'SP',
         EMAILFINANC: 'financeiro@cliente.test',
       },
     });
@@ -407,6 +422,122 @@ describe('StudioImportService - client import', () => {
 });
 
 describe('StudioImportService - equipment import', () => {
+  it('previews product conflicts and creates a missing catalog item once for two equipments', async () => {
+    let previewRows: any[] = [];
+    const catalog: any[] = [];
+    const tx = {
+      generator: {
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest
+          .fn()
+          .mockImplementation(() =>
+            Promise.resolve({ id: 'generator-created' }),
+          ),
+      },
+      client: { findFirst: jest.fn().mockResolvedValue({ id: 'client-1' }) },
+      catalogItem: {
+        findMany: jest.fn().mockImplementation(() => Promise.resolve(catalog)),
+        create: jest.fn().mockImplementation(({ data }) => {
+          const item = {
+            id: 'catalog-created',
+            name: data.name,
+            legacySequence: data.legacySequence,
+            manufacturerPartNumber: data.manufacturerPartNumber,
+            identifiers: data.identifiers.create.filter(
+              (identifier) => identifier.type === 'MANUFACTURER_PART_NUMBER',
+            ),
+          };
+          catalog.push(item);
+          return Promise.resolve({ id: item.id });
+        }),
+      },
+      catalogSkuRule: {
+        findFirst: jest.fn().mockResolvedValue({
+          areaId: 'area',
+          familyId: 'family',
+          applicationId: 'application',
+          area: { code: 'O' },
+          family: { code: 'O' },
+          application: { code: 'O' },
+        }),
+      },
+      catalogPricingPolicy: { findFirst: jest.fn().mockResolvedValue(null) },
+      $queryRaw: jest.fn().mockResolvedValue([{ nextval: 100 }]),
+      studioImportBatch: {
+        create: jest.fn().mockResolvedValue({ id: 'batch-products' }),
+      },
+      studioImportRow: {
+        createMany: jest.fn().mockImplementation(({ data }) => {
+          previewRows = data;
+          return Promise.resolve({ count: data.length });
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      systemAuditLog: { create: jest.fn().mockResolvedValue({ id: 'audit' }) },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback) => callback(tx)),
+      studioImportBatch: {
+        findUnique: jest.fn(),
+        update: jest
+          .fn()
+          .mockImplementation(({ data }) =>
+            Promise.resolve({ id: 'batch-products', ...data }),
+          ),
+      },
+      studioImportRow: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    const service = new StudioImportService(prisma as never);
+    const csv = [
+      'Codigo Legado;Descricao;Marca;Potencia kVA;CNPJCPF Cliente;Produto 1 - Possui itens;Produto 1 - Descrição;Produto 1 - Seq;Produto 1 - Código Original (PN);Produto 1 - Quantidade',
+      'GMG-1;Gerador 1;MWM;100;12345678909;SIM;Filtro de oleo;001;ABC123;1',
+      'GMG-2;Gerador 2;MWM;100;12345678909;SIM;Filtro de oleo;001;ABC123;2',
+      'GMG-3;Gerador 3;MWM;100;12345678909;SIM;Outro filtro;001;XYZ;1',
+    ].join('\n');
+    const preview = await service.preview(
+      { resource: 'equipments', csv },
+      { role: 'ADMIN' },
+    );
+    expect(preview.summary).toMatchObject({
+      total: 3,
+      warnings: 2,
+      invalid: 1,
+    });
+    expect(preview.rows[2].errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'PRODUCT_CONFLICT' }),
+      ]),
+    );
+    prisma.studioImportBatch.findUnique
+      .mockResolvedValueOnce({
+        id: 'batch-products',
+        resource: 'equipments',
+        status: StudioImportBatchStatus.PREVIEW,
+        rows: previewRows.map((row) => ({
+          rowNumber: row.rowNumber,
+          rawData: row.rawData,
+        })),
+      })
+      .mockResolvedValueOnce({ id: 'batch-products', rows: [] });
+
+    await service.execute('batch-products', { role: 'ADMIN' });
+    expect(tx.catalogItem.create).toHaveBeenCalledTimes(1);
+    expect(tx.generator.create).toHaveBeenCalledTimes(2);
+    expect(
+      tx.generator.create.mock.calls[0][0].data.baseItems.create,
+    ).toMatchObject([{ catalogItemId: 'catalog-created', quantity: 1 }]);
+    expect(
+      tx.generator.create.mock.calls[1][0].data.baseItems.create,
+    ).toMatchObject([{ catalogItemId: 'catalog-created', quantity: 2 }]);
+    expect(
+      prisma.studioImportBatch.update.mock.calls.at(-1)?.[0].data.summary,
+    ).toMatchObject({
+      createdCatalogItems: 1,
+    });
+  });
+
   it('resolves the client by owner name without a document and preserves technical legacy data', async () => {
     let previewRows: any[] = [];
     const tx = {
@@ -448,8 +579,9 @@ describe('StudioImportService - equipment import', () => {
     };
     const service = new StudioImportService(prisma as never);
     const csv = [
-      'SEQUENCIA;EQUIPAMENTO;MOTOR;POTENCIAALTERNADOR;PROPRIETARIO;MODELOMOTOR;CAMPOEXTRA',
-      '9001;GERADOR 100 KVA;MWM;100 KVA;CLIENTE TESTE;4.10 TCA;valor preservado',
+      'SEQUENCIA;EQUIPAMENTO;MOTOR;POTENCIAALTERNADOR;PROPRIETARIO;MODELOMOTOR;HORIMETRO;CRITICIDADE;STATUS OPERACIONAL;CAMPOEXTRA',
+      'EXEMPLO-EQUIPAMENTO-001;Linha de orientacao;;;;;0;B;Operando;',
+      '9001;GERADOR 100 KVA;MWM;100 KVA;CLIENTE TESTE;4.10 TCA;1.234 h;Critica;Em manutencao;valor preservado',
     ].join('\n');
 
     const preview = await service.preview(
@@ -461,6 +593,12 @@ describe('StudioImportService - equipment import', () => {
       { role: 'ADMIN' },
     );
     expect(preview.summary).toMatchObject({ total: 1, valid: 1, invalid: 0 });
+    expect(preview.rows[0].normalizedData).toMatchObject({
+      legacyCode: '9001',
+      hourMeter: 1234,
+      criticality: 'A',
+      operationalStatus: 'IN_MAINTENANCE',
+    });
 
     prisma.studioImportBatch.findUnique
       .mockResolvedValueOnce({
@@ -492,6 +630,9 @@ describe('StudioImportService - equipment import', () => {
       clientId: 'client-1',
       brand: 'MWM',
       power: 100,
+      hourMeter: 1234,
+      criticality: 'A',
+      operationalStatus: 'IN_MAINTENANCE',
       engineModelName: '4.10 TCA',
       legacyTechnicalData: {
         SEQUENCIA: '9001',
@@ -500,6 +641,9 @@ describe('StudioImportService - equipment import', () => {
         POTENCIAALTERNADOR: '100 KVA',
         PROPRIETARIO: 'CLIENTE TESTE',
         MODELOMOTOR: '4.10 TCA',
+        HORIMETRO: '1.234 h',
+        CRITICIDADE: 'Critica',
+        'STATUS OPERACIONAL': 'Em manutencao',
         CAMPOEXTRA: 'valor preservado',
       },
     });

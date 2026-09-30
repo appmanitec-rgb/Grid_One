@@ -45,6 +45,7 @@ type ImportPreviewResult = {
     invalid: number;
     duplicates: number;
     created?: number;
+    createdCatalogItems?: number;
     skipped?: number;
     failed?: number;
   };
@@ -53,7 +54,11 @@ type ImportPreviewResult = {
 
 const PAGE_SIZE = 50;
 
-export default function DataExplorer({ resource }: { resource: StudioResource }) {
+export default function DataExplorer({
+  resource,
+}: {
+  resource: StudioResource;
+}) {
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const [rows, setRows] = useState<StudioRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,7 +67,10 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
   const [success, setSuccess] = useState("");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortState>({
-    key: resource.fields.find((field) => field.sortable)?.key || resource.fields[0]?.key || "id",
+    key:
+      resource.fields.find((field) => field.sortable)?.key ||
+      resource.fields[0]?.key ||
+      "id",
     direction: "asc",
   });
   const [page, setPage] = useState(1);
@@ -74,7 +82,8 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
   const [auditError, setAuditError] = useState("");
   const [showColumns, setShowColumns] = useState(false);
   const [showImport, setShowImport] = useState(false);
-  const [importPreview, setImportPreview] = useState<ImportPreviewResult | null>(null);
+  const [importPreview, setImportPreview] =
+    useState<ImportPreviewResult | null>(null);
   const [importing, setImporting] = useState(false);
   const [executingImport, setExecutingImport] = useState(false);
   const [importError, setImportError] = useState("");
@@ -101,9 +110,13 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
 
   useEffect(() => {
     const defaultKeys = resource.fields
-      .filter((field) => !field.hiddenByDefault && !field.hidden && !field.sensitive)
+      .filter(
+        (field) => !field.hiddenByDefault && !field.hidden && !field.sensitive,
+      )
       .map((field) => field.key);
-    const saved = localStorage.getItem(`manitec_studio_columns_${resource.key}`);
+    const saved = localStorage.getItem(
+      `manitec_studio_columns_${resource.key}`,
+    );
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -138,14 +151,21 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
       const response = await apiFetch(resource.endpoint, { cache: "no-store" });
       if (!response.ok) {
         throw new Error(
-          await readApiErrorMessage(response, `Nao foi possivel carregar ${resource.pluralLabel}.`),
+          await readApiErrorMessage(
+            response,
+            `Nao foi possivel carregar ${resource.pluralLabel}.`,
+          ),
         );
       }
       const payload = await response.json();
       setRows(Array.isArray(payload) ? payload : []);
     } catch (loadError: unknown) {
       setRows([]);
-      setError(loadError instanceof Error ? loadError.message : "Falha ao carregar dados.");
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Falha ao carregar dados.",
+      );
     } finally {
       setLoading(false);
     }
@@ -168,7 +188,8 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
       if (field.type === "boolean") {
         nextDraft[field.key] = Boolean(value);
       } else {
-        nextDraft[field.key] = value === null || value === undefined ? "" : String(value);
+        nextDraft[field.key] =
+          value === null || value === undefined ? "" : String(value);
       }
     }
     setDraft(nextDraft);
@@ -239,7 +260,10 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
       );
       if (!response.ok) {
         throw new Error(
-          await readApiErrorMessage(response, "Nao foi possivel salvar o registro."),
+          await readApiErrorMessage(
+            response,
+            "Nao foi possivel salvar o registro.",
+          ),
         );
       }
       const updated = await response.json();
@@ -251,14 +275,22 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
         void loadAudit(updated.id);
       } else {
         setRows((current) =>
-          current.map((row) => (row.id === selected?.id ? { ...row, ...updated } : row)),
+          current.map((row) =>
+            row.id === selected?.id ? { ...row, ...updated } : row,
+          ),
         );
-        setSelected((current) => (current ? { ...current, ...updated } : current));
+        setSelected((current) =>
+          current ? { ...current, ...updated } : current,
+        );
         setSuccess("Registro atualizado com sucesso.");
         if (selected?.id) void loadAudit(selected.id);
       }
     } catch (saveError: unknown) {
-      setError(saveError instanceof Error ? saveError.message : "Falha ao salvar registro.");
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Falha ao salvar registro.",
+      );
     } finally {
       setSaving(false);
     }
@@ -283,7 +315,7 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
           field.importable !== false &&
           (field.editable || field.importable) &&
           (!field.readOnly || field.importable === true) &&
-          !field.hidden &&
+          (!field.hidden || field.importOnly) &&
           !field.sensitive,
       ),
     [resource.fields],
@@ -291,11 +323,16 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
 
   const filteredRows = useMemo(() => {
     const term = query.trim().toLowerCase();
-    const searchableFields = resource.fields.filter((field) => field.searchable);
+    const searchableFields = resource.fields.filter(
+      (field) => field.searchable,
+    );
     const filtered = rows.filter((row) => {
       if (!term) return true;
       return searchableFields.some((field) =>
-        formatStudioValue(field.render ? field.render(row) : getFieldValue(row, field.key), field)
+        formatStudioValue(
+          field.render ? field.render(row) : getFieldValue(row, field.key),
+          field,
+        )
           .toLowerCase()
           .includes(term),
       );
@@ -303,15 +340,22 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
 
     const sortField = resource.fields.find((field) => field.key === sort.key);
     return [...filtered].sort((a, b) => {
-      const aValue = sortField?.render ? sortField.render(a) : getFieldValue(a, sort.key);
-      const bValue = sortField?.render ? sortField.render(b) : getFieldValue(b, sort.key);
+      const aValue = sortField?.render
+        ? sortField.render(a)
+        : getFieldValue(a, sort.key);
+      const bValue = sortField?.render
+        ? sortField.render(b)
+        : getFieldValue(b, sort.key);
       const result = compareValues(aValue, bValue, sortField);
       return sort.direction === "asc" ? result : -result;
     });
   }, [query, resource.fields, rows, sort]);
 
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
-  const paginatedRows = filteredRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const paginatedRows = filteredRows.slice(
+    (page - 1) * PAGE_SIZE,
+    page * PAGE_SIZE,
+  );
   const firstIndex = filteredRows.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const lastIndex = Math.min(page * PAGE_SIZE, filteredRows.length);
 
@@ -319,7 +363,10 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
     if (!field.sortable) return;
     setSort((current) =>
       current.key === field.key
-        ? { key: field.key, direction: current.direction === "asc" ? "desc" : "asc" }
+        ? {
+            key: field.key,
+            direction: current.direction === "asc" ? "desc" : "asc",
+          }
         : { key: field.key, direction: "asc" },
     );
   }
@@ -344,7 +391,10 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
   function downloadTemplate() {
     if (!canImportData) return;
     const csv = buildCsv(resource.importExamples ?? [], importFields, true);
-    downloadTextFile(`modelo-importacao-${resource.key}.csv`, csv);
+    downloadTextFile(
+      resource.importFileName || `modelo-importacao-${resource.key}.csv`,
+      csv,
+    );
   }
 
   function scrollTable(direction: "left" | "right") {
@@ -387,7 +437,10 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
       });
       if (!response.ok) {
         throw new Error(
-          await readApiErrorMessage(response, "Nao foi possivel gerar a previa da importacao."),
+          await readApiErrorMessage(
+            response,
+            "Nao foi possivel gerar a previa da importacao.",
+          ),
         );
       }
       setImportPreview((await response.json()) as ImportPreviewResult);
@@ -411,11 +464,18 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
       );
       if (!response.ok) {
         throw new Error(
-          await readApiErrorMessage(response, "Nao foi possivel executar a importacao."),
+          await readApiErrorMessage(
+            response,
+            "Nao foi possivel executar a importacao.",
+          ),
         );
       }
       const payload = await response.json();
-      setSuccess("Importacao executada com auditoria.");
+      setSuccess(
+        resource.key === "equipments"
+          ? `Importacao executada: ${payload.createdRows || 0} equipamento(s) e ${payload.summary?.createdCatalogItems || 0} produto(s) novo(s) no catálogo.`
+          : "Importacao executada com auditoria.",
+      );
       setImportPreview({
         batchId: payload.id,
         summary: payload.summary || {
@@ -425,6 +485,7 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
           invalid: payload.invalidRows || 0,
           duplicates: payload.duplicateRows || 0,
           created: payload.createdRows || 0,
+          createdCatalogItems: 0,
           skipped: payload.skippedRows || 0,
           failed: payload.failedRows || 0,
         },
@@ -433,7 +494,9 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
       void loadRows();
     } catch (error: unknown) {
       setImportError(
-        error instanceof Error ? error.message : "Falha ao executar importacao.",
+        error instanceof Error
+          ? error.message
+          : "Falha ao executar importacao.",
       );
     } finally {
       setExecutingImport(false);
@@ -443,7 +506,8 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
   if (!canViewData) {
     return (
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm font-semibold text-amber-900">
-        Seu perfil nao possui permissao para visualizar dados pelo Manitec Studio.
+        Seu perfil nao possui permissao para visualizar dados pelo Manitec
+        Studio.
       </div>
     );
   }
@@ -505,7 +569,10 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
         <div className="mt-5 grid gap-3 md:grid-cols-3">
           <Metric label="Registros" value={String(rows.length)} />
           <Metric label="Resultado atual" value={String(filteredRows.length)} />
-          <Metric label="Campos visiveis" value={String(visibleFields.length)} />
+          <Metric
+            label="Campos visiveis"
+            value={String(visibleFields.length)}
+          />
         </div>
       </section>
 
@@ -540,19 +607,21 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
 
         {showColumns ? (
           <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {resource.fields.filter((field) => !field.hidden && !field.sensitive).map((field) => (
-              <label
-                key={field.key}
-                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"
-              >
-                <input
-                  type="checkbox"
-                  checked={visibleKeys.includes(field.key)}
-                  onChange={() => toggleColumn(field.key)}
-                />
-                {field.label}
-              </label>
-            ))}
+            {resource.fields
+              .filter((field) => !field.hidden && !field.sensitive)
+              .map((field) => (
+                <label
+                  key={field.key}
+                  className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"
+                >
+                  <input
+                    type="checkbox"
+                    checked={visibleKeys.includes(field.key)}
+                    onChange={() => toggleColumn(field.key)}
+                  />
+                  {field.label}
+                </label>
+              ))}
           </div>
         ) : null}
 
@@ -560,13 +629,25 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <p className="text-sm font-bold text-amber-950">Importacao controlada</p>
-                <p className="mt-1 text-sm leading-6 text-amber-900">
-                  O Studio le CSV ou XLSX, mostra a previa e so grava depois da confirmacao. Linhas sem os campos obrigatorios e duplicados sao ignoradas, com validacao e auditoria.
+                <p className="text-sm font-bold text-amber-950">
+                  Importacao controlada
                 </p>
+                <p className="mt-1 text-sm leading-6 text-amber-900">
+                  O Studio le CSV ou XLSX, mostra a previa e so grava depois da
+                  confirmacao. Linhas sem os campos obrigatorios e duplicados
+                  sao ignoradas, com validacao e auditoria.
+                </p>
+                {resource.importHelp ? (
+                  <p className="mt-2 text-sm leading-6 text-amber-900">
+                    {resource.importHelp}
+                  </p>
+                ) : null}
                 {resource.importExamples?.length ? (
                   <p className="mt-2 text-sm font-semibold leading-6 text-amber-950">
-                    O modelo inclui {resource.importExamples.length} linhas marcadas como EXEMPLO. Elas sao ignoradas automaticamente na importacao; substitua ou exclua essas linhas antes de enviar seus dados.
+                    O modelo inclui {resource.importExamples.length} linhas
+                    marcadas como EXEMPLO. Elas sao ignoradas automaticamente na
+                    importacao; substitua ou exclua essas linhas antes de enviar
+                    seus dados.
                   </p>
                 ) : null}
               </div>
@@ -584,7 +665,9 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
                     type="file"
                     accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     className="hidden"
-                    onChange={(event) => handleImportFile(event.target.files?.[0])}
+                    onChange={(event) =>
+                      handleImportFile(event.target.files?.[0])
+                    }
                   />
                 </label>
               </div>
@@ -602,20 +685,48 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
             {importPreview ? (
               <div className="mt-4 space-y-3">
                 <div className="grid gap-2 sm:grid-cols-4 lg:grid-cols-8">
-                  <ImportMetric label="Total" value={importPreview.summary.total} />
-                  <ImportMetric label="Validos" value={importPreview.summary.valid} />
-                  <ImportMetric label="Avisos" value={importPreview.summary.warnings} />
-                  <ImportMetric label="Invalidos" value={importPreview.summary.invalid} />
-                  <ImportMetric label="Duplicados" value={importPreview.summary.duplicates} />
-                  <ImportMetric label="Criados" value={importPreview.summary.created ?? 0} />
+                  <ImportMetric
+                    label="Total"
+                    value={importPreview.summary.total}
+                  />
+                  <ImportMetric
+                    label="Validos"
+                    value={importPreview.summary.valid}
+                  />
+                  <ImportMetric
+                    label="Avisos"
+                    value={importPreview.summary.warnings}
+                  />
+                  <ImportMetric
+                    label="Invalidos"
+                    value={importPreview.summary.invalid}
+                  />
+                  <ImportMetric
+                    label="Duplicados"
+                    value={importPreview.summary.duplicates}
+                  />
+                  <ImportMetric
+                    label="Criados"
+                    value={importPreview.summary.created ?? 0}
+                  />
+                  {resource.key === "equipments" ? (
+                    <ImportMetric
+                      label="Produtos novos"
+                      value={importPreview.summary.createdCatalogItems ?? 0}
+                    />
+                  ) : null}
                   <ImportMetric
                     label="Ignorados"
                     value={
                       importPreview.summary.skipped ??
-                      importPreview.summary.invalid + importPreview.summary.duplicates
+                      importPreview.summary.invalid +
+                        importPreview.summary.duplicates
                     }
                   />
-                  <ImportMetric label="Falhas" value={importPreview.summary.failed ?? 0} />
+                  <ImportMetric
+                    label="Falhas"
+                    value={importPreview.summary.failed ?? 0}
+                  />
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-xs font-semibold text-amber-900">
@@ -625,7 +736,9 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
                     type="button"
                     disabled={
                       executingImport ||
-                      importPreview.summary.valid + importPreview.summary.warnings === 0
+                      importPreview.summary.valid +
+                        importPreview.summary.warnings ===
+                        0
                     }
                     onClick={() => void executeImport()}
                     className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
@@ -633,34 +746,42 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
                     {executingImport ? "Executando..." : "Confirmar importacao"}
                   </button>
                 </div>
-              <div className="mt-4 overflow-x-auto rounded-xl border border-amber-200 bg-white">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-amber-50 text-xs uppercase tracking-[0.14em] text-amber-900">
-                    <tr>
-                      <th className="px-3 py-2">Linha</th>
-                      <th className="px-3 py-2">Status</th>
-                      <th className="px-3 py-2">Registro</th>
-                      <th className="px-3 py-2">Problemas</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-amber-100">
-                    {importPreview.rows.map((row) => (
-                      <tr key={row.rowNumber}>
-                        <td className="px-3 py-2 text-slate-700">{row.rowNumber}</td>
-                        <td className="px-3 py-2 font-semibold text-slate-800">{row.status}</td>
-                        <td className="px-3 py-2 text-slate-700">
-                          {String(row.normalizedData.companyName || row.normalizedData.name || "-")}
-                        </td>
-                        <td className="px-3 py-2 text-slate-600">
-                          {[...row.errors, ...row.warnings]
-                            .map((issue) => `${issue.code}: ${issue.message}`)
-                            .join(" | ") || "-"}
-                        </td>
+                <div className="mt-4 overflow-x-auto rounded-xl border border-amber-200 bg-white">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-amber-50 text-xs uppercase tracking-[0.14em] text-amber-900">
+                      <tr>
+                        <th className="px-3 py-2">Linha</th>
+                        <th className="px-3 py-2">Status</th>
+                        <th className="px-3 py-2">Registro</th>
+                        <th className="px-3 py-2">Problemas</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-amber-100">
+                      {importPreview.rows.map((row) => (
+                        <tr key={row.rowNumber}>
+                          <td className="px-3 py-2 text-slate-700">
+                            {row.rowNumber}
+                          </td>
+                          <td className="px-3 py-2 font-semibold text-slate-800">
+                            {row.status}
+                          </td>
+                          <td className="px-3 py-2 text-slate-700">
+                            {String(
+                              row.normalizedData.companyName ||
+                                row.normalizedData.name ||
+                                "-",
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-slate-600">
+                            {[...row.errors, ...row.warnings]
+                              .map((issue) => `${issue.code}: ${issue.message}`)
+                              .join(" | ") || "-"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             ) : null}
           </div>
@@ -689,101 +810,147 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
             &lt;
           </button>
         </div>
-      <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div ref={tableScrollRef} className="overflow-x-auto scroll-smooth">
-          <table className="w-full border-collapse text-left">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-sm text-slate-500">
-                {visibleFields.map((field) => (
-                  <th key={field.key} className="whitespace-nowrap p-4 font-semibold">
-                    <button
-                      type="button"
-                      onClick={() => toggleSort(field)}
-                      className={field.sortable ? "inline-flex items-center gap-2 hover:text-slate-900" : ""}
-                    >
-                      {field.label}
-                      {field.sortable ? (
-                        <span className="text-[11px]">
-                          {sort.key === field.key ? (sort.direction === "asc" ? "↑" : "↓") : "↕"}
-                        </span>
-                      ) : null}
-                    </button>
-                  </th>
-                ))}
-                <th className="p-4 text-right font-semibold">Acoes</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {loading ? (
-                <tr>
-                  <td colSpan={visibleFields.length + 1} className="p-8 text-center text-slate-500">
-                    Carregando registros...
-                  </td>
-                </tr>
-              ) : null}
-              {!loading && paginatedRows.map((row) => (
-                <tr key={row.id} className="hover:bg-slate-50">
+        <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div ref={tableScrollRef} className="overflow-x-auto scroll-smooth">
+            <table className="w-full border-collapse text-left">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-sm text-slate-500">
                   {visibleFields.map((field) => (
-                    <td key={field.key} className="max-w-[280px] truncate p-4 text-sm text-slate-700">
-                      {formatStudioValue(field.render ? field.render(row) : getFieldValue(row, field.key), field)}
-                    </td>
-                  ))}
-                  <td className="whitespace-nowrap p-4 text-right">
-                    <button
-                      type="button"
-                      onClick={() => openRecord(row)}
-                      className="text-sm font-semibold text-slate-700 hover:text-blue-700 hover:underline"
+                    <th
+                      key={field.key}
+                      className="whitespace-nowrap p-4 font-semibold"
                     >
-                      Abrir
-                    </button>
-                    {resource.detailHref ? (
-                      <Link
-                        href={resource.detailHref(row.id)}
-                        className="ml-4 text-sm font-semibold text-slate-500 hover:text-slate-900 hover:underline"
+                      <button
+                        type="button"
+                        onClick={() => toggleSort(field)}
+                        className={
+                          field.sortable
+                            ? "inline-flex items-center gap-2 hover:text-slate-900"
+                            : ""
+                        }
                       >
-                        Modulo
-                      </Link>
-                    ) : null}
-                  </td>
+                        {field.label}
+                        {field.sortable ? (
+                          <span className="text-[11px]">
+                            {sort.key === field.key
+                              ? sort.direction === "asc"
+                                ? "↑"
+                                : "↓"
+                              : "↕"}
+                          </span>
+                        ) : null}
+                      </button>
+                    </th>
+                  ))}
+                  <th className="dashboard-sticky-actions p-4 text-right font-semibold">
+                    Acoes
+                  </th>
                 </tr>
-              ))}
-              {!loading && filteredRows.length === 0 ? (
-                <tr>
-                  <td colSpan={visibleFields.length + 1} className="p-8 text-center text-slate-500">
-                    Nenhum registro encontrado.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-        <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-3 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
-          <span>
-            {firstIndex}-{lastIndex} de {filteredRows.length}
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={page <= 1}
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold disabled:opacity-40"
-            >
-              Anterior
-            </button>
-            <span className="font-semibold">
-              {page} / {pageCount}
-            </span>
-            <button
-              type="button"
-              disabled={page >= pageCount}
-              onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold disabled:opacity-40"
-            >
-              Proxima
-            </button>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {loading ? (
+                  <tr>
+                    <td
+                      colSpan={visibleFields.length + 1}
+                      className="p-8 text-center text-slate-500"
+                    >
+                      Carregando registros...
+                    </td>
+                  </tr>
+                ) : null}
+                {!loading &&
+                  paginatedRows.map((row) => (
+                    <tr key={row.id} className="hover:bg-slate-50">
+                      {visibleFields.map((field) => (
+                        <td
+                          key={field.key}
+                          className="max-w-[280px] truncate p-4 text-sm text-slate-700"
+                        >
+                          {field.key === visibleFields[0]?.key ? (
+                            <button
+                              type="button"
+                              onClick={() => openRecord(row)}
+                              className="dashboard-record-link max-w-[250px] truncate text-left font-semibold"
+                              title="Abrir cadastro do registro"
+                            >
+                              {formatStudioValue(
+                                field.render
+                                  ? field.render(row)
+                                  : getFieldValue(row, field.key),
+                                field,
+                              )}
+                            </button>
+                          ) : (
+                            formatStudioValue(
+                              field.render
+                                ? field.render(row)
+                                : getFieldValue(row, field.key),
+                              field,
+                            )
+                          )}
+                        </td>
+                      ))}
+                      <td className="dashboard-sticky-actions whitespace-nowrap p-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => openRecord(row)}
+                          className="text-sm font-semibold text-slate-700 hover:text-blue-700 hover:underline"
+                        >
+                          Abrir
+                        </button>
+                        {resource.detailHref ? (
+                          <Link
+                            href={resource.detailHref(row.id)}
+                            className="ml-4 text-sm font-semibold text-slate-500 hover:text-slate-900 hover:underline"
+                          >
+                            Modulo
+                          </Link>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                {!loading && filteredRows.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={visibleFields.length + 1}
+                      className="p-8 text-center text-slate-500"
+                    >
+                      Nenhum registro encontrado.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
           </div>
-        </div>
-      </section>
+          <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-3 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
+            <span>
+              {firstIndex}-{lastIndex} de {filteredRows.length}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold disabled:opacity-40"
+              >
+                Anterior
+              </button>
+              <span className="font-semibold">
+                {page} / {pageCount}
+              </span>
+              <button
+                type="button"
+                disabled={page >= pageCount}
+                onClick={() =>
+                  setPage((current) => Math.min(pageCount, current + 1))
+                }
+                className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold disabled:opacity-40"
+              >
+                Proxima
+              </button>
+            </div>
+          </div>
+        </section>
         <div className="hidden items-center md:flex">
           <button
             type="button"
@@ -807,7 +974,12 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
                 <h2 className="mt-2 text-2xl font-bold text-slate-950">
                   {isCreating
                     ? `Novo ${resource.label.toLowerCase()}`
-                    : formatStudioValue(getFieldValue(selected, resource.fields[0]?.key || "id"))}
+                    : formatStudioValue(
+                        getFieldValue(
+                          selected,
+                          resource.fields[0]?.key || "id",
+                        ),
+                      )}
                 </h2>
               </div>
               <button
@@ -848,7 +1020,10 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
                       field={field}
                       value={draft[field.key]}
                       onChange={(value) =>
-                        setDraft((current) => ({ ...current, [field.key]: value }))
+                        setDraft((current) => ({
+                          ...current,
+                          [field.key]: value,
+                        }))
                       }
                     />
                   ))}
@@ -868,10 +1043,20 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
               ) : (
                 <dl className="grid gap-3">
                   {resource.fields.map((field) => (
-                    <div key={field.key} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                      <dt className="text-xs font-bold uppercase text-slate-400">{field.label}</dt>
+                    <div
+                      key={field.key}
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-3"
+                    >
+                      <dt className="text-xs font-bold uppercase text-slate-400">
+                        {field.label}
+                      </dt>
                       <dd className="mt-1 break-words text-sm font-semibold text-slate-800">
-                        {formatStudioValue(field.render ? field.render(selected) : getFieldValue(selected, field.key), field)}
+                        {formatStudioValue(
+                          field.render
+                            ? field.render(selected)
+                            : getFieldValue(selected, field.key),
+                          field,
+                        )}
                       </dd>
                     </div>
                   ))}
@@ -880,34 +1065,44 @@ export default function DataExplorer({ resource }: { resource: StudioResource })
             </section>
 
             {!isCreating ? (
-            <section>
-              <h3 className="mb-3 text-sm font-bold uppercase tracking-[0.16em] text-slate-500">
-                Historico
-              </h3>
-              {auditError ? (
-                <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-                  {auditError}
-                </p>
-              ) : null}
-              {!auditError && auditEntries.length === 0 ? (
-                <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-                  Nenhum evento de auditoria encontrado para este registro.
-                </p>
-              ) : null}
-              <div className="space-y-2">
-                {auditEntries.map((entry) => (
-                  <article key={entry.id} className="rounded-xl border border-slate-200 bg-white p-3">
-                    <p className="text-sm font-bold text-slate-900">{entry.action}</p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {formatDateTime(entry.createdAt)} por {entry.actorUser?.name || entry.actorUser?.email || "Sistema"}
-                    </p>
-                    {entry.reason ? (
-                      <p className="mt-2 text-sm text-slate-600">{entry.reason}</p>
-                    ) : null}
-                  </article>
-                ))}
-              </div>
-            </section>
+              <section>
+                <h3 className="mb-3 text-sm font-bold uppercase tracking-[0.16em] text-slate-500">
+                  Historico
+                </h3>
+                {auditError ? (
+                  <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                    {auditError}
+                  </p>
+                ) : null}
+                {!auditError && auditEntries.length === 0 ? (
+                  <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                    Nenhum evento de auditoria encontrado para este registro.
+                  </p>
+                ) : null}
+                <div className="space-y-2">
+                  {auditEntries.map((entry) => (
+                    <article
+                      key={entry.id}
+                      className="rounded-xl border border-slate-200 bg-white p-3"
+                    >
+                      <p className="text-sm font-bold text-slate-900">
+                        {entry.action}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {formatDateTime(entry.createdAt)} por{" "}
+                        {entry.actorUser?.name ||
+                          entry.actorUser?.email ||
+                          "Sistema"}
+                      </p>
+                      {entry.reason ? (
+                        <p className="mt-2 text-sm text-slate-600">
+                          {entry.reason}
+                        </p>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
+              </section>
             ) : null}
           </div>
         </aside>
@@ -980,7 +1175,9 @@ function EditField({
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+        {label}
+      </p>
       <p className="mt-2 text-2xl font-black text-slate-950">{value}</p>
     </div>
   );
@@ -989,7 +1186,9 @@ function Metric({ label, value }: { label: string; value: string }) {
 function ImportMetric({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-xl border border-amber-200 bg-white p-3">
-      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">{label}</p>
+      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">
+        {label}
+      </p>
       <p className="mt-1 text-xl font-black text-slate-950">{value}</p>
     </div>
   );
@@ -1014,14 +1213,24 @@ function buildCsv(
   useImportHeaders = false,
 ) {
   const header = fields
-    .map((field) => escapeCsv(useImportHeaders ? field.importHeader || field.key : field.key))
+    .map((field) =>
+      escapeCsv(
+        useImportHeaders
+          ? field.importHeader || field.label.toLocaleUpperCase("pt-BR")
+          : field.key,
+      ),
+    )
     .join(";");
   const body = rows.map((row) =>
     fields
       .map((field) =>
         escapeCsv(
           formatCsvValue(
-            field.render ? field.render(row) : getFieldValue(row, field.key),
+            useImportHeaders
+              ? getFieldValue(row, field.key)
+              : field.render
+                ? field.render(row)
+                : getFieldValue(row, field.key),
             field,
             useImportHeaders,
           ),
@@ -1037,7 +1246,10 @@ function formatCsvValue(
   field: StudioField,
   preserveEmptyValues: boolean,
 ) {
-  if (preserveEmptyValues && (value === null || value === undefined || value === "")) {
+  if (
+    preserveEmptyValues &&
+    (value === null || value === undefined || value === "")
+  ) {
     return "";
   }
   return formatStudioValue(value, field);
@@ -1053,9 +1265,11 @@ function spreadsheetRowsToCsv(rows: unknown[][]) {
         .map((value) => {
           const normalized =
             value instanceof Date ? value.toISOString() : String(value ?? "");
-          return escapeCsv(rowIndex === 0 && normalized.startsWith("\uFEFF")
-            ? normalized.slice(1)
-            : normalized);
+          return escapeCsv(
+            rowIndex === 0 && normalized.startsWith("\uFEFF")
+              ? normalized.slice(1)
+              : normalized,
+          );
         })
         .join(";"),
     )

@@ -103,6 +103,45 @@ enum OrderStatus {
   CANCELED
 }
 
+enum DowntimeStatus {
+  REPORTED
+  TRIAGE
+  IN_REPAIR
+  WAITING_PARTS
+  WAITING_SUPPLIER
+  MONITORING
+  RESTORED
+  CLOSED
+  CANCELED
+}
+
+enum WarrantyOwner {
+  OUR
+  MANUFACTURER
+}
+
+enum WarrantyStatus {
+  OPEN
+  TRIAGE
+  WAITING_DOCUMENTS
+  WAITING_SUPPLIER
+  WAITING_MANUFACTURER
+  APPROVED
+  REJECTED
+  REPAIRING
+  RESOLVED
+  CLOSED
+  CANCELED
+}
+
+enum OperationAttachmentKind {
+  PHOTO
+  REPORT
+  INVOICE
+  PROTOCOL
+  OTHER
+}
+
 enum ItemType {
   PART
   SERVICE
@@ -838,9 +877,104 @@ model User {
   catalogSupplierOffers          CatalogSupplierOffer[]      @relation("CatalogOfferCreatedBy")
   catalogItemDocuments           CatalogItemDocument[]       @relation("CatalogItemDocumentCreatedBy")
   studioImportBatches            StudioImportBatch[]         @relation("StudioImportCreatedBy")
+  teamPosts                      TeamPost[]                  @relation("TeamPostAuthor")
+  teamPostComments               TeamPostComment[]           @relation("TeamPostCommentAuthor")
+  teamPostReactions              TeamPostReaction[]          @relation("TeamPostReactionUser")
+  createdTeamChannels            TeamChannel[]               @relation("TeamChannelCreator")
+  teamMessages                   TeamMessage[]               @relation("TeamMessageAuthor")
+  teamChannelReads               TeamChannelRead[]
 
   @@index([linkedClientId])
   @@map("users")
+}
+
+model TeamPost {
+  id         String             @id @default(uuid())
+  authorId   String?
+  author     User?              @relation("TeamPostAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  authorName String
+  body       String
+  pinnedAt   DateTime?
+  editedAt   DateTime?
+  deletedAt  DateTime?
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+  comments   TeamPostComment[]
+  reactions  TeamPostReaction[]
+
+  @@index([pinnedAt, createdAt])
+  @@index([createdAt])
+  @@map("team_posts")
+}
+
+model TeamPostComment {
+  id         String   @id @default(uuid())
+  postId     String
+  post       TeamPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId   String?
+  author     User?    @relation("TeamPostCommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  authorName String
+  body       String
+  createdAt  DateTime @default(now())
+
+  @@index([postId, createdAt])
+  @@map("team_post_comments")
+}
+
+model TeamPostReaction {
+  postId    String
+  post      TeamPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation("TeamPostReactionUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([postId, userId])
+  @@map("team_post_reactions")
+}
+
+model TeamChannel {
+  id              String            @id @default(uuid())
+  slug            String            @unique
+  name            String
+  description     String?
+  createdByUserId String?
+  createdByUser   User?             @relation("TeamChannelCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  isArchived      Boolean           @default(false)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  messages        TeamMessage[]
+  reads           TeamChannelRead[]
+
+  @@index([isArchived, name])
+  @@map("team_channels")
+}
+
+model TeamMessage {
+  id         String      @id @default(uuid())
+  channelId  String
+  channel    TeamChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  authorId   String?
+  author     User?       @relation("TeamMessageAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  authorName String
+  body       String
+  editedAt   DateTime?
+  deletedAt  DateTime?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@index([channelId, createdAt])
+  @@map("team_messages")
+}
+
+model TeamChannelRead {
+  channelId  String
+  channel    TeamChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadAt DateTime    @default(now())
+
+  @@id([channelId, userId])
+  @@map("team_channel_reads")
 }
 
 model AuthSession {
@@ -1163,6 +1297,8 @@ model Client {
   documentDeliveries    DocumentDelivery[]
   serviceTickets        ServiceTicket[]
   serviceReports        ServiceReport[]
+  machineDowntimes      MachineDowntime[]
+  warrantyCases         WarrantyCase[]
   documentAccessLogs    DocumentAccessLog[]
 
   createdAt DateTime @default(now())
@@ -1262,6 +1398,7 @@ model Manufacturer {
 
   catalogIdentifiers CatalogItemIdentifier[]
   catalogOffers      CatalogSupplierOffer[]
+  warrantyCases      WarrantyCase[]
 
   @@unique([type, name])
   @@index([name])
@@ -1363,6 +1500,8 @@ model Generator {
   orders              MaintenanceOrder[]
   serviceTickets      ServiceTicket[]
   serviceReports      ServiceReport[]
+  machineDowntimes    MachineDowntime[]
+  warrantyCases       WarrantyCase[]
   telemetryEvents     TelemetryEvent[]
   baseItems           GeneratorBaseItem[]
   contractLinks       ContractEquipment[]
@@ -1739,6 +1878,7 @@ model Supplier {
   purchaseOrders PurchaseOrder[]
   payableEntries AccountsPayable[]
   priceRevisions CatalogPriceRevision[]
+  warrantyCases  WarrantyCase[]
 
   @@map("suppliers")
 }
@@ -2227,6 +2367,8 @@ model MaintenanceOrder {
   fleetAllocations  FleetAllocation[]
   sourceTickets     ServiceTicket[]
   serviceReport     ServiceReport?
+  machineDowntimes  MachineDowntime[]
+  warrantyCases     WarrantyCase[]
 
   updatedAt DateTime @updatedAt
 
@@ -2234,6 +2376,143 @@ model MaintenanceOrder {
   @@index([generatorId, status])
   @@index([status, scheduledTo])
   @@map("maintenance_orders")
+}
+
+model MachineDowntime {
+  id                 String                 @id @default(uuid())
+  code               String                 @unique
+  generatorId        String
+  generator          Generator              @relation(fields: [generatorId], references: [id], onDelete: Restrict)
+  clientId           String
+  client             Client                 @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  maintenanceOrderId String?
+  maintenanceOrder   MaintenanceOrder?      @relation(fields: [maintenanceOrderId], references: [id], onDelete: SetNull)
+  ticketId           String?
+  ticket             ServiceTicket?         @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  status             DowntimeStatus         @default(REPORTED)
+  priority           TicketPriority         @default(HIGH)
+  symptom            String
+  operationalImpact  String?
+  failureCategory    String?
+  diagnosis          String?
+  temporarySolution  String?
+  rootCause          String?
+  resolution         String?
+  assignedUserId     String?
+  openedByUserId     String?
+  failureStartedAt   DateTime
+  reportedAt         DateTime               @default(now())
+  responseDueAt      DateTime?
+  targetRestoreAt    DateTime?
+  restoredAt         DateTime?
+  closedAt           DateTime?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  events             MachineDowntimeEvent[]
+  attachments        OperationAttachment[]
+  warrantyCases      WarrantyCase[]
+
+  @@index([status, priority, responseDueAt])
+  @@index([generatorId, status])
+  @@index([clientId, reportedAt])
+  @@index([assignedUserId, status])
+  @@map("machine_downtimes")
+}
+
+model MachineDowntimeEvent {
+  id          String          @id @default(uuid())
+  downtimeId  String
+  downtime    MachineDowntime @relation(fields: [downtimeId], references: [id], onDelete: Cascade)
+  fromStatus  DowntimeStatus?
+  toStatus    DowntimeStatus?
+  note        String
+  actorUserId String?
+  actorName   String?
+  createdAt   DateTime        @default(now())
+
+  @@index([downtimeId, createdAt])
+  @@map("machine_downtime_events")
+}
+
+model WarrantyCase {
+  id                 String                @id @default(uuid())
+  code               String                @unique
+  generatorId        String
+  generator          Generator             @relation(fields: [generatorId], references: [id], onDelete: Restrict)
+  clientId           String
+  client             Client                @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  downtimeId         String?
+  downtime           MachineDowntime?      @relation(fields: [downtimeId], references: [id], onDelete: SetNull)
+  maintenanceOrderId String?
+  maintenanceOrder   MaintenanceOrder?     @relation(fields: [maintenanceOrderId], references: [id], onDelete: SetNull)
+  supplierId         String?
+  supplier           Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  manufacturerId     String?
+  manufacturer       Manufacturer?         @relation(fields: [manufacturerId], references: [id], onDelete: SetNull)
+  owner              WarrantyOwner
+  status             WarrantyStatus        @default(OPEN)
+  title              String
+  defectDescription  String
+  component          String?
+  partNumber         String?
+  serialNumber       String?
+  diagnosis          String?
+  coverageDecision   String?
+  resolution         String?
+  externalProtocol   String?
+  supplierProtocol   String?
+  claimAmount        Float?
+  approvedAmount     Float?
+  coverageEndsAt     DateTime?
+  submittedAt        DateTime?
+  responseDueAt      DateTime?
+  resolvedAt         DateTime?
+  closedAt           DateTime?
+  assignedUserId     String?
+  openedByUserId     String?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  events             WarrantyCaseEvent[]
+  attachments        OperationAttachment[]
+
+  @@index([status, owner, responseDueAt])
+  @@index([generatorId, status])
+  @@index([supplierId, status])
+  @@index([clientId, createdAt])
+  @@map("warranty_cases")
+}
+
+model WarrantyCaseEvent {
+  id          String          @id @default(uuid())
+  warrantyId  String
+  warranty    WarrantyCase    @relation(fields: [warrantyId], references: [id], onDelete: Cascade)
+  fromStatus  WarrantyStatus?
+  toStatus    WarrantyStatus?
+  note        String
+  actorUserId String?
+  actorName   String?
+  createdAt   DateTime        @default(now())
+
+  @@index([warrantyId, createdAt])
+  @@map("warranty_case_events")
+}
+
+model OperationAttachment {
+  id          String                  @id @default(uuid())
+  downtimeId  String?
+  downtime    MachineDowntime?        @relation(fields: [downtimeId], references: [id], onDelete: Cascade)
+  warrantyId  String?
+  warranty    WarrantyCase?           @relation(fields: [warrantyId], references: [id], onDelete: Cascade)
+  kind        OperationAttachmentKind @default(OTHER)
+  name        String
+  url         String
+  addedById   String?
+  addedByName String?
+  createdAt   DateTime                @default(now())
+
+  @@index([downtimeId, createdAt])
+  @@index([warrantyId, createdAt])
+  @@map("operation_attachments")
 }
 
 model ServiceReport {
@@ -2468,6 +2747,7 @@ model ServiceTicket {
   contactEmail       String?
   internalNotes      String?
   comments           ServiceTicketComment[]
+  machineDowntimes   MachineDowntime[]
   createdAt          DateTime               @default(now())
   updatedAt          DateTime               @updatedAt
 

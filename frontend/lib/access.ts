@@ -183,6 +183,7 @@ const ACCESS_ROUTE_RULES: AccessRouteRule[] = [
   { prefix: "/dashboard/documents", permission: "dashboard" },
   { prefix: "/dashboard/deliveries", permission: "dashboard" },
   { prefix: "/dashboard/notifications", permission: "dashboard" },
+  { prefix: "/dashboard/team", permission: "dashboard" },
   { prefix: "/dashboard/reports", permission: "dashboard" },
   { prefix: "/dashboard/monitoring", permission: "orders" },
   { prefix: "/dashboard/sites", permission: "clients" },
@@ -198,6 +199,7 @@ const ACCESS_ROUTE_RULES: AccessRouteRule[] = [
   { prefix: "/dashboard/atendimento", permission: "tickets" },
   { prefix: "/dashboard/relatorios-tecnicos", permission: "serviceReports" },
   { prefix: "/dashboard/dispatch", permission: "orders" },
+  { prefix: "/dashboard/operation", permission: "orders" },
   { prefix: "/dashboard/technicians", permission: "orders" },
   { prefix: "/dashboard/opportunities", permission: "proposals" },
   { prefix: "/dashboard/commercial-inspections", permission: "proposals" },
@@ -457,10 +459,12 @@ export function defaultAccessByRole(role: string): AccessPolicy {
       serviceReports: allServiceReportActions(),
       tickets: {
         view: true,
+        viewOwn: true,
         create: true,
         update: true,
         assign: true,
         comment: true,
+        commentOwn: true,
         convertToOrder: true,
         resolve: true,
         close: true,
@@ -522,7 +526,7 @@ export function defaultAccessByRole(role: string): AccessPolicy {
         catalog: true,
         clients: true,
         equipments: true,
-        serviceReports: true,
+        tickets: true,
       },
       clients: { view: true, create: true, update: true },
       equipments: { view: true },
@@ -547,6 +551,7 @@ export function defaultAccessByRole(role: string): AccessPolicy {
         catalog: true,
         clients: true,
         equipments: true,
+        serviceReports: true,
         technicianPortal: true,
       },
       clients: { view: true },
@@ -828,7 +833,7 @@ export function getAccessFromToken(): AccessPolicy {
   const defaults = defaultAccessByRole(payload.role || "NORMAL");
   const custom =
     (payload.accessPolicy as AccessPolicyOverrides | undefined) || {};
-  return normalizeAccessPolicy(mergeAccessPolicy(defaults, custom));
+  return mergeAccessPolicy(defaults, custom);
 }
 
 export function canAccessDashboardPath(
@@ -849,9 +854,7 @@ export function canAccessDashboardPath(
 }
 
 function policy(overrides: AccessPolicyOverrides): AccessPolicy {
-  return normalizeAccessPolicy(
-    mergeAccessPolicy(EMPTY_ACCESS_POLICY, overrides),
-  );
+  return mergeAccessPolicy(EMPTY_ACCESS_POLICY, overrides);
 }
 
 function allAccess(): AccessPolicy {
@@ -942,77 +945,6 @@ function mapSection<T extends Record<string, boolean>>(
     output[key] = mapper(input[key]) as T[keyof T];
   }
   return output;
-}
-
-function normalizeAccessPolicy(access: AccessPolicy): AccessPolicy {
-  return {
-    ...access,
-    pages: {
-      ...access.pages,
-      proposals: access.pages.proposals || access.proposals.view,
-      orders: access.pages.orders || access.orders.view,
-      contracts: access.pages.contracts || access.contracts.view,
-      catalog:
-        access.pages.catalog ||
-        access.catalog.view ||
-        access.catalog.manageItems,
-      clients: access.pages.clients || access.clients.view,
-      finance: access.pages.finance || access.finance.view,
-      inventory:
-        access.pages.inventory ||
-        access.inventory.view ||
-        access.purchaseOrders.view,
-      people: access.pages.people || access.people.view,
-      usersControl: access.pages.usersControl || access.users.manage,
-      studio: access.pages.studio || access.studio.access,
-      tickets: access.pages.tickets || access.tickets.view,
-      serviceReports: access.pages.serviceReports || access.serviceReports.view,
-      technicianPortal:
-        access.pages.technicianPortal ||
-        access.technicianWork.view ||
-        access.tickets.viewOwn,
-    },
-    proposals: {
-      ...access.proposals,
-      approveBudget: access.proposals.approveBudget || access.proposals.approve,
-    },
-    catalog: {
-      ...access.catalog,
-      manageItems:
-        access.catalog.manageItems ||
-        access.catalog.create ||
-        access.catalog.update ||
-        access.catalog.delete,
-    },
-    maintenanceOrders: {
-      ...access.maintenanceOrders,
-      submitVisitReport:
-        access.maintenanceOrders.submitVisitReport || access.orders.finish,
-      assignWithOverride:
-        access.maintenanceOrders.assignWithOverride || access.orders.dispatch,
-    },
-    serviceReports: {
-      ...access.serviceReports,
-      create: access.serviceReports.create || access.serviceReports.update,
-      addEvidence:
-        access.serviceReports.addEvidence || access.serviceReports.update,
-      sign: access.serviceReports.sign || access.serviceReports.update,
-      generateDocument:
-        access.serviceReports.generateDocument || access.serviceReports.approve,
-      manageShareLinks:
-        access.serviceReports.manageShareLinks ||
-        access.serviceReports.releaseToCustomer,
-      manageDocuments:
-        access.serviceReports.manageDocuments ||
-        access.serviceReports.manageShareLinks ||
-        access.serviceReports.releaseToCustomer,
-    },
-    studio: {
-      ...access.studio,
-      dataView: access.studio.dataView || access.studio.access,
-      auditView: access.studio.auditView || access.audit.read,
-    },
-  };
 }
 
 function allServiceReportActions() {

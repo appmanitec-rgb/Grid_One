@@ -395,7 +395,9 @@ function ContractCard({
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-lg font-bold text-slate-950">{contract.code}</p>
+            <Link href={`/dashboard/contracts/${contract.id}`} className="dashboard-record-link text-lg font-bold" title="Abrir cadastro do contrato">
+              {contract.code}
+            </Link>
             <DataPill tone={contractStatusTone(contract.status)}>
               {contractStatusLabel(contract.status)}
             </DataPill>

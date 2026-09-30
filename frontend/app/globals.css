@@ -365,6 +365,11 @@ h3 {
   width: min(100%, 1600px);
 }
 
+.dashboard-main--wide .dashboard-container {
+  width: 100%;
+  max-width: none;
+}
+
 .dashboard-topbar {
   background: var(--dashboard-topbar-background) !important;
   border-color: var(--dashboard-topbar-border) !important;
@@ -618,6 +623,102 @@ h3 {
 @media (min-width: 640px) {
   .dashboard-kanban-side-button {
     display: flex;
+  }
+}
+
+.dashboard-record-link {
+  color: #1d4ed8;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  transition: color 150ms ease, text-decoration-color 150ms ease;
+}
+
+.dashboard-record-link:hover,
+.dashboard-record-link:focus-visible {
+  color: #1e40af;
+  text-decoration-color: currentColor;
+}
+
+.dashboard-record-link:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.dashboard-sticky-actions {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: #fff;
+  box-shadow: -8px 0 14px -12px rgba(15, 23, 42, 0.45);
+}
+
+thead .dashboard-sticky-actions {
+  z-index: 3;
+  background: #f8fafc;
+}
+
+tbody tr:hover .dashboard-sticky-actions {
+  background: #f8fafc;
+}
+
+.dashboard-home {
+  container: dashboard-home / inline-size;
+}
+
+.dashboard-home-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dashboard-home-primary-grid {
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+}
+
+.dashboard-home-actions {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+}
+
+.dashboard-home-process-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dashboard-home-bottom-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dashboard-home .text-xs {
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.dashboard-home [class~="text-[10px]"],
+.dashboard-home [class~="text-[11px]"] {
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.dashboard-home .text-slate-400,
+.dashboard-home .text-slate-500 {
+  color: #475569;
+}
+
+@container dashboard-home (max-width: 1100px) {
+  .dashboard-home-metrics,
+  .dashboard-home-process-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-home-primary-grid,
+  .dashboard-home-bottom-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container dashboard-home (max-width: 580px) {
+  .dashboard-home-metrics,
+  .dashboard-home-process-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

@@ -39,7 +39,7 @@ type NavItem = {
   href?: string;
   enabled?: boolean;
   soon?: boolean;
-  badgeKey?: "proposalsQueue" | "ordersOpen" | "contractsAttention";
+  badgeKey?: "proposalsQueue" | "ordersOpen" | "contractsAttention" | "teamUnread";
 };
 
 type NavSection = {
@@ -53,6 +53,7 @@ type SidebarCounters = {
   proposalsQueue: number;
   ordersOpen: number;
   contractsAttention: number;
+  teamUnread: number;
 };
 
 const MAIN_SECTIONS: NavSection[] = [
@@ -66,6 +67,13 @@ const MAIN_SECTIONS: NavSection[] = [
         label: "Dashboard",
         href: "/dashboard",
         enabled: true,
+      },
+      {
+        key: "overview_team",
+        label: "Equipe · Feed e chat",
+        href: "/dashboard/team",
+        enabled: true,
+        badgeKey: "teamUnread",
       },
       {
         key: "overview_documents",
@@ -168,6 +176,18 @@ const MAIN_SECTIONS: NavSection[] = [
         href: "/dashboard/orders",
         enabled: true,
         badgeKey: "ordersOpen",
+      },
+      {
+        key: "ops_downtimes",
+        label: "Máquinas paradas",
+        href: "/dashboard/operation/downtimes",
+        enabled: true,
+      },
+      {
+        key: "ops_warranties",
+        label: "Garantias",
+        href: "/dashboard/operation/warranties",
+        enabled: true,
       },
       {
         key: "ops_field",
@@ -453,6 +473,7 @@ export default function SidebarNavigation({
     proposalsQueue: 0,
     ordersOpen: 0,
     contractsAttention: 0,
+    teamUnread: 0,
   });
 
   const filteredSections = useMemo(
@@ -547,7 +568,7 @@ export default function SidebarNavigation({
       if (!token) return;
 
       try {
-        const [proposalsRes, ordersRes, contractsRes] =
+        const [proposalsRes, ordersRes, contractsRes, teamRes] =
           await Promise.allSettled([
             apiFetch("/proposals", { cache: "no-store" }),
             userRole === "CLIENT"
@@ -556,12 +577,16 @@ export default function SidebarNavigation({
             userRole === "CLIENT"
               ? Promise.resolve(new Response("[]", { status: 204 }))
               : apiFetch("/contracts", { cache: "no-store" }),
+            userRole === "CLIENT"
+              ? Promise.resolve(new Response("[]", { status: 204 }))
+              : apiFetch("/team/channels", { cache: "no-store" }),
           ]);
 
         const next: SidebarCounters = {
           proposalsQueue: 0,
           ordersOpen: 0,
           contractsAttention: 0,
+          teamUnread: 0,
         };
 
         if (proposalsRes.status === "fulfilled" && proposalsRes.value.ok) {
@@ -585,6 +610,14 @@ export default function SidebarNavigation({
           next.contractsAttention = (contracts || []).filter(
             (c: any) => c.status === "SUSPENDED" || c.status === "RENEWAL",
           ).length;
+        }
+
+        if (teamRes.status === "fulfilled" && teamRes.value.ok) {
+          const channels = (await teamRes.value.json()) as Array<{ unreadCount?: number }>;
+          next.teamUnread = channels.reduce(
+            (sum, channel) => sum + Math.max(0, Number(channel.unreadCount) || 0),
+            0,
+          );
         }
 
         if (mounted) setCounters(next);

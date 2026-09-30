@@ -18,7 +18,10 @@ import * as bcrypt from 'bcrypt';
 import { createHash } from 'crypto';
 import { DatabaseService } from '../../database/database.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
-import { effectiveAccessPolicy } from './access-policy';
+import {
+  defaultAccessPolicyByRole,
+  effectiveAccessPolicy,
+} from './access-policy';
 import { CreateUserCertificationDto } from './dto/create-user-certification.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { CreateUserSpecialtyDto } from './dto/create-user-specialty.dto';
@@ -110,6 +113,22 @@ export class UsersService {
       }
     }
 
+    const requestedPolicy = createUserDto.accessPolicy
+      ? effectiveAccessPolicy(createUserDto.role, createUserDto.accessPolicy)
+      : defaultAccessPolicyByRole(createUserDto.role);
+    const customAccessRequested =
+      JSON.stringify(requestedPolicy) !==
+      JSON.stringify(defaultAccessPolicyByRole(createUserDto.role));
+    if (
+      createUserDto.role === UserRole.ADMIN ||
+      createUserDto.role === UserRole.MANAGER ||
+      customAccessRequested
+    ) {
+      await this.assertCanManageSecurity(actorUserId);
+    }
+    if (createUserDto.managerId) {
+      await this.assertCanManageHierarchy(actorUserId);
+    }
     await this.assertCanManageSensitiveUserFields(createUserDto, actorUserId);
     await this.validateManager(createUserDto.managerId, undefined);
     const linkedClientId = await this.validateLinkedClientAccess(
@@ -228,6 +247,7 @@ export class UsersService {
         accessPolicy: true,
         isSystemMaster: true,
         linkedClientId: true,
+        managerId: true,
       },
     });
     if (!currentUser) {
@@ -235,6 +255,27 @@ export class UsersService {
     }
     if (currentUser.isSystemMaster) {
       throw new ForbiddenException('Usuario master nao pode ser editado.');
+    }
+
+    const targetRole = role ?? currentUser.role;
+    const currentPolicy = effectiveAccessPolicy(
+      currentUser.role,
+      currentUser.accessPolicy,
+    );
+    const nextPolicy = accessPolicy
+      ? effectiveAccessPolicy(targetRole, accessPolicy)
+      : currentPolicy;
+    if (
+      (role !== undefined && role !== currentUser.role) ||
+      JSON.stringify(currentPolicy) !== JSON.stringify(nextPolicy)
+    ) {
+      await this.assertCanManageSecurity(actorUserId);
+    }
+    if (
+      updateUserDto.managerId !== undefined &&
+      updateUserDto.managerId !== currentUser.managerId
+    ) {
+      await this.assertCanManageHierarchy(actorUserId);
     }
 
     if (updateUserDto.email) {
@@ -257,7 +298,6 @@ export class UsersService {
 
     await this.assertCanManageSensitiveUserFields(updateUserDto, actorUserId);
     await this.validateManager(updateUserDto.managerId, id);
-    const targetRole = role ?? currentUser.role;
     const targetLinkedClientId = await this.validateLinkedClientAccess(
       targetRole,
       updateUserDto.linkedClientId !== undefined
@@ -1015,6 +1055,47 @@ export class UsersService {
     if (actor.isSystemMaster || actor.role === UserRole.ADMIN) return true;
     const access = effectiveAccessPolicy(actor.role, actor.accessPolicy);
     return access.people.manageSensitive === true;
+  }
+
+  private async assertCanManageSecurity(actorUserId?: string) {
+    await this.assertCanManageUserPermission(
+      actorUserId,
+      'manageSecurity',
+      'Seu perfil nao possui permissao para alterar cargos ou permissoes.',
+    );
+  }
+
+  private async assertCanManageHierarchy(actorUserId?: string) {
+    await this.assertCanManageUserPermission(
+      actorUserId,
+      'manageHierarchy',
+      'Seu perfil nao possui permissao para alterar a hierarquia de usuarios.',
+    );
+  }
+
+  private async assertCanManageUserPermission(
+    actorUserId: string | undefined,
+    permission: 'manageSecurity' | 'manageHierarchy',
+    message: string,
+  ) {
+    if (!actorUserId) return;
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: { role: true, isSystemMaster: true, accessPolicy: true },
+    });
+    const userAccess = actor
+      ? effectiveAccessPolicy(actor.role, actor.accessPolicy).users
+      : null;
+    if (
+      actor &&
+      (actor.isSystemMaster ||
+        actor.role === UserRole.ADMIN ||
+        userAccess?.manageSecurity ||
+        userAccess?.[permission])
+    ) {
+      return;
+    }
+    throw new ForbiddenException(message);
   }
 
   private async validateLinkedClientAccess(

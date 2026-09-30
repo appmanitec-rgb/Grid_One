@@ -16,6 +16,7 @@ import {
   GeneratorOperationalStatus,
   ItemType,
   Prisma,
+  ServiceGroup,
   StudioImportBatchStatus,
   StudioImportMode,
   StudioImportRowStatus,
@@ -35,6 +36,55 @@ type ImportIssue = {
   field?: string;
 };
 
+const EQUIPMENT_PRODUCT_SLOTS = 20;
+type EquipmentProduct = {
+  slot: number;
+  name: string;
+  sequence?: string;
+  partNumber?: string;
+  quantity: number;
+};
+
+const EQUIPMENT_PRODUCT_FIELDS: ImportFieldDefinition[] = Array.from(
+  { length: EQUIPMENT_PRODUCT_SLOTS },
+  (_, index) => {
+    const slot = index + 1;
+    const prefix = `Produto ${slot}`;
+    return [
+      {
+        key: `product${slot}HasItems`,
+        label: `${prefix} - Possui itens`,
+        aliases: [],
+        normalize: normalizeText,
+      },
+      {
+        key: `product${slot}Description`,
+        label: `${prefix} - Descrição`,
+        aliases: [],
+        normalize: normalizeText,
+      },
+      {
+        key: `product${slot}Sequence`,
+        label: `${prefix} - Seq`,
+        aliases: [],
+        normalize: normalizeText,
+      },
+      {
+        key: `product${slot}PartNumber`,
+        label: `${prefix} - Código Original (PN)`,
+        aliases: [],
+        normalize: normalizeCatalogCode,
+      },
+      {
+        key: `product${slot}Quantity`,
+        label: `${prefix} - Quantidade`,
+        aliases: [],
+        normalize: normalizeText,
+      },
+    ];
+  },
+).flat();
+
 type ImportFieldDefinition = {
   key: string;
   label: string;
@@ -53,6 +103,18 @@ type ImportDefinition = {
   entityType: string;
   uniqueField: string;
   rawDataField?: string;
+  templateExample?: {
+    field: string;
+    prefix: string;
+  };
+  validateRows?: (
+    tx: Prisma.TransactionClient,
+    rows: Array<{
+      rowNumber: number;
+      normalizedData: Record<string, unknown>;
+    }>,
+  ) => Promise<Map<number, { errors: ImportIssue[]; warnings: ImportIssue[] }>>;
+  existingRecordBehavior?: 'DUPLICATE' | 'UPSERT';
   fields: ImportFieldDefinition[];
   findDuplicates: (
     tx: Prisma.TransactionClient,
@@ -61,7 +123,12 @@ type ImportDefinition = {
   createRecord: (
     tx: Prisma.TransactionClient,
     data: Record<string, unknown>,
-  ) => Promise<{ id: string }>;
+    actor: StudioActor,
+  ) => Promise<{
+    id: string;
+    createdCatalogItems?: number;
+    notices?: ImportIssue[];
+  }>;
 };
 
 type PreviewInput = {
@@ -83,6 +150,10 @@ const SUPPLIER_IMPORT_DEFINITION: ImportDefinition = {
   entityType: 'Supplier',
   uniqueField: 'cnpj',
   rawDataField: 'legacyData',
+  templateExample: {
+    field: 'legacyCode',
+    prefix: 'EXEMPLO-FORNECEDOR-',
+  },
   fields: [
     {
       key: 'legacyCode',
@@ -150,7 +221,14 @@ const SUPPLIER_IMPORT_DEFINITION: ImportDefinition = {
     {
       key: 'phone',
       label: 'Telefone',
-      aliases: ['telefone', 'tel', 'tel1', 'celular', 'whatsapp'],
+      aliases: [
+        'telefone',
+        'telefone principal',
+        'tel',
+        'tel1',
+        'celular',
+        'whatsapp',
+      ],
       normalize: normalizeText,
       validate: (value) =>
         value
@@ -165,14 +243,14 @@ const SUPPLIER_IMPORT_DEFINITION: ImportDefinition = {
     },
     {
       key: 'city',
-      label: 'Cidade',
-      aliases: ['cidade', 'municipio', 'município'],
+      label: 'Cidade Principal',
+      aliases: ['cidade', 'cidade principal', 'municipio', 'município'],
       normalize: normalizeText,
     },
     {
       key: 'state',
-      label: 'Estado',
-      aliases: ['estado', 'uf'],
+      label: 'UF Principal',
+      aliases: ['estado', 'uf', 'uf principal'],
       normalize: (value) =>
         normalizeText(value)?.toUpperCase().slice(0, 2) ?? null,
     },
@@ -263,6 +341,10 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
   entityType: 'Client',
   uniqueField: 'cnpj',
   rawDataField: 'legacyData',
+  templateExample: {
+    field: 'legacyCode',
+    prefix: 'EXEMPLO-CLIENTE-',
+  },
   fields: [
     {
       key: 'legacyCode',
@@ -313,7 +395,14 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
     {
       key: 'phone',
       label: 'Telefone',
-      aliases: ['telefone', 'tel', 'tel1', 'celular', 'whatsapp'],
+      aliases: [
+        'telefone',
+        'telefone principal',
+        'tel',
+        'tel1',
+        'celular',
+        'whatsapp',
+      ],
       normalize: normalizeText,
       validate: (value, row) =>
         value || row.contact01Phone || row.contact01Mobile
@@ -345,7 +434,7 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
       aliases: ['cidade', 'cidadeprincipal', 'municipio', 'municÃ­pio'],
       normalize: normalizeText,
       validate: (value, row) =>
-        value || row.billingCity || row.installationCity
+        value || row.primaryCity || row.billingCity || row.installationCity
           ? []
           : [
               {
@@ -361,7 +450,7 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
       aliases: ['estado', 'uf', 'ufprincipal'],
       normalize: normalizeUf,
       validate: (value, row) =>
-        value || row.billingState || row.installationState
+        value || row.primaryState || row.billingState || row.installationState
           ? []
           : [
               {
@@ -411,7 +500,13 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
     {
       key: 'clientType',
       label: 'Tipo',
-      aliases: ['tipo', 'tipo cliente', 'tipocliente', 'contrato'],
+      aliases: [
+        'tipo',
+        'tipo cliente',
+        'tipo de cliente',
+        'tipocliente',
+        'contrato',
+      ],
       normalize: normalizeClientType,
     },
     {
@@ -420,6 +515,7 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
       aliases: [
         'pessoa',
         'tipo pessoa',
+        'tipo de pessoa',
         'fisica juridica',
         'fÃ­sica jurÃ­dica',
       ],
@@ -430,6 +526,7 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
       label: 'Condicao Padrao',
       aliases: [
         'condicao pagamento',
+        'condicao de pagamento',
         'condiÃ§Ã£o pagamento',
         'pagamento',
         'prazo',
@@ -438,14 +535,20 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
     },
     {
       key: 'creditLimit',
-      label: 'Limite Credito',
-      aliases: ['limite credito', 'limite crÃ©dito', 'credito', 'crÃ©dito'],
+      label: 'Limite de Credito',
+      aliases: [
+        'limite credito',
+        'limite de credito',
+        'limite de crédito',
+        'credito',
+        'crédito',
+      ],
       normalize: normalizeNumberInput,
     },
     {
       key: 'priceTableCode',
-      label: 'Tabela Preco',
-      aliases: ['tabela preco', 'tabela preÃ§o', 'tabela'],
+      label: 'Tabela de Preco',
+      aliases: ['tabela preco', 'tabela de preco', 'tabela de preço', 'tabela'],
       normalize: normalizeText,
     },
     {
@@ -488,12 +591,14 @@ const CLIENT_IMPORT_DEFINITION: ImportDefinition = {
   createRecord: (tx, data) => {
     const city = (
       nullableString(data.city) ||
+      nullableString(data.primaryCity) ||
       nullableString(data.billingCity) ||
       nullableString(data.installationCity) ||
       ''
     ).trim();
     const state = (
       nullableString(data.state) ||
+      nullableString(data.primaryState) ||
       nullableString(data.billingState) ||
       nullableString(data.installationState) ||
       ''
@@ -581,6 +686,10 @@ const EQUIPMENT_IMPORT_DEFINITION: ImportDefinition = {
   entityType: 'Generator',
   uniqueField: 'legacyCode',
   rawDataField: 'legacyTechnicalData',
+  templateExample: {
+    field: 'legacyCode',
+    prefix: 'EXEMPLO-EQUIPAMENTO-',
+  },
   fields: [
     {
       key: 'legacyCode',
@@ -621,6 +730,38 @@ const EQUIPMENT_IMPORT_DEFINITION: ImportDefinition = {
       aliases: ['potencia', 'potencia alternador', 'potenciaalternador'],
       required: true,
       normalize: normalizePowerInput,
+    },
+    {
+      key: 'hourMeter',
+      label: 'Horimetro',
+      aliases: [
+        'horimetro',
+        'horímetro',
+        'horimetro atual',
+        'horímetro atual',
+        'horas trabalhadas',
+        'hour meter',
+        'hourmeter',
+      ],
+      normalize: normalizeNonNegativeIntegerInput,
+    },
+    {
+      key: 'criticality',
+      label: 'Criticidade',
+      aliases: ['criticidade', 'nivel de criticidade', 'criticality'],
+      normalize: normalizeGeneratorCriticality,
+    },
+    {
+      key: 'operationalStatus',
+      label: 'Status Operacional',
+      aliases: [
+        'status operacional',
+        'situacao operacional',
+        'situação operacional',
+        'operational status',
+        'operationalstatus',
+      ],
+      normalize: normalizeGeneratorOperationalStatus,
     },
     {
       key: 'voltage',
@@ -775,7 +916,9 @@ const EQUIPMENT_IMPORT_DEFINITION: ImportDefinition = {
       aliases: ['com contrato', 'contrato'],
       normalize: normalizeBooleanInput,
     },
+    ...EQUIPMENT_PRODUCT_FIELDS,
   ],
+  validateRows: validateEquipmentProductRows,
   findDuplicates: async (tx, values) => {
     const generators = await tx.generator.findMany({
       where: { legacyCode: { in: values } },
@@ -787,7 +930,7 @@ const EQUIPMENT_IMPORT_DEFINITION: ImportDefinition = {
         .filter((value): value is string => Boolean(value)),
     );
   },
-  createRecord: async (tx, data) => {
+  createRecord: async (tx, data, actor) => {
     const clientLegacyCode = nullableString(data.clientLegacyCode);
     const clientDocument = nullableString(data.clientDocument);
     const ownerName = nullableString(data.ownerName);
@@ -823,7 +966,46 @@ const EQUIPMENT_IMPORT_DEFINITION: ImportDefinition = {
       throw new BadRequestException(
         'Cliente da maquina nao encontrado pelo CNPJ/CPF ou codigo legado.',
       );
-    return tx.generator.create({
+    const products = readEquipmentProducts(data);
+    const resolved = [] as Array<{ catalogItemId: string; quantity: number }>;
+    let createdCatalogItems = 0;
+    const notices: ImportIssue[] = [];
+    for (const product of products) {
+      const item = await resolveEquipmentProduct(tx, product, actor);
+      if (item.created) {
+        createdCatalogItems += 1;
+        await tx.systemAuditLog.create({
+          data: {
+            domain: AuditDomain.INVENTORY,
+            entityType: 'CatalogItem',
+            entityId: item.id,
+            action: 'IMPORT_CREATE',
+            actorUserId: actor.sub,
+            afterPayload: {
+              source: 'EQUIPMENT_IMPORT',
+              equipmentLegacyCode: String(data.legacyCode),
+              productSlot: product.slot,
+              name: product.name,
+              legacySequence: product.sequence,
+              manufacturerPartNumber: product.partNumber,
+            },
+            reason: 'Produto criado durante a importação de equipamentos.',
+          },
+        });
+        notices.push({
+          code: 'PRODUCT_CREATED',
+          field: `product${product.slot}Description`,
+          message: `Produto ${product.slot}: ${product.name} cadastrado no catálogo.`,
+        });
+      }
+      const previous = resolved.find(
+        (entry) => entry.catalogItemId === item.id,
+      );
+      if (previous) previous.quantity += product.quantity;
+      else
+        resolved.push({ catalogItemId: item.id, quantity: product.quantity });
+    }
+    const generator = await tx.generator.create({
       data: {
         legacyCode: String(data.legacyCode),
         name: String(data.name),
@@ -831,6 +1013,8 @@ const EQUIPMENT_IMPORT_DEFINITION: ImportDefinition = {
         serialNumber: nullableString(data.serialNumber),
         assetTag: nullableString(data.assetTag),
         power: Number(data.power),
+        hourMeter:
+          typeof data.hourMeter === 'number' ? data.hourMeter : undefined,
         voltage: nullableString(data.voltage),
         condition: nullableString(data.condition),
         installationSite: nullableString(data.installationSite),
@@ -856,15 +1040,444 @@ const EQUIPMENT_IMPORT_DEFINITION: ImportDefinition = {
         notes: nullableString(data.notes),
         legacyTechnicalData: jsonObjectOrUndefined(data.legacyTechnicalData),
         hasMaintenanceContract: Boolean(data.hasMaintenanceContract),
-        operationalStatus: GeneratorOperationalStatus.OPERATING,
+        operationalStatus:
+          (data.operationalStatus as GeneratorOperationalStatus | undefined) ??
+          GeneratorOperationalStatus.OPERATING,
         lifecycleStatus: GeneratorLifecycleStatus.AVAILABLE,
-        criticality: GeneratorCriticality.B,
+        criticality:
+          (data.criticality as GeneratorCriticality | undefined) ??
+          GeneratorCriticality.B,
         clientId: client.id,
+        ...(resolved.length > 0
+          ? {
+              baseItems: {
+                create: resolved.map((entry) => ({
+                  catalogItemId: entry.catalogItemId,
+                  quantity: entry.quantity,
+                  serviceGroup: ServiceGroup.OUTROS,
+                  isCustomized: true,
+                })),
+              },
+            }
+          : {}),
       },
       select: { id: true },
     });
+    return { ...generator, createdCatalogItems, notices };
   },
 };
+
+function equipmentProductKey(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase();
+}
+
+function equipmentProductIssues(data: Record<string, unknown>) {
+  const products: EquipmentProduct[] = [];
+  const errors: ImportIssue[] = [];
+  for (let slot = 1; slot <= EQUIPMENT_PRODUCT_SLOTS; slot += 1) {
+    const prefix = `product${slot}`;
+    const flag = primitiveString(data[`${prefix}HasItems`]).trim();
+    const name = primitiveString(data[`${prefix}Description`]).trim();
+    const sequence = primitiveString(data[`${prefix}Sequence`]).trim();
+    const partNumber = primitiveString(data[`${prefix}PartNumber`]).trim();
+    const quantityText = primitiveString(data[`${prefix}Quantity`]).trim();
+    const hasAnyValue = Boolean(name || sequence || partNumber || quantityText);
+    if (!flag && !hasAnyValue) continue;
+    const normalizedFlag = comparableHeader(flag);
+    if (
+      flag &&
+      ![
+        'sim',
+        's',
+        '1',
+        'true',
+        'yes',
+        'y',
+        'nao',
+        'n',
+        '0',
+        'false',
+        'no',
+      ].includes(normalizedFlag)
+    ) {
+      errors.push({
+        code: 'INVALID_PRODUCT_FLAG',
+        field: `${prefix}HasItems`,
+        message: `Produto ${slot}: informe SIM ou NAO em Possui itens.`,
+      });
+      continue;
+    }
+    if (['nao', 'n', '0', 'false', 'no'].includes(normalizedFlag)) {
+      if (hasAnyValue)
+        errors.push({
+          code: 'PRODUCT_FLAG_CONFLICT',
+          field: `${prefix}HasItems`,
+          message: `Produto ${slot}: há dados preenchidos, mas Possui itens está como NÃO.`,
+        });
+      continue;
+    }
+    if (!name)
+      errors.push({
+        code: 'PRODUCT_DESCRIPTION_REQUIRED',
+        field: `${prefix}Description`,
+        message: `Produto ${slot}: informe a descrição.`,
+      });
+    if (!sequence && !partNumber)
+      errors.push({
+        code: 'PRODUCT_IDENTIFIER_REQUIRED',
+        field: `${prefix}Sequence`,
+        message: `Produto ${slot}: informe Seq ou Código Original (PN).`,
+      });
+    const quantity = Number(quantityText);
+    if (!quantityText || !Number.isSafeInteger(quantity) || quantity <= 0) {
+      errors.push({
+        code: 'PRODUCT_QUANTITY_INVALID',
+        field: `${prefix}Quantity`,
+        message: `Produto ${slot}: quantidade deve ser um inteiro maior que zero.`,
+      });
+    }
+    if (
+      name &&
+      (sequence || partNumber) &&
+      quantityText &&
+      Number.isSafeInteger(quantity) &&
+      quantity > 0
+    ) {
+      products.push({
+        slot,
+        name,
+        sequence: sequence || undefined,
+        partNumber: partNumber || undefined,
+        quantity,
+      });
+    }
+  }
+  return { products, errors };
+}
+
+function readEquipmentProducts(data: Record<string, unknown>) {
+  const parsed = equipmentProductIssues(data);
+  if (parsed.errors.length)
+    throw new BadRequestException(
+      parsed.errors.map((issue) => issue.message).join(' '),
+    );
+  return parsed.products;
+}
+
+type EquipmentCatalogMatch = {
+  id: string;
+  name: string;
+  legacySequence: string | null;
+  manufacturerPartNumber: string | null;
+  identifiers: Array<{ normalizedCode: string }>;
+};
+
+function matchingEquipmentCatalogItems(
+  items: EquipmentCatalogMatch[],
+  product: EquipmentProduct,
+) {
+  const sequenceKey = product.sequence && equipmentProductKey(product.sequence);
+  const partKey =
+    product.partNumber && normalizeCatalogIdentifier(product.partNumber);
+  const byCode = items.filter(
+    (item) =>
+      (sequenceKey &&
+        item.legacySequence &&
+        equipmentProductKey(item.legacySequence) === sequenceKey) ||
+      (partKey &&
+        ((item.manufacturerPartNumber &&
+          normalizeCatalogIdentifier(item.manufacturerPartNumber) ===
+            partKey) ||
+          item.identifiers.some(
+            (identifier) => identifier.normalizedCode === partKey,
+          ))),
+  );
+  const byName = items.filter(
+    (item) =>
+      equipmentProductKey(item.name) === equipmentProductKey(product.name),
+  );
+  const ids = new Set(byCode.map((item) => item.id));
+  if (ids.size > 1)
+    return {
+      issue: `Produto ${product.slot}: Seq e PN apontam para produtos diferentes no catálogo.`,
+    };
+  const matched = byCode[0];
+  if (
+    matched &&
+    equipmentProductKey(matched.name) !== equipmentProductKey(product.name)
+  ) {
+    return {
+      issue: `Produto ${product.slot}: ${product.sequence || product.partNumber} já pertence a "${matched.name}"; a descrição informada é diferente.`,
+    };
+  }
+  if (byName.some((item) => item.id !== matched?.id)) {
+    return {
+      issue: `Produto ${product.slot}: a descrição "${product.name}" já pertence a outro cadastro.`,
+    };
+  }
+  if (!matched && byName.length > 0) {
+    return {
+      issue: `Produto ${product.slot}: a descrição "${product.name}" já existe, mas Seq/PN não corresponde.`,
+    };
+  }
+  if (
+    matched &&
+    ((product.sequence &&
+      matched.legacySequence &&
+      equipmentProductKey(matched.legacySequence) !==
+        equipmentProductKey(product.sequence)) ||
+      (product.partNumber &&
+        matched.manufacturerPartNumber &&
+        normalizeCatalogIdentifier(matched.manufacturerPartNumber) !==
+          normalizeCatalogIdentifier(product.partNumber)))
+  ) {
+    return {
+      issue: `Produto ${product.slot}: Seq ou PN diverge do cadastro "${matched.name}".`,
+    };
+  }
+  return { matched };
+}
+
+async function findEquipmentCatalogItems(
+  tx: Prisma.TransactionClient,
+  products: EquipmentProduct[],
+) {
+  if (!products.length) return [] as EquipmentCatalogMatch[];
+  const items: EquipmentCatalogMatch[] = [];
+  // Smaller queries keep large equipment files within PostgreSQL parameter limits.
+  for (let offset = 0; offset < products.length; offset += 200) {
+    const group = products.slice(offset, offset + 200);
+    const groupSequences = group
+      .map((item) => item.sequence)
+      .filter((value): value is string => Boolean(value));
+    const groupParts = group
+      .map((item) => item.partNumber)
+      .filter((value): value is string => Boolean(value));
+    const groupNames = group.map((item) => item.name);
+    const found = await tx.catalogItem.findMany({
+      where: {
+        OR: [
+          ...(groupSequences.length
+            ? [
+                {
+                  legacySequence: {
+                    in: groupSequences,
+                    mode: 'insensitive' as const,
+                  },
+                },
+              ]
+            : []),
+          ...(groupParts.length
+            ? [
+                {
+                  manufacturerPartNumber: {
+                    in: groupParts,
+                    mode: 'insensitive' as const,
+                  },
+                },
+              ]
+            : []),
+          { name: { in: groupNames, mode: 'insensitive' as const } },
+          ...(groupParts.length
+            ? [
+                {
+                  identifiers: {
+                    some: {
+                      type: CatalogIdentifierType.MANUFACTURER_PART_NUMBER,
+                      isActive: true,
+                      normalizedCode: {
+                        in: groupParts.map(normalizeCatalogIdentifier),
+                      },
+                    },
+                  },
+                },
+              ]
+            : []),
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        legacySequence: true,
+        manufacturerPartNumber: true,
+        identifiers: {
+          where: {
+            type: CatalogIdentifierType.MANUFACTURER_PART_NUMBER,
+            isActive: true,
+          },
+          select: { normalizedCode: true },
+        },
+      },
+    });
+    for (const item of found)
+      if (!items.some((candidate) => candidate.id === item.id))
+        items.push(item);
+  }
+  return items;
+}
+
+async function validateEquipmentProductRows(
+  tx: Prisma.TransactionClient,
+  rows: Array<{ rowNumber: number; normalizedData: Record<string, unknown> }>,
+) {
+  const issues = new Map<
+    number,
+    { errors: ImportIssue[]; warnings: ImportIssue[] }
+  >();
+  const parsed = rows.map((row) => ({
+    ...row,
+    ...equipmentProductIssues(row.normalizedData),
+  }));
+  const items = await findEquipmentCatalogItems(
+    tx,
+    parsed.flatMap((row) => row.products),
+  );
+  const seen = new Map<string, EquipmentProduct>();
+  for (const row of parsed) {
+    const errors = [...row.errors];
+    const warnings: ImportIssue[] = [];
+    for (const product of row.products) {
+      const field = `product${product.slot}Description`;
+      const match = matchingEquipmentCatalogItems(items, product);
+      if (match.issue) {
+        errors.push({ code: 'PRODUCT_CONFLICT', field, message: match.issue });
+        continue;
+      }
+      const keys = [
+        product.sequence && `SEQ:${equipmentProductKey(product.sequence)}`,
+        product.partNumber &&
+          `PN:${normalizeCatalogIdentifier(product.partNumber)}`,
+        `NAME:${equipmentProductKey(product.name)}`,
+      ].filter((value): value is string => Boolean(value));
+      const previous = keys.map((key) => seen.get(key)).find(Boolean);
+      if (
+        previous &&
+        ((previous.sequence &&
+          product.sequence &&
+          equipmentProductKey(previous.sequence) !==
+            equipmentProductKey(product.sequence)) ||
+          (previous.partNumber &&
+            product.partNumber &&
+            normalizeCatalogIdentifier(previous.partNumber) !==
+              normalizeCatalogIdentifier(product.partNumber)) ||
+          equipmentProductKey(previous.name) !==
+            equipmentProductKey(product.name))
+      ) {
+        errors.push({
+          code: 'PRODUCT_CONFLICT',
+          field,
+          message: `Produto ${product.slot}: descrição, Seq ou PN conflita com outro produto desta planilha.`,
+        });
+        continue;
+      }
+      keys.forEach((key) => seen.set(key, product));
+      if (!match.matched)
+        warnings.push({
+          code: 'PRODUCT_WILL_BE_CREATED',
+          field,
+          message: `Produto ${product.slot}: "${product.name}" será cadastrado no catálogo e vinculado ao equipamento.`,
+        });
+    }
+    issues.set(row.rowNumber, { errors, warnings });
+  }
+  return issues;
+}
+
+async function resolveEquipmentProduct(
+  tx: Prisma.TransactionClient,
+  product: EquipmentProduct,
+  actor: StudioActor,
+) {
+  const items = await findEquipmentCatalogItems(tx, [product]);
+  const result = matchingEquipmentCatalogItems(items, product);
+  if (result.issue) throw new BadRequestException(result.issue);
+  if (result.matched) return { id: result.matched.id, created: false };
+  if (
+    !actor.isSystemMaster &&
+    actor.role !== 'ADMIN' &&
+    !hasPermission(actor.accessPolicy, 'catalog.create')
+  ) {
+    throw new ForbiddenException(
+      `Produto ${product.slot} não existe no catálogo. É necessária permissão para cadastrar produtos.`,
+    );
+  }
+  const created = await CATALOG_IMPORT_DEFINITION.createRecord(
+    tx,
+    {
+      name: product.name,
+      legacySequence: product.sequence,
+      manufacturerPartNumber: product.partNumber,
+      type: ItemType.PART,
+    },
+    actor,
+  );
+  return { id: created.id, created: true };
+}
+
+async function validateCatalogProductRows(
+  tx: Prisma.TransactionClient,
+  rows: Array<{ rowNumber: number; normalizedData: Record<string, unknown> }>,
+) {
+  const products = rows
+    .map((row) => ({
+      rowNumber: row.rowNumber,
+      product: {
+        slot: 0,
+        name: primitiveString(row.normalizedData.name).trim(),
+        sequence: nullableString(row.normalizedData.legacySequence),
+        partNumber: nullableString(row.normalizedData.manufacturerPartNumber),
+        quantity: 1,
+      },
+    }))
+    .filter((entry) => entry.product.name && entry.product.sequence);
+  const existing = await findEquipmentCatalogItems(
+    tx,
+    products.map((entry) => entry.product),
+  );
+  const seen = new Map<string, number>();
+  const issues = new Map<
+    number,
+    { errors: ImportIssue[]; warnings: ImportIssue[] }
+  >();
+  for (const { rowNumber, product } of products) {
+    const errors: ImportIssue[] = [];
+    const match = matchingEquipmentCatalogItems(existing, product);
+    if (match.issue || match.matched) {
+      errors.push({
+        code: 'PRODUCT_CONFLICT',
+        field: 'name',
+        message:
+          match.issue ||
+          `Descrição, Seq ou PN já pertence a outro produto no catálogo.`,
+      });
+    }
+    for (const [field, key] of [
+      ['name', `NAME:${equipmentProductKey(product.name)}`],
+      [
+        'manufacturerPartNumber',
+        product.partNumber &&
+          `PN:${normalizeCatalogIdentifier(product.partNumber)}`,
+      ],
+    ] as Array<[string, string | undefined]>) {
+      if (!key) continue;
+      const previousRow = seen.get(key);
+      if (previousRow !== undefined)
+        errors.push({
+          code: 'PRODUCT_CONFLICT',
+          field,
+          message: `${field === 'name' ? 'Descrição' : 'Part Number'} repetido na linha ${previousRow} da planilha.`,
+        });
+      else seen.set(key, rowNumber);
+    }
+    issues.set(rowNumber, { errors, warnings: [] });
+  }
+  return issues;
+}
 
 const CATALOG_IMPORT_DEFINITION: ImportDefinition = {
   resource: 'catalog',
@@ -874,6 +1487,11 @@ const CATALOG_IMPORT_DEFINITION: ImportDefinition = {
   domain: AuditDomain.INVENTORY,
   entityType: 'CatalogItem',
   uniqueField: 'legacySequence',
+  validateRows: validateCatalogProductRows,
+  templateExample: {
+    field: 'legacyCode',
+    prefix: 'EXEMPLO-PX-',
+  },
   fields: [
     {
       key: 'legacySequence',
@@ -1081,6 +1699,23 @@ const CATALOG_IMPORT_DEFINITION: ImportDefinition = {
     );
   },
   createRecord: async (tx, data) => {
+    const identity = {
+      slot: 0,
+      name: String(data.name).trim(),
+      sequence: nullableString(data.legacySequence),
+      partNumber: nullableString(data.manufacturerPartNumber),
+      quantity: 1,
+    };
+    const conflict = matchingEquipmentCatalogItems(
+      await findEquipmentCatalogItems(tx, [identity]),
+      identity,
+    );
+    if (conflict.issue || conflict.matched) {
+      throw new BadRequestException(
+        conflict.issue ||
+          'Descrição, Seq ou PN já pertence a outro produto no catálogo.',
+      );
+    }
     const generatedSku = await generateProvisionalCatalogSku(
       tx,
       data.type as ItemType,
@@ -1265,6 +1900,19 @@ export class StudioImportService {
       parsedRows,
       input.columnMapping,
     );
+    if (
+      definition.resource === 'equipments' &&
+      !actor.isSystemMaster &&
+      actor.role !== 'ADMIN' &&
+      !hasPermission(actor.accessPolicy, 'catalog.create') &&
+      analyzed.some((row) =>
+        row.warnings.some((issue) => issue.code === 'PRODUCT_WILL_BE_CREATED'),
+      )
+    ) {
+      throw new ForbiddenException(
+        'A planilha contém produtos novos. É necessária permissão para cadastrar produtos no catálogo.',
+      );
+    }
     const summary = summarizeRows(analyzed);
 
     const batch = await this.prisma.$transaction(
@@ -1352,6 +2000,7 @@ export class StudioImportService {
     });
 
     let createdRows = 0;
+    let createdCatalogItems = 0;
     let failedRows = 0;
     const skippedRows = analyzed.filter(
       (row) =>
@@ -1361,11 +2010,12 @@ export class StudioImportService {
 
     for (const row of executable) {
       try {
-        await this.prisma.$transaction(
+        const createdItemsInRow = await this.prisma.$transaction(
           async (tx) => {
             const created = await definition.createRecord(
               tx,
               row.normalizedData,
+              actor,
             );
             await tx.studioImportRow.updateMany({
               where: { batchId, rowNumber: row.rowNumber },
@@ -1373,7 +2023,12 @@ export class StudioImportService {
                 status: StudioImportRowStatus.CREATED,
                 normalizedData: row.normalizedData as any,
                 errors: [],
-                warnings: row.warnings as any,
+                warnings: [
+                  ...row.warnings.filter(
+                    (issue) => issue.code !== 'PRODUCT_WILL_BE_CREATED',
+                  ),
+                  ...(created.notices ?? []),
+                ] as any,
                 recordId: created.id,
               },
             });
@@ -1394,9 +2049,11 @@ export class StudioImportService {
                 reason: `Registro criado pela importacao ${batchId}.`,
               },
             });
+            return created.createdCatalogItems ?? 0;
           },
           { maxWait: 10_000, timeout: 30_000 },
         );
+        createdCatalogItems += createdItemsInRow;
         createdRows += 1;
       } catch (error: unknown) {
         failedRows += 1;
@@ -1447,6 +2104,7 @@ export class StudioImportService {
         summary: {
           ...summarizeRows(analyzed),
           created: createdRows,
+          createdCatalogItems,
           skipped: skippedRows,
           failed: failedRows,
         } as any,
@@ -1484,17 +2142,14 @@ export class StudioImportService {
     columnMapping?: Record<string, string>,
   ) {
     const normalizedRows = parsedRows
-      .filter(
-        (row) =>
-          !isEmptyRow(row.rawData) &&
-          !isCatalogTemplateExampleRow(definition, row.rawData),
-      )
+      .filter((row) => !isEmptyRow(row.rawData))
+      .map((row) => ({
+        ...row,
+        normalizedData: normalizeRow(definition, row.rawData, columnMapping),
+      }))
+      .filter((row) => !isTemplateExampleRow(definition, row.normalizedData))
       .map((row) => {
-        const normalizedData = normalizeRow(
-          definition,
-          row.rawData,
-          columnMapping,
-        );
+        const { normalizedData } = row;
         const errors = validateRequired(definition, normalizedData);
         const warnings: ImportIssue[] = [];
 
@@ -1525,12 +2180,30 @@ export class StudioImportService {
       definition.findDuplicates(tx, uniqueValues),
     );
 
+    const relatedIssues = definition.validateRows
+      ? await this.prisma.$transaction((tx) =>
+          definition.validateRows!(
+            tx,
+            normalizedRows.map((row) => ({
+              rowNumber: row.rowNumber,
+              normalizedData: row.normalizedData,
+            })),
+          ),
+        )
+      : new Map<number, { errors: ImportIssue[]; warnings: ImportIssue[] }>();
+
     return normalizedRows.map((row) => {
       const uniqueValue = primitiveString(
         row.normalizedData[definition.uniqueField],
       );
-      const errors = [...row.errors];
-      const warnings = [...row.warnings];
+      const errors = [
+        ...row.errors,
+        ...(relatedIssues.get(row.rowNumber)?.errors ?? []),
+      ];
+      const warnings = [
+        ...row.warnings,
+        ...(relatedIssues.get(row.rowNumber)?.warnings ?? []),
+      ];
 
       if (uniqueValue) {
         if (seen.has(uniqueValue) || existing.has(uniqueValue)) {
@@ -1753,31 +2426,17 @@ function isEmptyRow(row: Record<string, string>) {
   return Object.values(row).every((value) => !String(value || '').trim());
 }
 
-function isCatalogTemplateExampleRow(
+function isTemplateExampleRow(
   definition: ImportDefinition,
-  row: Record<string, string>,
+  normalizedData: Record<string, unknown>,
 ) {
-  if (definition.resource !== 'catalog') return false;
+  const marker = definition.templateExample;
+  if (!marker) return false;
 
-  const legacyCodeHeaders = new Set(
-    [
-      'legacyCode',
-      'Codigo PX (legado)',
-      'codigo px',
-      'codigopx',
-      'codigo legado',
-      'codigolegado',
-      'legacy code',
-      'legacycode',
-      'codigo',
-    ].map(comparableHeader),
-  );
-
-  return Object.entries(row).some(
-    ([header, value]) =>
-      legacyCodeHeaders.has(comparableHeader(header)) &&
-      /^EXEMPLO-PX(?:-|$)/i.test(String(value || '').trim()),
-  );
+  const value = primitiveString(normalizedData[marker.field])
+    .trim()
+    .toUpperCase();
+  return value.startsWith(marker.prefix.toUpperCase());
 }
 
 function comparableHeader(value: string) {
@@ -1823,6 +2482,52 @@ function normalizePowerInput(value: string) {
 function normalizeIntegerInput(value: string) {
   const normalized = normalizePowerInput(value);
   return typeof normalized === 'number' ? Math.trunc(normalized) : null;
+}
+
+function normalizeNonNegativeIntegerInput(value: string) {
+  const normalized = normalizeIntegerInput(value);
+  return typeof normalized === 'number' && normalized >= 0 ? normalized : null;
+}
+
+function normalizeGeneratorCriticality(value: string) {
+  const comparable = comparableHeader(value);
+  if (!comparable) return null;
+  if (['a', 'criticidade a', 'critica', 'alta'].includes(comparable)) {
+    return GeneratorCriticality.A;
+  }
+  if (['b', 'criticidade b', 'media'].includes(comparable)) {
+    return GeneratorCriticality.B;
+  }
+  if (['c', 'criticidade c', 'baixa'].includes(comparable)) {
+    return GeneratorCriticality.C;
+  }
+  return null;
+}
+
+function normalizeGeneratorOperationalStatus(value: string) {
+  const comparable = comparableHeader(value);
+  if (!comparable) return null;
+
+  if (['operating', 'operando', 'em operacao'].includes(comparable)) {
+    return GeneratorOperationalStatus.OPERATING;
+  }
+  if (['in maintenance', 'em manutencao', 'manutencao'].includes(comparable)) {
+    return GeneratorOperationalStatus.IN_MAINTENANCE;
+  }
+  if (
+    [
+      'stopped by failure',
+      'parado por falha',
+      'parada por falha',
+      'falha',
+    ].includes(comparable)
+  ) {
+    return GeneratorOperationalStatus.STOPPED_BY_FAILURE;
+  }
+  if (['deactivated', 'desativado', 'inativo'].includes(comparable)) {
+    return GeneratorOperationalStatus.DEACTIVATED;
+  }
+  return null;
 }
 
 function normalizeCatalogCode(value: string) {

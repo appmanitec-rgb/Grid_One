@@ -32,6 +32,9 @@ export type CatalogActor = {
     catalog?: {
       viewCosts?: boolean;
     };
+    finance?: {
+      update?: boolean;
+    };
   };
 };
 
@@ -54,14 +57,15 @@ const catalogListSelect = {
   brand: true,
   ncm: true,
   basePrice: true,
-  costPrice: true,
-  averageCost: true,
-  profitMargin: true,
   stockCurrent: true,
   stockMin: true,
   stockMax: true,
   storageLocation: true,
   isActive: true,
+  identifiers: {
+    where: { isActive: true },
+    select: { code: true },
+  },
   inventoryBalances: {
     select: {
       physicalQty: true,
@@ -142,6 +146,7 @@ export class CatalogsService {
         tx,
         createCatalogDto.legacySequence,
       );
+      await this.assertProductIdentityAvailable(tx, createCatalogDto);
 
       const created = await tx.catalogItem.create({ data: catalogData });
       await this.syncSkuIdentifiers(tx, created.id, null, created.sku);
@@ -177,6 +182,9 @@ export class CatalogsService {
         unknown
       >;
       delete summarized.inventoryBalances;
+      delete summarized.costPrice;
+      delete summarized.averageCost;
+      delete summarized.profitMargin;
       return this.maskCatalogValues(summarized, canViewCosts);
     });
   }
@@ -429,6 +437,8 @@ export class CatalogsService {
         sku: true,
         legacyCode: true,
         legacySequence: true,
+        name: true,
+        manufacturerPartNumber: true,
         radarCode: true,
         skuNumber: true,
         skuAreaId: true,
@@ -459,6 +469,16 @@ export class CatalogsService {
           id,
         );
       }
+      await this.assertProductIdentityAvailable(
+        tx,
+        {
+          name: updateCatalogDto.name ?? current.name,
+          manufacturerPartNumber:
+            updateCatalogDto.manufacturerPartNumber ??
+            current.manufacturerPartNumber,
+        },
+        id,
+      );
 
       const updated = await tx.catalogItem.update({
         where: { id },
@@ -1469,7 +1489,8 @@ export class CatalogsService {
         canDecide:
           actor.role === UserRole.ADMIN ||
           actor.isSystemMaster ||
-          approval.approverUserId === actor.sub,
+          (approval.approverUserId === actor.sub &&
+            actor.accessPolicy?.finance?.update === true),
       })),
     };
   }
@@ -1716,6 +1737,66 @@ export class CatalogsService {
     if (existing && existing.id !== currentItemId) {
       throw new ConflictException(
         `A sequencia legada ${normalizedSequence} ja esta registrada.`,
+      );
+    }
+  }
+
+  private async assertProductIdentityAvailable(
+    tx: Prisma.TransactionClient,
+    value: { name?: string | null; manufacturerPartNumber?: string | null },
+    currentItemId?: string,
+  ) {
+    const name = value.name?.trim();
+    const partNumber = value.manufacturerPartNumber?.trim();
+    const normalizedPartNumber =
+      partNumber && this.normalizeIdentifier(partNumber);
+    if (!name && !partNumber) return;
+    const matches = await tx.catalogItem.findMany({
+      where: {
+        OR: [
+          ...(name
+            ? [{ name: { equals: name, mode: 'insensitive' as const } }]
+            : []),
+          ...(partNumber
+            ? [
+                {
+                  manufacturerPartNumber: {
+                    equals: partNumber,
+                    mode: 'insensitive' as const,
+                  },
+                },
+              ]
+            : []),
+          ...(normalizedPartNumber
+            ? [
+                {
+                  identifiers: {
+                    some: {
+                      type: CatalogIdentifierType.MANUFACTURER_PART_NUMBER,
+                      normalizedCode: normalizedPartNumber,
+                      isActive: true,
+                    },
+                  },
+                },
+              ]
+            : []),
+        ],
+      },
+      select: { id: true, name: true, manufacturerPartNumber: true },
+    });
+    for (const match of matches ?? []) {
+      if (match.id === currentItemId) continue;
+      if (
+        name &&
+        match.name.trim().toLocaleUpperCase('pt-BR') ===
+          name.toLocaleUpperCase('pt-BR')
+      ) {
+        throw new ConflictException(
+          `A descrição "${name}" já está cadastrada em outro produto.`,
+        );
+      }
+      throw new ConflictException(
+        `O Código Original (PN) "${partNumber}" já está cadastrado em outro produto.`,
       );
     }
   }

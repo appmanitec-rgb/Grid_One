@@ -238,6 +238,118 @@ describe('UsersService', () => {
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
+  it('blocks changes to another user access policy without security permission', async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: 'target-user',
+        role: UserRole.SALES,
+        accessPolicy: null,
+        isSystemMaster: false,
+        linkedClientId: null,
+      })
+      .mockResolvedValueOnce({
+        role: UserRole.MANAGER,
+        isSystemMaster: false,
+        accessPolicy: null,
+      });
+
+    await expect(
+      service.update(
+        'target-user',
+        { accessPolicy: { finance: { view: true } } } as Parameters<
+          UsersService['update']
+        >[1],
+        'manager-user',
+      ),
+    ).rejects.toThrow('alterar cargos ou permissoes');
+
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('blocks a manager from creating an administrator account', async () => {
+    prisma.user.findFirst.mockResolvedValue(null);
+    prisma.user.findUnique.mockResolvedValue({
+      role: UserRole.MANAGER,
+      isSystemMaster: false,
+      accessPolicy: null,
+    });
+
+    await expect(
+      service.create(
+        {
+          name: 'Novo administrador',
+          email: 'novo-admin@manitec.test',
+          password: 'senha123',
+          role: UserRole.ADMIN,
+        },
+        'manager-user',
+      ),
+    ).rejects.toThrow('alterar cargos ou permissoes');
+
+    expect(prisma.user.create).not.toHaveBeenCalled();
+  });
+
+  it('blocks hierarchy changes without hierarchy permission', async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: 'target-user',
+        role: UserRole.SALES,
+        accessPolicy: null,
+        isSystemMaster: false,
+        linkedClientId: null,
+        managerId: null,
+      })
+      .mockResolvedValueOnce({
+        role: UserRole.SALES,
+        isSystemMaster: false,
+        accessPolicy: { users: { manage: true } },
+      });
+
+    await expect(
+      service.update('target-user', { managerId: 'manager-1' }, 'sales-user'),
+    ).rejects.toThrow('hierarquia de usuarios');
+
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('allows an administrator to update a user access policy', async () => {
+    const target = {
+      id: 'target-user',
+      role: UserRole.SALES,
+      accessPolicy: null,
+      isSystemMaster: false,
+      linkedClientId: null,
+      managerId: null,
+    };
+    prisma.user.findUnique
+      .mockResolvedValueOnce(target)
+      .mockResolvedValueOnce({
+        role: UserRole.ADMIN,
+        isSystemMaster: false,
+        accessPolicy: null,
+      })
+      .mockResolvedValueOnce(target);
+    prisma.user.update.mockResolvedValue(target);
+
+    await service.update(
+      'target-user',
+      { accessPolicy: { finance: { view: true } } } as Parameters<
+        UsersService['update']
+      >[1],
+      'admin-user',
+    );
+
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          accessPolicy: expect.objectContaining({
+            finance: expect.objectContaining({ view: true }),
+          }),
+        }),
+      }),
+    );
+  });
+
   it('allows sensitive people fields when actor has people.manageSensitive', async () => {
     const beforeUser = {
       id: 'target-user',

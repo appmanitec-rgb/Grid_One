@@ -102,6 +102,26 @@ describe('CatalogsService', () => {
     });
   });
 
+  it('reports a duplicate product description before creating the record', async () => {
+    prisma.catalogItem.findMany.mockResolvedValue([
+      {
+        id: 'existing',
+        name: 'Filtro de óleo',
+        manufacturerPartNumber: 'ABC123',
+      },
+    ]);
+
+    await expect(
+      service.create({
+        name: 'Filtro de óleo',
+        type: ItemType.SERVICE,
+      }),
+    ).rejects.toThrow(
+      'A descrição "Filtro de óleo" já está cadastrada em outro produto.',
+    );
+    expect(prisma.catalogItem.create).not.toHaveBeenCalled();
+  });
+
   it('composes automatic SKUs from zero without numeric padding', () => {
     expect((service as any).composeSku(0, 'CFT')).toBe('0CFT');
     expect((service as any).composeSku(1, 'CFT')).toBe('1CFT');
@@ -213,6 +233,10 @@ describe('CatalogsService', () => {
       where: { isActive: true },
       orderBy: { name: 'asc' },
       select: {
+        identifiers: {
+          where: { isActive: true },
+          select: { code: true },
+        },
         inventoryBalances: {
           select: {
             physicalQty: true,
@@ -243,14 +267,12 @@ describe('CatalogsService', () => {
         'brand',
         'ncm',
         'basePrice',
-        'costPrice',
-        'averageCost',
-        'profitMargin',
         'stockCurrent',
         'stockMin',
         'stockMax',
         'storageLocation',
         'isActive',
+        'identifiers',
         'inventoryBalances',
       ].sort(),
     );
@@ -265,7 +287,7 @@ describe('CatalogsService', () => {
     });
   });
 
-  it('masks list cost fields while keeping the suggested sale price', async () => {
+  it('omits cost and margin from the list while keeping the suggested sale price', async () => {
     prisma.catalogItem.findMany.mockResolvedValue([
       catalogItemFixture({
         basePrice: 250,
@@ -281,9 +303,9 @@ describe('CatalogsService', () => {
     });
 
     expect(result[0].basePrice).toBe(250);
-    expect(result[0].costPrice).toBeNull();
-    expect(result[0].averageCost).toBeNull();
-    expect(result[0].profitMargin).toBeNull();
+    expect(result[0]).not.toHaveProperty('costPrice');
+    expect(result[0]).not.toHaveProperty('averageCost');
+    expect(result[0]).not.toHaveProperty('profitMargin');
   });
 
   it('blocks direct stock balance mutation through catalog update', async () => {

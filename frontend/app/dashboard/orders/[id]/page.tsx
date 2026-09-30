@@ -75,8 +75,16 @@ type Order = {
     quantity: number;
     unitCost?: number | null;
     reservedAt?: string | null;
-    warehouse?: { id: string; code?: string | null; name?: string | null } | null;
-    catalogItem?: { id: string; name?: string | null; sku?: string | null } | null;
+    warehouse?: {
+      id: string;
+      code?: string | null;
+      name?: string | null;
+    } | null;
+    catalogItem?: {
+      id: string;
+      name?: string | null;
+      sku?: string | null;
+    } | null;
   }>;
 };
 
@@ -175,7 +183,9 @@ export default function OrderDetailPage() {
       });
       if (await handleUnauthorized(res)) return;
       if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, "Falha ao atualizar a O.S."));
+        throw new Error(
+          await readApiErrorMessage(res, "Falha ao atualizar a O.S."),
+        );
       }
 
       setNotice(successMessage);
@@ -203,16 +213,19 @@ export default function OrderDetailPage() {
     setNotice("");
 
     try {
-      const res = await apiFetch(apiUrl(`/maintenance-orders/${id}/visit-report/submit`), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const res = await apiFetch(
+        apiUrl(`/maintenance-orders/${id}/visit-report/submit`),
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            report: reportDraft.trim(),
+            note: reportNote.trim() || undefined,
+          }),
         },
-        body: JSON.stringify({
-          report: reportDraft.trim(),
-          note: reportNote.trim() || undefined,
-        }),
-      });
+      );
       if (await handleUnauthorized(res)) return;
       if (!res.ok) {
         throw new Error(
@@ -246,7 +259,8 @@ export default function OrderDetailPage() {
     );
   }
 
-  const siteName = order.site?.name || order.generator?.currentSite?.name || "-";
+  const siteName =
+    order.site?.name || order.generator?.currentSite?.name || "-";
   const needsDispatch = !order.technician?.id;
   const reportPending = !order.customerReport && order.status !== "CANCELED";
   const canViewCosts = access.catalog.viewCosts;
@@ -373,7 +387,9 @@ export default function OrderDetailPage() {
                 <DataPill tone={priorityTone(order.priority)}>
                   {priorityLabel(order.priority)}
                 </DataPill>
-                {order.contract ? <DataPill tone="blue">{order.contract.code}</DataPill> : null}
+                {order.contract ? (
+                  <DataPill tone="blue">{order.contract.code}</DataPill>
+                ) : null}
               </div>
             </div>
             <MiniInfo
@@ -392,7 +408,11 @@ export default function OrderDetailPage() {
             />
             <MiniInfo
               label="Agenda"
-              value={order.scheduledTo ? formatDateTime(order.scheduledTo) : "Sem horario"}
+              value={
+                order.scheduledTo
+                  ? formatDateTime(order.scheduledTo)
+                  : "Sem horario"
+              }
               helper="Data prevista para atendimento."
             />
           </FieldBox>
@@ -403,17 +423,20 @@ export default function OrderDetailPage() {
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
       {needsDispatch ? (
         <StatusBanner tone="amber">
-          Esta O.S. ainda nao possui tecnico atribuido. O fluxo operacional pede despacho antes da execucao em campo.
+          Esta O.S. ainda nao possui tecnico atribuido. O fluxo operacional pede
+          despacho antes da execucao em campo.
         </StatusBanner>
       ) : null}
       {reportPending && order.status === "IN_PROGRESS" ? (
         <StatusBanner tone="amber">
-          Atendimento em andamento sem relatorio de visita submetido. Vale fechar essa trilha para aprovacao.
+          Atendimento em andamento sem relatorio de visita submetido. Vale
+          fechar essa trilha para aprovacao.
         </StatusBanner>
       ) : null}
       {order.status === "COMPLETED" ? (
         <StatusBanner tone="blue">
-          O.S. concluida. Proximo passo do processo: conferir valores e gerar o recebivel em Faturamento.
+          O.S. concluida. Proximo passo do processo: conferir valores e gerar o
+          recebivel em Faturamento.
         </StatusBanner>
       ) : null}
 
@@ -425,52 +448,61 @@ export default function OrderDetailPage() {
         <RelatedEntityGrid
           items={[
             ...(order.generator?.client?.id
-              ? [{
-                  label: order.generator.client.companyName || "Cliente da O.S.",
-                  description: "Cliente atendido por esta ordem.",
-                  href: `/dashboard/clients/${order.generator.client.id}`,
-                  badge: "Cliente",
-                  tone: "blue" as const,
-                  permission: "clients.view",
-                }]
+              ? [
+                  {
+                    label:
+                      order.generator.client.companyName || "Cliente da O.S.",
+                    description: "Cliente atendido por esta ordem.",
+                    href: `/dashboard/clients/${order.generator.client.id}`,
+                    badge: "Cliente",
+                    tone: "blue" as const,
+                    permission: "clients.view",
+                  },
+                ]
               : []),
             ...(order.generator?.id
-              ? [{
-                  label: order.generator.name || "Equipamento da O.S.",
-                  description: `Equipamento atendido no site ${siteName}.`,
-                  href: `/dashboard/equipments/${order.generator.id}`,
-                  badge: "Equipamento",
-                  tone: "slate" as const,
-                  permission: "equipments.view",
-                }]
+              ? [
+                  {
+                    label: order.generator.name || "Equipamento da O.S.",
+                    description: `Equipamento atendido no site ${siteName}.`,
+                    href: `/dashboard/equipments/${order.generator.id}`,
+                    badge: "Equipamento",
+                    tone: "slate" as const,
+                    permission: "equipments.view",
+                  },
+                ]
               : []),
             ...(order.contract
-              ? [{
-                  label: order.contract.code,
-                  description: "Contrato que originou ou cobre esta O.S.",
-                  href: `/dashboard/contracts/${order.contract.id}`,
-                  badge: "Contrato",
-                  tone: "emerald" as const,
-                  permission: "contracts.view",
-                }]
+              ? [
+                  {
+                    label: order.contract.code,
+                    description: "Contrato que originou ou cobre esta O.S.",
+                    href: `/dashboard/contracts/${order.contract.id}`,
+                    badge: "Contrato",
+                    tone: "emerald" as const,
+                    permission: "contracts.view",
+                  },
+                ]
               : []),
-            ...((order.sourceTickets || []).map((ticket) => ({
+            ...(order.sourceTickets || []).map((ticket) => ({
               label: ticket.code || "Chamado de origem",
               description: "Solicitacao que originou esta ordem.",
               href: `/dashboard/atendimento/${ticket.id}`,
               badge: "Chamado",
               tone: "amber" as const,
               permission: "tickets.view",
-            }))),
+            })),
             ...(order.serviceReport
-              ? [{
-                  label: order.serviceReport.code || "Laudo tecnico",
-                  description: "Laudo tecnico vinculado a execucao.",
-                  href: `/dashboard/relatorios-tecnicos/${order.serviceReport.id}`,
-                  badge: "Laudo",
-                  tone: "amber" as const,
-                  permission: "serviceReports.view",
-                }]
+              ? [
+                  {
+                    label: order.serviceReport.code || "Laudo tecnico",
+                    description: "Laudo tecnico vinculado a execucao.",
+                    href: `/dashboard/relatorios-tecnicos/${order.serviceReport.id}`,
+                    badge: "Laudo",
+                    tone: "amber" as const,
+                    permission: "serviceReports.view",
+                  },
+                ]
               : []),
             {
               label: `Documento da O.S.`,
@@ -498,7 +530,11 @@ export default function OrderDetailPage() {
             </div>
 
             <div className="mt-5 grid gap-3 md:grid-cols-3">
-              <Info label="Tipo" value={orderTypeLabel(order.type)} tone="slate" />
+              <Info
+                label="Tipo"
+                value={orderTypeLabel(order.type)}
+                tone="slate"
+              />
               <Info
                 label="Contrato"
                 value={order.contract?.code || "O.S. avulsa"}
@@ -577,14 +613,18 @@ export default function OrderDetailPage() {
             title="Relatorio de visita e aprovacao"
             description="O backend ja possui esse fluxo; agora ele esta acessivel na tela para fechar a trilha da visita tecnica."
             actions={
-              <button
-                type="button"
-                onClick={() => void submitVisitReport()}
-                disabled={workingKey === "visit-report"}
-                className={PRIMARY_BUTTON}
-              >
-                {workingKey === "visit-report" ? "Enviando..." : "Enviar relatorio"}
-              </button>
+              access.maintenanceOrders.submitVisitReport ? (
+                <button
+                  type="button"
+                  onClick={() => void submitVisitReport()}
+                  disabled={workingKey === "visit-report"}
+                  className={PRIMARY_BUTTON}
+                >
+                  {workingKey === "visit-report"
+                    ? "Enviando..."
+                    : "Enviar relatorio"}
+                </button>
+              ) : undefined
             }
           >
             <div className="grid gap-4">
@@ -605,7 +645,8 @@ export default function OrderDetailPage() {
               </FormField>
               {order.customerReport ? (
                 <InlineMessage>
-                  Ja existe um relatorio salvo nesta O.S. Reenviar atualiza a trilha para aprovacao.
+                  Ja existe um relatorio salvo nesta O.S. Reenviar atualiza a
+                  trilha para aprovacao.
                 </InlineMessage>
               ) : null}
             </div>
@@ -641,14 +682,17 @@ export default function OrderDetailPage() {
                         )}
                         <p className="mt-1 text-xs text-slate-500">
                           SKU: {material.catalogItem?.sku || "-"} · Almoxarifado{" "}
-                          {material.warehouse?.code || material.warehouse?.name || "-"}
+                          {material.warehouse?.code ||
+                            material.warehouse?.name ||
+                            "-"}
                         </p>
                       </div>
                       <DataPill tone="blue">{material.quantity} un.</DataPill>
                     </div>
                     {canViewCosts ? (
                       <p className="mt-3 text-sm text-slate-600">
-                        Custo unitario: {formatCurrency(Number(material.unitCost || 0))}
+                        Custo unitario:{" "}
+                        {formatCurrency(Number(material.unitCost || 0))}
                       </p>
                     ) : null}
                   </div>
@@ -710,15 +754,52 @@ export default function OrderDetailPage() {
             description="Pontos centrais para execucao, despacho e encerramento."
           >
             <div className="grid gap-3">
-              <Info label="Status" value={orderStatusLabel(order.status)} tone={orderStatusTone(order.status)} />
-              <Info label="Prioridade" value={priorityLabel(order.priority)} tone={priorityTone(order.priority)} />
-              <Info label="Tecnico" value={order.technician?.user?.name || "Nao atribuido"} tone={order.technician?.id ? "emerald" : "amber"} />
-              <Info label="Cliente" value={order.generator?.client?.companyName || "-"} />
+              <Info
+                label="Status"
+                value={orderStatusLabel(order.status)}
+                tone={orderStatusTone(order.status)}
+              />
+              <Info
+                label="Prioridade"
+                value={priorityLabel(order.priority)}
+                tone={priorityTone(order.priority)}
+              />
+              <Info
+                label="Tecnico"
+                value={order.technician?.user?.name || "Nao atribuido"}
+                tone={order.technician?.id ? "emerald" : "amber"}
+              />
+              <Info
+                label="Cliente"
+                value={order.generator?.client?.companyName || "-"}
+              />
               <Info label="Equipamento" value={order.generator?.name || "-"} />
               <Info label="Site" value={siteName} />
-              <Info label="Agenda" value={order.scheduledTo ? formatDateTime(order.scheduledTo) : "Sem agenda"} tone={order.scheduledTo ? "blue" : "amber"} />
-              <Info label="Horas apontadas" value={order.laborHours != null ? `${order.laborHours}h` : "Nao informado"} />
-              <Info label="Horimetro final" value={order.hourMeterAfter != null ? String(order.hourMeterAfter) : "Nao informado"} />
+              <Info
+                label="Agenda"
+                value={
+                  order.scheduledTo
+                    ? formatDateTime(order.scheduledTo)
+                    : "Sem agenda"
+                }
+                tone={order.scheduledTo ? "blue" : "amber"}
+              />
+              <Info
+                label="Horas apontadas"
+                value={
+                  order.laborHours != null
+                    ? `${order.laborHours}h`
+                    : "Nao informado"
+                }
+              />
+              <Info
+                label="Horimetro final"
+                value={
+                  order.hourMeterAfter != null
+                    ? String(order.hourMeterAfter)
+                    : "Nao informado"
+                }
+              />
             </div>
           </SectionCard>
 
@@ -728,11 +809,42 @@ export default function OrderDetailPage() {
             description="Ajuda a validar se a ordem realmente percorreu todas as etapas necessarias."
           >
             <div className="space-y-3">
-              <Info label="Deslocamento" value={order.displacementStartedAt ? formatDateTime(order.displacementStartedAt) : "Nao iniciado"} tone={order.displacementStartedAt ? "blue" : "slate"} />
-              <Info label="Inicio" value={order.startedAt ? formatDateTime(order.startedAt) : "Nao iniciado"} tone={order.startedAt ? "blue" : "slate"} />
-              <Info label="Pausa" value={order.pausedAt ? formatDateTime(order.pausedAt) : "Sem pausa"} />
-              <Info label="Conclusao" value={order.finishedAt ? formatDateTime(order.finishedAt) : "Nao concluido"} tone={order.finishedAt ? "emerald" : "amber"} />
-              {order.auvoId ? <Info label="Referencia Auvo" value={order.auvoId} /> : null}
+              <Info
+                label="Deslocamento"
+                value={
+                  order.displacementStartedAt
+                    ? formatDateTime(order.displacementStartedAt)
+                    : "Nao iniciado"
+                }
+                tone={order.displacementStartedAt ? "blue" : "slate"}
+              />
+              <Info
+                label="Inicio"
+                value={
+                  order.startedAt
+                    ? formatDateTime(order.startedAt)
+                    : "Nao iniciado"
+                }
+                tone={order.startedAt ? "blue" : "slate"}
+              />
+              <Info
+                label="Pausa"
+                value={
+                  order.pausedAt ? formatDateTime(order.pausedAt) : "Sem pausa"
+                }
+              />
+              <Info
+                label="Conclusao"
+                value={
+                  order.finishedAt
+                    ? formatDateTime(order.finishedAt)
+                    : "Nao concluido"
+                }
+                tone={order.finishedAt ? "emerald" : "amber"}
+              />
+              {order.auvoId ? (
+                <Info label="Referencia Auvo" value={order.auvoId} />
+              ) : null}
             </div>
           </SectionCard>
         </div>
@@ -778,7 +890,9 @@ function Info({
         </p>
         <DataPill tone={tone}>{value}</DataPill>
       </div>
-      <p className="mt-3 break-words text-sm font-medium text-slate-800">{value}</p>
+      <p className="mt-3 break-words text-sm font-medium text-slate-800">
+        {value}
+      </p>
     </div>
   );
 }
@@ -787,7 +901,9 @@ function summarizeChecklist(checklistData?: Record<string, unknown> | null) {
   if (!checklistData) return [];
 
   return Object.entries(checklistData)
-    .filter(([, value]) => value !== null && value !== undefined && value !== "")
+    .filter(
+      ([, value]) => value !== null && value !== undefined && value !== "",
+    )
     .slice(0, 10)
     .map(([key, value]) => ({
       label: humanizeKey(key),
