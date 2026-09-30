@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -60,6 +61,12 @@ type Proposal = {
   paymentTerm?: string | null;
   deliveryLeadTimeDays?: number | null;
   paymentDetails?: string | null;
+  paymentSelections?: Array<{
+    purpose: "PARTS" | "SERVICES";
+    method: "PIX" | "BOLETO";
+    name: string;
+    qrCodeDataUrl?: string | null;
+  }> | null;
   hasDownPayment?: boolean | null;
   downPaymentAmount?: number | null;
   installmentCount?: number | null;
@@ -1055,12 +1062,22 @@ export default function ProposalDetailPage() {
         <SectionCard
           eyebrow="Financeiro"
           title="Dados para pagamento"
-          description="Observações complementares para o fechamento financeiro."
+          description="Contas selecionadas para peças e serviços no momento da criação da proposta."
         >
           <div className="rounded-[24px] border border-slate-200 bg-slate-50/85 px-4 py-4">
             <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">
               {proposal.paymentDetails}
             </p>
+            {proposal.paymentSelections?.some((entry) => entry.qrCodeDataUrl) ? (
+              <div className="mt-4 flex flex-wrap gap-4">
+                {proposal.paymentSelections.filter((entry) => entry.qrCodeDataUrl).map((entry) => (
+                  <div key={entry.purpose} className="rounded-xl border border-slate-200 bg-white p-3 text-center">
+                    <p className="mb-2 text-xs font-semibold text-slate-700">PIX {entry.purpose === "PARTS" ? "Peças" : "Serviços"}</p>
+                    <Image src={entry.qrCodeDataUrl!} alt={`QR Code PIX ${entry.name}`} width={160} height={160} unoptimized />
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         </SectionCard>
       ) : null}

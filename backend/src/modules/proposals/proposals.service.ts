@@ -25,6 +25,8 @@ import {
   ProposalHourType,
   ProposalItemKind,
   ProposalOrigin,
+  ProposalPaymentMethod,
+  ProposalPaymentPurpose,
   ProposalStatus,
   ProposalTechnicianType,
   ProposalType,
@@ -32,6 +34,7 @@ import {
   SalesOpportunityStage,
   UserRole,
 } from '@prisma/client';
+import { toDataURL } from 'qrcode';
 import { DatabaseService } from '../../database/database.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
@@ -208,6 +211,26 @@ export class ProposalsService {
         tx,
         createProposalDto.items,
       );
+      const usesManagedPayment =
+        origin === ProposalOrigin.MANITEC &&
+        (createProposalDto.type === ProposalType.PARTS_AND_SERVICES ||
+          createProposalDto.type === ProposalType.CONTRACT);
+      if (usesManagedPayment) {
+        await this.requireAvailablePaymentProfiles(
+          tx,
+          normalizedItems,
+          createProposalDto,
+        );
+      }
+      const paymentSelection = await this.preparePaymentSelections(
+        tx,
+        createProposalDto,
+      );
+      const paymentDetails =
+        paymentSelection?.details ??
+        (usesManagedPayment
+          ? null
+          : (createProposalDto.paymentDetails ?? null));
       const operationalExpenses = await this.prepareOperationalExpenses(
         tx,
         createProposalDto.operationalExpenses,
@@ -258,7 +281,10 @@ export class ProposalsService {
             | undefined,
           commercialSnapshot: this.buildCommercialSnapshot({
             origin,
-            dto: createProposalDto,
+            dto: {
+              ...createProposalDto,
+              paymentDetails: paymentDetails ?? undefined,
+            },
             generator: commercialGenerator,
             items: normalizedItems,
             operationalExpenses: operationalExpenses.items,
@@ -285,7 +311,10 @@ export class ProposalsService {
           freight: createProposalDto.freight,
           paymentTerm: createProposalDto.paymentTerm,
           deliveryLeadTimeDays: createProposalDto.deliveryLeadTimeDays,
-          paymentDetails: createProposalDto.paymentDetails,
+          paymentDetails,
+          paymentSelections: paymentSelection?.snapshots as unknown as
+            | Prisma.InputJsonValue
+            | undefined,
           hasDownPayment: Boolean(createProposalDto.hasDownPayment),
           downPaymentAmount: createProposalDto.hasDownPayment
             ? createProposalDto.downPaymentAmount
@@ -443,6 +472,7 @@ export class ProposalsService {
           paymentTerm: source.paymentTerm,
           deliveryLeadTimeDays: source.deliveryLeadTimeDays,
           paymentDetails: source.paymentDetails,
+          paymentSelections: source.paymentSelections ?? undefined,
           hasDownPayment: source.hasDownPayment,
           downPaymentAmount: source.downPaymentAmount,
           installmentCount: source.installmentCount,
@@ -963,8 +993,14 @@ export class ProposalsService {
     });
   }
 
-  getPricingOptions() {
+  async getPricingOptions() {
+    const rates = await this.prisma.proposalHourlyRate.findMany({
+      where: { isActive: true },
+      select: { hourType: true, technicianType: true, unitPrice: true },
+      orderBy: [{ sortOrder: 'asc' }, { technicianType: 'asc' }],
+    });
     return {
+      rates,
       hourTypes: [
         {
           value: ProposalHourType.ONE_OFF,
@@ -993,6 +1029,10 @@ export class ProposalsService {
         },
       ],
       technicianTypes: [
+        {
+          value: ProposalTechnicianType.ASSISTANT,
+          label: 'Assistente',
+        },
         {
           value: ProposalTechnicianType.JUNIOR_TECHNICIAN,
           label: 'Tecnico junior',
@@ -1037,11 +1077,68 @@ export class ProposalsService {
         category: true,
         description: true,
         scopeText: true,
+        sourceFileName: true,
         tags: true,
         compatibleOpportunityTypes: true,
       },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
+  }
+
+  async importScopeTemplate(file?: { originalname?: string; buffer?: Buffer }) {
+    if (!file?.buffer || !/\.txt$/i.test(file.originalname || '')) {
+      throw new BadRequestException('Selecione um arquivo .txt valido.');
+    }
+    if (file.buffer.length === 0 || file.buffer.length > 256 * 1024) {
+      throw new BadRequestException('O TXT deve ter entre 1 byte e 256 KB.');
+    }
+    let content: string;
+    if (file.buffer[0] === 0xff && file.buffer[1] === 0xfe) {
+      content = new TextDecoder('utf-16le').decode(file.buffer.subarray(2));
+    } else {
+      try {
+        content = new TextDecoder('utf-8', { fatal: true }).decode(file.buffer);
+      } catch {
+        content = new TextDecoder('windows-1252').decode(file.buffer);
+      }
+    }
+    const scopeText = content.replace(/^\uFEFF/, '').trim();
+    const hasInvalidControls = Array.from(scopeText).some((character) => {
+      const code = character.charCodeAt(0);
+      return code <= 8 || code === 11 || (code >= 14 && code <= 31);
+    });
+    if (scopeText.length < 10 || hasInvalidControls) {
+      throw new BadRequestException(
+        'O arquivo nao contem um escopo em texto valido.',
+      );
+    }
+    const sourceFileName = (file.originalname || '').slice(0, 240);
+    return this.prisma.proposalScopeTemplate.create({
+      data: {
+        name:
+          sourceFileName.replace(/\.txt$/i, '').trim() || 'Escopo importado',
+        category: 'Arquivo TXT',
+        sourceFileName,
+        scopeText,
+        active: true,
+      },
+    });
+  }
+
+  async getPaymentProfiles() {
+    const profiles = await this.prisma.proposalPaymentProfile.findMany({
+      where: { isActive: true },
+      orderBy: [{ purpose: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
+    });
+    return Promise.all(
+      profiles.map(async (profile) => ({
+        ...profile,
+        qrCodeDataUrl:
+          profile.method === ProposalPaymentMethod.PIX && profile.pixCopyPaste
+            ? await toDataURL(profile.pixCopyPaste, { margin: 1, width: 180 })
+            : null,
+      })),
+    );
   }
 
   async lookupGenerators(query?: string, take?: string, clientId?: string) {
@@ -1966,6 +2063,138 @@ export class ProposalsService {
     return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
   }
 
+  private async requireAvailablePaymentProfiles(
+    tx: Prisma.TransactionClient,
+    items: Array<{ kind: ProposalItemKind }>,
+    dto: CreateProposalDto,
+  ) {
+    const purposes = await tx.proposalPaymentProfile.findMany({
+      where: { isActive: true },
+      select: { purpose: true },
+    });
+    const hasParts = items.some(
+      (item) => item.kind === ProposalItemKind.PART_MATERIAL,
+    );
+    const hasServices = items.some(
+      (item) => item.kind !== ProposalItemKind.PART_MATERIAL,
+    );
+    if (
+      hasParts &&
+      purposes.some(
+        (profile) => profile.purpose === ProposalPaymentPurpose.PARTS,
+      ) &&
+      !dto.partsPaymentProfileId
+    ) {
+      throw new BadRequestException('Selecione a conta de pagamento de pecas.');
+    }
+    if (
+      hasServices &&
+      purposes.some(
+        (profile) => profile.purpose === ProposalPaymentPurpose.SERVICES,
+      ) &&
+      !dto.servicesPaymentProfileId
+    ) {
+      throw new BadRequestException(
+        'Selecione a conta de pagamento de servicos.',
+      );
+    }
+  }
+
+  private async preparePaymentSelections(
+    tx: Prisma.TransactionClient,
+    dto: CreateProposalDto,
+  ) {
+    const requested = [
+      { id: dto.partsPaymentProfileId, purpose: ProposalPaymentPurpose.PARTS },
+      {
+        id: dto.servicesPaymentProfileId,
+        purpose: ProposalPaymentPurpose.SERVICES,
+      },
+    ].filter(
+      (entry): entry is { id: string; purpose: ProposalPaymentPurpose } =>
+        Boolean(entry.id),
+    );
+    if (!requested.length) return null;
+
+    const profiles = await tx.proposalPaymentProfile.findMany({
+      where: { id: { in: requested.map((entry) => entry.id) }, isActive: true },
+    });
+    const profileById = new Map(
+      profiles.map((profile) => [profile.id, profile]),
+    );
+    const snapshots = await Promise.all(
+      requested.map(async ({ id, purpose }) => {
+        const profile = profileById.get(id);
+        if (!profile || profile.purpose !== purpose) {
+          throw new BadRequestException(
+            `Selecione um perfil de pagamento ativo para ${purpose === ProposalPaymentPurpose.PARTS ? 'pecas' : 'servicos'}.`,
+          );
+        }
+        if (
+          profile.method === ProposalPaymentMethod.PIX &&
+          (!profile.pixKey || !profile.pixCopyPaste)
+        ) {
+          throw new BadRequestException(
+            'O perfil PIX precisa de chave e codigo para QR Code.',
+          );
+        }
+        if (
+          profile.method === ProposalPaymentMethod.BOLETO &&
+          !profile.boletoInstructions
+        ) {
+          throw new BadRequestException(
+            'O perfil de boleto precisa de instrucoes de cobranca.',
+          );
+        }
+        return {
+          id: profile.id,
+          name: profile.name,
+          purpose: profile.purpose,
+          method: profile.method,
+          beneficiary: profile.beneficiary,
+          beneficiaryDocument: profile.beneficiaryDocument,
+          bankName: profile.bankName,
+          agency: profile.agency,
+          accountNumber: profile.accountNumber,
+          pixKey: profile.pixKey,
+          pixCopyPaste: profile.pixCopyPaste,
+          boletoInstructions: profile.boletoInstructions,
+          qrCodeDataUrl:
+            profile.method === ProposalPaymentMethod.PIX && profile.pixCopyPaste
+              ? await toDataURL(profile.pixCopyPaste, { margin: 1, width: 180 })
+              : null,
+        };
+      }),
+    );
+    const details = snapshots
+      .map((profile) =>
+        [
+          profile.purpose === ProposalPaymentPurpose.PARTS
+            ? 'Pecas'
+            : 'Servicos',
+          profile.method === ProposalPaymentMethod.PIX ? 'PIX' : 'Boleto',
+          `Favorecido: ${profile.beneficiary}`,
+          profile.beneficiaryDocument
+            ? `CPF/CNPJ: ${profile.beneficiaryDocument}`
+            : null,
+          profile.bankName ? `Banco: ${profile.bankName}` : null,
+          profile.agency ? `Agencia: ${profile.agency}` : null,
+          profile.accountNumber ? `Conta: ${profile.accountNumber}` : null,
+          profile.pixKey ? `Chave PIX: ${profile.pixKey}` : null,
+          profile.pixCopyPaste
+            ? `PIX copia e cola: ${profile.pixCopyPaste}`
+            : null,
+          profile.boletoInstructions
+            ? `Boleto: ${profile.boletoInstructions}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' | '),
+      )
+      .join('\n');
+    return { snapshots, details };
+  }
+
   private async prepareProposalItems(
     tx: Prisma.TransactionClient,
     items: CreateProposalDto['items'],
@@ -1985,10 +2214,21 @@ export class ProposalsService {
       catalogIds.length > 0
         ? await tx.catalogItem.findMany({
             where: { id: { in: catalogIds }, isActive: true },
-            select: { id: true, type: true, name: true },
+            select: { id: true, type: true, name: true, basePrice: true },
           })
         : [];
     const catalogById = new Map(catalogItems.map((item) => [item.id, item]));
+    const hourlyRates = items.some(
+      (item) => item.kind === ProposalItemKind.HOURLY_SERVICE,
+    )
+      ? await tx.proposalHourlyRate.findMany({ where: { isActive: true } })
+      : [];
+    const rateByCombination = new Map(
+      hourlyRates.map((rate) => [
+        `${rate.hourType}:${rate.technicianType}`,
+        rate.unitPrice,
+      ]),
+    );
 
     return items.map((item, index) => {
       const catalogItem = item.catalogItemId
@@ -2018,8 +2258,28 @@ export class ProposalsService {
         );
       }
 
+      if (
+        catalogItem?.type === 'SERVICE' &&
+        kind !== ProposalItemKind.CATALOG_SERVICE
+      ) {
+        throw new BadRequestException(
+          `Item ${index + 1}: servicos do catalogo devem manter seu tipo e preco cadastrado.`,
+        );
+      }
+      if (
+        kind === ProposalItemKind.CATALOG_SERVICE &&
+        catalogItem?.type !== 'SERVICE'
+      ) {
+        throw new BadRequestException(
+          `Item ${index + 1}: selecione um servico valido do catalogo.`,
+        );
+      }
+
       if (kind === ProposalItemKind.HOURLY_SERVICE) {
-        return this.prepareHourlyItem(item, index);
+        const rate = rateByCombination.get(
+          `${item.hourType ?? ProposalHourType.ONE_OFF}:${item.technicianType}`,
+        );
+        return this.prepareHourlyItem(item, index, rate);
       }
 
       if (kind === ProposalItemKind.OTHER && !item.description?.trim()) {
@@ -2029,11 +2289,14 @@ export class ProposalsService {
       }
 
       const quantity = Number(item.quantity ?? 1);
-      const unitPrice = Number(item.unitPrice ?? 0);
-      const discountPercent = this.normalizeDiscountPercent(
-        item.discountPercent ?? 0,
-        index,
-      );
+      const unitPrice =
+        kind === ProposalItemKind.CATALOG_SERVICE
+          ? Number(catalogItem?.basePrice ?? 0)
+          : Number(item.unitPrice ?? 0);
+      const discountPercent =
+        kind === ProposalItemKind.CATALOG_SERVICE
+          ? 0
+          : this.normalizeDiscountPercent(item.discountPercent ?? 0, index);
       if (!Number.isFinite(quantity) || quantity <= 0) {
         throw new BadRequestException(
           `Item ${index + 1}: quantidade deve ser maior que zero.`,
@@ -2042,6 +2305,11 @@ export class ProposalsService {
       if (!Number.isFinite(unitPrice) || unitPrice < 0) {
         throw new BadRequestException(
           `Item ${index + 1}: valor de venda invalido.`,
+        );
+      }
+      if (kind === ProposalItemKind.CATALOG_SERVICE && unitPrice <= 0) {
+        throw new BadRequestException(
+          `Item ${index + 1}: o servico precisa de um preco de venda no catalogo.`,
         );
       }
 
@@ -2132,14 +2400,12 @@ export class ProposalsService {
   private prepareHourlyItem(
     item: CreateProposalDto['items'][number],
     index: number,
+    configuredRate?: number,
   ) {
     const hours = Number(item.hours ?? item.quantity ?? 0);
-    const unitPrice = Number(item.unitPrice ?? 0);
+    const unitPrice = Number(configuredRate ?? 0);
     const hourType = item.hourType ?? ProposalHourType.ONE_OFF;
-    const discountPercent = this.normalizeDiscountPercent(
-      item.discountPercent ?? (hourType === ProposalHourType.CONTRACT ? 20 : 0),
-      index,
-    );
+    const discountPercent = hourType === ProposalHourType.CONTRACT ? 20 : 0;
 
     if (!Number.isFinite(hours) || hours <= 0) {
       throw new BadRequestException(
@@ -2148,7 +2414,7 @@ export class ProposalsService {
     }
     if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
       throw new BadRequestException(
-        `Item ${index + 1}: informe valor hora de venda maior que zero.`,
+        `Item ${index + 1}: configure e ative a tarifa desta hora no Manitec Studio.`,
       );
     }
     if (!item.technicianType) {

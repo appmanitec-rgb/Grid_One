@@ -84,8 +84,8 @@ export class StudioController {
 
   @Get('data/:resource')
   @RequireAccessPolicy('studio.access', 'studio.dataView')
-  listRecords(@Param('resource') resource: string) {
-    return this.studioService.listRecords(resource);
+  listRecords(@Param('resource') resource: string, @Req() req: AuthRequest) {
+    return this.studioService.listRecords(resource, req.user ?? {});
   }
 
   @Post('imports/preview')

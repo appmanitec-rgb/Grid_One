@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
@@ -108,8 +109,29 @@ type HourlyItem = {
   hourType: string;
   technicianType: string;
   hours: string;
-  unitPrice: string;
   discountPercent: string;
+};
+
+type HourlyRateOption = {
+  hourType: string;
+  technicianType: string;
+  unitPrice: number;
+};
+
+type PaymentProfile = {
+  id: string;
+  name: string;
+  purpose: "PARTS" | "SERVICES";
+  method: "PIX" | "BOLETO";
+  beneficiary: string;
+  beneficiaryDocument?: string | null;
+  bankName?: string | null;
+  agency?: string | null;
+  accountNumber?: string | null;
+  pixKey?: string | null;
+  pixCopyPaste?: string | null;
+  boletoInstructions?: string | null;
+  qrCodeDataUrl?: string | null;
 };
 
 type OtherItem = {
@@ -131,6 +153,7 @@ type ScopeTemplate = {
   category?: string | null;
   description?: string | null;
   scopeText: string;
+  sourceFileName?: string | null;
   tags?: string[];
   compatibleOpportunityTypes?: string[];
 };
@@ -257,7 +280,7 @@ function joinScopeTexts(texts: string[]) {
   const unique = Array.from(
     new Set(texts.map((text) => text.trim()).filter(Boolean)),
   );
-  return unique.map((text) => `- ${text.replace(/^-+\s*/, "")}`).join("\n");
+  return unique.join("\n\n");
 }
 
 function mergeCatalogOptions(
@@ -358,6 +381,60 @@ function SearchableSelect({
   );
 }
 
+function PaymentProfileSelector({ label, purpose, profiles, value, onChange }: {
+  label: string;
+  purpose: PaymentProfile["purpose"];
+  profiles: PaymentProfile[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const choices = profiles.filter((profile) => profile.purpose === purpose);
+  const selected = choices.find((profile) => profile.id === value);
+  return (
+    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+      <label className="block text-sm font-semibold text-zinc-800">{label}</label>
+      <p className="mt-1 text-xs text-zinc-500">Selecione uma conta cadastrada; os dados não podem ser alterados na proposta.</p>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-3 w-full rounded-lg border border-zinc-300 bg-white p-2.5 text-sm"
+      >
+        <option value="">Selecione PIX ou boleto</option>
+        {choices.map((profile) => (
+          <option key={profile.id} value={profile.id}>
+            {profile.method === "PIX" ? "PIX" : "Boleto"} · {profile.name}
+          </option>
+        ))}
+      </select>
+      {choices.length === 0 ? (
+        <p className="mt-3 text-xs text-amber-800">Nenhum perfil ativo. Cadastre os dados reais no Manitec Studio.</p>
+      ) : null}
+      {selected ? (
+        <div className="mt-3 rounded-lg border border-zinc-200 bg-white p-3 text-sm text-zinc-700">
+          <p className="font-bold text-zinc-900">{selected.beneficiary}</p>
+          {selected.beneficiaryDocument ? <p>CPF/CNPJ: {selected.beneficiaryDocument}</p> : null}
+          {selected.bankName ? <p>Banco: {selected.bankName}</p> : null}
+          {selected.agency ? <p>Agência: {selected.agency}</p> : null}
+          {selected.accountNumber ? <p>Conta: {selected.accountNumber}</p> : null}
+          {selected.method === "PIX" ? (
+            <div className="mt-2 flex flex-wrap items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <p>Chave PIX: <strong>{selected.pixKey}</strong></p>
+                {selected.pixCopyPaste ? <p className="mt-1 break-all text-xs">Copia e cola: {selected.pixCopyPaste}</p> : null}
+              </div>
+              {selected.qrCodeDataUrl ? (
+                <Image src={selected.qrCodeDataUrl} alt={`QR Code PIX para ${label.toLowerCase()}`} width={120} height={120} unoptimized className="rounded border border-zinc-200" />
+              ) : null}
+            </div>
+          ) : selected.boletoInstructions ? (
+            <p className="mt-2 whitespace-pre-wrap">{selected.boletoInstructions}</p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function NewProposalPage() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -378,6 +455,8 @@ export default function NewProposalPage() {
   const [scopeTemplates, setScopeTemplates] = useState<ScopeTemplate[]>([]);
   const [hourTypes, setHourTypes] = useState<PricingOption[]>([]);
   const [technicianTypes, setTechnicianTypes] = useState<PricingOption[]>([]);
+  const [hourlyRates, setHourlyRates] = useState<HourlyRateOption[]>([]);
+  const [paymentProfiles, setPaymentProfiles] = useState<PaymentProfile[]>([]);
   const [linkedOpportunity, setLinkedOpportunity] =
     useState<LinkedOpportunity | null>(null);
   const [loadingOpportunity, setLoadingOpportunity] = useState(false);
@@ -438,6 +517,8 @@ export default function NewProposalPage() {
   const [selectedScopeTemplateIds, setSelectedScopeTemplateIds] = useState<
     string[]
   >([]);
+  const [scopeSearch, setScopeSearch] = useState("");
+  const [scopeUploadBusy, setScopeUploadBusy] = useState(false);
   const [freight, setFreight] = useState("FOB");
   const [validUntil, setValidUntil] = useState("");
   const [paymentTerm, setPaymentTerm] = useState("");
@@ -445,7 +526,8 @@ export default function NewProposalPage() {
     [],
   );
   const [deliveryLeadTimeDays, setDeliveryLeadTimeDays] = useState("");
-  const [paymentDetails, setPaymentDetails] = useState("");
+  const [partsPaymentProfileId, setPartsPaymentProfileId] = useState("");
+  const [servicesPaymentProfileId, setServicesPaymentProfileId] = useState("");
   const [hasDownPayment, setHasDownPayment] = useState(false);
   const [downPaymentAmount, setDownPaymentAmount] = useState("");
   const [installmentCount, setInstallmentCount] = useState("1");
@@ -469,6 +551,7 @@ export default function NewProposalPage() {
           servicesRes,
           pricingRes,
           scopesRes,
+          paymentProfilesRes,
           controlOptions,
         ] = await Promise.all([
           apiFetch(apiUrl("/clients/lookup?take=10"), { cache: "no-store" }),
@@ -480,6 +563,7 @@ export default function NewProposalPage() {
           }),
           apiFetch(apiUrl("/proposals/pricing-options"), { cache: "no-store" }),
           apiFetch(apiUrl("/proposals/scope-templates"), { cache: "no-store" }),
+          apiFetch(apiUrl("/proposals/payment-profiles"), { cache: "no-store" }),
           loadControlOptions(["PAYMENT_TERM"]),
         ]);
 
@@ -492,12 +576,16 @@ export default function NewProposalPage() {
           const pricing = (await pricingRes.json()) as {
             hourTypes?: PricingOption[];
             technicianTypes?: PricingOption[];
+            rates?: HourlyRateOption[];
           };
           setHourTypes(pricing.hourTypes || []);
           setTechnicianTypes(pricing.technicianTypes || []);
+          setHourlyRates(pricing.rates || []);
         }
         if (scopesRes.ok)
           setScopeTemplates((await scopesRes.json()) as ScopeTemplate[]);
+        if (paymentProfilesRes.ok)
+          setPaymentProfiles((await paymentProfilesRes.json()) as PaymentProfile[]);
         setPaymentTermOptions(controlOptions.PAYMENT_TERM || []);
         if (!clientsRes.ok || !partsRes.ok || !servicesRes.ok) {
           setFeedback({
@@ -819,18 +907,29 @@ export default function NewProposalPage() {
     if (type === "SERVICE") setServiceOptions(payload);
   }
 
-  const addHourlyService = () =>
+  const hourlyRateFor = (item: Pick<HourlyItem, "hourType" | "technicianType">) =>
+    hourlyRates.find(
+      (rate) =>
+        rate.hourType === item.hourType &&
+        rate.technicianType === item.technicianType,
+    )?.unitPrice ?? 0;
+  const addHourlyService = () => {
+    const firstRate = hourlyRates[0];
+    if (!firstRate) {
+      setFeedback({ kind: "error", text: "Configure e ative as tarifas de hora no Manitec Studio antes de adicionar horas." });
+      return;
+    }
     setHourlyServices((prev) => [
       ...prev,
       {
         description: "Servico por hora",
-        hourType: "ONE_OFF",
-        technicianType: "MID_LEVEL_TECHNICIAN",
+        hourType: firstRate.hourType,
+        technicianType: firstRate.technicianType,
         hours: "1",
-        unitPrice: "",
-        discountPercent: "0",
+        discountPercent: defaultHourlyDiscount(firstRate.hourType),
       },
     ]);
+  };
   const removeHourlyService = (index: number) => {
     if (!confirmDeletion("este servico por hora")) return;
     setHourlyServices((prev) => prev.filter((_, i) => i !== index));
@@ -845,6 +944,10 @@ export default function NewProposalPage() {
       copy[index] = { ...copy[index], [field]: value };
       if (field === "hourType") {
         copy[index].discountPercent = defaultHourlyDiscount(value);
+        if (!hourlyRateFor(copy[index])) {
+          copy[index].technicianType =
+            hourlyRates.find((rate) => rate.hourType === value)?.technicianType || "";
+        }
       }
       return copy;
     });
@@ -1074,15 +1177,38 @@ export default function NewProposalPage() {
   );
   function appendScopeTemplates() {
     if (!combinedScopeText) return;
-    const currentParts = scope
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-    const next = joinScopeTexts([
-      ...currentParts,
-      ...selectedScopeTemplates.map((template) => template.scopeText),
-    ]);
-    setScope(next);
+    const additions = selectedScopeTemplates
+      .map((template) => template.scopeText.trim())
+      .filter((text) => text && !scope.includes(text));
+    setScope([scope.trim(), ...additions].filter(Boolean).join("\n\n"));
+    setSelectedScopeTemplateIds([]);
+  }
+
+  async function uploadScopeTxt(file?: File) {
+    if (!file) return;
+    setScopeUploadBusy(true);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const response = await apiFetch("/proposals/scope-templates/upload", {
+        method: "POST",
+        body,
+      });
+      if (!response.ok) {
+        throw new Error(await readApiErrorMessage(response, "Falha ao importar o TXT."));
+      }
+      const imported = (await response.json()) as ScopeTemplate;
+      setScopeTemplates((current) => [...current, imported]);
+      setSelectedScopeTemplateIds((current) => [...current, imported.id]);
+      setFeedback({ kind: "success", text: `Escopo “${imported.name}” importado. Selecione Adicionar ao escopo para usar.` });
+    } catch (cause: unknown) {
+      setFeedback({
+        kind: "error",
+        text: cause instanceof Error ? cause.message : "Falha ao importar o TXT.",
+      });
+    } finally {
+      setScopeUploadBusy(false);
+    }
   }
 
   useEffect(() => {
@@ -1184,14 +1310,17 @@ export default function NewProposalPage() {
   const hourlyTotal = useMemo(
     () =>
       hourlyServices.reduce((acc, item) => {
-        const gross = Number(item.hours || 0) * Number(item.unitPrice || 0);
+        const rate = hourlyRates.find(
+          (entry) => entry.hourType === item.hourType && entry.technicianType === item.technicianType,
+        )?.unitPrice ?? 0;
+        const gross = Number(item.hours || 0) * rate;
         const discount = Math.min(
           100,
           Math.max(0, Number(item.discountPercent || 0)),
         );
         return acc + gross * (1 - discount / 100);
       }, 0),
-    [hourlyServices],
+    [hourlyServices, hourlyRates],
   );
   const otherTotal = useMemo(
     () =>
@@ -1319,6 +1448,26 @@ export default function NewProposalPage() {
       });
       return;
     }
+    if (parts.some((item) => !item.catalogItemId) || labor.some((item) => !item.catalogItemId)) {
+      setFeedback({ kind: "error", text: "Selecione cada peça e serviço na lista de resultados do catálogo." });
+      return;
+    }
+    if (labor.some((item) => Number(item.unitPrice) <= 0)) {
+      setFeedback({ kind: "error", text: "Há serviço sem preço cadastrado no catálogo." });
+      return;
+    }
+    if (hourlyServices.some((item) => hourlyRateFor(item) <= 0)) {
+      setFeedback({ kind: "error", text: "Há uma hora sem tarifa ativa no Manitec Studio." });
+      return;
+    }
+    if (partsSubtotal > 0 && paymentProfiles.some((profile) => profile.purpose === "PARTS") && !partsPaymentProfileId) {
+      setFeedback({ kind: "error", text: "Selecione a conta para pagamento de peças." });
+      return;
+    }
+    if (servicesSubtotal > 0 && paymentProfiles.some((profile) => profile.purpose === "SERVICES") && !servicesPaymentProfileId) {
+      setFeedback({ kind: "error", text: "Selecione a conta para pagamento de serviços." });
+      return;
+    }
     if (hasDownPayment && entryAmount <= 0) {
       setFeedback({
         kind: "error",
@@ -1353,7 +1502,7 @@ export default function NewProposalPage() {
         hourType: item.hourType,
         technicianType: item.technicianType,
         hours: Number(item.hours || 0),
-        unitPrice: Number(item.unitPrice || 0),
+        unitPrice: hourlyRateFor(item),
         discountPercent: Number(item.discountPercent || 0),
       })),
       ...otherItems.map((item) => ({
@@ -1377,7 +1526,8 @@ export default function NewProposalPage() {
       deliveryLeadTimeDays: deliveryLeadTimeDays
         ? Number(deliveryLeadTimeDays)
         : undefined,
-      paymentDetails: paymentDetails || undefined,
+      partsPaymentProfileId: partsPaymentProfileId || undefined,
+      servicesPaymentProfileId: servicesPaymentProfileId || undefined,
       hasDownPayment,
       downPaymentAmount: hasDownPayment ? entryAmount : undefined,
       installmentCount: installments,
@@ -2222,15 +2372,9 @@ export default function NewProposalPage() {
                 <label className="mb-1 block text-xs font-medium text-purple-600">
                   Valor (R$)
                 </label>
-                <input
-                  type="number"
-                  value={lab.unitPrice}
-                  onChange={(e) =>
-                    updateLabor(index, "unitPrice", e.target.value)
-                  }
-                  className="w-full rounded-md border border-zinc-300 p-2 text-sm font-bold text-purple-700"
-                  placeholder="0.00"
-                />
+                <output className="block w-full rounded-md border border-zinc-300 bg-white p-2 text-sm font-bold text-purple-700" aria-label="Valor definido no cadastro do servico">
+                  {lab.catalogItemId ? `R$ ${formatMoney(Number(lab.unitPrice || 0))}` : "Selecione"}
+                </output>
               </div>
               <button
                 type="button"
@@ -2250,17 +2394,24 @@ export default function NewProposalPage() {
                 4. Servico por hora
               </h2>
               <p className="text-xs text-zinc-500">
-                Valor de venda ao cliente. Custo interno nao e exibido.
+                Tarifa de venda definida no Manitec Studio. O vendedor informa apenas o tipo e as horas.
               </p>
             </div>
             <button
               type="button"
               onClick={addHourlyService}
-              className="rounded-md bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-100"
+              disabled={hourlyRates.length === 0}
+              className="rounded-md bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
               + Adicionar hora
             </button>
           </div>
+
+          {hourlyRates.length === 0 ? (
+            <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              Ainda não há tarifas de hora ativas. Um responsável deve cadastrá-las no Manitec Studio.
+            </p>
+          ) : null}
 
           {hourlyServices.length === 0 ? (
             <p className="text-sm italic text-zinc-500">
@@ -2269,7 +2420,8 @@ export default function NewProposalPage() {
           ) : null}
 
           {hourlyServices.map((item, index) => {
-            const gross = Number(item.hours || 0) * Number(item.unitPrice || 0);
+            const unitPrice = hourlyRateFor(item);
+            const gross = Number(item.hours || 0) * unitPrice;
             const discount = Math.min(
               100,
               Math.max(0, Number(item.discountPercent || 0)),
@@ -2295,9 +2447,8 @@ export default function NewProposalPage() {
                   }
                   className="rounded-md border border-amber-200 bg-white p-2 text-sm"
                 >
-                  {(hourTypes.length
-                    ? hourTypes
-                    : [{ value: "ONE_OFF", label: "Hora avulsa" }]
+                  {hourTypes.filter((option) =>
+                    hourlyRates.some((rate) => rate.hourType === option.value),
                   ).map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
@@ -2311,14 +2462,10 @@ export default function NewProposalPage() {
                   }
                   className="rounded-md border border-amber-200 bg-white p-2 text-sm"
                 >
-                  {(technicianTypes.length
-                    ? technicianTypes
-                    : [
-                        {
-                          value: "MID_LEVEL_TECHNICIAN",
-                          label: "Tecnico pleno",
-                        },
-                      ]
+                  {technicianTypes.filter((option) =>
+                    hourlyRates.some((rate) =>
+                      rate.hourType === item.hourType && rate.technicianType === option.value,
+                    ),
                   ).map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
@@ -2336,33 +2483,13 @@ export default function NewProposalPage() {
                   className="rounded-md border border-amber-200 bg-white p-2 text-sm"
                   placeholder="Horas"
                 />
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={item.unitPrice}
-                  onChange={(e) =>
-                    updateHourlyService(index, "unitPrice", e.target.value)
-                  }
-                  className="rounded-md border border-amber-200 bg-white p-2 text-sm"
-                  placeholder="Valor hora"
-                />
+                <output className="rounded-md border border-amber-200 bg-white p-2 text-sm font-semibold text-amber-900" aria-label="Valor da hora definido no Studio">
+                  R$ {formatMoney(unitPrice)} / hora
+                </output>
                 <div className="flex items-center gap-2 md:col-span-6">
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={item.discountPercent}
-                    onChange={(e) =>
-                      updateHourlyService(
-                        index,
-                        "discountPercent",
-                        e.target.value,
-                      )
-                    }
-                    className="w-28 rounded-md border border-amber-200 bg-white p-2 text-sm"
-                    placeholder="Desc. %"
-                  />
+                  <output className="rounded-md border border-amber-200 bg-white p-2 text-sm text-amber-900" aria-label="Desconto da hora definido pela regra comercial">
+                    Desconto: {discount}%
+                  </output>
                   <span className="text-sm font-semibold text-amber-800">
                     Total: R$ {formatMoney(total)}
                   </span>
@@ -2462,19 +2589,45 @@ export default function NewProposalPage() {
               <div className="mb-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <p className="text-xs font-bold uppercase tracking-[0.14em] text-zinc-500">
-                    Escopos prontos
+                    Biblioteca de escopos prontos
                   </p>
-                  <button
-                    type="button"
-                    onClick={appendScopeTemplates}
-                    disabled={selectedScopeTemplates.length === 0}
-                    className="rounded bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
-                  >
-                    Adicionar ao escopo
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <label className="cursor-pointer rounded border border-sky-200 bg-white px-3 py-1.5 text-xs font-semibold text-sky-800">
+                      {scopeUploadBusy ? "Importando..." : "Importar arquivo TXT"}
+                      <input
+                        type="file"
+                        accept=".txt,text/plain"
+                        disabled={scopeUploadBusy}
+                        className="sr-only"
+                        onChange={(event) => {
+                          void uploadScopeTxt(event.target.files?.[0]);
+                          event.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={appendScopeTemplates}
+                      disabled={selectedScopeTemplates.length === 0}
+                      className="rounded bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                    >
+                      Adicionar ao escopo
+                    </button>
+                  </div>
                 </div>
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                  {scopeTemplates.map((template) => (
+                <input
+                  type="search"
+                  value={scopeSearch}
+                  onChange={(event) => setScopeSearch(event.target.value)}
+                  placeholder="Pesquisar escopos por nome, arquivo ou categoria"
+                  className="mb-3 w-full rounded-lg border border-zinc-300 bg-white p-2 text-sm"
+                />
+                <div className="grid max-h-64 grid-cols-1 gap-2 overflow-y-auto md:grid-cols-3">
+                  {scopeTemplates.filter((template) =>
+                    `${template.name} ${template.category || ""} ${template.sourceFileName || ""}`
+                      .toLocaleLowerCase("pt-BR")
+                      .includes(scopeSearch.trim().toLocaleLowerCase("pt-BR")),
+                  ).map((template) => (
                     <label
                       key={template.id}
                       className="flex items-start gap-2 rounded border border-zinc-200 bg-white p-2 text-sm"
@@ -2495,20 +2648,23 @@ export default function NewProposalPage() {
                           {template.name}
                         </span>
                         <span className="block text-xs text-zinc-500">
-                          {template.category || "Escopo comercial"}
+                          {template.sourceFileName || template.category || "Escopo comercial"}
                         </span>
                       </span>
                     </label>
                   ))}
                 </div>
+                {scopeTemplates.length === 0 ? (
+                  <p className="mt-2 text-sm text-zinc-500">Nenhum escopo cadastrado. Importe um arquivo TXT para começar.</p>
+                ) : null}
                 {combinedScopeText ? (
-                  <pre className="mt-3 whitespace-pre-wrap rounded border border-zinc-200 bg-white p-3 text-xs leading-5 text-zinc-700">
+                  <pre className="mt-3 max-h-52 overflow-y-auto whitespace-pre-wrap rounded border border-zinc-200 bg-white p-3 text-xs leading-5 text-zinc-700">
                     {combinedScopeText}
                   </pre>
                 ) : null}
               </div>
               <textarea
-                rows={6}
+                rows={14}
                 value={scope}
                 onChange={(e) => setScope(e.target.value)}
                 className="w-full rounded-lg border border-zinc-300 p-3 text-sm"
@@ -2581,16 +2737,20 @@ export default function NewProposalPage() {
               </select>
             </div>
 
-            <div className="md:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-zinc-700">
-                Dados para pagamento
-              </label>
-              <textarea
-                rows={2}
-                value={paymentDetails}
-                onChange={(e) => setPaymentDetails(e.target.value)}
-                placeholder="PIX, banco, agencia, conta, favorecido"
-                className="w-full rounded-lg border border-zinc-300 p-2.5 text-sm"
+            <div className="grid gap-4 md:col-span-4 lg:grid-cols-2">
+              <PaymentProfileSelector
+                label="Pagamento de peças"
+                purpose="PARTS"
+                profiles={paymentProfiles}
+                value={partsPaymentProfileId}
+                onChange={setPartsPaymentProfileId}
+              />
+              <PaymentProfileSelector
+                label="Pagamento de serviços"
+                purpose="SERVICES"
+                profiles={paymentProfiles}
+                value={servicesPaymentProfileId}
+                onChange={setServicesPaymentProfileId}
               />
             </div>
 

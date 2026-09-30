@@ -100,8 +100,10 @@ export default function DataExplorer({
       ),
     [resource.fields],
   );
-  const canViewData = access.studio.dataView || access.studio.access;
-  const canEditData = resource.canEdit && access.studio.dataEdit;
+  const canViewData = (access.studio.dataView || access.studio.access) &&
+    (resource.key !== "proposalPaymentProfiles" || access.finance.view || access.finance.update);
+  const canEditData = resource.canEdit && access.studio.dataEdit &&
+    (resource.key !== "proposalPaymentProfiles" || access.finance.update);
   const canExportData = resource.canExport && access.studio.dataExport;
   const canImportData =
     resource.canImport &&
@@ -1155,6 +1157,20 @@ function EditField({
             </option>
           ))}
         </select>
+      </label>
+    );
+  }
+
+  if (field.type === "textarea") {
+    return (
+      <label className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+        {field.label}
+        <textarea
+          value={String(value ?? "")}
+          onChange={(event) => onChange(event.target.value)}
+          rows={4}
+          className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium normal-case text-slate-800"
+        />
       </label>
     );
   }

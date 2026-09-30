@@ -5,6 +5,8 @@ import {
   ProposalHourType,
   ProposalItemKind,
   ProposalOrigin,
+  ProposalPaymentMethod,
+  ProposalPaymentPurpose,
   ProposalStatus,
   ProposalTechnicianType,
   ProposalType,
@@ -34,7 +36,9 @@ describe('ProposalsService', () => {
       update: jest.Mock;
     };
     controlOption: { findMany: jest.Mock };
-    proposalScopeTemplate: { findMany: jest.Mock };
+    proposalScopeTemplate: { findMany: jest.Mock; create: jest.Mock };
+    proposalHourlyRate: { findMany: jest.Mock };
+    proposalPaymentProfile: { findMany: jest.Mock };
     user: { findFirst: jest.Mock; findUnique: jest.Mock };
     client: { findUnique: jest.Mock };
     site: { findUnique: jest.Mock };
@@ -87,7 +91,10 @@ describe('ProposalsService', () => {
       },
       proposalScopeTemplate: {
         findMany: jest.fn(),
+        create: jest.fn(),
       },
+      proposalHourlyRate: { findMany: jest.fn().mockResolvedValue([]) },
+      proposalPaymentProfile: { findMany: jest.fn().mockResolvedValue([]) },
       user: {
         findFirst: jest.fn(),
         findUnique: jest.fn(),
@@ -735,6 +742,13 @@ describe('ProposalsService', () => {
     db.salesOpportunity.findUnique.mockResolvedValue(null);
     db.user.findFirst.mockResolvedValue({ id: 'seller-1' });
     db.catalogItem.findMany.mockResolvedValue([]);
+    db.proposalHourlyRate.findMany.mockResolvedValue([
+      {
+        hourType: ProposalHourType.CONTRACT,
+        technicianType: ProposalTechnicianType.SENIOR_TECHNICIAN,
+        unitPrice: 200,
+      },
+    ]);
     db.proposal.findMany.mockResolvedValue([]);
     db.proposal.create.mockResolvedValue({ id: 'proposal-1' });
     db.proposal.findUnique.mockResolvedValue({ id: 'proposal-1' });
@@ -751,7 +765,8 @@ describe('ProposalsService', () => {
             hourType: ProposalHourType.CONTRACT,
             technicianType: ProposalTechnicianType.SENIOR_TECHNICIAN,
             hours: 5,
-            unitPrice: 200,
+            unitPrice: 9999,
+            discountPercent: 99,
           },
         ],
       },
@@ -777,6 +792,167 @@ describe('ProposalsService', () => {
         }),
       }),
     );
+  });
+
+  it('uses the catalog price for a service even if the request sends another price', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      role: UserRole.ADMIN,
+      linkedClientId: null,
+    });
+    db.salesOpportunity.findUnique.mockResolvedValue(null);
+    db.user.findFirst.mockResolvedValue({ id: 'seller-1' });
+    db.catalogItem.findMany.mockResolvedValue([
+      {
+        id: 'service-1',
+        type: 'SERVICE',
+        name: 'Manutencao',
+        basePrice: 350,
+      },
+    ]);
+    db.proposal.findMany.mockResolvedValue([]);
+    db.proposal.create.mockResolvedValue({ id: 'proposal-1' });
+    db.proposal.findUnique.mockResolvedValue({ id: 'proposal-1' });
+
+    await service.create(
+      {
+        clientId: 'client-1',
+        userId: 'seller-1',
+        type: ProposalType.SERVICES,
+        items: [
+          {
+            kind: ProposalItemKind.CATALOG_SERVICE,
+            catalogItemId: 'service-1',
+            quantity: 2,
+            unitPrice: 9999,
+            discountPercent: 90,
+          },
+        ],
+      },
+      'admin-1',
+    );
+
+    expect(db.proposal.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          totalValue: 700,
+          items: {
+            create: [
+              expect.objectContaining({
+                unitPrice: 350,
+                discountPercent: 0,
+                totalPrice: 700,
+              }),
+            ],
+          },
+        }),
+      }),
+    );
+  });
+
+  it('requires a configured service payment account and saves the selected PIX data', async () => {
+    db.user.findUnique.mockResolvedValue({
+      id: 'admin-1',
+      role: UserRole.ADMIN,
+      linkedClientId: null,
+    });
+    db.salesOpportunity.findUnique.mockResolvedValue(null);
+    db.user.findFirst.mockResolvedValue({ id: 'seller-1' });
+    db.catalogItem.findMany.mockResolvedValue([
+      {
+        id: 'service-1',
+        type: 'SERVICE',
+        name: 'Manutencao',
+        basePrice: 350,
+      },
+    ]);
+    db.proposal.findMany.mockResolvedValue([]);
+    db.proposal.create.mockResolvedValue({ id: 'proposal-1' });
+    db.proposal.findUnique.mockResolvedValue({ id: 'proposal-1' });
+    db.proposalPaymentProfile.findMany.mockImplementation(
+      ({ select }: { select?: { purpose?: boolean } }) =>
+        Promise.resolve(
+          select
+            ? [{ purpose: ProposalPaymentPurpose.SERVICES }]
+            : [
+                {
+                  id: 'payment-1',
+                  name: 'PIX servicos',
+                  purpose: ProposalPaymentPurpose.SERVICES,
+                  method: ProposalPaymentMethod.PIX,
+                  beneficiary: 'Manitec',
+                  beneficiaryDocument: null,
+                  bankName: null,
+                  agency: null,
+                  accountNumber: null,
+                  pixKey: 'financeiro@manitec.com.br',
+                  pixCopyPaste: '00020101021226840014BR.GOV.BCB.PIX',
+                  boletoInstructions: null,
+                },
+              ],
+        ),
+    );
+    const input = {
+      clientId: 'client-1',
+      userId: 'seller-1',
+      type: ProposalType.PARTS_AND_SERVICES,
+      items: [
+        {
+          kind: ProposalItemKind.CATALOG_SERVICE,
+          catalogItemId: 'service-1',
+          quantity: 1,
+        },
+      ],
+    };
+
+    await expect(service.create(input, 'admin-1')).rejects.toThrow(
+      'Selecione a conta de pagamento de servicos',
+    );
+    expect(db.proposal.create).not.toHaveBeenCalled();
+
+    await service.create(
+      {
+        ...input,
+        servicesPaymentProfileId: 'payment-1',
+        paymentDetails: 'conta arbitraria',
+      },
+      'admin-1',
+    );
+    expect(db.proposal.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          paymentDetails: expect.stringContaining(
+            'Chave PIX: financeiro@manitec.com.br',
+          ),
+          paymentSelections: [
+            expect.objectContaining({
+              id: 'payment-1',
+              purpose: ProposalPaymentPurpose.SERVICES,
+              qrCodeDataUrl: expect.stringContaining('data:image/png;base64,'),
+            }),
+          ],
+        }),
+      }),
+    );
+    expect(
+      db.proposal.create.mock.calls[0][0].data.paymentDetails,
+    ).not.toContain('conta arbitraria');
+  });
+
+  it('imports a long TXT scope without changing its line breaks', async () => {
+    db.proposalScopeTemplate.create.mockImplementation(({ data }) =>
+      Promise.resolve(data),
+    );
+    const scopeText =
+      'Atividade principal\n  1. Isolar o equipamento\n  2. Verificar conexoes';
+
+    const imported = await service.importScopeTemplate({
+      originalname: 'escopo-manutencao.txt',
+      buffer: Buffer.from(scopeText, 'utf8'),
+    });
+
+    expect(imported.scopeText).toBe(scopeText);
+    expect(imported.sourceFileName).toBe('escopo-manutencao.txt');
   });
 
   it('keeps old catalog item proposal compatible without new fields', async () => {

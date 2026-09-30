@@ -270,10 +270,27 @@ export class ProposalsController {
     return this.proposalsService.getScopeTemplates(opportunityType);
   }
 
+  @RequireAccessPolicy('proposals.create')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 256 * 1024 } }),
+  )
+  @Post('scope-templates/upload')
+  importScopeTemplate(
+    @UploadedFile() file?: { originalname?: string; buffer?: Buffer },
+  ) {
+    return this.proposalsService.importScopeTemplate(file);
+  }
+
   @RequireAccessPolicy('proposals.view')
   @Get('pricing-options')
   pricingOptions() {
     return this.proposalsService.getPricingOptions();
+  }
+
+  @RequireAccessPolicy('proposals.create')
+  @Get('payment-profiles')
+  paymentProfiles() {
+    return this.proposalsService.getPaymentProfiles();
   }
 
   @RequireAccessPolicy('proposals.view')

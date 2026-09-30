@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { getAccessFromToken } from "@/lib/access";
 import { STUDIO_RESOURCES } from "./resources";
 
 type ResourceCount = Record<string, number>;
@@ -10,15 +11,21 @@ type ResourceCount = Record<string, number>;
 const categoryOrder = ["Comercial", "Operacao", "Ativos", "Suprimentos", "Financeiro", "RH"];
 
 export default function StudioDataPage() {
+  const [access, setAccess] = useState(() => getAccessFromToken());
+  const visibleResources = useMemo(() => STUDIO_RESOURCES.filter((resource) =>
+    resource.key !== "proposalPaymentProfiles" || access.finance.view || access.finance.update,
+  ), [access.finance.view, access.finance.update]);
   const [query, setQuery] = useState("");
   const [counts, setCounts] = useState<ResourceCount>({});
+
+  useEffect(() => setAccess(getAccessFromToken()), []);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadCounts() {
       const entries = await Promise.allSettled(
-        STUDIO_RESOURCES.map(async (resource) => {
+        visibleResources.map(async (resource) => {
           const response = await apiFetch(resource.endpoint, { cache: "no-store" });
           if (!response.ok) return [resource.key, 0] as const;
           const payload = await response.json();
@@ -41,17 +48,17 @@ export default function StudioDataPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [visibleResources]);
 
   const filteredResources = useMemo(() => {
     const term = query.trim().toLowerCase();
-    return STUDIO_RESOURCES.filter((resource) => {
+    return visibleResources.filter((resource) => {
       if (!term) return true;
       return `${resource.pluralLabel} ${resource.category} ${resource.description}`
         .toLowerCase()
         .includes(term);
     });
-  }, [query]);
+  }, [query, visibleResources]);
 
   const groupedResources = categoryOrder
     .map((category) => ({
@@ -78,14 +85,14 @@ export default function StudioDataPage() {
         </div>
 
         <div className="mt-5 grid gap-3 md:grid-cols-3">
-          <Metric label="Recursos" value={String(STUDIO_RESOURCES.length)} />
+          <Metric label="Recursos" value={String(visibleResources.length)} />
           <Metric
             label="Editaveis"
-            value={String(STUDIO_RESOURCES.filter((resource) => resource.editable).length)}
+            value={String(visibleResources.filter((resource) => resource.editable).length)}
           />
           <Metric
             label="Protegidos"
-            value={String(STUDIO_RESOURCES.filter((resource) => !resource.editable).length)}
+            value={String(visibleResources.filter((resource) => !resource.editable).length)}
           />
         </div>
       </section>

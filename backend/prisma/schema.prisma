@@ -215,11 +215,22 @@ enum ProposalHourType {
 }
 
 enum ProposalTechnicianType {
+  ASSISTANT
   JUNIOR_TECHNICIAN
   MID_LEVEL_TECHNICIAN
   SENIOR_TECHNICIAN
   APPLICATION_ENGINEER
   SPECIALIST
+}
+
+enum ProposalPaymentPurpose {
+  PARTS
+  SERVICES
+}
+
+enum ProposalPaymentMethod {
+  PIX
+  BOLETO
 }
 
 enum ProposalStatus {
@@ -2101,6 +2112,7 @@ model Proposal {
   paymentTerm                     String?
   deliveryLeadTimeDays            Int?
   paymentDetails                  String?
+  paymentSelections               Json?
   hasDownPayment                  Boolean    @default(false)
   downPaymentAmount               Float?
   installmentCount                Int?
@@ -2310,6 +2322,7 @@ model ProposalScopeTemplate {
   category                   String?
   description                String?
   scopeText                  String
+  sourceFileName             String?
   active                     Boolean                @default(true)
   sortOrder                  Int                    @default(0)
   tags                       String[]               @default([])
@@ -2320,6 +2333,44 @@ model ProposalScopeTemplate {
 
   @@index([active, sortOrder])
   @@map("proposal_scope_templates")
+}
+
+model ProposalHourlyRate {
+  id             String                 @id @default(uuid())
+  hourType       ProposalHourType
+  technicianType ProposalTechnicianType
+  unitPrice      Float
+  isActive       Boolean                @default(false)
+  sortOrder      Int                    @default(0)
+  notes          String?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@unique([hourType, technicianType])
+  @@index([isActive, sortOrder])
+  @@map("proposal_hourly_rates")
+}
+
+model ProposalPaymentProfile {
+  id                  String                 @id @default(uuid())
+  name                String
+  purpose             ProposalPaymentPurpose
+  method              ProposalPaymentMethod
+  beneficiary         String
+  beneficiaryDocument String?
+  bankName            String?
+  agency              String?
+  accountNumber       String?
+  pixKey              String?
+  pixCopyPaste        String?
+  boletoInstructions  String?
+  isActive            Boolean                @default(false)
+  sortOrder           Int                    @default(0)
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  @@index([purpose, method, isActive, sortOrder])
+  @@map("proposal_payment_profiles")
 }
 
 model MaintenanceOrder {

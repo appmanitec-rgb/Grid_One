@@ -1,4 +1,4 @@
-export type StudioFieldType = "text" | "number" | "select" | "boolean";
+export type StudioFieldType = "text" | "number" | "select" | "boolean" | "textarea";
 
 export type StudioField = {
   key: string;
@@ -1414,6 +1414,76 @@ export const STUDIO_RESOURCES: StudioResource[] = [
         hiddenByDefault: true,
         importHeader: "SEGMENTO",
       },
+    ],
+  },
+  {
+    key: "proposalHourlyRates",
+    label: "Tarifa de Hora",
+    pluralLabel: "Tarifas de Hora",
+    category: "Comercial",
+    description: "Valores de venda por tipo de hora e profissional usados nas propostas. Configure os valores reais e ative cada tarifa.",
+    endpoint: "/studio/data/proposalHourlyRates",
+    entityType: "ProposalHourlyRate",
+    editable: true,
+    canCreate: true,
+    canEdit: true,
+    canDelete: false,
+    canImport: false,
+    canExport: true,
+    importMode: "DISABLED",
+    fields: [
+      { key: "hourType", label: "Tipo de hora", type: "select", editable: true, required: true, options: [
+        { value: "ONE_OFF", label: "Hora avulsa" }, { value: "CONTRACT", label: "Hora contrato" },
+        { value: "EMERGENCY", label: "Emergencia" }, { value: "TRAVEL", label: "Deslocamento" },
+        { value: "ENGINEERING", label: "Engenharia" },
+      ] },
+      { key: "technicianType", label: "Profissional", type: "select", editable: true, required: true, options: [
+        { value: "ASSISTANT", label: "Assistente" },
+        { value: "JUNIOR_TECHNICIAN", label: "Tecnico junior" },
+        { value: "MID_LEVEL_TECHNICIAN", label: "Tecnico pleno" },
+        { value: "SENIOR_TECHNICIAN", label: "Tecnico senior" },
+        { value: "APPLICATION_ENGINEER", label: "Engenheiro de aplicacao" },
+        { value: "SPECIALIST", label: "Especialista" },
+      ] },
+      { key: "unitPrice", label: "Valor da hora (R$)", type: "number", editable: true, required: true },
+      { key: "isActive", label: "Ativa", type: "boolean", editable: true, defaultValue: false },
+      { key: "sortOrder", label: "Ordem", type: "number", editable: true, defaultValue: 0 },
+      { key: "notes", label: "Observacoes", editable: true, hiddenByDefault: true },
+    ],
+  },
+  {
+    key: "proposalPaymentProfiles",
+    label: "Conta para Proposta",
+    pluralLabel: "Contas para Propostas",
+    category: "Financeiro",
+    description: "Cadastre separadamente as contas de pecas e servicos. O vendedor escolhe um perfil ativo de PIX ou boleto.",
+    endpoint: "/studio/data/proposalPaymentProfiles",
+    entityType: "ProposalPaymentProfile",
+    editable: true,
+    canCreate: true,
+    canEdit: true,
+    canDelete: false,
+    canImport: false,
+    canExport: false,
+    importMode: "DISABLED",
+    fields: [
+      { key: "name", label: "Nome do perfil", editable: true, required: true, searchable: true },
+      { key: "purpose", label: "Destino", type: "select", editable: true, required: true, options: [
+        { value: "PARTS", label: "Pecas" }, { value: "SERVICES", label: "Servicos" },
+      ] },
+      { key: "method", label: "Meio", type: "select", editable: true, required: true, options: [
+        { value: "PIX", label: "PIX" }, { value: "BOLETO", label: "Boleto" },
+      ] },
+      { key: "beneficiary", label: "Favorecido", editable: true, required: true },
+      { key: "beneficiaryDocument", label: "CPF/CNPJ do favorecido", editable: true, hiddenByDefault: true },
+      { key: "bankName", label: "Banco", editable: true },
+      { key: "agency", label: "Agencia", editable: true },
+      { key: "accountNumber", label: "Conta", editable: true },
+      { key: "pixKey", label: "Chave PIX", editable: true },
+      { key: "pixCopyPaste", label: "PIX copia e cola (gera QR Code)", type: "textarea", editable: true, hiddenByDefault: true },
+      { key: "boletoInstructions", label: "Instrucoes de boleto", type: "textarea", editable: true, hiddenByDefault: true },
+      { key: "isActive", label: "Ativo", type: "boolean", editable: true, defaultValue: false },
+      { key: "sortOrder", label: "Ordem", type: "number", editable: true, defaultValue: 0 },
     ],
   },
   {

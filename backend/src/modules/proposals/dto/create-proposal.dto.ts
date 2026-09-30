@@ -142,6 +142,14 @@ export class CreateProposalDto {
   @IsOptional()
   paymentDetails?: string;
 
+  @IsUUID()
+  @IsOptional()
+  partsPaymentProfileId?: string;
+
+  @IsUUID()
+  @IsOptional()
+  servicesPaymentProfileId?: string;
+
   @IsBoolean()
   @IsOptional()
   hasDownPayment?: boolean;
