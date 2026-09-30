@@ -124,9 +124,15 @@ export default function GeneratorProposalWizardPage() {
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [clientSearch, setClientSearch] = useState("");
   const [clientId, setClientId] = useState("");
+  const [clientLookupOpen, setClientLookupOpen] = useState(false);
+  const [clientLookupLoading, setClientLookupLoading] = useState(false);
+  const [clientLookupError, setClientLookupError] = useState("");
   const [sellers, setSellers] = useState<SellerOption[]>([]);
   const [sellerSearch, setSellerSearch] = useState("");
   const [sellerId, setSellerId] = useState("");
+  const [sellerLookupOpen, setSellerLookupOpen] = useState(false);
+  const [sellerLookupLoading, setSellerLookupLoading] = useState(false);
+  const [sellerLookupError, setSellerLookupError] = useState("");
 
   const [power, setPower] = useState("");
   const [powerUnit, setPowerUnit] = useState("KW");
@@ -236,31 +242,83 @@ export default function GeneratorProposalWizardPage() {
 
   useEffect(() => {
     if (linkedOpportunity) return;
-    const timeout = window.setTimeout(async () => {
+    let active = true;
+    setClientLookupLoading(true);
+    setClientLookupError("");
+    const timeout = window.setTimeout(() => {
       const params = new URLSearchParams({ take: "10" });
       if (clientSearch.trim()) params.set("q", clientSearch.trim());
-      const response = await apiFetch(`/clients/lookup?${params.toString()}`, {
+      void apiFetch(`/clients/lookup?${params.toString()}`, {
         cache: "no-store",
-      });
-      if (response.ok) setClients(await response.json());
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            throw new Error(
+              await readApiErrorMessage(response, "Não foi possível buscar clientes."),
+            );
+          }
+          return response.json() as Promise<ClientOption[]>;
+        })
+        .then((results) => {
+          if (active) setClients(results);
+        })
+        .catch((cause: unknown) => {
+          if (!active) return;
+          setClients([]);
+          setClientLookupError(
+            cause instanceof Error ? cause.message : "Não foi possível buscar clientes.",
+          );
+        })
+        .finally(() => {
+          if (active) setClientLookupLoading(false);
+        });
     }, 250);
-    return () => window.clearTimeout(timeout);
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+    };
   }, [clientSearch, linkedOpportunity]);
 
   useEffect(() => {
     if (linkedOpportunity?.assignedSeller) return;
-    const timeout = window.setTimeout(async () => {
+    let active = true;
+    setSellerLookupLoading(true);
+    setSellerLookupError("");
+    const timeout = window.setTimeout(() => {
       const params = new URLSearchParams({
         take: "10",
         pipeline: "COMMERCIAL_01_GENERATORS",
       });
       if (sellerSearch.trim()) params.set("q", sellerSearch.trim());
-      const response = await apiFetch(`/crm/sellers?${params.toString()}`, {
+      void apiFetch(`/crm/sellers?${params.toString()}`, {
         cache: "no-store",
-      });
-      if (response.ok) setSellers(await response.json());
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            throw new Error(
+              await readApiErrorMessage(response, "Não foi possível buscar vendedores."),
+            );
+          }
+          return response.json() as Promise<SellerOption[]>;
+        })
+        .then((results) => {
+          if (active) setSellers(results);
+        })
+        .catch((cause: unknown) => {
+          if (!active) return;
+          setSellers([]);
+          setSellerLookupError(
+            cause instanceof Error ? cause.message : "Não foi possível buscar vendedores.",
+          );
+        })
+        .finally(() => {
+          if (active) setSellerLookupLoading(false);
+        });
     }, 250);
-    return () => window.clearTimeout(timeout);
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+    };
   }, [linkedOpportunity, sellerSearch]);
 
   useEffect(() => {
@@ -577,15 +635,63 @@ export default function GeneratorProposalWizardPage() {
             </div>
           ) : null}
           <div className="grid gap-5 md:grid-cols-2">
-            <LookupField label="Cliente" value={clientSearch} locked={Boolean(linkedOpportunity)} onChange={(value) => { setClientSearch(value); setClientId(""); }}>
-              {!clientId && !linkedOpportunity ? clients.map((client) => (
-                <LookupOption key={client.id} title={client.companyName} helper={client.cnpj || client.tradeName || "Cliente"} onClick={() => { setClientId(client.id); setClientSearch(client.companyName); }} />
-              )) : null}
+            <LookupField
+              label="Cliente"
+              value={clientSearch}
+              locked={Boolean(linkedOpportunity)}
+              open={clientLookupOpen && !clientId}
+              loading={clientLookupLoading}
+              error={clientLookupError}
+              hasResults={clients.length > 0}
+              emptyText="Nenhum cliente encontrado. Tente nome, fantasia ou CNPJ."
+              onOpenChange={setClientLookupOpen}
+              onChange={(value) => {
+                setClientSearch(value);
+                setClientId("");
+                setClientLookupOpen(true);
+              }}
+            >
+              {clients.map((client) => (
+                <LookupOption
+                  key={client.id}
+                  title={client.companyName}
+                  helper={[client.tradeName, client.cnpj].filter(Boolean).join(" · ") || "Cliente"}
+                  onClick={() => {
+                    setClientId(client.id);
+                    setClientSearch(client.companyName);
+                    setClientLookupOpen(false);
+                  }}
+                />
+              ))}
             </LookupField>
-            <LookupField label="Vendedor" value={sellerSearch} locked={Boolean(linkedOpportunity?.assignedSeller)} onChange={(value) => { setSellerSearch(value); setSellerId(""); }}>
-              {!sellerId && !linkedOpportunity?.assignedSeller ? sellers.map((seller) => (
-                <LookupOption key={seller.id} title={seller.name} helper={seller.email || "Comercial"} onClick={() => { setSellerId(seller.id); setSellerSearch(seller.name); }} />
-              )) : null}
+            <LookupField
+              label="Vendedor"
+              value={sellerSearch}
+              locked={Boolean(linkedOpportunity?.assignedSeller)}
+              open={sellerLookupOpen && !sellerId}
+              loading={sellerLookupLoading}
+              error={sellerLookupError}
+              hasResults={sellers.length > 0}
+              emptyText="Nenhum vendedor encontrado."
+              onOpenChange={setSellerLookupOpen}
+              onChange={(value) => {
+                setSellerSearch(value);
+                setSellerId("");
+                setSellerLookupOpen(true);
+              }}
+            >
+              {sellers.map((seller) => (
+                <LookupOption
+                  key={seller.id}
+                  title={seller.name}
+                  helper={seller.email || "Comercial"}
+                  onClick={() => {
+                    setSellerId(seller.id);
+                    setSellerSearch(seller.name);
+                    setSellerLookupOpen(false);
+                  }}
+                />
+              ))}
             </LookupField>
           </div>
         </SectionCard>
@@ -766,12 +872,64 @@ function Select({ value, onChange, options }: { value: string; onChange: (value:
   return <select className={INPUT_CLASS} value={value} onChange={(event) => onChange(event.target.value)}>{options.map(([optionValue, label]) => <option key={optionValue} value={optionValue}>{label}</option>)}</select>;
 }
 
-function LookupField({ label, value, locked, onChange, children }: { label: string; value: string; locked: boolean; onChange: (value: string) => void; children: ReactNode }) {
-  return <div className="relative"><label className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">{label}</label><input className={INPUT_CLASS} value={value} disabled={locked} onChange={(event) => onChange(event.target.value)} /><div className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-slate-200 bg-white shadow-xl">{children}</div></div>;
+function LookupField({ label, value, locked, open, loading, error, hasResults, emptyText, onChange, onOpenChange, children }: {
+  label: string;
+  value: string;
+  locked: boolean;
+  open: boolean;
+  loading: boolean;
+  error: string;
+  hasResults: boolean;
+  emptyText: string;
+  onChange: (value: string) => void;
+  onOpenChange: (open: boolean) => void;
+  children: ReactNode;
+}) {
+  const listId = label === "Cliente" ? "proposal-client-results" : "proposal-seller-results";
+  return (
+    <div
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          onOpenChange(false);
+        }
+      }}
+    >
+      <label htmlFor={listId + "-input"} className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">{label}</label>
+      <input
+        id={listId + "-input"}
+        className={INPUT_CLASS}
+        type="search"
+        autoComplete="off"
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded={open && !locked}
+        aria-controls={listId}
+        value={value}
+        disabled={locked}
+        onFocus={() => onOpenChange(true)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") onOpenChange(false);
+        }}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={label === "Cliente" ? "Busque por nome, fantasia ou CNPJ" : "Busque o vendedor"}
+      />
+      {open && !locked ? (
+        <div id={listId} role="listbox" aria-label={`Resultados de ${label.toLowerCase()}`} className="mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+          {loading ? (
+            <p className="px-4 py-3 text-sm text-slate-500">Buscando {label.toLowerCase()}...</p>
+          ) : error ? (
+            <p className="px-4 py-3 text-sm text-rose-700">{error}</p>
+          ) : hasResults ? children : (
+            <p className="px-4 py-3 text-sm text-slate-500">{emptyText}</p>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function LookupOption({ title, helper, onClick }: { title: string; helper: string; onClick: () => void }) {
-  return <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={onClick} className="block w-full border-b border-slate-100 px-4 py-3 text-left hover:bg-sky-50"><span className="block text-sm font-semibold text-slate-900">{title}</span><span className="block text-xs text-slate-500">{helper}</span></button>;
+  return <button type="button" role="option" aria-selected={false} onClick={onClick} className="block w-full border-b border-slate-100 px-4 py-3 text-left hover:bg-sky-50 focus:bg-sky-50 last:border-0"><span className="block text-sm font-semibold text-slate-900">{title}</span><span className="block text-xs text-slate-500">{helper}</span></button>;
 }
 
 function GeneratorCard({ generator, selected, onSelect, compact = false }: { generator: CommercialGeneratorOption; selected: boolean; onSelect: () => void; compact?: boolean }) {
