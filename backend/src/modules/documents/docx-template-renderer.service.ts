@@ -24,6 +24,13 @@ type DocxFile = {
   content: Buffer;
 };
 
+export type EditableWordBlock = {
+  id: string;
+  section: string;
+  text: string;
+  editable: boolean;
+};
+
 const DOCX_MIME =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document' as const;
 const WORD_TEXT_XML_PATTERN = /^word\/(?:document|header\d+|footer\d+)\.xml$/;
@@ -344,6 +351,151 @@ ${this.documentBrand()}${paragraphs.join('')}
       }
     }
     return { labels: [...labels], technicalMarkers };
+  }
+
+  wordBlocks(buffer: Buffer): EditableWordBlock[] {
+    const blocks: EditableWordBlock[] = [];
+    for (const file of this.unzip(buffer)) {
+      if (!WORD_TEXT_XML_PATTERN.test(file.path)) continue;
+      let index = 0;
+      for (const paragraph of file.content
+        .toString('utf8')
+        .match(/<w:p\b[\s\S]*?<\/w:p>/g) || []) {
+        const id = `${file.path}:${index++}`;
+        const text = this.extractWordParagraphText(paragraph).trim();
+        if (!text) continue;
+        const section =
+          file.path === 'word/document.xml'
+            ? 'Documento'
+            : file.path.includes('/header')
+              ? 'Cabeçalho'
+              : 'Rodapé';
+        blocks.push({
+          id,
+          section,
+          text,
+          editable: this.canEditWordParagraph(paragraph),
+        });
+      }
+    }
+    return blocks;
+  }
+
+  editWordBlocks(
+    buffer: Buffer,
+    edits: Array<{ id: string; text: string }>,
+  ): Buffer {
+    if (!Array.isArray(edits) || edits.length > 500)
+      throw new BadRequestException('Envie até 500 blocos por vez.');
+    const changes = new Map<string, string>();
+    for (const edit of edits) {
+      if (
+        !edit ||
+        typeof edit.id !== 'string' ||
+        typeof edit.text !== 'string' ||
+        edit.text.length > 6000 ||
+        /[\r\n\t]/.test(edit.text) ||
+        changes.has(edit.id)
+      )
+        throw new BadRequestException('Há um bloco inválido ou repetido.');
+      if (/[«»]/.test(edit.text.replace(/«[^»]{1,120}»/g, '')))
+        throw new BadRequestException(
+          'Um campo automático foi alterado parcialmente. Insira o campo novamente pela lista.',
+        );
+      changes.set(edit.id, edit.text);
+    }
+    const files = this.unzip(buffer).map((file) => {
+      if (!WORD_TEXT_XML_PATTERN.test(file.path)) return file;
+      let index = 0;
+      const xml = file.content
+        .toString('utf8')
+        .replace(/<w:p\b[\s\S]*?<\/w:p>/g, (paragraph) => {
+          const id = `${file.path}:${index++}`;
+          if (!changes.has(id)) return paragraph;
+          if (!this.canEditWordParagraph(paragraph))
+            throw new BadRequestException(
+              `O bloco ${id} contém elementos que precisam ser editados no Word.`,
+            );
+          const nextText = changes.get(id)!;
+          changes.delete(id);
+          const nodes = [
+            ...paragraph.matchAll(/(<w:t\b[^>]*>)([\s\S]*?)(<\/w:t>)/g),
+          ];
+          const values = nodes.map((node) => this.decodeXmlText(node[2]));
+          const original = values.join('');
+          if (original === nextText) return paragraph;
+          let start = 0;
+          while (
+            start < original.length &&
+            start < nextText.length &&
+            original[start] === nextText[start]
+          )
+            start++;
+          let end = 0;
+          while (
+            end < original.length - start &&
+            end < nextText.length - start &&
+            original[original.length - 1 - end] ===
+              nextText[nextText.length - 1 - end]
+          )
+            end++;
+          const oldEnd = original.length - end;
+          const replacement = nextText.slice(start, nextText.length - end);
+          let offset = 0;
+          let first = -1;
+          let last = -1;
+          let firstOffset = 0;
+          let lastOffset = 0;
+          for (let i = 0; i < values.length; i++) {
+            const nodeEnd = offset + values[i].length;
+            if (first < 0 && start <= nodeEnd) {
+              first = i;
+              firstOffset = start - offset;
+            }
+            if (last < 0 && oldEnd <= nodeEnd) {
+              last = i;
+              lastOffset = oldEnd - offset;
+            }
+            offset = nodeEnd;
+          }
+          if (first < 0 || last < 0)
+            throw new BadRequestException(
+              `Não foi possível alterar o bloco ${id}.`,
+            );
+          if (first === last) {
+            values[first] =
+              values[first].slice(0, firstOffset) +
+              replacement +
+              values[first].slice(lastOffset);
+          } else {
+            values[first] = values[first].slice(0, firstOffset) + replacement;
+            for (let i = first + 1; i < last; i++) values[i] = '';
+            values[last] = values[last].slice(lastOffset);
+          }
+          let nodeIndex = 0;
+          return paragraph.replace(
+            /(<w:t\b[^>]*>)([\s\S]*?)(<\/w:t>)/g,
+            (_match, open: string, _value: string, close: string) =>
+              `${open}${this.escapeXml(values[nodeIndex++] || '')}${close}`,
+          );
+        });
+      return { ...file, content: Buffer.from(xml, 'utf8') };
+    });
+    if (changes.size)
+      throw new BadRequestException(
+        'Um dos blocos não pertence a esta versão do Word. Recarregue o editor.',
+      );
+    return this.zip(files);
+  }
+
+  private canEditWordParagraph(paragraph: string) {
+    return (
+      /<w:t\b/.test(paragraph) &&
+      !/^«[^»]+»$/.test(this.extractWordParagraphText(paragraph).trim()) &&
+      !/<w:(?:br|tab|drawing|pict|object|fldChar|instrText|sym|footnoteReference|endnoteReference|commentReference|hyperlink|sdt)\b|<mc:AlternateContent\b/i.test(
+        paragraph,
+      )
+    );
   }
 
   renderFriendlyWord(

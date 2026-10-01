@@ -22,6 +22,7 @@ type Version = { versionNumber: number; format: "VISUAL" | "WORD"; blocks: Block
 type TemplateDetail = TemplateSummary & { versions: Version[] };
 type SampleRecord = { id: string; label: string };
 type WordField = { label: string; category: string };
+type WordBlock = { id: string; section: string; text: string; editable: boolean };
 type Cursor = { blockId: string; segmentIndex: number; start: number; end: number };
 
 const API = "/studio/document-editor";
@@ -65,6 +66,13 @@ export default function DocumentEditorPage() {
   const [kind, setKind] = useState<Kind>("PROPOSAL");
   const [fields, setFields] = useState<Field[]>([]);
   const [wordFields, setWordFields] = useState<WordField[]>([]);
+  const [wordBlocks, setWordBlocks] = useState<WordBlock[]>([]);
+  const [wordDraft, setWordDraft] = useState<Record<string, string>>({});
+  const [wordQuery, setWordQuery] = useState("");
+  const [activeWordBlockId, setActiveWordBlockId] = useState("");
+  const [wordPreviewUrl, setWordPreviewUrl] = useState("");
+  const [wordPreviewSignature, setWordPreviewSignature] = useState("");
+  const [wordPreviewBusy, setWordPreviewBusy] = useState(false);
   const [showVisualBuilder, setShowVisualBuilder] = useState(false);
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
   const [samples, setSamples] = useState<SampleRecord[]>([]);
@@ -90,6 +98,14 @@ export default function DocumentEditorPage() {
   const dragRef = useRef<string | null>(null);
   const wordInputRef = useRef<HTMLInputElement | null>(null);
   const wordMode = template?.versions[0]?.format === "WORD";
+  const wordTemplateId = wordMode ? template?.id : null;
+  const wordTemplateVersion = wordMode ? template?.currentVersion : null;
+  const wordEdits = useMemo(() => wordBlocks.filter((block) => block.editable && wordDraft[block.id] !== undefined && wordDraft[block.id] !== block.text).map((block) => ({ id: block.id, text: wordDraft[block.id] })), [wordBlocks, wordDraft]);
+  const wordSignature = JSON.stringify({ edits: wordEdits, recordId });
+  const visibleWordBlocks = useMemo(() => {
+    const query = wordQuery.trim().toLocaleLowerCase("pt-BR");
+    return query ? wordBlocks.filter((block) => `${block.section} ${wordDraft[block.id] ?? block.text}`.toLocaleLowerCase("pt-BR").includes(query)) : wordBlocks;
+  }, [wordBlocks, wordDraft, wordQuery]);
 
   useEffect(() => setAccess(getAccessFromToken()), []);
 
@@ -114,6 +130,24 @@ export default function DocumentEditorPage() {
   }, []);
 
   useEffect(() => { void loadCatalog(kind); }, [kind, loadCatalog]);
+
+  useEffect(() => {
+    setWordPreviewUrl("");
+    setWordPreviewSignature("");
+    if (!wordTemplateId) { setWordBlocks([]); setWordDraft({}); return; }
+    let cancelled = false;
+    setWordBlocks([]);
+    setWordDraft({});
+    setActiveWordBlockId("");
+    request<WordBlock[]>(`/templates/${wordTemplateId}/word-blocks`).then((items) => {
+      if (!cancelled) setWordBlocks(items);
+    }).catch((error) => {
+      if (!cancelled) setFeedback({ kind: "error", text: error instanceof Error ? error.message : "Não foi possível abrir os blocos do Word." });
+    });
+    return () => { cancelled = true; };
+  }, [wordTemplateId, wordTemplateVersion]);
+
+  useEffect(() => () => { if (wordPreviewUrl) URL.revokeObjectURL(wordPreviewUrl); }, [wordPreviewUrl]);
 
   const fieldById = useMemo(() => new Map(fields.map((field) => [field.id, field])), [fields]);
   const groupedFields = useMemo(() => {
@@ -146,7 +180,7 @@ export default function DocumentEditorPage() {
   }, [kind, blocks, recordId, canView, loading, wordMode]);
 
   function reset(nextKind = kind) {
-    if (dirty && !window.confirm("Há alterações não salvas. Deseja sair deste modelo?")) return;
+    if ((dirty || wordEdits.length > 0) && !window.confirm("Há alterações não salvas. Deseja sair deste modelo?")) return;
     setKind(nextKind);
     if (nextKind !== kind) { setFields([]); setTemplates([]); setSamples([]); setWordFields([]); }
     setTemplate(null);
@@ -162,7 +196,7 @@ export default function DocumentEditorPage() {
   }
 
   async function openTemplate(id: string) {
-    if (dirty && !window.confirm("Há alterações não salvas. Deseja abrir outro modelo?")) return;
+    if ((dirty || wordEdits.length > 0) && !window.confirm("Há alterações não salvas. Deseja abrir outro modelo?")) return;
     setBusy(true);
     try {
       const loaded = await request<TemplateDetail>(`/templates/${id}`);
@@ -261,6 +295,10 @@ export default function DocumentEditorPage() {
 
   async function act(action: "publish" | "deactivate" | "duplicate", version?: number) {
     if (!template) return;
+    if (wordMode && wordEdits.length > 0) {
+      setFeedback({ kind: "error", text: "Salve as alterações dos blocos antes de continuar." });
+      return;
+    }
     setBusy(true);
     try {
       const path = version ? `/templates/${template.id}/restore/${version}` : `/templates/${template.id}/${action}`;
@@ -327,6 +365,68 @@ export default function DocumentEditorPage() {
     }
   }
 
+  async function createWordFromBase() {
+    if (!name.trim()) { setFeedback({ kind: "error", text: "Dê um nome ao modelo para começar a editar." }); return; }
+    setBusy(true);
+    try {
+      const loaded = await request<TemplateDetail>("/word-templates/from-base", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, name }),
+      });
+      setTemplate(loaded); setDirty(false); setShowVisualBuilder(false);
+      setFeedback({ kind: "success", text: "Modelo Word criado. Edite os blocos abaixo e confira a prévia no próprio Studio." });
+      void loadCatalog(kind);
+    } catch (error) {
+      setFeedback({ kind: "error", text: error instanceof Error ? error.message : "Não foi possível criar o modelo Word." });
+    } finally { setBusy(false); }
+  }
+
+  function insertFieldInWord(label: string) {
+    const block = wordBlocks.find((item) => item.id === activeWordBlockId);
+    if (!block?.editable) return;
+    const text = wordDraft[block.id] ?? block.text;
+    const input = document.getElementById(`word-block-${block.id}`) as HTMLTextAreaElement | null;
+    const start = input?.selectionStart ?? text.length;
+    const end = input?.selectionEnd ?? start;
+    const token = `«${label}»`;
+    setWordDraft((current) => ({ ...current, [block.id]: `${text.slice(0, start)}${token}${text.slice(end)}` }));
+    window.setTimeout(() => { input?.focus(); input?.setSelectionRange(start + token.length, start + token.length); }, 0);
+  }
+
+  async function previewWordDraft() {
+    if (!template || !wordMode) return;
+    setWordPreviewBusy(true);
+    try {
+      const response = await apiFetch(`${API}/templates/${template.id}/word-blocks/preview`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ edits: wordEdits, recordId: recordId || undefined }),
+      });
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, "Não foi possível gerar a prévia."));
+      setWordPreviewUrl(URL.createObjectURL(await response.blob()));
+      setWordPreviewSignature(wordSignature);
+      setFeedback(null);
+    } catch (error) {
+      setFeedback({ kind: "error", text: error instanceof Error ? error.message : "Não foi possível gerar a prévia." });
+    } finally { setWordPreviewBusy(false); }
+  }
+
+  async function saveWordDraft() {
+    if (!template || wordEdits.length === 0) return;
+    setBusy(true);
+    try {
+      const loaded = await request<TemplateDetail>(`/templates/${template.id}/word-blocks`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expectedVersion: template.currentVersion, edits: wordEdits }),
+      });
+      setTemplate(loaded);
+      setWordDraft({});
+      setWordPreviewSignature("");
+      setFeedback({ kind: "success", text: `Versão ${loaded.currentVersion} salva. Confira a prévia e publique quando estiver pronta.` });
+      void loadCatalog(kind);
+    } catch (error) {
+      setFeedback({ kind: "error", text: error instanceof Error ? error.message : "Não foi possível salvar os blocos." });
+    } finally { setBusy(false); }
+  }
+
   async function copyWordField(label: string) {
     if (!navigator.clipboard?.writeText) {
       setFeedback({ kind: "error", text: `Copie o campo «${label}» e cole no Word.` });
@@ -362,14 +462,15 @@ export default function DocumentEditorPage() {
 
       <section className="rounded-2xl border border-blue-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div><p className="text-xs font-black uppercase tracking-[0.16em] text-blue-700">Modelo Word da MANITEC</p><h2 className="mt-1 text-xl font-bold text-slate-900">Edite o documento que vocês já usam</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Baixe uma cópia do Word original, altere textos, tabelas, imagens e formatação no Word e envie o arquivo aqui. Os campos com nomes legíveis serão preenchidos automaticamente na geração.</p></div>
-          <button type="button" disabled={busy} onClick={() => void downloadWord(`/word-base?kind=${kind}`, `modelo-${kind.toLowerCase()}-editavel.docx`)} className={primary}>1. Baixar Word original</button>
+          <div><p className="text-xs font-black uppercase tracking-[0.16em] text-blue-700">Modelo Word da MANITEC</p><h2 className="mt-1 text-xl font-bold text-slate-900">Edite o Word diretamente no Studio</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Abra o modelo original, altere textos por bloco, insira campos pelo nome e confira o PDF sem sair do sistema. Cada salvamento cria uma versão do mesmo Word.</p></div>
+          <div className="flex flex-wrap gap-2">{!wordMode ? <button type="button" disabled={!canEdit || busy || !name.trim()} onClick={() => void createWordFromBase()} className={primary}>Criar modelo Word editável</button> : null}<button type="button" disabled={busy} onClick={() => void downloadWord(`/word-base?kind=${kind}`, `modelo-${kind.toLowerCase()}-editavel.docx`)} className={button}>Baixar original</button></div>
         </div>
-        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        {!wordMode ? <label className="mt-4 block max-w-xl text-xs font-semibold text-slate-600">Nome do novo modelo<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Ex.: Proposta comercial padrão" className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2.5 text-sm" /></label> : null}
+        <details className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3"><summary className="cursor-pointer text-sm font-semibold text-slate-700">Importar um Word personalizado ou copiar campos para o Word</summary><div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <h3 className="font-bold text-slate-900">2. Enviar o Word editado</h3>
+            <h3 className="font-bold text-slate-900">Enviar arquivo Word</h3>
             <p className="mt-1 text-xs leading-5 text-slate-600">O arquivo enviado vira uma nova versão deste modelo. A versão publicada continua em uso até você publicar a nova.</p>
-            {!template ? <label className="mt-3 block text-xs font-semibold text-slate-600">Nome do modelo<input value={name} onChange={(event) => { setName(event.target.value); setDirty(true); }} placeholder="Ex.: Proposta comercial padrão" className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2.5 text-sm" /></label> : <p className="mt-3 text-sm font-bold text-slate-800">{template.name} · versão {template.currentVersion}</p>}
+            <p className="mt-3 text-sm font-bold text-slate-800">{template ? `${template.name} · versão ${template.currentVersion}` : name || "Informe o nome do modelo acima"}</p>
             <input ref={wordInputRef} type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={!canEdit || busy} onChange={(event) => void uploadWord(event.target.files?.[0])} className="mt-3 block w-full text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-100 file:px-3 file:py-2 file:font-bold file:text-blue-900" />
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -378,7 +479,7 @@ export default function DocumentEditorPage() {
             <input type="search" value={fieldQuery} onChange={(event) => setFieldQuery(event.target.value)} placeholder="Buscar nome, valor, data…" className="mt-3 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm" />
             <div className="mt-2 flex max-h-36 flex-wrap gap-1.5 overflow-y-auto">{wordFields.filter((field) => `${field.label} ${field.category}`.toLocaleLowerCase("pt-BR").includes(fieldQuery.toLocaleLowerCase("pt-BR"))).map((field) => <button key={`${field.category}-${field.label}`} type="button" onClick={() => void copyWordField(field.label)} className="rounded-lg border border-blue-200 bg-white px-2 py-1 text-xs font-semibold text-blue-900 hover:bg-blue-50" title={`Copiar ${field.label}`}>«{field.label}»</button>)}</div>
           </div>
-        </div>
+        </div></details>
         <div className="mt-4 border-t border-slate-200 pt-4"><h3 className="text-sm font-bold text-slate-900">Modelos salvos</h3><div className="mt-2 flex max-h-32 flex-wrap gap-2 overflow-y-auto">{templates.length ? templates.map((item) => <button key={item.id} type="button" onClick={() => void openTemplate(item.id)} className={`rounded-lg border px-3 py-2 text-xs font-semibold ${template?.id === item.id ? "border-blue-500 bg-blue-50 text-blue-900" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}>{item.name}{item.isActive ? " · publicado" : ""}</button>) : <span className="text-xs text-slate-500">Nenhum modelo salvo nesta categoria.</span>}</div></div>
         {wordMode && template ? <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-bold text-emerald-950">Versão Word {template.currentVersion} pronta para conferência</p><p className="mt-1 text-xs text-emerald-900">Confira o arquivo preenchido com um exemplo ou um cadastro real antes de publicar.</p></div><button type="button" onClick={() => reset()} className={button}>Ver outros modelos</button></div>
@@ -387,6 +488,28 @@ export default function DocumentEditorPage() {
           {historyOpen ? <div className="mt-3 space-y-2">{template.versions.map((version) => <div key={version.versionNumber} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-white p-2 text-sm"><span>Versão {version.versionNumber} · {version.format === "WORD" ? "Word" : "Visual"} · {new Date(version.createdAt).toLocaleString("pt-BR")}</span><button type="button" disabled={!canEdit || busy || version.versionNumber === template.currentVersion} onClick={() => void act("publish", version.versionNumber)} className={button}>Restaurar</button></div>)}</div> : null}
         </div> : null}
       </section>
+
+      {wordMode && template ? <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-4">
+          <div><p className="text-xs font-black uppercase tracking-[0.16em] text-blue-700">Edição no sistema</p><h2 className="mt-1 text-xl font-bold text-slate-900">Blocos do documento</h2><p className="mt-1 text-sm text-slate-600">Edite um parágrafo por vez. Tabelas, imagens, cabeçalhos e a estrutura do Word continuam no arquivo original.</p></div>
+          <div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-800">{wordEdits.length} alteração(ões)</span><button type="button" disabled={!canEdit || busy || wordEdits.length === 0} onClick={() => void saveWordDraft()} className={primary}>{busy ? "Salvando…" : "Salvar nova versão"}</button></div>
+        </div>
+        <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(380px,0.95fr)]">
+          <div className="min-w-0">
+            <div className="flex flex-wrap gap-2"><input type="search" value={wordQuery} onChange={(event) => setWordQuery(event.target.value)} placeholder="Buscar texto no documento…" className="min-w-[200px] flex-1 rounded-xl border border-slate-300 p-2.5 text-sm" /><select value="" disabled={!canEdit || !activeWordBlockId} onChange={(event) => { if (event.target.value) insertFieldInWord(event.target.value); }} className="max-w-full rounded-xl border border-blue-200 bg-blue-50 p-2.5 text-sm font-semibold text-blue-900"><option value="">Inserir campo no bloco selecionado</option>{[...new Set(wordFields.map((field) => field.category))].map((category) => <optgroup key={category} label={category}>{wordFields.filter((field) => field.category === category).map((field) => <option key={field.label} value={field.label}>{field.label}</option>)}</optgroup>)}</select></div>
+            <p className="mt-2 text-xs text-slate-500">Clique em um bloco para editar. Os trechos entre « » são campos preenchidos automaticamente. Algumas áreas especiais do Word ficam protegidas.</p>
+            <div className="mt-3 max-h-[850px] space-y-2 overflow-y-auto pr-1">{wordBlocks.length === 0 ? <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">Carregando os blocos do documento…</p> : visibleWordBlocks.length === 0 ? <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">Nenhum bloco encontrado para esta busca.</p> : visibleWordBlocks.map((block, index) => <div key={block.id} className={`rounded-xl border p-3 ${activeWordBlockId === block.id ? "border-blue-400 bg-blue-50/40" : "border-slate-200 bg-white"}`}>
+              <div className="mb-2 flex items-center justify-between gap-2"><span className="text-[11px] font-black uppercase tracking-wide text-slate-500">{block.section} · bloco {index + 1}</span><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${!block.editable ? "bg-slate-100 text-slate-500" : wordDraft[block.id] !== undefined && wordDraft[block.id] !== block.text ? "bg-amber-100 text-amber-800" : "bg-emerald-50 text-emerald-700"}`}>{!block.editable ? "Protegido" : wordDraft[block.id] !== undefined && wordDraft[block.id] !== block.text ? "Alterado" : "Editável"}</span></div>
+              {block.editable ? <textarea id={`word-block-${block.id}`} value={wordDraft[block.id] ?? block.text} disabled={!canEdit || busy} onFocus={() => setActiveWordBlockId(block.id)} onChange={(event) => setWordDraft((current) => ({ ...current, [block.id]: event.target.value.replace(/[\r\n\t]+/g, " ") }))} rows={Math.min(5, Math.max(2, Math.ceil((wordDraft[block.id] ?? block.text).length / 90)))} className="w-full resize-y rounded-lg border border-slate-200 bg-white p-2.5 text-sm leading-6 text-slate-800 outline-none focus:border-blue-400" /> : <p className="text-sm leading-6 text-slate-600">{block.text}</p>}
+              {block.editable && wordDraft[block.id] !== undefined && wordDraft[block.id] !== block.text ? <button type="button" onClick={() => setWordDraft((current) => { const next = { ...current }; delete next[block.id]; return next; })} className="mt-1 text-xs font-semibold text-slate-500 hover:text-blue-700">Desfazer neste bloco</button> : null}
+            </div>)}</div>
+          </div>
+          <div className="min-w-0 xl:sticky xl:top-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-bold text-slate-900">Prévia do Word preenchido</h3><p className="text-xs text-slate-500">Usa os dados escolhidos acima, incluindo alterações ainda não salvas.</p></div><button type="button" disabled={wordPreviewBusy || busy} onClick={() => void previewWordDraft()} className={button}>{wordPreviewBusy ? "Gerando…" : "Atualizar prévia"}</button></div>
+            {wordPreviewUrl && wordPreviewSignature !== wordSignature ? <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs font-semibold text-amber-800">A prévia está desatualizada. Clique em Atualizar prévia.</p> : null}
+            <div className="mt-3 flex h-[760px] items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-100">{wordPreviewUrl ? <iframe title="Prévia do Word em PDF" src={wordPreviewUrl} className="h-full w-full bg-white" /> : <p className="max-w-xs px-5 text-center text-sm text-slate-500">Clique em “Atualizar prévia” para ver o documento com os campos preenchidos.</p>}</div>
+          </div>
+        </div>
+      </section> : null}
 
       {!wordMode ? <button type="button" onClick={() => setShowVisualBuilder((value) => !value)} className={button}>{showVisualBuilder ? "Recolher editor visual" : "Criar documento do zero no editor visual"}</button> : null}
       <div className={`${wordMode || !showVisualBuilder ? "hidden" : "grid"} items-start gap-5 xl:grid-cols-[245px_minmax(0,1fr)_330px]`}>

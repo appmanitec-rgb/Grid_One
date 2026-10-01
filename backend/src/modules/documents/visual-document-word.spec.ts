@@ -73,6 +73,55 @@ describe('Word editável do Studio', () => {
     );
   });
 
+  it.each([
+    VisualDocumentKind.PROPOSAL,
+    VisualDocumentKind.CONTRACT,
+    VisualDocumentKind.SERVICE_REPORT,
+  ])(
+    'edita um bloco do Word %s sem perder os campos e a estrutura',
+    async (kind) => {
+      const original = await editor.baseWord(kind);
+      const block = renderer
+        .wordBlocks(original)
+        .find((item) => item.editable && item.text.length > 10);
+      expect(block).toBeDefined();
+      const edited = renderer.editWordBlocks(original, [
+        { id: block!.id, text: `${block!.text} Atualizado no Studio` },
+      ]);
+      expect(
+        renderer.wordBlocks(edited).find((item) => item.id === block!.id)?.text,
+      ).toBe(`${block!.text} Atualizado no Studio`);
+      expect(renderer.inspectFriendlyWord(edited).labels).toEqual(
+        renderer.inspectFriendlyWord(original).labels,
+      );
+      expect(edited.includes(Buffer.from('word/media/'))).toBe(
+        original.includes(Buffer.from('word/media/')),
+      );
+      const folder =
+        kind === VisualDocumentKind.PROPOSAL
+          ? 'proposal'
+          : kind === VisualDocumentKind.CONTRACT
+            ? 'contract'
+            : 'service-report';
+      const fields = await editor.wordFields(kind);
+      const filled = renderer.renderFriendlyWord(
+        edited,
+        templates.loadInstitutional(folder).sampleData,
+        renderer
+          .inspectFriendlyWord(edited)
+          .labels.map(
+            (label) => fields.find((field) => field.label === label)!,
+          ),
+      );
+      expect(renderer.inspectFriendlyWord(filled).labels).toEqual([]);
+      expect(() =>
+        renderer.editWordBlocks(original, [
+          { id: block!.id, text: '«Campo incompleto' },
+        ]),
+      ).toThrow();
+    },
+  );
+
   it('salva o DOCX e usa a versão publicada na geração seguinte', async () => {
     const editable = await editor.baseWord(VisualDocumentKind.PROPOSAL);
     const fields = await editor.wordFields(VisualDocumentKind.PROPOSAL);

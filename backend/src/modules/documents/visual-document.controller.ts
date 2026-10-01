@@ -59,6 +59,23 @@ export class VisualDocumentController {
     res.send(buffer);
   }
 
+  @Get('word-base/blocks')
+  wordBaseBlocks(@Query('kind') kind: VisualDocumentKind) {
+    return this.documents.baseWordBlocks(kind);
+  }
+
+  @Post('word-templates/from-base')
+  @RequireAccessPolicy('studio.access', 'studio.dataEdit')
+  createFromBase(
+    @Body() body: { kind?: VisualDocumentKind; name?: string },
+    @Req() req: Request,
+  ) {
+    return this.documents.createWordFromBase(
+      body,
+      (req['user'] as { sub?: string } | undefined)?.sub,
+    );
+  }
+
   @Post('word-templates')
   @RequireAccessPolicy('studio.access', 'studio.dataEdit')
   @UseInterceptors(
@@ -112,6 +129,51 @@ export class VisualDocumentController {
     res.setHeader(
       'Content-Disposition',
       'attachment; filename="modelo-manitec.docx"',
+    );
+    res.send(buffer);
+  }
+
+  @Get('templates/:id/word-blocks')
+  wordBlocks(@Param('id') id: string) {
+    return this.documents.getWordBlocks(id);
+  }
+
+  @Put('templates/:id/word-blocks')
+  @RequireAccessPolicy('studio.access', 'studio.dataEdit')
+  saveWordBlocks(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      expectedVersion?: number;
+      edits?: Array<{ id: string; text: string }>;
+    },
+    @Req() req: Request,
+  ) {
+    return this.documents.saveWordBlocks(
+      id,
+      body,
+      (req['user'] as { sub?: string } | undefined)?.sub,
+    );
+  }
+
+  @Post('templates/:id/word-blocks/preview')
+  async previewWordBlocks(
+    @Param('id') id: string,
+    @Body()
+    body: { edits?: Array<{ id: string; text: string }>; recordId?: string },
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const template = await this.documents.getTemplate(id);
+    if (body.recordId && !this.canViewRecords(req, template.kind))
+      throw new ForbiddenException(
+        'Seu perfil não pode visualizar este cadastro na prévia.',
+      );
+    const buffer = await this.documents.previewWordBlocks(id, body);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      'inline; filename="previa-blocos.pdf"',
     );
     res.send(buffer);
   }

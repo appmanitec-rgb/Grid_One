@@ -429,6 +429,21 @@ export class VisualDocumentService {
     );
   }
 
+  async baseWordBlocks(kind: VisualDocumentKind) {
+    return this.wordRenderer!.wordBlocks(await this.baseWord(kind));
+  }
+
+  async createWordFromBase(
+    input: { kind?: VisualDocumentKind; name?: string },
+    actorId?: string,
+  ) {
+    const kind = this.requireKind(input.kind);
+    return this.createWordTemplate(
+      { ...input, kind, file: await this.baseWord(kind) },
+      actorId,
+    );
+  }
+
   async createWordTemplate(
     input: { kind?: VisualDocumentKind; name?: string; file?: Buffer },
     actorId?: string,
@@ -514,6 +529,96 @@ export class VisualDocumentService {
     if (version?.format !== 'WORD' || !version.wordTemplate)
       throw new NotFoundException('Esta versão não contém um arquivo Word.');
     return Buffer.from(version.wordTemplate);
+  }
+
+  async getWordBlocks(id: string) {
+    if (!this.wordRenderer)
+      throw new BadRequestException('Editor Word indisponível.');
+    return this.wordRenderer.wordBlocks(await this.downloadWord(id));
+  }
+
+  async saveWordBlocks(
+    id: string,
+    input: {
+      expectedVersion?: number;
+      edits?: Array<{ id: string; text: string }>;
+    },
+    actorId?: string,
+  ) {
+    const template = await this.prisma.visualDocumentTemplate.findUnique({
+      where: { id },
+    });
+    if (!template) throw new NotFoundException('Modelo não encontrado.');
+    if (
+      !Number.isInteger(input.expectedVersion) ||
+      template.currentVersion !== input.expectedVersion
+    )
+      throw new ConflictException(
+        'Este modelo mudou em outra sessão. Recarregue antes de salvar.',
+      );
+    const edits = input.edits;
+    if (!this.wordRenderer || !Array.isArray(edits) || edits.length === 0)
+      throw new BadRequestException(
+        'Altere ao menos um bloco antes de salvar.',
+      );
+    const current = await this.downloadWord(id);
+    const edited = this.wordRenderer.editWordBlocks(current, edits);
+    const { buffer, mappings } = await this.prepareWordUpload(
+      template.kind,
+      edited,
+    );
+    await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.visualDocumentTemplate.updateMany({
+        where: { id, currentVersion: input.expectedVersion },
+        data: { currentVersion: { increment: 1 } },
+      });
+      if (!updated.count)
+        throw new ConflictException(
+          'Este modelo mudou em outra sessão. Recarregue antes de salvar.',
+        );
+      await tx.visualDocumentTemplateVersion.create({
+        data: {
+          templateId: id,
+          versionNumber: template.currentVersion + 1,
+          format: 'WORD',
+          blocks: [],
+          wordTemplate: buffer,
+          wordFieldMap: mappings as unknown as Prisma.InputJsonValue,
+          changeSummary: `${edits.length} bloco(s) editado(s) no Studio`,
+          createdByUserId: actorId,
+        },
+      });
+    });
+    return this.getTemplate(id);
+  }
+
+  async previewWordBlocks(
+    id: string,
+    input: { edits?: Array<{ id: string; text: string }>; recordId?: string },
+  ) {
+    const template = await this.prisma.visualDocumentTemplate.findUnique({
+      where: { id },
+    });
+    if (!template) throw new NotFoundException('Modelo não encontrado.');
+    if (!this.wordRenderer || !Array.isArray(input.edits))
+      throw new BadRequestException('Blocos inválidos para prévia.');
+    const edited = this.wordRenderer.editWordBlocks(
+      await this.downloadWord(id),
+      input.edits,
+    );
+    const { mappings } = await this.prepareWordUpload(template.kind, edited);
+    const context = input.recordId
+      ? await this.realContext(template.kind, input.recordId)
+      : this.sampleContext(template.kind);
+    const filled = this.wordRenderer.renderFriendlyWord(
+      edited,
+      context,
+      mappings,
+    );
+    return this.requireWordConverter().convertDocxToPdf({
+      buffer: filled,
+      fileName: 'previa-blocos.docx',
+    });
   }
 
   async previewWord(
