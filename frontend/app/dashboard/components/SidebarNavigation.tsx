@@ -301,6 +301,12 @@ const MAIN_SECTIONS: NavSection[] = [
         enabled: true,
       },
       {
+        key: "finance_fiscal_documents",
+        label: "Notas Fiscais",
+        href: "/dashboard/finance/fiscal-documents",
+        enabled: true,
+      },
+      {
         key: "finance_payable",
         label: "Contas a Pagar",
         href: "/dashboard/finance/accounts-payable",

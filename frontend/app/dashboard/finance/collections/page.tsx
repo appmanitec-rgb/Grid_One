@@ -11,7 +11,7 @@ type Agreement = {
   beneficiaryDocument: string; agency: string; agencyDigit: string; accountNumber: string;
   accountDigit: string; walletCode: string; documentType: string; homologated: boolean;
 };
-type Receivable = { id: string; description: string; dueDate: string; netAmount: number; paidAmount: number; client: { companyName: string } | null };
+type Receivable = { id: string; description: string; dueDate: string; netAmount: number; paidAmount: number; client: { companyName: string } | null; fiscalDocuments: { id: string; kind: "NFE" | "NFSE"; status: string; number: string | null }[] };
 type Title = {
   id: string; bankAccountId: string; documentNumber: string; ourNumber: string; status: string;
   invoiceNumber: string | null; invoiceIssuedAt: string | null; lastMessage: string | null;
@@ -123,7 +123,7 @@ export default function CollectionsPage() {
         { label: "Enviadas", value: String(batches.filter((item) => item.status === "SENT").length), tone: "emerald" },
         { label: "Para revisar", value: String(review.length), tone: "rose" },
       ]}
-      actions={<Link className={secondary} href="/dashboard/finance/accounts-receivable">Abrir contas a receber</Link>} />
+      actions={<div className="flex flex-wrap gap-2"><Link className={secondary} href="/dashboard/finance/fiscal-documents">Notas fiscais</Link><Link className={secondary} href="/dashboard/finance/accounts-receivable">Contas a receber</Link></div>} />
 
     {error && <StatusBanner tone="rose">{error}</StatusBanner>}
     {notice && <StatusBanner tone="emerald">{notice}</StatusBanner>}
@@ -164,16 +164,16 @@ export default function CollectionsPage() {
         {titles.length === 0 && <p className="text-sm text-slate-500">Nenhum boleto preparado para esta conta.</p>}
         {titles.map((title) => <div key={title.id} className="grid gap-3 rounded-xl border border-slate-200 p-3 text-sm md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center">
           <input aria-label={`Selecionar boleto ${title.documentNumber}`} type="checkbox" disabled={!ready.includes(title)} checked={selected.includes(title.id)} onChange={(event) => setSelected((previous) => event.target.checked ? [...previous, title.id] : previous.filter((id) => id !== title.id))} />
-          <div className="min-w-0"><p className="font-semibold text-slate-900">{title.receivable.client?.companyName || "Cliente"} · {title.documentNumber}</p><p className="text-xs text-slate-500">Nosso número {title.ourNumber} · {money(Number(title.receivable.netAmount) - Number(title.receivable.paidAmount))} · Vence {date(title.receivable.dueDate)}</p><p className="text-xs text-slate-500">NF {title.invoiceNumber || "não vinculada"} · {statusLabel[title.status] || title.status}{title.lastMessage ? ` · ${title.lastMessage}` : ""}</p></div>
+          <div className="min-w-0"><p className="font-semibold text-slate-900">{title.receivable.client?.companyName || "Cliente"} · {title.documentNumber}</p><p className="text-xs text-slate-500">Nosso número {title.ourNumber} · {money(Number(title.receivable.netAmount) - Number(title.receivable.paidAmount))} · Vence {date(title.receivable.dueDate)}</p><p className="text-xs text-slate-500">{title.receivable.fiscalDocuments.length ? title.receivable.fiscalDocuments.map((item) => `${item.kind === "NFE" ? "NF-e" : "NFS-e"} ${item.number || "rascunho"} (${item.status === "DRAFT" ? "sem valor fiscal" : item.status})`).join(" · ") : title.invoiceNumber ? `NF anterior ${title.invoiceNumber}` : "Nota fiscal pendente"} · {statusLabel[title.status] || title.status}{title.lastMessage ? ` · ${title.lastMessage}` : ""}</p></div>
           <button className={secondary} disabled={busy} onClick={() => {
             setInvoiceTitleId(title.id);
             setInvoiceDraft({ number: title.invoiceNumber || "", issuedAt: title.invoiceIssuedAt?.slice(0, 10) || "", accessKey: title.invoiceAccessKey || "", url: title.invoiceUrl || "" });
-          }}>Vincular NF</button>
+          }}>NF anterior</button>
         </div>)}
       </div>
       {invoiceTitleId && <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4">
         <p className="text-sm font-bold text-slate-900">Referência da nota fiscal</p>
-        <p className="mt-1 text-xs text-slate-600">Guarde os dados da NF emitida no seu sistema fiscal para acompanhar esta cobrança.</p>
+        <p className="mt-1 text-xs text-slate-600">Referência de notas já emitidas antes da integração fiscal do GridOne. Novos rascunhos de NF-e e NFS-e ficam na área Notas Fiscais.</p>
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           <label className="text-xs font-semibold text-slate-700">Número da NF<input className={`${input} mt-1`} value={invoiceDraft.number} onChange={(event) => setInvoiceDraft((previous) => ({ ...previous, number: event.target.value }))} /></label>
           <label className="text-xs font-semibold text-slate-700">Data de emissão<input className={`${input} mt-1`} type="date" value={invoiceDraft.issuedAt} onChange={(event) => setInvoiceDraft((previous) => ({ ...previous, issuedAt: event.target.value }))} /></label>

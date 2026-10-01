@@ -39,6 +39,7 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/dashboard/purchase-orders": { title: "Pedidos de Compra", subtitle: "Solicitações e acompanhamento de compras." },
   "/dashboard/finance/accounts-receivable": { title: "Contas a Receber", subtitle: "Recebimentos de contratos e ordens avulsas." },
   "/dashboard/finance/collections": { title: "Cobrança Santander", subtitle: "Boletos, remessas CNAB 240 e retornos bancários." },
+  "/dashboard/finance/fiscal-documents": { title: "Notas Fiscais", subtitle: "Rascunhos de NF-e e NFS-e vinculados ao financeiro." },
   "/dashboard/finance/accounts-payable": { title: "Contas a Pagar", subtitle: "Despesas operacionais, folha e fornecedores." },
   "/dashboard/finance/cash-flow": { title: "Fluxo de Caixa", subtitle: "Previsão de saldo, entradas e saídas do dia." },
   "/dashboard/finance/bank-accounts": { title: "Contas Bancárias & Caixas", subtitle: "Consolidação de saldos por banco e caixa interno." },

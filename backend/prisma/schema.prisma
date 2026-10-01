@@ -3354,12 +3354,55 @@ model AccountsReceivable {
   commissions        CommissionEntry[]
   bankMovements      BankMovement[]
   collectionTitle    BankCollectionTitle?
+  fiscalDocuments    FiscalDocument[]
   createdAt          DateTime                    @default(now())
   updatedAt          DateTime                    @updatedAt
 
   @@index([clientId, status, dueDate])
   @@index([contractId, competenceDate])
   @@map("accounts_receivable")
+}
+
+enum FiscalDocumentKind {
+  NFE
+  NFSE
+}
+
+enum FiscalDocumentStatus {
+  DRAFT
+  SUBMITTED
+  AUTHORIZED
+  REJECTED
+  CANCELLED
+}
+
+model FiscalDocument {
+  id                String               @id @default(uuid())
+  receivableId      String
+  receivable        AccountsReceivable   @relation(fields: [receivableId], references: [id], onDelete: Restrict)
+  kind              FiscalDocumentKind
+  status            FiscalDocumentStatus @default(DRAFT)
+  issuerSnapshot    Json
+  recipientSnapshot Json
+  items             Json
+  totalAmount       Decimal              @db.Decimal(15, 2)
+  fiscalNotes       String?
+  provider          String?
+  providerReference String?              @unique
+  number            String?
+  series            String?
+  accessKey         String?              @unique
+  issuedAt          DateTime?
+  authorizedAt      DateTime?
+  rejectionReason   String?
+  xml               Bytes?
+  pdf               Bytes?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@index([receivableId, kind, status])
+  @@index([status, createdAt])
+  @@map("fiscal_documents")
 }
 
 model BankCollectionAgreement {

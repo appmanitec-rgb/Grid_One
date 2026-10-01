@@ -50,6 +50,10 @@ export class BankCollectionService {
             receivable: {
               include: {
                 client: { select: { id: true, companyName: true, cnpj: true } },
+                fiscalDocuments: {
+                  select: { id: true, kind: true, status: true, number: true },
+                  orderBy: { createdAt: 'desc' },
+                },
               },
             },
             bankAccount: { select: { id: true, name: true } },
@@ -105,6 +109,10 @@ export class BankCollectionService {
       },
       include: {
         client: { select: { id: true, companyName: true, cnpj: true } },
+        fiscalDocuments: {
+          select: { id: true, kind: true, status: true, number: true },
+          orderBy: { createdAt: 'desc' },
+        },
       },
       orderBy: { dueDate: 'asc' },
       take: 300,
