@@ -34,8 +34,11 @@ const button = "rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm fo
 const primary = "rounded-xl bg-blue-700 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-40";
 
 function createBlock(type: Block["type"] = "paragraph"): Block {
+  const blockId = typeof globalThis.crypto?.randomUUID === "function"
+    ? globalThis.crypto.randomUUID()
+    : `block-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   return {
-    id: crypto.randomUUID(),
+    id: blockId,
     type,
     segments: type === "spacer" ? [] : [{ type: "text", text: "" }],
     fontSize: type === "heading" ? 18 : 11,
