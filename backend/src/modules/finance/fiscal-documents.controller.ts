@@ -41,6 +41,7 @@ export class FiscalDraftItemDto {
 
 export class SaveFiscalDraftDto {
   @IsUUID() receivableId!: string;
+  @IsUUID() issuerCompanyId!: string;
   @IsEnum(FiscalDocumentKind) kind!: FiscalDocumentKind;
   @IsArray()
   @ArrayMinSize(1)

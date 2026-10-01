@@ -9,6 +9,7 @@ import { FiscalDocumentsService } from './fiscal-documents.service';
 
 describe('FiscalDocumentsService', () => {
   const company = {
+    id: 'issuer-id',
     companyName: 'Manitec',
     cnpj: '12.345.678/0001-90',
     stateRegistration: '123',
@@ -41,7 +42,7 @@ describe('FiscalDocumentsService', () => {
           .fn()
           .mockResolvedValue({ id: 'receivable-id', status, client }),
       },
-      companySettings: { findFirst: jest.fn().mockResolvedValue(company) },
+      companySettings: { findUnique: jest.fn().mockResolvedValue(company) },
       fiscalDocument: {
         create: jest.fn().mockImplementation(({ data }) =>
           Promise.resolve({
@@ -69,6 +70,7 @@ describe('FiscalDocumentsService', () => {
     const { service, tx } = setup();
     const result = await service.createDraft({
       receivableId: 'receivable-id',
+      issuerCompanyId: 'issuer-id',
       kind: FiscalDocumentKind.NFE,
       items: [
         {
@@ -88,6 +90,7 @@ describe('FiscalDocumentsService', () => {
       ],
     });
     expect(result.status).toBe(FiscalDocumentStatus.DRAFT);
+    expect(result.issuerCompanyId).toBe('issuer-id');
     expect(result.totalAmount.toString()).toBe('24');
     expect(result.issuerSnapshot).toMatchObject({
       cnpj: '12345678000190',
@@ -114,6 +117,7 @@ describe('FiscalDocumentsService', () => {
     await expect(
       service.createDraft({
         receivableId: 'receivable-id',
+        issuerCompanyId: 'issuer-id',
         kind: FiscalDocumentKind.NFSE,
         items: [
           {
@@ -123,6 +127,20 @@ describe('FiscalDocumentsService', () => {
             serviceCode: '14.01',
           },
         ],
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(tx.fiscalDocument.create).not.toHaveBeenCalled();
+  });
+
+  it('does not accept an issuer that is absent from company settings', async () => {
+    const { service, tx } = setup();
+    tx.companySettings.findUnique.mockResolvedValue(null);
+    await expect(
+      service.createDraft({
+        receivableId: 'receivable-id',
+        issuerCompanyId: 'other-issuer-id',
+        kind: FiscalDocumentKind.NFSE,
+        items: [{ description: 'Serviço', quantity: 1, unitAmount: 100 }],
       }),
     ).rejects.toThrow(BadRequestException);
     expect(tx.fiscalDocument.create).not.toHaveBeenCalled();

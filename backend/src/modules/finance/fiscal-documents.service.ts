@@ -30,19 +30,21 @@ export class FiscalDocumentsService {
   constructor(private readonly prisma: DatabaseService) {}
 
   async overview() {
-    const [company, receivables, documents] = await Promise.all([
-      this.prisma.companySettings
-        .findFirst({
-          where: { isPrimary: true },
-          orderBy: { createdAt: 'asc' },
-        })
-        .then(
-          async (primary) =>
-            primary ||
-            this.prisma.companySettings.findFirst({
-              where: { key: 'default' },
-            }),
-        ),
+    const [companies, receivables, documents] = await Promise.all([
+      this.prisma.companySettings.findMany({
+        select: {
+          id: true,
+          companyName: true,
+          cnpj: true,
+          stateRegistration: true,
+          municipalRegistration: true,
+          taxRegime: true,
+          city: true,
+          state: true,
+          isPrimary: true,
+        },
+        orderBy: [{ isPrimary: 'desc' }, { companyName: 'asc' }],
+      }),
       this.prisma.accountsReceivable.findMany({
         where: { status: { not: AccountsReceivableStatus.CANCELED } },
         select: {
@@ -59,6 +61,7 @@ export class FiscalDocumentsService {
         select: {
           id: true,
           receivableId: true,
+          issuerCompanyId: true,
           kind: true,
           status: true,
           items: true,
@@ -87,17 +90,7 @@ export class FiscalDocumentsService {
       }),
     ]);
     return {
-      issuer: company
-        ? {
-            companyName: company.companyName,
-            cnpj: company.cnpj,
-            stateRegistration: company.stateRegistration,
-            municipalRegistration: company.municipalRegistration,
-            taxRegime: company.taxRegime,
-            city: company.city,
-            state: company.state,
-          }
-        : null,
+      issuers: companies,
       receivables,
       documents: documents.map((document) => ({
         ...document,
@@ -106,6 +99,7 @@ export class FiscalDocumentsService {
           document.issuerSnapshot,
           document.recipientSnapshot,
           document.items,
+          document.issuerCompanyId,
         ),
       })),
       issuanceConfigured: false,
@@ -125,18 +119,19 @@ export class FiscalDocumentsService {
         throw new BadRequestException(
           'Não é possível preparar nota para uma conta cancelada.',
         );
-      const primary = await tx.companySettings.findFirst({
-        where: { isPrimary: true },
-        orderBy: { createdAt: 'asc' },
+      const company = await tx.companySettings.findUnique({
+        where: { id: input.issuerCompanyId },
       });
-      const company =
-        primary ||
-        (await tx.companySettings.findFirst({ where: { key: 'default' } }));
+      if (!company)
+        throw new BadRequestException(
+          'Selecione uma empresa emitente cadastrada.',
+        );
       const issuerSnapshot = this.issuerSnapshot(company);
       const recipientSnapshot = this.recipientSnapshot(receivable.client);
       const document = await tx.fiscalDocument.create({
         data: {
           receivableId: input.receivableId,
+          issuerCompanyId: company.id,
           kind: input.kind,
           issuerSnapshot,
           recipientSnapshot,
@@ -154,6 +149,7 @@ export class FiscalDocumentsService {
           actorUserId,
           payload: {
             receivableId: document.receivableId,
+            issuerCompanyId: company.id,
             kind: document.kind,
             totalAmount,
           },
@@ -166,6 +162,7 @@ export class FiscalDocumentsService {
           issuerSnapshot,
           recipientSnapshot,
           items,
+          company.id,
         ),
       };
     });
@@ -199,19 +196,20 @@ export class FiscalDocumentsService {
         receivable.status === AccountsReceivableStatus.CANCELED
       )
         throw new BadRequestException('A conta a receber não está disponível.');
-      const primary = await tx.companySettings.findFirst({
-        where: { isPrimary: true },
-        orderBy: { createdAt: 'asc' },
+      const company = await tx.companySettings.findUnique({
+        where: { id: input.issuerCompanyId },
       });
-      const company =
-        primary ||
-        (await tx.companySettings.findFirst({ where: { key: 'default' } }));
+      if (!company)
+        throw new BadRequestException(
+          'Selecione uma empresa emitente cadastrada.',
+        );
       const issuerSnapshot = this.issuerSnapshot(company);
       const recipientSnapshot = this.recipientSnapshot(receivable.client);
       const document = await tx.fiscalDocument.update({
         where: { id },
         data: {
           issuerSnapshot,
+          issuerCompanyId: company.id,
           recipientSnapshot,
           items: items as unknown as Prisma.InputJsonValue,
           totalAmount: new Prisma.Decimal(totalAmount.toFixed(2)),
@@ -227,6 +225,7 @@ export class FiscalDocumentsService {
           actorUserId,
           payload: {
             receivableId: document.receivableId,
+            issuerCompanyId: company.id,
             kind: document.kind,
             totalAmount,
           },
@@ -239,6 +238,7 @@ export class FiscalDocumentsService {
           issuerSnapshot,
           recipientSnapshot,
           items,
+          company.id,
         ),
       };
     });
@@ -355,11 +355,13 @@ export class FiscalDocumentsService {
     issuerValue: Prisma.JsonValue,
     recipientValue: Prisma.JsonValue,
     itemsValue: Prisma.JsonValue,
+    issuerCompanyId?: string | null,
   ) {
     const issuer = issuerValue as Record<string, unknown>;
     const recipient = recipientValue as Record<string, unknown>;
     const items = itemsValue as unknown as DraftItem[];
     const missing: string[] = [];
+    if (!issuerCompanyId) missing.push('empresa emitente');
     if (
       digits(typeof issuer.cnpj === 'string' ? issuer.cnpj : '').length !== 14
     )

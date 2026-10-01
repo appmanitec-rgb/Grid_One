@@ -1224,6 +1224,7 @@ model CompanySettings {
   updatedByUser             User?    @relation("CompanySettingsUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
+  fiscalDocuments           FiscalDocument[]
 
   @@index([cnpj])
   @@index([isPrimary])
@@ -3380,6 +3381,8 @@ model FiscalDocument {
   id                String               @id @default(uuid())
   receivableId      String
   receivable        AccountsReceivable   @relation(fields: [receivableId], references: [id], onDelete: Restrict)
+  issuerCompanyId   String?
+  issuerCompany     CompanySettings?     @relation(fields: [issuerCompanyId], references: [id], onDelete: Restrict)
   kind              FiscalDocumentKind
   status            FiscalDocumentStatus @default(DRAFT)
   issuerSnapshot    Json
@@ -3401,6 +3404,7 @@ model FiscalDocument {
   updatedAt         DateTime             @updatedAt
 
   @@index([receivableId, kind, status])
+  @@index([issuerCompanyId, status, createdAt])
   @@index([status, createdAt])
   @@map("fiscal_documents")
 }

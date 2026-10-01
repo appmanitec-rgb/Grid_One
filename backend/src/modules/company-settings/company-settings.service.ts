@@ -274,6 +274,15 @@ export class CompanySettingsService {
       );
     }
 
+    const linkedFiscalDocuments = await this.prisma.fiscalDocument.count({
+      where: { issuerCompanyId: id },
+    });
+    if (linkedFiscalDocuments > 0) {
+      throw new ConflictException(
+        'Esta empresa já está vinculada a documentos fiscais e não pode ser excluída.',
+      );
+    }
+
     return this.prisma.$transaction(async (tx) => {
       await tx.companySettings.delete({
         where: { id },
