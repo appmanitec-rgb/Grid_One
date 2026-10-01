@@ -11,9 +11,10 @@ import { InstitutionalDocumentService } from './institutional-document.service';
 import { PdfRenderService } from './pdf-render.service';
 import { ProposalPdfService } from './proposal-pdf.service';
 import { TemplateRendererService } from './template-renderer.service';
+import { VisualDocumentModule } from './visual-document.module';
 
 @Module({
-  imports: [DatabaseModule, FileStorageModule],
+  imports: [DatabaseModule, FileStorageModule, VisualDocumentModule],
   controllers: [DocumentsController],
   providers: [
     DocumentsService,

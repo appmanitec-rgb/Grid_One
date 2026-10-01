@@ -2,6 +2,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   ContractInvoiceStatus,
@@ -16,6 +17,7 @@ import {
   Prisma,
   ProposalStatus,
   UserRole,
+  VisualDocumentKind,
 } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
 import {
@@ -32,6 +34,7 @@ import {
 import { GeneratedProposalPdf } from './proposal-pdf.service';
 import { ProposalPdfService } from './proposal-pdf.service';
 import { ContractDocumentOptionsDto } from './dto/contract-document-options.dto';
+import { VisualDocumentService } from './visual-document.service';
 
 type DocumentState = 'ready' | 'attention' | 'pending';
 type DocumentKind = 'proposal' | 'contract' | 'order';
@@ -76,6 +79,7 @@ export class DocumentsService {
     private readonly proposalPdfService: ProposalPdfService,
     private readonly documentGenerationService: DocumentGenerationService,
     private readonly fileStorage: FileStorageService,
+    @Optional() private readonly visualDocuments?: VisualDocumentService,
   ) {}
 
   async getHub(userId: string) {
@@ -399,6 +403,16 @@ export class DocumentsService {
 
   async previewProposalPdfHtml(id: string, userId: string) {
     const payload = await this.getProposalDocument(id, userId);
+    const visual = await this.visualDocuments?.renderPublished(
+      VisualDocumentKind.PROPOSAL,
+      payload as unknown as Record<string, unknown>,
+    );
+    if (visual)
+      return {
+        html: visual.html,
+        templateKey: visual.templateKey,
+        templateVersion: visual.templateVersion,
+      };
     return this.proposalPdfService.renderHtml(payload);
   }
 
@@ -1132,7 +1146,7 @@ export class DocumentsService {
             generationOptions: options.generationOptions,
           }
         : payload;
-    const generated = this.documentGenerationService.generateDocx(
+    const generated = await this.documentGenerationService.generateDocx(
       kind,
       generationPayload as Record<string, unknown>,
     );
@@ -1541,7 +1555,21 @@ export class DocumentsService {
   ): Promise<LoadedFile & { documentDeliveryId: string; templateKey: string }> {
     const actor = await this.getActorScope(userId);
     const payload = await this.getProposalDocument(id, userId);
-    const generated = this.proposalPdfService.generate(payload);
+    const visual = await this.visualDocuments?.renderPublished(
+      VisualDocumentKind.PROPOSAL,
+      payload as unknown as Record<string, unknown>,
+    );
+    const generated: GeneratedProposalPdf =
+      visual && this.visualDocuments
+        ? {
+            buffer: this.visualDocuments.pdf(visual.name, visual.blocks),
+            html: visual.html,
+            templateKey: visual.templateKey,
+            templateVersion: visual.templateVersion,
+            templateSchema: {},
+            fileName: `proposta-${payload.document.code.replace(/[^a-zA-Z0-9._-]/g, '-')}.pdf`,
+          }
+        : this.proposalPdfService.generate(payload);
     const stored = await this.fileStorage.saveDocumentPdf(
       'proposal-pdfs',
       generated.fileName,

@@ -6,6 +6,7 @@ import {
   InstitutionalTemplateDefinition,
   LoadedInstitutionalDocumentTemplate,
 } from './document-template.service';
+import type { RenderedVisualBlock } from './visual-document.service';
 
 type RenderContext = Record<string, unknown>;
 
@@ -29,6 +30,52 @@ const WORD_TEXT_XML_PATTERN = /^word\/(?:document|header\d+|footer\d+)\.xml$/;
 
 @Injectable()
 export class DocxTemplateRendererService {
+  renderVisual(input: {
+    title: string;
+    blocks: RenderedVisualBlock[];
+    templateKey: string;
+    templateVersion: string;
+    fileName: string;
+  }): GeneratedDocxDocument {
+    const paragraphs = input.blocks.map((block) => {
+      const spacing = Math.round(block.spaceAfter * 20);
+      if (block.type === 'spacer') {
+        return `<w:p><w:pPr><w:spacing w:after="${spacing}"/></w:pPr></w:p>`;
+      }
+      const alignment =
+        block.align === 'center'
+          ? 'center'
+          : block.align === 'right'
+            ? 'right'
+            : 'left';
+      const runs = block.runs
+        .flatMap((run) =>
+          run.text
+            .split(/\r?\n/)
+            .map(
+              (line, index) =>
+                `<w:r><w:rPr>${block.bold || block.type === 'heading' ? '<w:b/>' : ''}<w:sz w:val="${block.fontSize * 2}"/></w:rPr>${index > 0 ? '<w:br/>' : ''}<w:t xml:space="preserve">${this.escapeXml(line)}</w:t></w:r>`,
+            ),
+        )
+        .join('');
+      return `<w:p><w:pPr><w:jc w:val="${alignment}"/><w:spacing w:after="${spacing}"/></w:pPr>${runs || this.run(' ')}</w:p>`;
+    });
+    const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>
+${this.documentBrand()}${paragraphs.join('')}
+<w:sectPr><w:footerReference w:type="default" r:id="rId1"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1020" w:bottom="1276" w:left="1020" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr>
+</w:body></w:document>`;
+    const buffer = this.buildDocxArchive({ documentXml, title: input.title });
+    return {
+      buffer,
+      mimeType: DOCX_MIME,
+      checksumSha256: createHash('sha256').update(buffer).digest('hex'),
+      templateKey: input.templateKey,
+      templateVersion: input.templateVersion,
+      fileName: input.fileName,
+    };
+  }
+
   private readonly legacyVariables: Array<[string, string]> = [
     ['!pecasrelatorio.dataset', ''],
     ['!servicosrel.dataset', ''],

@@ -219,6 +219,7 @@ export class SimplePdfDocument {
       bold?: boolean;
       color?: 'normal' | 'muted';
       yGapAfter?: number;
+      align?: 'left' | 'center' | 'right';
     } = {},
   ) {
     const size = options.size ?? BODY_FONT_SIZE;
@@ -226,9 +227,19 @@ export class SimplePdfDocument {
     const lines = this.wrap(value, size, PAGE_WIDTH - MARGIN_X * 2);
     for (const line of lines) {
       this.ensureSpace(lineHeight);
+      const estimatedWidth = Math.min(
+        PAGE_WIDTH - MARGIN_X * 2,
+        line.length * size * 0.5,
+      );
+      const x =
+        options.align === 'center'
+          ? (PAGE_WIDTH - estimatedWidth) / 2
+          : options.align === 'right'
+            ? PAGE_WIDTH - MARGIN_X - estimatedWidth
+            : MARGIN_X;
       this.current.commands.push(
         `${options.color === 'muted' ? '0.38 0.45 0.55 rg' : '0.06 0.09 0.16 rg'}`,
-        `BT /${options.bold ? 'F2' : 'F1'} ${size} Tf ${MARGIN_X} ${this.y.toFixed(2)} Td (${this.escapePdf(line)}) Tj ET`,
+        `BT /${options.bold ? 'F2' : 'F1'} ${size} Tf ${x.toFixed(2)} ${this.y.toFixed(2)} Td (${this.escapePdf(line)}) Tj ET`,
       );
       this.y -= lineHeight;
     }
@@ -259,6 +270,11 @@ export class SimplePdfDocument {
 
   gap(size: number) {
     this.y -= size;
+  }
+
+  pageBreak() {
+    this.pages.push({ commands: [] });
+    this.y = PAGE_HEIGHT - MARGIN_TOP;
   }
 
   qrCode(value: string, x: number, y: number, size: number) {

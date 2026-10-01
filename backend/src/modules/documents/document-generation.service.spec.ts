@@ -21,8 +21,8 @@ describe('DocumentGenerationService', () => {
     docxToPdf as unknown as DocxToPdfService,
   );
 
-  it('generates proposal DOCX from normalized institutional payload', () => {
-    const generated = service.generateDocx('proposal', {
+  it('generates proposal DOCX from normalized institutional payload', async () => {
+    const generated = await service.generateDocx('proposal', {
       company: {
         companyName: 'MANITEC',
         tradeName: 'MANITEC Operacao Integrada',

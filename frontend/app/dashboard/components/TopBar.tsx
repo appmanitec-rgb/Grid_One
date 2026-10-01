@@ -56,6 +56,7 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/dashboard/catalog": { title: "Inteligência de Catálogo", subtitle: "Peças, custos, margens e precificação." },
   "/dashboard/suppliers": { title: "Rede de Fornecedores", subtitle: "Compras, SLA e condições comerciais." },
   "/dashboard/developer/data": { title: "Manitec Studio", subtitle: "Visualizacao, edicao controlada, importacao preparada e exportacao de dados." },
+  "/dashboard/developer/document-editor": { title: "Editor Inteligente de Documentos", subtitle: "Monte propostas, contratos e relatórios com campos visuais." },
   "/dashboard/developer/history": { title: "Historico do Studio", subtitle: "Auditoria e rastreabilidade dos eventos administrativos." },
   "/dashboard/developer": { title: "Manitec Studio", subtitle: "Gerenciamento seguro dos dados do ERP." },
   "/dashboard/management/users": { title: "Área de Gestão (Admin)", subtitle: "Cadastros de usuários, permissões e governança." },

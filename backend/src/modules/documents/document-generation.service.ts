@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { createHash } from 'crypto';
+import { VisualDocumentKind } from '@prisma/client';
 import { DocxToPdfService } from './docx-to-pdf.service';
 import { DocxTemplateRendererService } from './docx-template-renderer.service';
 import {
@@ -11,6 +12,7 @@ import {
   InstitutionalDocumentService,
 } from './institutional-document.service';
 import { DocumentTemplateService } from './document-template.service';
+import { VisualDocumentService } from './visual-document.service';
 
 export type GeneratedInstitutionalDocument = {
   buffer: Buffer;
@@ -42,12 +44,13 @@ export class DocumentGenerationService {
     private readonly institutionalDocuments: InstitutionalDocumentService,
     private readonly docxRenderer: DocxTemplateRendererService,
     private readonly docxToPdf: DocxToPdfService,
+    @Optional() private readonly visualDocuments?: VisualDocumentService,
   ) {}
 
-  generateDocx(
+  async generateDocx(
     kind: DocumentTemplateKind,
     payload: Record<string, unknown>,
-  ): GeneratedInstitutionalDocument {
+  ): Promise<GeneratedInstitutionalDocument> {
     const template = this.templates.loadInstitutional(kind);
     const context = this.institutionalDocuments.buildContext(
       kind,
@@ -58,6 +61,27 @@ export class DocumentGenerationService {
       kind,
       context,
     );
+    const visualKind =
+      kind === 'proposal'
+        ? VisualDocumentKind.PROPOSAL
+        : kind === 'contract'
+          ? VisualDocumentKind.CONTRACT
+          : kind === 'service-report'
+            ? VisualDocumentKind.SERVICE_REPORT
+            : null;
+    const visual = visualKind
+      ? await this.visualDocuments?.renderPublished(visualKind, payload)
+      : null;
+    if (visual) {
+      const rendered = this.docxRenderer.renderVisual({
+        title: visual.name,
+        blocks: visual.blocks,
+        templateKey: visual.templateKey,
+        templateVersion: visual.templateVersion,
+        fileName: `${this.safeFileSegment(kind)}-${this.safeFileSegment(documentCode)}.docx`,
+      });
+      return { ...rendered, context, template };
+    }
     const rendered = this.docxRenderer.render({
       template,
       context,
@@ -81,7 +105,7 @@ export class DocumentGenerationService {
     kind: DocumentTemplateKind,
     payload: Record<string, unknown>,
   ): Promise<GeneratedInstitutionalPdf> {
-    const docx = this.generateDocx(kind, payload);
+    const docx = await this.generateDocx(kind, payload);
     const pdfBuffer = await this.docxToPdf.convertDocxToPdf({
       buffer: docx.buffer,
       fileName: docx.fileName,

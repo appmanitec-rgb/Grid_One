@@ -394,6 +394,12 @@ const MAIN_SECTIONS: NavSection[] = [
         enabled: true,
       },
       {
+        key: "studio_document_editor",
+        label: "Editor de documentos",
+        href: "/dashboard/developer/document-editor",
+        enabled: true,
+      },
+      {
         key: "studio_history",
         label: "Historico",
         href: "/dashboard/developer/history",

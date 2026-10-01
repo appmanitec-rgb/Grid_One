@@ -6,9 +6,15 @@ import { ServiceReportPdfService } from './service-report-pdf.service';
 import { ServiceReportsController } from './service-reports.controller';
 import { ServiceReportsPublicController } from './service-reports-public.controller';
 import { ServiceReportsService } from './service-reports.service';
+import { VisualDocumentModule } from '../documents/visual-document.module';
 
 @Module({
-  imports: [DatabaseModule, AuditLogsModule, FileStorageModule],
+  imports: [
+    DatabaseModule,
+    AuditLogsModule,
+    FileStorageModule,
+    VisualDocumentModule,
+  ],
   controllers: [ServiceReportsController, ServiceReportsPublicController],
   providers: [ServiceReportsService, ServiceReportPdfService],
   exports: [ServiceReportsService],

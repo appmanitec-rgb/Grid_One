@@ -2678,6 +2678,73 @@ model ServiceReportTemplate {
   @@map("service_report_templates")
 }
 
+enum VisualDocumentKind {
+  PROPOSAL
+  CONTRACT
+  SERVICE_REPORT
+}
+
+model VisualDocumentField {
+  id         String                               @id @default(uuid())
+  key        String                               @unique
+  label      String
+  category   String
+  kinds      VisualDocumentKind[]
+  sourcePath String?
+  fixedValue String?
+  isSystem   Boolean                              @default(false)
+  createdAt  DateTime                             @default(now())
+  mappings   VisualDocumentTemplateFieldMapping[]
+
+  @@index([category, label])
+  @@map("visual_document_fields")
+}
+
+model VisualDocumentTemplate {
+  id               String                          @id @default(uuid())
+  kind             VisualDocumentKind
+  name             String
+  description      String?
+  isActive         Boolean                         @default(false)
+  currentVersion   Int                             @default(1)
+  publishedVersion Int?
+  createdByUserId  String?
+  createdAt        DateTime                        @default(now())
+  updatedAt        DateTime                        @updatedAt
+  versions         VisualDocumentTemplateVersion[]
+
+  @@index([kind, isActive])
+  @@map("visual_document_templates")
+}
+
+model VisualDocumentTemplateVersion {
+  id              String                               @id @default(uuid())
+  templateId      String
+  template        VisualDocumentTemplate               @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  versionNumber   Int
+  blocks          Json
+  changeSummary   String?
+  createdByUserId String?
+  createdAt       DateTime                             @default(now())
+  fieldsMapping   VisualDocumentTemplateFieldMapping[]
+
+  @@unique([templateId, versionNumber])
+  @@map("visual_document_template_versions")
+}
+
+model VisualDocumentTemplateFieldMapping {
+  id         String                        @id @default(uuid())
+  versionId  String
+  version    VisualDocumentTemplateVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  fieldId    String
+  field      VisualDocumentField           @relation(fields: [fieldId], references: [id], onDelete: Restrict)
+  sourcePath String?
+  fixedValue String?
+
+  @@unique([versionId, fieldId])
+  @@map("visual_document_template_fields_mapping")
+}
+
 model ServiceReportVersion {
   id                  String            @id @default(uuid())
   reportId            String

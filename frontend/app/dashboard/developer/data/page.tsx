@@ -95,6 +95,10 @@ export default function StudioDataPage() {
             value={String(visibleResources.filter((resource) => !resource.editable).length)}
           />
         </div>
+        <Link href="/dashboard/developer/document-editor" className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4 transition hover:border-blue-400 hover:bg-blue-100">
+          <span><span className="block text-base font-bold text-blue-950">Editor Inteligente de Documentos</span><span className="mt-1 block text-sm text-blue-800">Monte propostas, contratos e relatórios com texto e campos visuais.</span></span>
+          <span className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-bold text-white">Abrir editor</span>
+        </Link>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
