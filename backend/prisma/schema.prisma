@@ -3320,6 +3320,8 @@ model BankAccount {
   statementEntries       BankStatementEntry[]
   reconciliationIssues   BankReconciliationIssue[]
   reconciliationClosings BankReconciliationClosing[]
+  collectionAgreement     BankCollectionAgreement?
+  collectionTitles        BankCollectionTitle[]
 
   @@map("bank_accounts")
 }
@@ -3351,12 +3353,138 @@ model AccountsReceivable {
   payments           AccountsReceivablePayment[]
   commissions        CommissionEntry[]
   bankMovements      BankMovement[]
+  collectionTitle    BankCollectionTitle?
   createdAt          DateTime                    @default(now())
   updatedAt          DateTime                    @updatedAt
 
   @@index([clientId, status, dueDate])
   @@index([contractId, competenceDate])
   @@map("accounts_receivable")
+}
+
+model BankCollectionAgreement {
+  id                   String   @id @default(uuid())
+  bankAccountId        String   @unique
+  bankAccount          BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  transmissionCode     String
+  beneficiaryName      String
+  beneficiaryDocument  String
+  agency               String
+  agencyDigit          String
+  accountNumber        String
+  accountDigit         String
+  walletCode           String   @default("1")
+  registrationForm     String   @default("1")
+  documentType         String   @default("2")
+  nextRemittanceNumber Int      @default(1)
+  nextOurNumber        Int      @default(1)
+  homologated          Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  batches              BankCollectionBatch[]
+  returnImports        BankCollectionReturnImport[]
+
+  @@map("bank_collection_agreements")
+}
+
+model BankCollectionTitle {
+  id                 String   @id @default(uuid())
+  receivableId       String   @unique
+  receivable         AccountsReceivable @relation(fields: [receivableId], references: [id], onDelete: Restrict)
+  bankAccountId      String
+  bankAccount        BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  documentNumber     String
+  ourNumber          String
+  speciesCode        String   @default("04")
+  status             String   @default("DRAFT")
+  invoiceNumber      String?
+  invoiceIssuedAt    DateTime?
+  invoiceAccessKey   String?
+  invoiceUrl         String?
+  lastOccurrenceCode String?
+  lastOccurrenceAt   DateTime?
+  lastMessage        String?
+  registeredAt       DateTime?
+  paidAt             DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  batchItems         BankCollectionBatchItem[]
+  returnEvents       BankCollectionReturnEvent[]
+
+  @@unique([bankAccountId, ourNumber])
+  @@unique([bankAccountId, documentNumber])
+  @@index([status, updatedAt])
+  @@map("bank_collection_titles")
+}
+
+model BankCollectionBatch {
+  id             String   @id @default(uuid())
+  agreementId    String
+  agreement      BankCollectionAgreement @relation(fields: [agreementId], references: [id], onDelete: Restrict)
+  sequence       Int
+  fileName       String
+  content        Bytes
+  checksumSha256 String
+  status         String   @default("GENERATED")
+  createdAt      DateTime @default(now())
+  sentAt         DateTime?
+  sentById       String?
+  items          BankCollectionBatchItem[]
+
+  @@unique([agreementId, sequence])
+  @@index([status, createdAt])
+  @@map("bank_collection_batches")
+}
+
+model BankCollectionBatchItem {
+  id      String @id @default(uuid())
+  batchId String
+  batch   BankCollectionBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  titleId String
+  title   BankCollectionTitle @relation(fields: [titleId], references: [id], onDelete: Restrict)
+
+  @@unique([batchId, titleId])
+  @@index([titleId])
+  @@map("bank_collection_batch_items")
+}
+
+model BankCollectionReturnImport {
+  id             String   @id @default(uuid())
+  agreementId    String
+  agreement      BankCollectionAgreement @relation(fields: [agreementId], references: [id], onDelete: Restrict)
+  fileName       String
+  content        Bytes
+  checksumSha256 String
+  importedAt     DateTime @default(now())
+  importedById   String?
+  events         BankCollectionReturnEvent[]
+
+  @@unique([agreementId, checksumSha256])
+  @@index([importedAt])
+  @@map("bank_collection_return_imports")
+}
+
+model BankCollectionReturnEvent {
+  id           String   @id @default(uuid())
+  importId     String
+  import       BankCollectionReturnImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+  titleId      String?
+  title        BankCollectionTitle? @relation(fields: [titleId], references: [id], onDelete: SetNull)
+  lineNumber   Int
+  movementCode String
+  reasonCodes  String?
+  amount       Float   @default(0)
+  netCreditAmount Float @default(0)
+  eventDate    DateTime?
+  outcome      String   @default("PENDING_REVIEW")
+  message      String?
+  createdAt    DateTime @default(now())
+
+  @@unique([importId, lineNumber])
+  @@index([outcome, createdAt])
+  @@map("bank_collection_return_events")
 }
 
 model AccountsReceivablePayment {

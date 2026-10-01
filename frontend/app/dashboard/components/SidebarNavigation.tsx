@@ -295,6 +295,12 @@ const MAIN_SECTIONS: NavSection[] = [
         enabled: true,
       },
       {
+        key: "finance_collections",
+        label: "Cobrança Santander",
+        href: "/dashboard/finance/collections",
+        enabled: true,
+      },
+      {
         key: "finance_payable",
         label: "Contas a Pagar",
         href: "/dashboard/finance/accounts-payable",

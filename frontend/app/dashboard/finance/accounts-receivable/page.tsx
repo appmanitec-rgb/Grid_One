@@ -755,6 +755,9 @@ export default function AccountsReceivablePage() {
         ]}
         actions={
           <>
+            <Link href="/dashboard/finance/collections" className={SECONDARY_BUTTON}>
+              Cobrança Santander
+            </Link>
             <button
               type="button"
               onClick={() => void syncContractInvoices()}
