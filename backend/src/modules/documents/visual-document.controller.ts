@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   ForbiddenException,
@@ -8,10 +9,14 @@ import {
   Put,
   Query,
   Req,
+  Res,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { VisualDocumentKind } from '@prisma/client';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { RequireAccessPolicy } from '../auth/access-policy.decorator';
 import { AccessPolicyGuard } from '../auth/access-policy.guard';
 import { AuthGuard } from '../auth/auth.guard';
@@ -26,6 +31,50 @@ export class VisualDocumentController {
   @Get('fields')
   fields(@Query('kind') kind?: VisualDocumentKind) {
     return this.documents.listFields(kind);
+  }
+
+  @Get('word-fields')
+  wordFields(@Query('kind') kind: VisualDocumentKind) {
+    return this.documents
+      .wordFields(kind)
+      .then((fields) =>
+        fields.map(({ label, category }) => ({ label, category })),
+      );
+  }
+
+  @Get('word-base')
+  async wordBase(
+    @Query('kind') kind: VisualDocumentKind,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.documents.baseWord(kind);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="modelo-manitec-editavel.docx"',
+    );
+    res.send(buffer);
+  }
+
+  @Post('word-templates')
+  @RequireAccessPolicy('studio.access', 'studio.dataEdit')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 16 * 1024 * 1024 } }),
+  )
+  createWord(
+    @Body() body: { kind?: VisualDocumentKind; name?: string },
+    @UploadedFile()
+    file: { buffer?: Buffer; originalname?: string } | undefined,
+    @Req() req: Request,
+  ) {
+    this.requireDocxName(file);
+    return this.documents.createWordTemplate(
+      { ...body, file: file?.buffer },
+      (req['user'] as { sub?: string } | undefined)?.sub,
+    );
   }
 
   @Post('fields')
@@ -44,6 +93,83 @@ export class VisualDocumentController {
   @Get('templates/:id')
   template(@Param('id') id: string) {
     return this.documents.getTemplate(id);
+  }
+
+  @Get('templates/:id/word')
+  async downloadWord(
+    @Param('id') id: string,
+    @Query('version') version: string | undefined,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.documents.downloadWord(
+      id,
+      version ? Number(version) : undefined,
+    );
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="modelo-manitec.docx"',
+    );
+    res.send(buffer);
+  }
+
+  @Get('templates/:id/word-preview')
+  async wordPreview(
+    @Param('id') id: string,
+    @Query('recordId') recordId: string | undefined,
+    @Query('format') format: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const template = await this.documents.getTemplate(id);
+    if (recordId && !this.canViewRecords(req, template.kind))
+      throw new ForbiddenException(
+        'Seu perfil não pode visualizar este cadastro na prévia.',
+      );
+    const pdf = format === 'pdf';
+    const buffer = await this.documents.previewWord(
+      id,
+      recordId,
+      pdf ? 'pdf' : 'docx',
+    );
+    res.setHeader(
+      'Content-Type',
+      pdf
+        ? 'application/pdf'
+        : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="previa-manitec.${pdf ? 'pdf' : 'docx'}"`,
+    );
+    res.send(buffer);
+  }
+
+  @Post('templates/:id/word')
+  @RequireAccessPolicy('studio.access', 'studio.dataEdit')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 16 * 1024 * 1024 } }),
+  )
+  saveWord(
+    @Param('id') id: string,
+    @Body() body: { expectedVersion?: string; name?: string },
+    @UploadedFile()
+    file: { buffer?: Buffer; originalname?: string } | undefined,
+    @Req() req: Request,
+  ) {
+    this.requireDocxName(file);
+    return this.documents.saveWordTemplate(
+      id,
+      {
+        file: file?.buffer,
+        expectedVersion: Number(body.expectedVersion),
+        name: body.name,
+      },
+      (req['user'] as { sub?: string } | undefined)?.sub,
+    );
   }
 
   @Post('templates')
@@ -142,5 +268,10 @@ export class VisualDocumentController {
           ? 'contracts'
           : 'serviceReports';
     return actor?.accessPolicy?.[section]?.view === true;
+  }
+
+  private requireDocxName(file?: { originalname?: string }) {
+    if (!file?.originalname?.toLowerCase().endsWith('.docx'))
+      throw new BadRequestException('Selecione um arquivo .docx do Word.');
   }
 }

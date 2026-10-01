@@ -18,9 +18,10 @@ type Block = {
 };
 type Field = { id: string; label: string; category: string; kinds: Kind[]; isSystem: boolean };
 type TemplateSummary = { id: string; kind: Kind; name: string; description: string | null; isActive: boolean; currentVersion: number; publishedVersion: number | null; updatedAt: string };
-type Version = { versionNumber: number; blocks: Block[]; changeSummary: string | null; createdAt: string };
+type Version = { versionNumber: number; format: "VISUAL" | "WORD"; blocks: Block[]; changeSummary: string | null; createdAt: string };
 type TemplateDetail = TemplateSummary & { versions: Version[] };
 type SampleRecord = { id: string; label: string };
+type WordField = { label: string; category: string };
 type Cursor = { blockId: string; segmentIndex: number; start: number; end: number };
 
 const API = "/studio/document-editor";
@@ -60,6 +61,8 @@ export default function DocumentEditorPage() {
   const canView = access.studio.access && access.studio.dataView;
   const [kind, setKind] = useState<Kind>("PROPOSAL");
   const [fields, setFields] = useState<Field[]>([]);
+  const [wordFields, setWordFields] = useState<WordField[]>([]);
+  const [showVisualBuilder, setShowVisualBuilder] = useState(false);
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
   const [samples, setSamples] = useState<SampleRecord[]>([]);
   const [template, setTemplate] = useState<TemplateDetail | null>(null);
@@ -82,20 +85,24 @@ export default function DocumentEditorPage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const cursorRef = useRef<Cursor | null>(null);
   const dragRef = useRef<string | null>(null);
+  const wordInputRef = useRef<HTMLInputElement | null>(null);
+  const wordMode = template?.versions[0]?.format === "WORD";
 
   useEffect(() => setAccess(getAccessFromToken()), []);
 
   const loadCatalog = useCallback(async (nextKind: Kind) => {
     setLoading(true);
     try {
-      const [nextFields, nextTemplates, nextSamples] = await Promise.all([
+      const [nextFields, nextTemplates, nextSamples, nextWordFields] = await Promise.all([
         request<Field[]>(`/fields?kind=${nextKind}`),
         request<TemplateSummary[]>(`/templates?kind=${nextKind}`),
         request<SampleRecord[]>(`/sample-records?kind=${nextKind}`),
+        request<WordField[]>(`/word-fields?kind=${nextKind}`),
       ]);
       setFields(nextFields);
       setTemplates(nextTemplates);
       setSamples(nextSamples);
+      setWordFields(nextWordFields);
     } catch (error) {
       setFeedback({ kind: "error", text: error instanceof Error ? error.message : "Falha ao carregar o editor." });
     } finally {
@@ -114,7 +121,7 @@ export default function DocumentEditorPage() {
   const selectedBlock = blocks.find((block) => block.id === selectedBlockId) || null;
 
   useEffect(() => {
-    if (!canView || loading || blocks.length === 0) return;
+    if (!canView || loading || wordMode || blocks.length === 0) return;
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       setPreviewBusy(true);
@@ -133,12 +140,12 @@ export default function DocumentEditorPage() {
       }
     }, 450);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [kind, blocks, recordId, canView, loading]);
+  }, [kind, blocks, recordId, canView, loading, wordMode]);
 
   function reset(nextKind = kind) {
     if (dirty && !window.confirm("Há alterações não salvas. Deseja sair deste modelo?")) return;
     setKind(nextKind);
-    if (nextKind !== kind) { setFields([]); setTemplates([]); setSamples([]); }
+    if (nextKind !== kind) { setFields([]); setTemplates([]); setSamples([]); setWordFields([]); }
     setTemplate(null);
     setName("");
     setDescription("");
@@ -147,6 +154,7 @@ export default function DocumentEditorPage() {
     setRecordId("");
     setDirty(false);
     setHistoryOpen(false);
+    setShowVisualBuilder(false);
     cursorRef.current = null;
   }
 
@@ -159,6 +167,7 @@ export default function DocumentEditorPage() {
       setName(loaded.name);
       setDescription(loaded.description || "");
       setBlocks(loaded.versions[0]?.blocks || initialBlocks());
+      setShowVisualBuilder(loaded.versions[0]?.format !== "WORD");
       setSelectedBlockId("");
       setDirty(false);
       setHistoryOpen(false);
@@ -257,6 +266,7 @@ export default function DocumentEditorPage() {
       setName(loaded.name);
       setDescription(loaded.description || "");
       setBlocks(loaded.versions[0]?.blocks || initialBlocks());
+      setShowVisualBuilder(loaded.versions[0]?.format !== "WORD");
       setDirty(false);
       setFeedback({ kind: "success", text: version ? `Versão ${version} restaurada como novo rascunho.` : action === "publish" ? "Modelo publicado e aplicado aos próximos documentos." : action === "duplicate" ? "Cópia criada como rascunho." : "Modelo desativado." });
       void loadCatalog(kind);
@@ -275,6 +285,56 @@ export default function DocumentEditorPage() {
     } catch (error) {
       setFeedback({ kind: "error", text: error instanceof Error ? error.message : "Falha ao criar campo." });
     } finally { setBusy(false); }
+  }
+
+  async function downloadWord(path: string, filename: string) {
+    setBusy(true);
+    try {
+      const response = await apiFetch(`${API}${path}`);
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, "Não foi possível baixar o Word."));
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url; link.download = filename; document.body.append(link); link.click(); link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      setFeedback({ kind: "error", text: error instanceof Error ? error.message : "Falha ao baixar o Word." });
+    } finally { setBusy(false); }
+  }
+
+  async function uploadWord(file?: File) {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".docx")) { setFeedback({ kind: "error", text: "Selecione um arquivo .docx." }); return; }
+    if (!template && !name.trim()) { setFeedback({ kind: "error", text: "Dê um nome ao modelo antes de enviar o Word." }); return; }
+    setBusy(true);
+    try {
+      const form = new FormData();
+      form.append("file", file); form.append("name", name || template?.name || "Modelo Word");
+      if (template) form.append("expectedVersion", String(template.currentVersion));
+      else form.append("kind", kind);
+      const loaded = await request<TemplateDetail>(template ? `/templates/${template.id}/word` : "/word-templates", { method: "POST", body: form });
+      setTemplate(loaded); setName(loaded.name); setBlocks(loaded.versions[0]?.blocks || []);
+      setShowVisualBuilder(false);
+      setDirty(false); setFeedback({ kind: "success", text: `Word enviado como versão ${loaded.currentVersion}. Baixe a prévia preenchida e publique quando estiver pronto.` });
+      void loadCatalog(kind);
+    } catch (error) {
+      setFeedback({ kind: "error", text: error instanceof Error ? error.message : "Não foi possível enviar o Word." });
+    } finally {
+      setBusy(false);
+      if (wordInputRef.current) wordInputRef.current.value = "";
+    }
+  }
+
+  async function copyWordField(label: string) {
+    if (!navigator.clipboard?.writeText) {
+      setFeedback({ kind: "error", text: `Copie o campo «${label}» e cole no Word.` });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(`«${label}»`);
+      setFeedback({ kind: "success", text: `Campo “${label}” copiado. Cole no Word.` });
+    } catch {
+      setFeedback({ kind: "error", text: `Copie o campo «${label}» e cole no Word.` });
+    }
   }
 
   if (!canView) return <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-900">Seu perfil precisa de acesso de visualização ao Manitec Studio.</div>;
@@ -297,7 +357,36 @@ export default function DocumentEditorPage() {
 
       {feedback ? <div role="status" className={`rounded-xl border px-4 py-3 text-sm font-semibold ${feedback.kind === "error" ? "border-red-200 bg-red-50 text-red-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>{feedback.text}</div> : null}
 
-      <div className="grid items-start gap-5 xl:grid-cols-[245px_minmax(0,1fr)_330px]">
+      <section className="rounded-2xl border border-blue-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div><p className="text-xs font-black uppercase tracking-[0.16em] text-blue-700">Modelo Word da MANITEC</p><h2 className="mt-1 text-xl font-bold text-slate-900">Edite o documento que vocês já usam</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Baixe uma cópia do Word original, altere textos, tabelas, imagens e formatação no Word e envie o arquivo aqui. Os campos com nomes legíveis serão preenchidos automaticamente na geração.</p></div>
+          <button type="button" disabled={busy} onClick={() => void downloadWord(`/word-base?kind=${kind}`, `modelo-${kind.toLowerCase()}-editavel.docx`)} className={primary}>1. Baixar Word original</button>
+        </div>
+        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <h3 className="font-bold text-slate-900">2. Enviar o Word editado</h3>
+            <p className="mt-1 text-xs leading-5 text-slate-600">O arquivo enviado vira uma nova versão deste modelo. A versão publicada continua em uso até você publicar a nova.</p>
+            {!template ? <label className="mt-3 block text-xs font-semibold text-slate-600">Nome do modelo<input value={name} onChange={(event) => { setName(event.target.value); setDirty(true); }} placeholder="Ex.: Proposta comercial padrão" className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2.5 text-sm" /></label> : <p className="mt-3 text-sm font-bold text-slate-800">{template.name} · versão {template.currentVersion}</p>}
+            <input ref={wordInputRef} type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={!canEdit || busy} onChange={(event) => void uploadWord(event.target.files?.[0])} className="mt-3 block w-full text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-100 file:px-3 file:py-2 file:font-bold file:text-blue-900" />
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <h3 className="font-bold text-slate-900">Campos para copiar no Word</h3>
+            <p className="mt-1 text-xs leading-5 text-slate-600">Clique em um campo e cole no local desejado do documento. Você verá apenas o nome do dado.</p>
+            <input type="search" value={fieldQuery} onChange={(event) => setFieldQuery(event.target.value)} placeholder="Buscar nome, valor, data…" className="mt-3 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm" />
+            <div className="mt-2 flex max-h-36 flex-wrap gap-1.5 overflow-y-auto">{wordFields.filter((field) => `${field.label} ${field.category}`.toLocaleLowerCase("pt-BR").includes(fieldQuery.toLocaleLowerCase("pt-BR"))).map((field) => <button key={`${field.category}-${field.label}`} type="button" onClick={() => void copyWordField(field.label)} className="rounded-lg border border-blue-200 bg-white px-2 py-1 text-xs font-semibold text-blue-900 hover:bg-blue-50" title={`Copiar ${field.label}`}>«{field.label}»</button>)}</div>
+          </div>
+        </div>
+        <div className="mt-4 border-t border-slate-200 pt-4"><h3 className="text-sm font-bold text-slate-900">Modelos salvos</h3><div className="mt-2 flex max-h-32 flex-wrap gap-2 overflow-y-auto">{templates.length ? templates.map((item) => <button key={item.id} type="button" onClick={() => void openTemplate(item.id)} className={`rounded-lg border px-3 py-2 text-xs font-semibold ${template?.id === item.id ? "border-blue-500 bg-blue-50 text-blue-900" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}>{item.name}{item.isActive ? " · publicado" : ""}</button>) : <span className="text-xs text-slate-500">Nenhum modelo salvo nesta categoria.</span>}</div></div>
+        {wordMode && template ? <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-bold text-emerald-950">Versão Word {template.currentVersion} pronta para conferência</p><p className="mt-1 text-xs text-emerald-900">Confira o arquivo preenchido com um exemplo ou um cadastro real antes de publicar.</p></div><button type="button" onClick={() => reset()} className={button}>Ver outros modelos</button></div>
+          <div className="mt-3 flex flex-wrap items-end gap-2"><label className="min-w-[240px] flex-1 text-xs font-semibold text-slate-600">Dados para prévia<select value={recordId} onChange={(event) => setRecordId(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm"><option value="">Exemplo demonstrativo</option>{samples.map((sample) => <option key={sample.id} value={sample.id}>{sample.label}</option>)}</select></label><button type="button" disabled={busy} onClick={() => void downloadWord(`/templates/${template.id}/word`, `modelo-${kind.toLowerCase()}-v${template.currentVersion}.docx`)} className={button}>Baixar esta versão</button><button type="button" disabled={busy} onClick={() => void downloadWord(`/templates/${template.id}/word-preview${recordId ? `?recordId=${encodeURIComponent(recordId)}` : ""}`, "previa-preenchida.docx")} className={button}>Prévia preenchida em Word</button><button type="button" disabled={busy} onClick={() => void downloadWord(`/templates/${template.id}/word-preview?format=pdf${recordId ? `&recordId=${encodeURIComponent(recordId)}` : ""}`, "previa-preenchida.pdf")} className={button}>Prévia em PDF</button></div>
+          <div className="mt-3 flex flex-wrap gap-2"><button type="button" disabled={!canEdit || busy || template.isActive && template.publishedVersion === template.currentVersion} onClick={() => void act("publish")} className={primary}>Publicar versão Word</button><button type="button" disabled={!canEdit || busy} onClick={() => void act("duplicate")} className={button}>Duplicar modelo</button><button type="button" disabled={!canEdit || busy || !template.isActive} onClick={() => void act("deactivate")} className={button}>Desativar</button><button type="button" onClick={() => setHistoryOpen((value) => !value)} className={button}>Histórico</button></div>
+          {historyOpen ? <div className="mt-3 space-y-2">{template.versions.map((version) => <div key={version.versionNumber} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-white p-2 text-sm"><span>Versão {version.versionNumber} · {version.format === "WORD" ? "Word" : "Visual"} · {new Date(version.createdAt).toLocaleString("pt-BR")}</span><button type="button" disabled={!canEdit || busy || version.versionNumber === template.currentVersion} onClick={() => void act("publish", version.versionNumber)} className={button}>Restaurar</button></div>)}</div> : null}
+        </div> : null}
+      </section>
+
+      {!wordMode ? <button type="button" onClick={() => setShowVisualBuilder((value) => !value)} className={button}>{showVisualBuilder ? "Recolher editor visual" : "Criar documento do zero no editor visual"}</button> : null}
+      <div className={`${wordMode || !showVisualBuilder ? "hidden" : "grid"} items-start gap-5 xl:grid-cols-[245px_minmax(0,1fr)_330px]`}>
         <aside className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between"><h2 className="font-bold text-slate-900">Modelos</h2><button type="button" onClick={() => reset()} disabled={!canEdit} className="text-xs font-bold text-blue-700 disabled:opacity-40">+ Novo</button></div>
           <p className="text-xs leading-5 text-slate-500">Publique um modelo para usá-lo nos próximos documentos desse tipo.</p>

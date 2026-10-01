@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../../database/database.module';
 import { DocumentTemplateService } from './document-template.service';
+import { DocxTemplateRendererService } from './docx-template-renderer.service';
+import { DocxToPdfService } from './docx-to-pdf.service';
 import { InstitutionalDocumentService } from './institutional-document.service';
 import { VisualDocumentController } from './visual-document.controller';
 import { VisualDocumentService } from './visual-document.service';
@@ -12,6 +14,8 @@ import { VisualDocumentService } from './visual-document.service';
     VisualDocumentService,
     DocumentTemplateService,
     InstitutionalDocumentService,
+    DocxTemplateRendererService,
+    DocxToPdfService,
   ],
   exports: [VisualDocumentService],
 })

@@ -69,6 +69,22 @@ export class DocumentGenerationService {
           : kind === 'service-report'
             ? VisualDocumentKind.SERVICE_REPORT
             : null;
+    const word = visualKind
+      ? await this.visualDocuments?.renderPublishedWord(visualKind, payload)
+      : null;
+    if (word) {
+      return {
+        buffer: word.buffer,
+        mimeType:
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        checksumSha256: word.checksumSha256,
+        templateKey: word.templateKey,
+        templateVersion: word.templateVersion,
+        fileName: `${this.safeFileSegment(kind)}-${this.safeFileSegment(documentCode)}.docx`,
+        context,
+        template,
+      };
+    }
     const visual = visualKind
       ? await this.visualDocuments?.renderPublished(visualKind, payload)
       : null;

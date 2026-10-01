@@ -9,10 +9,13 @@ import {
   VisualDocumentKind,
   VisualDocumentTemplateVersion,
 } from '@prisma/client';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
+import { readFileSync } from 'fs';
 import { DatabaseService } from '../../database/database.service';
 import { SimplePdfDocument } from '../service-reports/service-report-pdf.service';
 import { DocumentTemplateService } from './document-template.service';
+import { DocxTemplateRendererService } from './docx-template-renderer.service';
+import { DocxToPdfService } from './docx-to-pdf.service';
 import { InstitutionalDocumentService } from './institutional-document.service';
 
 export type VisualSegment =
@@ -292,12 +295,21 @@ type VersionWithMapping = VisualDocumentTemplateVersion & {
   }>;
 };
 
+type WordField = {
+  label: string;
+  category: string;
+  sourcePath: string | null;
+  fixedValue: string | null;
+};
+
 @Injectable()
 export class VisualDocumentService {
   constructor(
     private readonly prisma: DatabaseService,
     private readonly templates: DocumentTemplateService,
     private readonly institutional: InstitutionalDocumentService,
+    private readonly wordRenderer?: DocxTemplateRendererService,
+    private readonly docxToPdf?: DocxToPdfService,
   ) {}
 
   async listFields(kind?: VisualDocumentKind) {
@@ -313,6 +325,345 @@ export class VisualDocumentService {
         isSystem: true,
       },
     });
+  }
+
+  async wordFields(kind: VisualDocumentKind): Promise<WordField[]> {
+    this.requireKind(kind);
+    if (!this.wordRenderer)
+      throw new BadRequestException('Editor Word indisponível.');
+    const original = this.templates.loadInstitutional(
+      this.institutionalKind(kind),
+    );
+    const source = original.docxTemplatePath
+      ? readFileSync(original.docxTemplatePath)
+      : null;
+    const paths = source ? this.wordRenderer.wordTemplatePaths(source) : [];
+    const schemaLabels =
+      original.schema.fields && typeof original.schema.fields === 'object'
+        ? (original.schema.fields as Record<string, string>)
+        : {};
+    const builtin = BUILTIN_FIELDS.filter((field) =>
+      (field.kinds as readonly VisualDocumentKind[]).includes(kind),
+    );
+    const byPath = new Map<string, WordField>();
+    for (const field of builtin)
+      byPath.set(field.sourcePath, {
+        label: field.label,
+        category: field.category,
+        sourcePath: field.sourcePath,
+        fixedValue: null,
+      });
+    for (const [path, label] of Object.entries(schemaLabels)) {
+      if (path.includes('[]') || byPath.has(path)) continue;
+      byPath.set(path, {
+        label,
+        category: this.wordCategory(path),
+        sourcePath: path,
+        fixedValue: null,
+      });
+    }
+    const specialLabels: Record<string, string> = {
+      __proposal_parts__: 'Peças da Proposta',
+      __proposal_services__: 'Serviços da Proposta',
+      __contract_items__: 'Equipamentos do Contrato',
+      __contract_services__: 'Serviços do Contrato',
+    };
+    for (const path of paths) {
+      if (byPath.has(path)) continue;
+      byPath.set(path, {
+        label: specialLabels[path] || this.friendlyWordPath(path, schemaLabels),
+        category: this.wordCategory(path),
+        sourcePath: path,
+        fixedValue: null,
+      });
+    }
+    const custom = await this.prisma.visualDocumentField.findMany({
+      where: { kinds: { has: kind }, isSystem: false },
+      select: {
+        label: true,
+        category: true,
+        sourcePath: true,
+        fixedValue: true,
+      },
+    });
+    const fields = [...byPath.values(), ...custom];
+    const used = new Set<string>();
+    return fields
+      .map((field) => {
+        let label = field.label;
+        let suffix = 2;
+        while (used.has(label.toLocaleLowerCase('pt-BR')))
+          label = `${field.label} ${suffix++}`;
+        used.add(label.toLocaleLowerCase('pt-BR'));
+        return { ...field, label };
+      })
+      .sort((a, b) =>
+        `${a.category} ${a.label}`.localeCompare(
+          `${b.category} ${b.label}`,
+          'pt-BR',
+        ),
+      );
+  }
+
+  async baseWord(kind: VisualDocumentKind) {
+    if (!this.wordRenderer)
+      throw new BadRequestException('Editor Word indisponível.');
+    const source = this.templates.loadInstitutional(
+      this.institutionalKind(this.requireKind(kind)),
+    );
+    if (!source.docxTemplatePath)
+      throw new NotFoundException('Modelo Word original não encontrado.');
+    const fields = await this.wordFields(kind);
+    const labels: Record<string, string> = {};
+    for (const field of BUILTIN_FIELDS) {
+      if ((field.kinds as readonly VisualDocumentKind[]).includes(kind))
+        labels[field.sourcePath] = field.label;
+    }
+    for (const field of fields) {
+      if (field.sourcePath && !labels[field.sourcePath])
+        labels[field.sourcePath] = field.label;
+    }
+    return this.wordRenderer.prepareEditableWord(
+      readFileSync(source.docxTemplatePath),
+      labels,
+    );
+  }
+
+  async createWordTemplate(
+    input: { kind?: VisualDocumentKind; name?: string; file?: Buffer },
+    actorId?: string,
+  ) {
+    const kind = this.requireKind(input.kind);
+    const name = this.requireName(input.name);
+    const { buffer, mappings } = await this.prepareWordUpload(kind, input.file);
+    const created = await this.prisma.visualDocumentTemplate.create({
+      data: {
+        kind,
+        name,
+        createdByUserId: actorId,
+        versions: {
+          create: {
+            versionNumber: 1,
+            format: 'WORD',
+            blocks: [],
+            wordTemplate: buffer,
+            wordFieldMap: mappings as unknown as Prisma.InputJsonValue,
+            createdByUserId: actorId,
+          },
+        },
+      },
+    });
+    return this.getTemplate(created.id);
+  }
+
+  async saveWordTemplate(
+    id: string,
+    input: { file?: Buffer; expectedVersion?: number; name?: string },
+    actorId?: string,
+  ) {
+    const template = await this.prisma.visualDocumentTemplate.findUnique({
+      where: { id },
+    });
+    if (!template) throw new NotFoundException('Modelo não encontrado.');
+    if (template.currentVersion !== input.expectedVersion)
+      throw new ConflictException(
+        'Este modelo mudou em outra sessão. Recarregue antes de enviar o Word.',
+      );
+    const { buffer, mappings } = await this.prepareWordUpload(
+      template.kind,
+      input.file,
+    );
+    await this.prisma.$transaction(async (tx) => {
+      await tx.visualDocumentTemplateVersion.create({
+        data: {
+          templateId: id,
+          versionNumber: template.currentVersion + 1,
+          format: 'WORD',
+          blocks: [],
+          wordTemplate: buffer,
+          wordFieldMap: mappings as unknown as Prisma.InputJsonValue,
+          changeSummary: 'Arquivo Word atualizado',
+          createdByUserId: actorId,
+        },
+      });
+      await tx.visualDocumentTemplate.update({
+        where: { id },
+        data: {
+          name: input.name ? this.requireName(input.name) : template.name,
+          currentVersion: { increment: 1 },
+        },
+      });
+    });
+    return this.getTemplate(id);
+  }
+
+  async downloadWord(id: string, versionNumber?: number) {
+    const template = await this.prisma.visualDocumentTemplate.findUnique({
+      where: { id },
+    });
+    if (!template) throw new NotFoundException('Modelo não encontrado.');
+    const version = await this.prisma.visualDocumentTemplateVersion.findUnique({
+      where: {
+        templateId_versionNumber: {
+          templateId: id,
+          versionNumber: versionNumber || template.currentVersion,
+        },
+      },
+      select: { format: true, wordTemplate: true },
+    });
+    if (version?.format !== 'WORD' || !version.wordTemplate)
+      throw new NotFoundException('Esta versão não contém um arquivo Word.');
+    return Buffer.from(version.wordTemplate);
+  }
+
+  async previewWord(
+    id: string,
+    recordId?: string,
+    format: 'docx' | 'pdf' = 'docx',
+  ) {
+    const template = await this.prisma.visualDocumentTemplate.findUnique({
+      where: { id },
+    });
+    if (!template) throw new NotFoundException('Modelo não encontrado.');
+    const version = await this.prisma.visualDocumentTemplateVersion.findUnique({
+      where: {
+        templateId_versionNumber: {
+          templateId: id,
+          versionNumber: template.currentVersion,
+        },
+      },
+    });
+    if (
+      version?.format !== 'WORD' ||
+      !version.wordTemplate ||
+      !this.wordRenderer
+    )
+      throw new NotFoundException('Envie um Word antes de gerar a prévia.');
+    const context = recordId
+      ? await this.realContext(template.kind, recordId)
+      : this.sampleContext(template.kind);
+    const buffer = this.wordRenderer.renderFriendlyWord(
+      Buffer.from(version.wordTemplate),
+      context,
+      this.savedWordFields(version.wordFieldMap),
+    );
+    return format === 'pdf'
+      ? this.requireWordConverter().convertDocxToPdf({
+          buffer,
+          fileName: 'previa.docx',
+        })
+      : buffer;
+  }
+
+  private async prepareWordUpload(kind: VisualDocumentKind, file?: Buffer) {
+    if (!file || file.length > 16 * 1024 * 1024 || !this.wordRenderer)
+      throw new BadRequestException('Envie um arquivo DOCX de até 16 MB.');
+    let inspection: ReturnType<
+      DocxTemplateRendererService['inspectFriendlyWord']
+    >;
+    try {
+      inspection = this.wordRenderer.inspectFriendlyWord(file);
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      throw new BadRequestException('O arquivo enviado não é um DOCX válido.');
+    }
+    if (inspection.technicalMarkers)
+      throw new BadRequestException(
+        'Este Word ainda contém códigos internos. Baixe o modelo editável do Studio e envie a cópia editada.',
+      );
+    const catalog = await this.wordFields(kind);
+    const byLabel = new Map(catalog.map((field) => [field.label, field]));
+    const missing = inspection.labels.filter((label) => !byLabel.has(label));
+    if (missing.length)
+      throw new BadRequestException(
+        `Campos não reconhecidos no Word: ${missing.slice(0, 5).join(', ')}.`,
+      );
+    const mappings = inspection.labels.map((label) => byLabel.get(label)!);
+    this.wordRenderer.renderFriendlyWord(
+      file,
+      this.sampleContext(kind),
+      mappings,
+    );
+    return { buffer: file, mappings };
+  }
+
+  private savedWordFields(value: unknown): WordField[] {
+    return Array.isArray(value)
+      ? value.filter((entry): entry is WordField =>
+          Boolean(
+            entry &&
+            typeof entry.label === 'string' &&
+            (typeof entry.sourcePath === 'string' ||
+              typeof entry.fixedValue === 'string'),
+          ),
+        )
+      : [];
+  }
+
+  private requireWordConverter() {
+    if (!this.docxToPdf)
+      throw new BadRequestException('Conversor Word indisponível.');
+    return this.docxToPdf;
+  }
+
+  private wordCategory(path: string) {
+    return path.startsWith('client.') || path.startsWith('contact.')
+      ? 'Cliente'
+      : path.startsWith('proposal.') || path.startsWith('__proposal')
+        ? 'Proposta'
+        : path.startsWith('contract.') || path.startsWith('__contract')
+          ? 'Contrato'
+          : path.startsWith('company.')
+            ? 'Empresa'
+            : path.startsWith('equipment.')
+              ? 'Equipamento'
+              : path.startsWith('serviceReport.') || path.startsWith('items[')
+                ? 'Relatório'
+                : 'Outros';
+  }
+
+  private friendlyWordPath(path: string, schemaLabels: Record<string, string>) {
+    if (path.startsWith('items[')) {
+      const match = path.match(/^items\[(\d+)]\.(\w+)$/);
+      if (match)
+        return `Evidência ${Number(match[1]) + 1} - ${this.wordName(match[2])}`;
+    }
+    const labels: Record<string, string> = {
+      'metadata.templateKey': 'Nome do Modelo',
+      'metadata.generatedAt': 'Data de Geração',
+      'metadata.documentId': 'Número Interno do Documento',
+      'signatures.customer': 'Assinatura do Cliente',
+      'signatures.technician': 'Nome do Técnico',
+    };
+    return (
+      labels[path] ||
+      schemaLabels[path] ||
+      `${this.wordName(path.split('.')[0])} - ${this.wordName(path.split('.').at(-1) || path)}`
+    );
+  }
+
+  private wordName(value: string) {
+    const known: Record<string, string> = {
+      company: 'Empresa',
+      client: 'Cliente',
+      contract: 'Contrato',
+      proposal: 'Proposta',
+      serviceReport: 'Relatório',
+      equipment: 'Equipamento',
+      contact: 'Contato',
+      consultant: 'Consultor',
+      title: 'Título',
+      type: 'Tipo',
+      fileName: 'Arquivo',
+      name: 'Nome',
+      site: 'Local',
+    };
+    return (
+      known[value] ||
+      value
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .replace(/^./, (character) => character.toLocaleUpperCase('pt-BR'))
+    );
   }
 
   async createField(input: {
@@ -397,6 +748,7 @@ export class VisualDocumentService {
           select: {
             id: true,
             versionNumber: true,
+            format: true,
             blocks: true,
             changeSummary: true,
             createdAt: true,
@@ -489,6 +841,41 @@ export class VisualDocumentService {
 
   async duplicateTemplate(id: string, actorId?: string) {
     const source = await this.getTemplate(id);
+    if (source.versions[0]?.format === 'WORD') {
+      const version =
+        await this.prisma.visualDocumentTemplateVersion.findUnique({
+          where: {
+            templateId_versionNumber: {
+              templateId: id,
+              versionNumber: source.currentVersion,
+            },
+          },
+        });
+      if (!version?.wordTemplate)
+        throw new NotFoundException('Arquivo Word da versão não encontrado.');
+      const copy = await this.prisma.visualDocumentTemplate.create({
+        data: {
+          kind: source.kind,
+          name: `${source.name} (cópia)`,
+          description: source.description,
+          createdByUserId: actorId,
+          versions: {
+            create: {
+              versionNumber: 1,
+              format: 'WORD',
+              blocks: [],
+              wordTemplate: version.wordTemplate,
+              wordFieldMap:
+                version.wordFieldMap === null
+                  ? Prisma.JsonNull
+                  : (version.wordFieldMap as Prisma.InputJsonValue),
+              createdByUserId: actorId,
+            },
+          },
+        },
+      });
+      return this.getTemplate(copy.id);
+    }
     return this.createTemplate(
       {
         kind: source.kind,
@@ -506,6 +893,38 @@ export class VisualDocumentService {
       (entry) => entry.versionNumber === versionNumber,
     );
     if (!version) throw new NotFoundException('Versão não encontrada.');
+    if (version.format === 'WORD') {
+      const original =
+        await this.prisma.visualDocumentTemplateVersion.findUnique({
+          where: {
+            templateId_versionNumber: { templateId: id, versionNumber },
+          },
+        });
+      if (!original?.wordTemplate)
+        throw new NotFoundException('Arquivo Word da versão não encontrado.');
+      await this.prisma.$transaction(async (tx) => {
+        await tx.visualDocumentTemplateVersion.create({
+          data: {
+            templateId: id,
+            versionNumber: template.currentVersion + 1,
+            format: 'WORD',
+            blocks: [],
+            wordTemplate: original.wordTemplate,
+            wordFieldMap:
+              original.wordFieldMap === null
+                ? Prisma.JsonNull
+                : (original.wordFieldMap as Prisma.InputJsonValue),
+            changeSummary: `Restaurada da versão ${versionNumber}`,
+            createdByUserId: actorId,
+          },
+        });
+        await tx.visualDocumentTemplate.update({
+          where: { id },
+          data: { currentVersion: { increment: 1 } },
+        });
+      });
+      return this.getTemplate(id);
+    }
     return this.saveTemplate(
       id,
       {
@@ -642,7 +1061,7 @@ export class VisualDocumentService {
     payload: Record<string, unknown>,
   ) {
     const published = await this.getPublished(kind);
-    if (!published) return null;
+    if (!published || published.version.format === 'WORD') return null;
     const context = this.institutional.buildContext(
       this.institutionalKind(kind),
       payload,
@@ -670,6 +1089,20 @@ export class VisualDocumentService {
     payload: Record<string, unknown>,
     validationUrl?: string | null,
   ) {
+    const word = await this.renderPublishedWord(
+      VisualDocumentKind.SERVICE_REPORT,
+      payload,
+      validationUrl,
+    );
+    if (word)
+      return {
+        buffer: await this.requireWordConverter().convertDocxToPdf({
+          buffer: word.buffer,
+          fileName: 'relatorio.docx',
+        }),
+        templateKey: word.templateKey,
+        templateVersion: word.templateVersion,
+      };
     const rendered = await this.renderPublished(
       VisualDocumentKind.SERVICE_REPORT,
       payload,
@@ -681,6 +1114,40 @@ export class VisualDocumentService {
           templateVersion: rendered.templateVersion,
         }
       : null;
+  }
+
+  async renderPublishedWord(
+    kind: VisualDocumentKind,
+    payload: Record<string, unknown>,
+    validationUrl?: string | null,
+  ) {
+    const published = await this.getPublished(kind);
+    if (
+      !published ||
+      published.version.format !== 'WORD' ||
+      !published.version.wordTemplate ||
+      !this.wordRenderer
+    )
+      return null;
+    const context = this.institutional.buildContext(
+      this.institutionalKind(kind),
+      payload,
+      `visual/${published.template.id}`,
+    ) as unknown as Record<string, unknown>;
+    if (kind === VisualDocumentKind.SERVICE_REPORT)
+      context.checklistItems = payload.checklistItems || [];
+    const buffer = this.wordRenderer.renderFriendlyWord(
+      Buffer.from(published.version.wordTemplate),
+      context,
+      this.savedWordFields(published.version.wordFieldMap),
+      validationUrl,
+    );
+    return {
+      buffer,
+      checksumSha256: createHash('sha256').update(buffer).digest('hex'),
+      templateKey: `visual/${published.template.id}`,
+      templateVersion: `v${published.version.versionNumber}`,
+    };
   }
 
   pdf(
@@ -962,6 +1429,9 @@ export class VisualDocumentService {
           equipments: {
             include: { generator: { include: { currentSite: true } } },
           },
+          sourceProposal: {
+            include: { items: { include: { catalogItem: true } } },
+          },
         },
       });
       if (!row)
@@ -971,6 +1441,7 @@ export class VisualDocumentService {
         client: row.client,
         createdByUser: row.createdByUser,
         equipments: row.equipments,
+        sourceProposal: row.sourceProposal,
         document: { ...row, issuedAt: row.updatedAt },
       };
     } else {

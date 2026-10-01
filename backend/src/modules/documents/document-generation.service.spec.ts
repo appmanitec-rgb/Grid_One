@@ -3,6 +3,7 @@ import { DocumentTemplateService } from './document-template.service';
 import { DocxToPdfService } from './docx-to-pdf.service';
 import { DocxTemplateRendererService } from './docx-template-renderer.service';
 import { InstitutionalDocumentService } from './institutional-document.service';
+import { VisualDocumentService } from './visual-document.service';
 
 describe('DocumentGenerationService', () => {
   const docxToPdf = {
@@ -106,5 +107,35 @@ describe('DocumentGenerationService', () => {
         buffer: expect.any(Buffer),
       }),
     );
+  });
+
+  it('uses the published Word file as the source of a proposal', async () => {
+    const word = Buffer.from('PK Word preservado');
+    const renderPublished = jest.fn();
+    const visual = {
+      renderPublishedWord: jest.fn().mockResolvedValue({
+        buffer: word,
+        checksumSha256: 'hash-do-word',
+        templateKey: 'visual/modelo-word',
+        templateVersion: 'v2',
+      }),
+      renderPublished,
+    } as unknown as VisualDocumentService;
+    const generator = new DocumentGenerationService(
+      new DocumentTemplateService(),
+      new InstitutionalDocumentService(),
+      new DocxTemplateRendererService(),
+      docxToPdf as unknown as DocxToPdfService,
+      visual,
+    );
+    const generated = await generator.generateDocx('proposal', {
+      company: { companyName: 'MANITEC' },
+      client: { companyName: 'Cliente Word' },
+      document: { id: 'proposal-word', code: 'PROP-WORD' },
+    });
+    expect(generated.buffer).toBe(word);
+    expect(generated.templateKey).toBe('visual/modelo-word');
+    expect(generated.templateVersion).toBe('v2');
+    expect(renderPublished).not.toHaveBeenCalled();
   });
 });

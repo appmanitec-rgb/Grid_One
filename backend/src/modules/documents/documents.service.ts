@@ -1555,12 +1555,33 @@ export class DocumentsService {
   ): Promise<LoadedFile & { documentDeliveryId: string; templateKey: string }> {
     const actor = await this.getActorScope(userId);
     const payload = await this.getProposalDocument(id, userId);
-    const visual = await this.visualDocuments?.renderPublished(
+    const published = await this.visualDocuments?.getPublished(
       VisualDocumentKind.PROPOSAL,
-      payload as unknown as Record<string, unknown>,
     );
-    const generated: GeneratedProposalPdf =
-      visual && this.visualDocuments
+    const visual =
+      published?.version.format === 'WORD'
+        ? null
+        : await this.visualDocuments?.renderPublished(
+            VisualDocumentKind.PROPOSAL,
+            payload as unknown as Record<string, unknown>,
+          );
+    const wordPdf =
+      published?.version.format === 'WORD'
+        ? await this.documentGenerationService.generatePdfFromDocx(
+            'proposal',
+            payload as unknown as Record<string, unknown>,
+          )
+        : null;
+    const generated: GeneratedProposalPdf = wordPdf
+      ? {
+          buffer: wordPdf.buffer,
+          html: '',
+          templateKey: wordPdf.templateKey,
+          templateVersion: wordPdf.templateVersion,
+          templateSchema: {},
+          fileName: wordPdf.fileName,
+        }
+      : visual && this.visualDocuments
         ? {
             buffer: this.visualDocuments.pdf(visual.name, visual.blocks),
             html: visual.html,

@@ -240,6 +240,190 @@ ${this.documentBrand()}${paragraphs.join('')}
     };
   }
 
+  wordTemplatePaths(buffer: Buffer): string[] {
+    const paths = new Set<string>();
+    for (const file of this.unzip(buffer)) {
+      if (!WORD_TEXT_XML_PATTERN.test(file.path)) continue;
+      const xml = file.content.toString('utf8');
+      for (const paragraph of xml.match(/<w:p\b[\s\S]*?<\/w:p>/g) || []) {
+        const content = this.extractWordParagraphText(paragraph);
+        for (const match of content.matchAll(/{{\s*([\w.[\]]+)\s*}}/g))
+          paths.add(match[1]);
+        for (const [marker, replacement] of this.legacyVariables) {
+          if (
+            !content
+              .toLocaleLowerCase('pt-BR')
+              .includes(marker.toLocaleLowerCase('pt-BR'))
+          )
+            continue;
+          const path = replacement.match(/^{{([\w.[\]]+)}}$/)?.[1];
+          if (path) paths.add(path);
+          else if (marker.toLowerCase().includes('pecasrelatorio.dataset'))
+            paths.add('__proposal_parts__');
+          else if (marker.toLowerCase().includes('servicosrel.dataset'))
+            paths.add('__proposal_services__');
+          else if (
+            marker.toLowerCase().includes('dadosequipamentosjoin.dataset')
+          )
+            paths.add('__contract_items__');
+          else if (marker.toLowerCase().includes('prodcontratopxjoin.dataset'))
+            paths.add('__contract_services__');
+        }
+      }
+    }
+    return [...paths];
+  }
+
+  prepareEditableWord(buffer: Buffer, labelsByPath: Record<string, string>) {
+    const files = this.unzip(buffer).map((file) => {
+      if (!WORD_TEXT_XML_PATTERN.test(file.path)) return file;
+      const xml = file.content
+        .toString('utf8')
+        .replace(/<w:p\b[\s\S]*?<\/w:p>/g, (paragraph) => {
+          const legacy = this.legacyVariables.map(
+            ([marker, replacement]): [string, string] => {
+              const path = replacement.match(/^{{([\w.[\]]+)}}$/)?.[1];
+              const special = marker
+                .toLowerCase()
+                .includes('pecasrelatorio.dataset')
+                ? '__proposal_parts__'
+                : marker.toLowerCase().includes('servicosrel.dataset')
+                  ? '__proposal_services__'
+                  : marker
+                        .toLowerCase()
+                        .includes('dadosequipamentosjoin.dataset')
+                    ? '__contract_items__'
+                    : marker
+                          .toLowerCase()
+                          .includes('prodcontratopxjoin.dataset')
+                      ? '__contract_services__'
+                      : null;
+              const label = labelsByPath[path || special || ''];
+              return [marker, label ? `«${label}»` : replacement];
+            },
+          );
+          const converted = this.replaceWordsInRuns(paragraph, legacy);
+          const paths = [
+            ...this.extractWordParagraphText(converted).matchAll(
+              /{{\s*([\w.[\]]+)\s*}}/g,
+            ),
+          ].map((match): [string, string] => [
+            match[0],
+            labelsByPath[match[1]] ? `«${labelsByPath[match[1]]}»` : match[0],
+          ]);
+          return this.replaceWordsInRuns(converted, paths);
+        });
+      return { ...file, content: Buffer.from(xml, 'utf8') };
+    });
+    return this.zip(files);
+  }
+
+  inspectFriendlyWord(buffer: Buffer) {
+    const files = this.unzip(buffer);
+    if (!files.some((file) => file.path === 'word/document.xml'))
+      throw new BadRequestException(
+        'O arquivo enviado não é um documento Word válido.',
+      );
+    const labels = new Set<string>();
+    let technicalMarkers = false;
+    for (const file of files) {
+      if (!WORD_TEXT_XML_PATTERN.test(file.path)) continue;
+      for (const paragraph of file.content
+        .toString('utf8')
+        .match(/<w:p\b[\s\S]*?<\/w:p>/g) || []) {
+        const content = this.extractWordParagraphText(paragraph);
+        for (const match of content.matchAll(/«([^»]{1,120})»/g))
+          labels.add(match[1]);
+        if (
+          content.includes('{{') ||
+          content.includes('}}') ||
+          this.hasLegacyMarker(content) ||
+          /[!^][A-Za-z][\w.]{2,}/.test(content)
+        )
+          technicalMarkers = true;
+      }
+    }
+    return { labels: [...labels], technicalMarkers };
+  }
+
+  renderFriendlyWord(
+    buffer: Buffer,
+    context: RenderContext,
+    fields: Array<{
+      label: string;
+      sourcePath?: string | null;
+      fixedValue?: string | null;
+    }>,
+    validationUrl?: string | null,
+  ) {
+    const files = this.unzip(buffer).map((file) => {
+      if (!WORD_TEXT_XML_PATTERN.test(file.path)) return file;
+      let xml = file.content
+        .toString('utf8')
+        .replace(/<w:p\b[\s\S]*?<\/w:p>/g, (paragraph) => {
+          const text = this.extractWordParagraphText(paragraph).trim();
+          const onlyField = fields.find((field) => text === `«${field.label}»`);
+          if (onlyField?.sourcePath === '__proposal_parts__')
+            return this.legacyProposalItemsTable('parts');
+          if (onlyField?.sourcePath === '__proposal_services__')
+            return this.legacyProposalItemsTable('services');
+          if (onlyField?.sourcePath === '__contract_items__')
+            return this.legacyContractEquipmentsTable();
+          if (onlyField?.sourcePath === '__contract_services__')
+            return this.legacyContractProductsTable();
+          const replacements: Array<[string, string]> = fields.map((field) => [
+            `«${field.label}»`,
+            field.fixedValue ?? this.wordValue(field.sourcePath, context),
+          ]);
+          return this.replaceWordsInRuns(paragraph, replacements);
+        });
+      if (file.path === 'word/document.xml' && validationUrl) {
+        const validationPage = `<w:p><w:r><w:br w:type="page"/></w:r></w:p><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Validação do relatório</w:t></w:r></w:p><w:p><w:r><w:t xml:space="preserve">${this.escapeXml(validationUrl)}</w:t></w:r></w:p>`;
+        xml = xml.replace(
+          /(<w:sectPr\b[\s\S]*?<\/w:sectPr>\s*<\/w:body>)/,
+          `${validationPage}$1`,
+        );
+      }
+      return {
+        ...file,
+        content: Buffer.from(this.renderXmlTemplate(xml, context), 'utf8'),
+      };
+    });
+    const unresolved = this.inspectFriendlyWord(this.zip(files));
+    if (unresolved.labels.length || unresolved.technicalMarkers)
+      throw new BadRequestException(
+        'O Word contém campos que não puderam ser preenchidos. Revise o modelo no Studio.',
+      );
+    return this.zip(files);
+  }
+
+  private wordValue(path: string | null | undefined, context: RenderContext) {
+    if (!path) return '';
+    if (path === '__today__')
+      return new Intl.DateTimeFormat('pt-BR', {
+        timeZone: 'America/Sao_Paulo',
+      }).format(new Date());
+    if (path.startsWith('__')) {
+      const rows =
+        path === '__proposal_parts__'
+          ? context.parts
+          : path === '__proposal_services__' || path === '__contract_services__'
+            ? context.services
+            : path === '__report_checklist__'
+              ? context.checklistItems
+              : context.items;
+      return Array.isArray(rows)
+        ? rows
+            .map((row, index) => {
+              const record = row as Record<string, unknown>;
+              return `${index + 1}. ${this.stringify(record.description || record.title || record.label || record.name)}`;
+            })
+            .join(' • ')
+        : '';
+    }
+    return this.stringify(this.resolvePath(path, context));
+  }
+
   renderDocumentXml(
     definition: InstitutionalTemplateDefinition,
     context: RenderContext,
@@ -359,14 +543,25 @@ ${this.documentBrand()}${paragraphs.join('')}
   }
 
   private replaceLegacyVariablesInRuns(paragraph: string) {
+    return this.replaceWordsInRuns(paragraph, this.legacyVariables);
+  }
+
+  private replaceWordsInRuns(
+    paragraph: string,
+    replacements: Array<[string, string]>,
+  ) {
     const textNodePattern = /(<w:t\b[^>]*>)([\s\S]*?)(<\/w:t>)/g;
     const matches = [...paragraph.matchAll(textNodePattern)];
     if (!matches.length) return paragraph;
 
     const values = matches.map((match) => this.decodeXmlText(match[2]));
-    const mappings = [...this.legacyVariables].sort(
-      ([left], [right]) => right.length - left.length,
-    );
+    const mappings = replacements
+      .filter(
+        ([marker, replacement]) =>
+          marker.toLocaleLowerCase('pt-BR') !==
+          replacement.toLocaleLowerCase('pt-BR'),
+      )
+      .sort(([left], [right]) => right.length - left.length);
 
     for (const [marker, replacement] of mappings) {
       const normalizedMarker = marker.toLocaleLowerCase('pt-BR');
@@ -894,6 +1089,7 @@ ${this.documentBrand()}${paragraphs.join('')}
     rows: string,
     _spacing: { before?: number; after?: number } = {},
   ) {
+    void _spacing;
     return `<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="90" w:type="dxa"/><w:left w:w="100" w:type="dxa"/><w:bottom w:w="90" w:type="dxa"/><w:right w:w="100" w:type="dxa"/></w:tblCellMar></w:tblPr>${rows}</w:tbl>`;
   }
 
@@ -1226,10 +1422,19 @@ ${this.documentBrand()}${paragraphs.join('')}
   }
 
   private unzip(buffer: Buffer): DocxFile[] {
+    if (
+      buffer.length < 22 ||
+      buffer.length > 16 * 1024 * 1024 ||
+      buffer.readUInt32LE(0) !== 0x04034b50
+    )
+      throw new BadRequestException('Arquivo Word inválido ou acima de 16 MB.');
     const endOffset = this.findEndOfCentralDirectory(buffer);
     const totalEntries = buffer.readUInt16LE(endOffset + 10);
+    if (totalEntries > 500)
+      throw new BadRequestException('O Word possui arquivos internos demais.');
     let offset = buffer.readUInt32LE(endOffset + 16);
     const files: DocxFile[] = [];
+    let totalSize = 0;
 
     for (let index = 0; index < totalEntries; index += 1) {
       if (buffer.readUInt32LE(offset) !== 0x02014b50) {
@@ -1240,6 +1445,10 @@ ${this.documentBrand()}${paragraphs.join('')}
 
       const method = buffer.readUInt16LE(offset + 10);
       const compressedSize = buffer.readUInt32LE(offset + 20);
+      const uncompressedSize = buffer.readUInt32LE(offset + 24);
+      totalSize += uncompressedSize;
+      if (totalSize > 50 * 1024 * 1024 || uncompressedSize > 20 * 1024 * 1024)
+        throw new BadRequestException('O Word descompactado é grande demais.');
       const localHeaderOffset = buffer.readUInt32LE(offset + 42);
       const fileNameLength = buffer.readUInt16LE(offset + 28);
       const extraLength = buffer.readUInt16LE(offset + 30);
@@ -1261,10 +1470,12 @@ ${this.documentBrand()}${paragraphs.join('')}
         localHeaderOffset + 30 + localFileNameLength + localExtraLength;
       const compressed = buffer.subarray(dataStart, dataStart + compressedSize);
 
-      files.push({
-        path: fileName,
-        content: this.inflateZipEntry(method, compressed),
-      });
+      const content = this.inflateZipEntry(method, compressed);
+      if (content.length !== uncompressedSize)
+        throw new BadRequestException(
+          'DOCX inválido: tamanho interno incorreto.',
+        );
+      files.push({ path: fileName, content });
     }
 
     return files;
@@ -1286,7 +1497,8 @@ ${this.documentBrand()}${paragraphs.join('')}
 
   private inflateZipEntry(method: number, compressed: Buffer) {
     if (method === 0) return compressed;
-    if (method === 8) return inflateRawSync(compressed);
+    if (method === 8)
+      return inflateRawSync(compressed, { maxOutputLength: 20 * 1024 * 1024 });
 
     throw new BadRequestException(
       `DOCX usa metodo ZIP nao suportado: ${method}.`,

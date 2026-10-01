@@ -2723,6 +2723,9 @@ model VisualDocumentTemplateVersion {
   template        VisualDocumentTemplate               @relation(fields: [templateId], references: [id], onDelete: Cascade)
   versionNumber   Int
   blocks          Json
+  format          String                               @default("VISUAL")
+  wordTemplate    Bytes?                               @db.ByteA
+  wordFieldMap    Json?
   changeSummary   String?
   createdByUserId String?
   createdAt       DateTime                             @default(now())
