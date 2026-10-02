@@ -244,6 +244,13 @@ export default function DashboardLayout({
         enabled: visiblePages.proposals,
       },
       {
+        href: "/dashboard/sales-orders",
+        label: "Pedidos de venda",
+        mobileLabel: "Pedidos",
+        icon: "PV",
+        enabled: visiblePages.proposals || visiblePages.inventory || visiblePages.finance,
+      },
+      {
         href: "/dashboard/orders",
         label: "Ordens",
         mobileLabel: "Ordens",

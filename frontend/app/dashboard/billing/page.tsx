@@ -77,6 +77,16 @@ type BillingOrder = {
     id: string;
     user?: { name?: string | null } | null;
   } | null;
+  billingMode: "PROPOSAL" | "MANUAL";
+  reviewReason: string;
+  sourceProposal?: {
+    id: string;
+    code: string;
+    totalValue: number;
+    firstDueDate?: string | null;
+    installmentCount?: number | null;
+    hasDownPayment: boolean;
+  } | null;
 };
 
 type OrderBillingDraft = {
@@ -129,7 +139,7 @@ export default function BillingPage() {
       const [invoiceRes, receivableRes, ordersRes] = await Promise.all([
         apiFetch(apiUrl("/contracts/invoices/all"), { cache: "no-store" }),
         apiFetch(apiUrl("/finance/receivables"), { cache: "no-store" }),
-        apiFetch(apiUrl("/maintenance-orders"), { cache: "no-store" }),
+        apiFetch(apiUrl("/finance/execution-billing/queue"), { cache: "no-store" }),
       ]);
 
       const failed = [
@@ -202,7 +212,7 @@ export default function BillingPage() {
     const map = new Map<string, Receivable>();
     for (const receivable of receivables) {
       if (!receivable.maintenanceOrder?.id) continue;
-      map.set(receivable.maintenanceOrder.id, receivable);
+      if (receivable.status !== "CANCELED") map.set(receivable.maintenanceOrder.id, receivable);
     }
     return map;
   }, [receivables]);
@@ -373,8 +383,8 @@ export default function BillingPage() {
     const draft = orderDrafts[order.id] || buildOrderDraft(order);
     const amount = Number(draft.amount);
 
-    if (!amount || amount <= 0 || !draft.dueDate) {
-      setError("Informe valor e vencimento para faturar a O.S. avulsa.");
+    if (!draft.dueDate || (order.billingMode === "MANUAL" && (!amount || amount <= 0))) {
+      setError(order.billingMode === "PROPOSAL" ? "Defina o vencimento para faturar a proposta aprovada." : "Informe valor e vencimento para faturar a O.S. avulsa.");
       return;
     }
 
@@ -384,13 +394,15 @@ export default function BillingPage() {
 
     try {
       const res = await apiFetch(
-        apiUrl(`/finance/receivables/sync/orders/${order.id}`),
+        apiUrl(order.billingMode === "PROPOSAL" ? `/finance/execution-billing/orders/${order.id}/confirm` : `/finance/receivables/sync/orders/${order.id}`),
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+          body: JSON.stringify(order.billingMode === "PROPOSAL" ? {
+            dueDate: `${draft.dueDate}T12:00:00.000Z`,
+          } : {
             amount,
-            dueDate: new Date(draft.dueDate).toISOString(),
+            dueDate: `${draft.dueDate}T12:00:00.000Z`,
             description: draft.description.trim() || undefined,
           }),
         },
@@ -403,7 +415,10 @@ export default function BillingPage() {
         );
       }
 
-      setSuccessMessage(`Titulo financeiro criado para a O.S. ${order.title}.`);
+      const result = await res.json() as { receivableIds?: string[] };
+      setSuccessMessage(order.billingMode === "PROPOSAL"
+        ? `${result.receivableIds?.length || 0} título(s) vinculados à O.S. ${order.title}.`
+        : `Título financeiro criado para a O.S. ${order.title}.`);
       await loadData();
     } catch (createError: unknown) {
       setError(
@@ -572,7 +587,7 @@ export default function BillingPage() {
         <SectionCard
           eyebrow="Avulso"
           title="Ordens prontas para gerar titulo"
-          description="Quando a O.S. avulsa termina, o faturamento pode nascer aqui com vencimento e descricao financeira."
+          description="A execução com preço e vencimento definidos na proposta gera títulos ao concluir a O.S. Os casos que exigem conferência aparecem aqui."
         >
           {loading ? (
             <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 px-5 py-10 text-sm text-slate-500">
@@ -801,6 +816,8 @@ function StandaloneOrderCard({
             • {order.generator?.name || "Equipamento nao identificado"} •{" "}
             {order.technician?.user?.name || "Sem tecnico vinculado"}
           </p>
+          <p className="max-w-3xl text-sm font-medium text-amber-800">{order.reviewReason}</p>
+          {order.sourceProposal ? <p className="text-xs text-slate-600">Proposta {order.sourceProposal.code} · Valor aprovado {formatCurrency(order.sourceProposal.totalValue)} · {order.sourceProposal.installmentCount || 1} parcela(s)</p> : null}
         </div>
 
         <Link
@@ -812,15 +829,15 @@ function StandaloneOrderCard({
       </div>
 
       <div className="mt-5 grid gap-4 md:grid-cols-3">
-        <FormField label="Valor do titulo">
-          <TextInput
+        <FormField label={order.billingMode === "PROPOSAL" ? "Valor aprovado" : "Valor do titulo"}>
+          {order.billingMode === "PROPOSAL" ? <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">{formatCurrency(order.sourceProposal?.totalValue || 0)}</div> : <TextInput
             value={draft.amount}
             onChange={(event) =>
               onDraftChange(order.id, { amount: event.target.value })
             }
             inputMode="decimal"
             placeholder="0,00"
-          />
+          />}
         </FormField>
         <FormField label="Vencimento">
           <TextInput
@@ -831,7 +848,7 @@ function StandaloneOrderCard({
             type="date"
           />
         </FormField>
-        <FormField label="Descricao financeira">
+        {order.billingMode === "MANUAL" ? <FormField label="Descricao financeira">
           <TextAreaInput
             value={draft.description}
             onChange={(event) =>
@@ -840,7 +857,7 @@ function StandaloneOrderCard({
             className="min-h-[96px]"
             placeholder="Descricao para o contas a receber"
           />
-        </FormField>
+        </FormField> : <div className="rounded-xl bg-blue-50 p-4 text-xs leading-5 text-blue-900">As parcelas e os valores de peças e serviços serão calculados a partir da proposta. O financeiro confirma apenas o vencimento inicial.</div>}
       </div>
 
       <div className="mt-4 flex flex-wrap gap-3">
@@ -850,7 +867,7 @@ function StandaloneOrderCard({
           disabled={busy}
           className={PRIMARY_BUTTON}
         >
-          {busy ? "Gerando..." : "Gerar titulo"}
+          {busy ? "Gerando..." : order.billingMode === "PROPOSAL" ? "Confirmar faturamento" : "Gerar titulo"}
         </button>
       </div>
     </article>
@@ -1003,8 +1020,11 @@ function buildOrderDrafts(
 
 function buildOrderDraft(order?: BillingOrder): OrderBillingDraft {
   return {
-    amount: "",
-    dueDate: defaultDueDate(),
+    amount: order?.billingMode === "PROPOSAL" ? String(order.sourceProposal?.totalValue || "") : "",
+    dueDate: order?.billingMode === "PROPOSAL"
+      ? (order.sourceProposal?.firstDueDate && order.sourceProposal.firstDueDate.slice(0, 10) >= new Date().toISOString().slice(0, 10)
+        ? order.sourceProposal.firstDueDate.slice(0, 10) : "")
+      : defaultDueDate(),
     description: order
       ? `Faturamento do servico avulso da O.S. ${order.title}`
       : "",

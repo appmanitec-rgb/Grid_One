@@ -40,6 +40,7 @@ import { OperationalCostsModule } from './modules/operational-costs/operational-
 import { CommercialSizingModule } from './modules/commercial-sizing/commercial-sizing.module';
 import { TeamModule } from './modules/team/team.module';
 import { OperationsModule } from './modules/operations/operations.module';
+import { SalesOrdersModule } from './modules/sales-orders/sales-orders.module';
 
 @Module({
   imports: [
@@ -91,6 +92,7 @@ import { OperationsModule } from './modules/operations/operations.module';
     CommercialSizingModule,
     TeamModule,
     OperationsModule,
+    SalesOrdersModule,
   ],
   controllers: [],
   providers: [

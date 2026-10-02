@@ -36,6 +36,7 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/dashboard/technicians": { title: "Equipe de Técnicos", subtitle: "Capacidade operacional, skills e certificações da equipe." },
   "/dashboard/sites": { title: "Locais e Obras", subtitle: "Mapa de instalações e ativos por local." },
   "/dashboard/inventory": { title: "Controle de Estoque", subtitle: "Inventário, rupturas e valorização." },
+  "/dashboard/sales-orders": { title: "Pedidos de Venda", subtitle: "Separação, entregas parciais e rastreabilidade das peças." },
   "/dashboard/purchase-orders": { title: "Pedidos de Compra", subtitle: "Solicitações e acompanhamento de compras." },
   "/dashboard/finance/accounts-receivable": { title: "Contas a Receber", subtitle: "Recebimentos de contratos e ordens avulsas." },
   "/dashboard/finance/collections": { title: "Cobrança Santander", subtitle: "Boletos, remessas CNAB 240 e retornos bancários." },
@@ -76,7 +77,7 @@ function getRouteFamily(pathname: string) {
   if (pathname.startsWith("/dashboard/finance")) return "Financeiro";
   if (pathname.startsWith("/dashboard/hr/collaborators")) return "Agentes";
   if (pathname.startsWith("/dashboard/hr")) return "RH Operacional";
-  if (pathname.startsWith("/dashboard/catalog") || pathname.startsWith("/dashboard/suppliers") || pathname.startsWith("/dashboard/inventory") || pathname.startsWith("/dashboard/purchase-orders")) {
+  if (pathname.startsWith("/dashboard/catalog") || pathname.startsWith("/dashboard/suppliers") || pathname.startsWith("/dashboard/inventory") || pathname.startsWith("/dashboard/sales-orders") || pathname.startsWith("/dashboard/purchase-orders")) {
     return "Suprimentos";
   }
   if (pathname.startsWith("/dashboard/clients") || pathname.startsWith("/dashboard/opportunities") || pathname.startsWith("/dashboard/commercial-inspections") || pathname.startsWith("/dashboard/proposals") || pathname.startsWith("/dashboard/contracts")) {

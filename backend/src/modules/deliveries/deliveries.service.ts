@@ -22,6 +22,7 @@ import { allAccessPolicy, effectiveAccessPolicy } from '../users/access-policy';
 import { ApproveSharedProposalDto } from './dto/approve-shared-proposal.dto';
 import { CreateDocumentDeliveryDto } from './dto/create-document-delivery.dto';
 import { CreateDocumentEmailDeliveryDto } from './dto/create-document-email-delivery.dto';
+import { createApprovedProposalOrder } from '../proposals/proposal-work-order';
 
 type ActorScope = {
   id: string;
@@ -627,6 +628,8 @@ export class DeliveriesService {
           code: true,
           status: true,
           totalValue: true,
+          type: true,
+          generatorId: true,
           validUntil: true,
           salesOpportunityId: true,
           clientId: true,
@@ -670,7 +673,7 @@ export class DeliveriesService {
       });
 
       const updated = await tx.proposal.update({
-        where: { id: proposal.id },
+        where: { id: proposal.id, status: ProposalStatus.CLIENT_REVIEW },
         data: {
           status: ProposalStatus.WON,
           requestedDiscountPercent: null,
@@ -711,6 +714,8 @@ export class DeliveriesService {
           },
         });
       }
+
+      await createApprovedProposalOrder(tx, proposal);
 
       await tx.documentShareToken.update({
         where: { id: shareToken.id },

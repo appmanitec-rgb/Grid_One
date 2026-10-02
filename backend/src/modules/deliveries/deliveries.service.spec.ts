@@ -20,6 +20,9 @@ describe('DeliveriesService', () => {
     };
     proposalMovement: { create: jest.Mock };
     salesOpportunity: { update: jest.Mock };
+    generator: { findUnique: jest.Mock };
+    proposalItem: { findMany: jest.Mock };
+    maintenanceOrder: { create: jest.Mock };
   };
   let auditLogsService: { record: jest.Mock };
 
@@ -52,6 +55,9 @@ describe('DeliveriesService', () => {
       },
       proposalMovement: { create: jest.fn() },
       salesOpportunity: { update: jest.fn() },
+      generator: { findUnique: jest.fn() },
+      proposalItem: { findMany: jest.fn() },
+      maintenanceOrder: { create: jest.fn() },
     };
     auditLogsService = { record: jest.fn() };
     service = new DeliveriesService(
@@ -67,6 +73,8 @@ describe('DeliveriesService', () => {
       id: 'proposal-1',
       code: 'PROP-001',
       status: ProposalStatus.CLIENT_REVIEW,
+      type: 'SERVICES',
+      generatorId: 'generator-1',
       totalValue: 15000,
       validUntil: new Date('2099-01-01T00:00:00.000Z'),
       salesOpportunityId: 'opportunity-1',
@@ -83,6 +91,9 @@ describe('DeliveriesService', () => {
       customerDecisionSource: 'SHARE_LINK_SIGNATURE',
       customerDecisionNote: 'Aprovado via link seguro.',
     });
+    prisma.generator.findUnique.mockResolvedValue({ currentSiteId: 'site-1' });
+    prisma.proposalItem.findMany.mockResolvedValue([]);
+    prisma.maintenanceOrder.create.mockResolvedValue({ id: 'order-1' });
 
     const result = await service.approveSharedProposal(
       'token-publico',
@@ -99,7 +110,7 @@ describe('DeliveriesService', () => {
     expect(result.proposal.status).toBe(ProposalStatus.WON);
     expect(prisma.proposal.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'proposal-1' },
+        where: { id: 'proposal-1', status: ProposalStatus.CLIENT_REVIEW },
         data: expect.objectContaining({
           status: ProposalStatus.WON,
           customerDecisionSource: 'SHARE_LINK_SIGNATURE',
@@ -112,6 +123,12 @@ describe('DeliveriesService', () => {
         action: 'SHARE_LINK_APPROVE_SIGNATURE',
         fromStatus: ProposalStatus.CLIENT_REVIEW,
         toStatus: ProposalStatus.WON,
+      }),
+    });
+    expect(prisma.maintenanceOrder.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        generatorId: 'generator-1',
+        siteId: 'site-1',
       }),
     });
     expect(prisma.salesOpportunity.update).toHaveBeenCalledWith(

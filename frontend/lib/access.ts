@@ -678,6 +678,7 @@ export function defaultAccessByRole(role: string): AccessPolicy {
         create: true,
         update: true,
         reserve: true,
+        consume: true,
         adjust: true,
       },
       purchaseOrders: {
@@ -843,6 +844,9 @@ export function canAccessDashboardPath(
   if (!pathname.startsWith("/dashboard")) return true;
   if (pathname === "/dashboard/profile") return true;
   if (pathname === "/dashboard") return pages.dashboard;
+  if (pathname === "/dashboard/sales-orders" || pathname.startsWith("/dashboard/sales-orders/")) {
+    return pages.proposals || pages.inventory || pages.finance;
+  }
 
   for (const rule of ACCESS_ROUTE_RULES) {
     if (pathname === rule.prefix || pathname.startsWith(`${rule.prefix}/`)) {

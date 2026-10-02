@@ -21,7 +21,7 @@ import {
 type Tone = "blue" | "emerald" | "amber" | "rose" | "slate";
 type ReceivableStatus = "OPEN" | "PARTIAL" | "OVERDUE" | "PAID" | "CANCELED";
 type PaymentMethod = "PIX" | "BOLETO" | "TRANSFER" | "CASH" | "CARD" | "OTHER";
-type ReceivableSource = "CONTRACT" | "ORDER" | "MANUAL";
+type ReceivableSource = "CONTRACT" | "ORDER" | "SALES_ORDER" | "MANUAL";
 
 type BankAccount = {
   id: string;
@@ -63,6 +63,10 @@ type Receivable = {
   client?: { id: string; companyName?: string | null } | null;
   contract?: { id: string; code?: string | null } | null;
   maintenanceOrder?: { id: string; title?: string | null } | null;
+  salesOrder?: { id: string; code?: string | null } | null;
+  executionBillingCategory?: "PARTS" | "SERVICES" | null;
+  installmentNumber?: number | null;
+  installmentCount?: number | null;
   costCenter?: {
     id: string;
     code?: string | null;
@@ -121,6 +125,7 @@ const STATUS_META: Record<
 const SOURCE_META: Record<ReceivableSource, { label: string; tone: Tone }> = {
   CONTRACT: { label: "Contrato", tone: "blue" },
   ORDER: { label: "O.S. avulsa", tone: "amber" },
+  SALES_ORDER: { label: "Venda de peças", tone: "blue" },
   MANUAL: { label: "Manual", tone: "slate" },
 };
 
@@ -179,6 +184,7 @@ function parseMoneyInput(value: string) {
 function getReceivableSource(item: Receivable): ReceivableSource {
   if (item.contract?.id) return "CONTRACT";
   if (item.maintenanceOrder?.id) return "ORDER";
+  if (item.salesOrder?.id) return "SALES_ORDER";
   return "MANUAL";
 }
 
@@ -226,6 +232,7 @@ function describeReceivable(item: Receivable) {
     item.description || "",
     item.contract?.code || "",
     item.maintenanceOrder?.title || "",
+    item.salesOrder?.code || "",
     item.costCenter?.code || "",
     item.costCenter?.name || "",
     STATUS_META[item.status].label,
@@ -870,6 +877,7 @@ export default function AccountsReceivablePage() {
                 <option value="ALL">Todas</option>
                 <option value="CONTRACT">Contrato</option>
                 <option value="ORDER">O.S. avulsa</option>
+                <option value="SALES_ORDER">Venda de peças</option>
                 <option value="MANUAL">Manual</option>
               </SelectInput>
             </FormField>
@@ -980,6 +988,17 @@ export default function AccountsReceivablePage() {
                               O.S.{" "}
                               {item.maintenanceOrder.title ||
                                 item.maintenanceOrder.id.slice(0, 8)}
+                            </Link>
+                          ) : null}
+                          {item.executionBillingCategory ? (
+                            <span className="rounded-full bg-blue-50 px-2 py-0.5 font-semibold text-blue-800">
+                              {item.executionBillingCategory === "PARTS" ? "Peças" : "Serviços"}
+                              {item.installmentNumber && item.installmentCount ? ` · ${item.installmentNumber}/${item.installmentCount}` : ""}
+                            </span>
+                          ) : null}
+                          {item.salesOrder?.id ? (
+                            <Link href={`/dashboard/sales-orders?orderId=${item.salesOrder.id}`} className="font-semibold text-slate-700 underline-offset-4 hover:text-slate-950 hover:underline">
+                              Pedido {item.salesOrder.code || item.salesOrder.id.slice(0, 8)}
                             </Link>
                           ) : null}
                           {item.costCenter?.id ? (

@@ -681,6 +681,7 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         create: true,
         update: true,
         reserve: true,
+        consume: true,
         adjust: true,
       },
       purchaseOrders: {

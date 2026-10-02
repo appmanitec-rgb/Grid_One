@@ -45,6 +45,7 @@ import {
 } from './dto/create-proposal.dto';
 import { UpdateProposalDto } from './dto/update-proposal.dto';
 import { ConvertGeneratorPostSaleDto } from './dto/convert-generator-post-sale.dto';
+import { createApprovedProposalOrder } from './proposal-work-order';
 
 const COMMERCIAL_GENERATOR_PROPOSAL_SELECT = {
   id: true,
@@ -726,31 +727,29 @@ export class ProposalsService {
       throw new Error('A proposta precisa estar em analise do cliente.');
     }
 
+    let ordemDeServico: Awaited<
+      ReturnType<typeof createApprovedProposalOrder>
+    > = null;
     const updated = await this.changeStatus(
       id,
       ProposalStatus.WON,
       actorUserId,
       'CLIENT_APPROVE',
       'Cliente aprovou a proposta.',
+      async (tx, approvedProposal) => {
+        ordemDeServico = await createApprovedProposalOrder(
+          tx,
+          approvedProposal,
+        );
+      },
+      ProposalStatus.CLIENT_REVIEW,
     );
 
-    if (
-      proposal.generatorId &&
-      (proposal.type === ProposalType.PARTS_AND_SERVICES ||
-        proposal.type === ProposalType.SERVICES)
-    ) {
-      const os = await this.prisma.maintenanceOrder.create({
-        data: {
-          title: `OS Automatica - Proposta ${proposal.code}`,
-          description: `Ordem gerada automaticamente apos aprovacao do cliente. Valor: R$ ${proposal.totalValue}`,
-          generatorId: proposal.generatorId,
-        },
-      });
-
+    if (ordemDeServico) {
       return {
         message: 'Proposta aprovada pelo cliente e O.S. criada.',
         proposal: updated,
-        ordemDeServico: os,
+        ordemDeServico,
       };
     }
 
@@ -1856,15 +1855,31 @@ export class ProposalsService {
     actorUserId: string | undefined,
     action: string,
     note?: string,
+    afterChange?: (
+      tx: Prisma.TransactionClient,
+      proposal: {
+        id: string;
+        code: string;
+        generatorId: string | null;
+        type: ProposalType;
+        totalValue: number;
+      },
+    ) => Promise<void>,
+    expectedStatus?: ProposalStatus,
   ) {
     return this.prisma.$transaction(async (tx) => {
       const proposal = await tx.proposal.findUnique({ where: { id } });
       if (!proposal) {
         throw new NotFoundException('Proposta nao encontrada.');
       }
+      if (expectedStatus && proposal.status !== expectedStatus) {
+        throw new ConflictException(
+          'A proposta ja mudou de estado. Atualize a pagina.',
+        );
+      }
 
       const updated = await tx.proposal.update({
-        where: { id },
+        where: { id, ...(expectedStatus ? { status: expectedStatus } : {}) },
         data: {
           status: toStatus,
           requestedDiscountPercent: null,
@@ -1901,6 +1916,8 @@ export class ProposalsService {
         },
         tx,
       );
+
+      if (afterChange) await afterChange(tx, updated);
 
       return updated;
     });

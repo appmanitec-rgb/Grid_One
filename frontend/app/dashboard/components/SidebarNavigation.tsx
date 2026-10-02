@@ -270,6 +270,12 @@ const MAIN_SECTIONS: NavSection[] = [
         enabled: true,
       },
       {
+        key: "stock_sales_orders",
+        label: "Pedidos de venda",
+        href: "/dashboard/sales-orders",
+        enabled: true,
+      },
+      {
         key: "stock_purchase",
         label: "Compras",
         href: "/dashboard/purchase-orders",

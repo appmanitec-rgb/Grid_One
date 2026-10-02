@@ -22,6 +22,7 @@ import {
   CreateCustomerQuoteRequestDto,
   CustomerProposalDecisionDto,
 } from './dto/customer-portal.dto';
+import { createApprovedProposalOrder } from '../proposals/proposal-work-order';
 
 const CUSTOMER_PORTAL_SOURCE = 'CUSTOMER_PORTAL';
 
@@ -616,7 +617,7 @@ export class CustomerPortalService {
 
       const now = new Date();
       const updated = await tx.proposal.update({
-        where: { id: proposal.id },
+        where: { id: proposal.id, status: ProposalStatus.CLIENT_REVIEW },
         data: {
           status: nextStatus,
           requestedDiscountPercent: null,
@@ -652,6 +653,10 @@ export class CustomerPortalService {
             lostAt: nextStatus === ProposalStatus.LOST ? now : undefined,
           },
         });
+      }
+
+      if (nextStatus === ProposalStatus.WON) {
+        await createApprovedProposalOrder(tx, proposal);
       }
 
       await this.auditLogsService.record(

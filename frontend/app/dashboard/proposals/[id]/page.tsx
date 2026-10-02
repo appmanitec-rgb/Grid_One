@@ -623,6 +623,11 @@ export default function ProposalDetailPage() {
                 Abrir O.S. no despacho
               </PermissionAwareLink>
             ) : null}
+            {proposal.status === "WON" && proposal.type === "PARTS" && !isClient ? (
+              <Link href={`/dashboard/sales-orders?proposalId=${proposal.id}`} className={PRIMARY_BUTTON}>
+                Acompanhar pedido de peças
+              </Link>
+            ) : null}
             {canCreateRevision ? (
               <ActionButton
                 busy={isBusy}

@@ -550,6 +550,15 @@ enum InventoryMovementType {
   ADJUSTMENT
   PURCHASE_RECEIPT
   OS_CONSUMPTION
+  SALES_DELIVERY
+}
+
+enum SalesOrderStatus {
+  OPEN
+  PARTIALLY_DELIVERED
+  DELIVERED
+  CLOSED
+  CANCELED
 }
 
 enum PurchaseOrderStatus {
@@ -574,6 +583,11 @@ enum AccountsReceivableStatus {
   OVERDUE
   PAID
   CANCELED
+}
+
+enum ExecutionBillingCategory {
+  PARTS
+  SERVICES
 }
 
 enum PaymentMethod {
@@ -1298,6 +1312,7 @@ model Client {
   contacts              ClientContact[]
   auditLogs             ClientAuditLog[]
   proposals             Proposal[]
+  salesOrders            SalesOrder[]
   opportunities         SalesOpportunity[]
   commercialInspections CommercialInspection[]
   sites                 Site[]
@@ -1606,6 +1621,7 @@ model CatalogItem {
   generatorBaseItems        GeneratorBaseItem[]
   maintenanceOrderMaterials MaintenanceOrderMaterial[]
   proposalItems             ProposalItem[]
+  salesOrderItems           SalesOrderItem[]
   supplierItems             SupplierCatalogItem[]
   identifiers               CatalogItemIdentifier[]
   supplierOffers            CatalogSupplierOffer[]
@@ -2161,6 +2177,8 @@ model Proposal {
   items             ProposalItem[]
   movements         ProposalMovement[]
   generatedContract ServiceContract?   @relation("SourceProposalContract")
+  salesOrder        SalesOrder?
+  executionOrder    MaintenanceOrder? @relation("ExecutionProposalOrder")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2313,8 +2331,98 @@ model ProposalItem {
 
   catalogItemId String?
   catalogItem   CatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  salesOrderItem SalesOrderItem?
 
   @@map("proposal_items")
+}
+
+model SalesOrder {
+  id            String           @id @default(uuid())
+  code          String           @unique
+  proposalId    String           @unique
+  proposal      Proposal         @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  clientId      String
+  client        Client           @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  status        SalesOrderStatus @default(OPEN)
+  totalValue    Decimal          @db.Decimal(15, 2)
+  paymentTerm   String?
+  notes         String?
+  closedReason  String?
+  closedAt      DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  items         SalesOrderItem[]
+  deliveries    SalesDelivery[]
+  receivables   AccountsReceivable[]
+
+  @@index([clientId, status, createdAt])
+  @@map("sales_orders")
+}
+
+model SalesOrderItem {
+  id                   String           @id @default(uuid())
+  salesOrderId         String
+  salesOrder           SalesOrder       @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  proposalItemId       String           @unique
+  proposalItem         ProposalItem     @relation(fields: [proposalItemId], references: [id], onDelete: Restrict)
+  catalogItemId        String?
+  catalogItem          CatalogItem?     @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  description          String
+  quantity             Int
+  deliveredQty         Int              @default(0)
+  unitPrice            Decimal          @db.Decimal(15, 2)
+  totalPrice           Decimal          @db.Decimal(15, 2)
+  allocations          SalesOrderAllocation[]
+  deliveryItems        SalesDeliveryItem[]
+
+  @@index([salesOrderId])
+  @@map("sales_order_items")
+}
+
+model SalesOrderAllocation {
+  id               String         @id @default(uuid())
+  salesOrderItemId String
+  salesOrderItem   SalesOrderItem @relation(fields: [salesOrderItemId], references: [id], onDelete: Cascade)
+  warehouseId      String
+  warehouse        Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  reservedQty      Int            @default(0)
+  pickedQty        Int            @default(0)
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([salesOrderItemId, warehouseId])
+  @@map("sales_order_allocations")
+}
+
+model SalesDelivery {
+  id                String              @id @default(uuid())
+  code              String              @unique
+  salesOrderId      String
+  salesOrder        SalesOrder          @relation(fields: [salesOrderId], references: [id], onDelete: Restrict)
+  receivedByName    String
+  shippingReference String?
+  notes             String?
+  deliveredByUserId String?
+  deliveredAt       DateTime            @default(now())
+  items             SalesDeliveryItem[]
+
+  @@index([salesOrderId, deliveredAt])
+  @@map("sales_deliveries")
+}
+
+model SalesDeliveryItem {
+  id               String         @id @default(uuid())
+  salesDeliveryId  String
+  salesDelivery    SalesDelivery  @relation(fields: [salesDeliveryId], references: [id], onDelete: Restrict)
+  salesOrderItemId String
+  salesOrderItem   SalesOrderItem @relation(fields: [salesOrderItemId], references: [id], onDelete: Restrict)
+  warehouseId      String
+  warehouse        Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  quantity         Int
+
+  @@unique([salesDeliveryId, salesOrderItemId, warehouseId])
+  @@index([salesOrderItemId])
+  @@map("sales_delivery_items")
 }
 
 model ProposalScopeTemplate {
@@ -2404,6 +2512,8 @@ model MaintenanceOrder {
   costCenter          CostCenter?                 @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
   contractId          String?
   contract            ServiceContract?            @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  sourceProposalId    String?                       @unique
+  sourceProposal      Proposal?                     @relation("ExecutionProposalOrder", fields: [sourceProposalId], references: [id], onDelete: SetNull)
   contractScheduleId  String?
   contractSchedule    ContractPreventiveSchedule? @relation("ContractScheduleOrderLink", fields: [contractScheduleId], references: [id], onDelete: SetNull)
   generatedBySchedule ContractPreventiveSchedule? @relation("GeneratedOrderLink")
@@ -3164,6 +3274,8 @@ model Warehouse {
   movements        InventoryMovement[]
   purchaseReceipts PurchaseOrderReceipt[]
   orderMaterials   MaintenanceOrderMaterial[]
+  salesAllocations SalesOrderAllocation[]
+  salesDeliveries  SalesDeliveryItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3335,6 +3447,12 @@ model AccountsReceivable {
   contract           ServiceContract?            @relation(fields: [contractId], references: [id], onDelete: SetNull)
   maintenanceOrderId String?
   maintenanceOrder   MaintenanceOrder?           @relation(fields: [maintenanceOrderId], references: [id], onDelete: SetNull)
+  salesOrderId       String?
+  salesOrder         SalesOrder?                 @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
+  executionBillingKey      String?                   @unique
+  executionBillingCategory ExecutionBillingCategory?
+  installmentNumber       Int?
+  installmentCount        Int?
   costCenterId       String?
   costCenter         CostCenter?                 @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
   description        String
@@ -3361,6 +3479,7 @@ model AccountsReceivable {
 
   @@index([clientId, status, dueDate])
   @@index([contractId, competenceDate])
+  @@index([salesOrderId])
   @@map("accounts_receivable")
 }
 

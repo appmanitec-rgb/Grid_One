@@ -497,9 +497,13 @@ export class BankCollectionService {
     return this.prisma.$transaction(async (tx) => {
       const batch = await tx.bankCollectionBatch.findUnique({
         where: { id },
-        include: { items: true },
+        include: { items: true, agreement: { select: { homologated: true } } },
       });
       if (!batch) throw new NotFoundException('Remessa não encontrada.');
+      if (!batch.agreement.homologated)
+        throw new BadRequestException(
+          'Homologue o convênio Santander antes de marcar a remessa como enviada.',
+        );
       if (batch.status !== 'GENERATED')
         throw new ConflictException(
           'Esta remessa já foi marcada como enviada.',

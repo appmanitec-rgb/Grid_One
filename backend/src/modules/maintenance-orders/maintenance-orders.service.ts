@@ -25,6 +25,7 @@ import {
 import { DatabaseService } from '../../database/database.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { billCompletedExecution } from '../finance/execution-billing';
 import { CreateMaintenanceOrderDto } from './dto/create-maintenance-order.dto';
 import { ListMaintenanceOrdersQueryDto } from './dto/list-maintenance-orders-query.dto';
 import { UpdateMaintenanceOrderDto } from './dto/update-maintenance-order.dto';
@@ -994,6 +995,7 @@ export class MaintenanceOrdersService {
   ) {
     await this.consumeOrderMaterials(tx, orderId, actorUserId);
     await this.createTimeEntryForFinishedOrder(tx, orderId, actorUserId);
+    await billCompletedExecution(tx, orderId, { actorUserId });
     await this.auditLogsService.record(
       {
         domain: AuditDomain.MAINTENANCE_ORDERS,

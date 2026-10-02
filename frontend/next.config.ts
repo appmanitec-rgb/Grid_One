@@ -7,6 +7,7 @@ const internalApiUrl = (process.env.INTERNAL_API_URL || "http://localhost:3000")
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  allowedDevOrigins: ["192.168.0.25"],
   async headers() {
     return [
       {

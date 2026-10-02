@@ -245,7 +245,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full rounded-lg border border-zinc-300 bg-zinc-50 p-3 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-200"
-                placeholder="contato@manitec.com.br"
+                placeholder="seu.email@manitec.com.br"
                 required
               />
             </div>

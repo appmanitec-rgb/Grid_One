@@ -42,7 +42,9 @@ import {
   ResolveReconciliationIssueDto,
   ReversePayablePaymentDto,
   ReverseReceivablePaymentDto,
+  ReviewExecutionBillingDto,
   SyncOrderReceivableDto,
+  SyncSalesOrderReceivableDto,
   UnmatchBankStatementEntryDto,
   UnreconcileBankMovementDto,
   UpdateBankAccountDto,
@@ -153,6 +155,39 @@ export class FinanceController {
     return this.financeService.createReceivableFromOrder(
       orderId,
       dto,
+      this.getActorUserId(req),
+    );
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.view')
+  @Get('execution-billing/queue')
+  executionBillingQueue() {
+    return this.financeService.listExecutionBillingQueue();
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.create')
+  @Post('execution-billing/orders/:orderId/confirm')
+  confirmExecutionBilling(
+    @Param('orderId') orderId: string,
+    @Body() dto: ReviewExecutionBillingDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.createReceivablesFromExecutionProposal(orderId, dto.dueDate, this.getActorUserId(req));
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.create')
+  @Post('receivables/sync/sales-orders/:salesOrderId')
+  syncSalesOrder(
+    @Param('salesOrderId') salesOrderId: string,
+    @Body() dto: SyncSalesOrderReceivableDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.createReceivableFromSalesOrder(
+      salesOrderId,
+      dto.dueDate,
       this.getActorUserId(req),
     );
   }

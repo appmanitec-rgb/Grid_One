@@ -281,6 +281,12 @@ export class CatalogsService {
                 },
               },
               {
+                manufacturerPartNumber: {
+                  contains: search,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+              {
                 legacyCode: {
                   contains: search,
                   mode: Prisma.QueryMode.insensitive,
@@ -389,6 +395,7 @@ export class CatalogsService {
       select: {
         id: true,
         sku: true,
+        manufacturerPartNumber: true,
         legacyCode: true,
         legacySequence: true,
         radarCode: true,

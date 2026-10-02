@@ -125,7 +125,7 @@ describe('CustomerPortalService', () => {
     });
     expect(db.proposal.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'proposal-a' },
+        where: { id: 'proposal-a', status: ProposalStatus.CLIENT_REVIEW },
         data: expect.objectContaining({
           status: ProposalStatus.WON,
           customerDecisionByUserId: 'user-a',
@@ -141,6 +141,44 @@ describe('CustomerPortalService', () => {
       }),
       db,
     );
+  });
+
+  it('creates the service order and carries proposal parts when customer approves in the portal', async () => {
+    db.proposal.findFirst.mockResolvedValue({
+      id: 'proposal-service',
+      code: 'PROP-001',
+      clientId: 'client-a',
+      generatorId: 'equipment-a',
+      type: 'PARTS_AND_SERVICES',
+      totalValue: 1500,
+      status: ProposalStatus.CLIENT_REVIEW,
+      validUntil: new Date('2099-01-01T00:00:00.000Z'),
+      salesOpportunityId: 'opp-a',
+    });
+    db.proposal.update.mockResolvedValue({
+      id: 'proposal-service',
+      status: ProposalStatus.WON,
+    });
+    db.generator.findUnique.mockResolvedValue({ currentSiteId: 'site-a' });
+    db.proposalItem.findMany.mockResolvedValue([
+      { catalogItemId: 'part-a', quantity: 2 },
+    ]);
+    db.maintenanceOrder.create.mockResolvedValue({ id: 'order-a' });
+
+    await service.approveProposal(
+      'user-a',
+      'proposal-service',
+      { note: 'Aprovado' },
+      {},
+    );
+
+    expect(db.maintenanceOrder.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        generatorId: 'equipment-a',
+        siteId: 'site-a',
+        materials: { create: [{ catalogItemId: 'part-a', quantity: 2 }] },
+      }),
+    });
   });
 
   it('does not approve proposal already decided', async () => {
@@ -272,6 +310,7 @@ function createDbMock(): CustomerPortalDbMock {
       count: jest.fn(),
       findMany: jest.fn(),
       findFirst: jest.fn(),
+      findUnique: jest.fn(),
     },
     proposal: {
       count: jest.fn(),
@@ -280,6 +319,7 @@ function createDbMock(): CustomerPortalDbMock {
       update: jest.fn(),
     },
     proposalMovement: { create: jest.fn() },
+    proposalItem: { findMany: jest.fn() },
     salesOpportunity: {
       count: jest.fn(),
       findMany: jest.fn(),
@@ -291,6 +331,7 @@ function createDbMock(): CustomerPortalDbMock {
       count: jest.fn(),
       findMany: jest.fn(),
       findFirst: jest.fn(),
+      create: jest.fn(),
     },
     documentDelivery: { findMany: jest.fn() },
     contractPreventiveSchedule: { findMany: jest.fn() },
@@ -306,6 +347,7 @@ type CustomerPortalDbMock = {
     count: jest.Mock;
     findMany: jest.Mock;
     findFirst: jest.Mock;
+    findUnique: jest.Mock;
   };
   proposal: {
     count: jest.Mock;
@@ -314,6 +356,7 @@ type CustomerPortalDbMock = {
     update: jest.Mock;
   };
   proposalMovement: { create: jest.Mock };
+  proposalItem: { findMany: jest.Mock };
   salesOpportunity: {
     count: jest.Mock;
     findMany: jest.Mock;
@@ -325,6 +368,7 @@ type CustomerPortalDbMock = {
     count: jest.Mock;
     findMany: jest.Mock;
     findFirst: jest.Mock;
+    create: jest.Mock;
   };
   documentDelivery: { findMany: jest.Mock };
   contractPreventiveSchedule: { findMany: jest.Mock };

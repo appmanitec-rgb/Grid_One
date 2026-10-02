@@ -59,6 +59,16 @@ export class CreateAccountsReceivableDto {
   discountAmount?: number;
 }
 
+export class SyncSalesOrderReceivableDto {
+  @IsDateString()
+  dueDate!: string;
+}
+
+export class ReviewExecutionBillingDto {
+  @IsDateString()
+  dueDate!: string;
+}
+
 export class PayAccountsReceivableDto {
   @IsNumber()
   @Min(0.01)
