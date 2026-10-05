@@ -83,18 +83,31 @@ describe('Santander cobrança CNAB 240', () => {
     header.set(47, agreement.accountDigit);
     header.set(143, '2');
     const lot = line('1');
+    lot.set(19, '012345678000195');
+    lot.set(54, agreement.agency);
+    lot.set(58, agreement.agencyDigit);
+    lot.set(59, agreement.accountNumber);
+    lot.set(68, agreement.accountDigit);
     const t = line('3', 'T');
+    t.set(9, '00001');
     t.set(16, '06');
+    t.set(18, agreement.agency);
+    t.set(22, agreement.agencyDigit);
+    t.set(23, agreement.accountNumber);
+    t.set(32, agreement.accountDigit);
     t.set(41, makeSantanderOurNumber(1));
     t.set(55, 'NF123'.padEnd(15));
     t.set(78, '000000000123456');
     const u = line('3', 'U');
+    u.set(9, '00002');
     u.set(16, '06');
     u.set(78, '000000000123456');
     u.set(93, '000000000123456');
     u.set(138, '20102026');
     const lotTrailer = line('5');
+    lotTrailer.set(18, '000004');
     const trailer = line('9');
+    trailer.set(18, '000001');
     trailer.set(24, '000006');
     const file = (rows: string[]) =>
       Buffer.from(`${rows.join('\r\n')}\r\n`, 'latin1');
@@ -130,6 +143,24 @@ describe('Santander cobrança CNAB 240', () => {
     expect(() =>
       parseSantanderCollectionReturn(
         file(rows.slice(0, -1)),
+        agreement.beneficiaryDocument,
+        agreement,
+      ),
+    ).toThrow(BadRequestException);
+    const wrongLotCount = [...rows];
+    wrongLotCount[4] = `${wrongLotCount[4].slice(0, 17)}000003${wrongLotCount[4].slice(23)}`;
+    expect(() =>
+      parseSantanderCollectionReturn(
+        file(wrongLotCount),
+        agreement.beneficiaryDocument,
+        agreement,
+      ),
+    ).toThrow(BadRequestException);
+    const wrongSequence = [...rows];
+    wrongSequence[3] = `${wrongSequence[3].slice(0, 8)}00003${wrongSequence[3].slice(13)}`;
+    expect(() =>
+      parseSantanderCollectionReturn(
+        file(wrongSequence),
         agreement.beneficiaryDocument,
         agreement,
       ),

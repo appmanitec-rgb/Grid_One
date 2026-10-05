@@ -18,7 +18,6 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
-  IsBoolean,
   IsDateString,
   IsOptional,
   IsString,
@@ -32,6 +31,7 @@ import { BankCollectionService } from './bank-collection.service';
 
 class SaveAgreementDto {
   @IsUUID() bankAccountId!: string;
+  @IsUUID() issuerCompanyId!: string;
   @IsString() @MaxLength(15) transmissionCode!: string;
   @IsString() @MaxLength(30) beneficiaryName!: string;
   @IsString() @MaxLength(18) beneficiaryDocument!: string;
@@ -41,7 +41,11 @@ class SaveAgreementDto {
   @IsString() @MaxLength(1) accountDigit!: string;
   @IsOptional() @IsString() walletCode?: string;
   @IsOptional() @IsString() documentType?: string;
-  @IsOptional() @IsBoolean() homologated?: boolean;
+}
+
+class RegisterHomologationDto {
+  @IsUUID() batchId!: string;
+  @IsString() @MaxLength(160) bankTestReference!: string;
 }
 
 class PrepareTitleDto {
@@ -82,6 +86,16 @@ export class BankCollectionController {
   @RequireAccessPolicy('finance.update')
   saveAgreement(@Body() dto: SaveAgreementDto, @Req() req: Request) {
     return this.collections.saveAgreement(dto, this.actor(req));
+  }
+
+  @Post('agreements/:id/homologation')
+  @RequireAccessPolicy('finance.reconcile')
+  registerHomologation(
+    @Param('id') id: string,
+    @Body() dto: RegisterHomologationDto,
+    @Req() req: Request,
+  ) {
+    return this.collections.registerHomologation(id, dto, this.actor(req));
   }
 
   @Post('titles')
@@ -142,6 +156,25 @@ export class BankCollectionController {
       { bankAccountId, fileName: file.originalname, content: file.buffer },
       this.actor(req),
     );
+  }
+
+  @Post('returns/preview')
+  @RequireAccessPolicy('finance.reconcile')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }),
+  )
+  previewReturn(
+    @Body('bankAccountId') bankAccountId: string,
+    @UploadedFile() file: { buffer?: Buffer } | undefined,
+  ) {
+    if (!bankAccountId || !file?.buffer)
+      throw new BadRequestException(
+        'Selecione a conta e o arquivo de retorno Santander.',
+      );
+    return this.collections.previewReturn({
+      bankAccountId,
+      content: file.buffer,
+    });
   }
 
   @Post('events/:id/apply')

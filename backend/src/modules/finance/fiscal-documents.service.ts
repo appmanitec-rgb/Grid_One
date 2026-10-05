@@ -41,6 +41,10 @@ export class FiscalDocumentsService {
           taxRegime: true,
           city: true,
           state: true,
+          address: true,
+          addressNumber: true,
+          district: true,
+          zipCode: true,
           isPrimary: true,
         },
         orderBy: [{ isPrimary: 'desc' }, { companyName: 'asc' }],
@@ -90,7 +94,13 @@ export class FiscalDocumentsService {
       }),
     ]);
     return {
-      issuers: companies,
+      issuers: companies.map((company) => ({
+        ...company,
+        readiness: {
+          NFE: this.issuerMissing(company, FiscalDocumentKind.NFE),
+          NFSE: this.issuerMissing(company, FiscalDocumentKind.NFSE),
+        },
+      })),
       receivables,
       documents: documents.map((document) => ({
         ...document,
@@ -394,6 +404,48 @@ export class FiscalDocumentsService {
       missing.push('código fiscal dos serviços');
     missing.push('enquadramento tributário validado pela contabilidade');
     missing.push('integração fiscal e credenciais de homologação');
+    return missing;
+  }
+
+  private issuerMissing(
+    company: {
+      companyName: string | null;
+      cnpj: string | null;
+      taxRegime: string | null;
+      stateRegistration: string | null;
+      municipalRegistration: string | null;
+      address: string | null;
+      addressNumber: string | null;
+      district: string | null;
+      city: string | null;
+      state: string | null;
+      zipCode: string | null;
+    },
+    kind: FiscalDocumentKind,
+  ) {
+    const missing: string[] = [];
+    if (!company.companyName) missing.push('razão social');
+    if (digits(company.cnpj).length !== 14) missing.push('CNPJ com 14 dígitos');
+    if (!company.taxRegime) missing.push('regime tributário');
+    if (
+      !company.address ||
+      !company.addressNumber ||
+      !company.district ||
+      !company.city ||
+      !company.state ||
+      digits(company.zipCode).length !== 8
+    )
+      missing.push('endereço fiscal completo');
+    if (kind === FiscalDocumentKind.NFE && !company.stateRegistration)
+      missing.push('inscrição estadual');
+    if (kind === FiscalDocumentKind.NFSE && !company.municipalRegistration)
+      missing.push('inscrição municipal');
+    missing.push('certificado A1 e parâmetros fiscais homologados');
+    missing.push(
+      kind === FiscalDocumentKind.NFE
+        ? 'integração SEFAZ para emissão e cancelamento'
+        : 'integração NFS-e Nacional para emissão e cancelamento',
+    );
     return missing;
   }
 }

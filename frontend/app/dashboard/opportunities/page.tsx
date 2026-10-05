@@ -124,6 +124,8 @@ type Opportunity = {
   temperature: Temperature;
   estimatedValue: number;
   expectedCloseDate?: string | null;
+  probabilityPercent?: number | null;
+  crmActivities?: Array<{ id: string; type: string; subject: string; dueAt: string | null }>;
   lossReason?: LossReason | null;
   lossReasonDetail?: string | null;
   client: { id: string; companyName: string; tradeName?: string | null };
@@ -144,6 +146,17 @@ type PipelineRow = {
   estimatedValue: number;
 };
 
+type Forecast = {
+  count: number;
+  amount: number;
+  weightedAmount: number;
+  unscheduled: number;
+  overdue: number;
+  months: Array<{ month: string; count: number; amount: number; weightedAmount: number }>;
+};
+
+const forecastCurrency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
 type ClientOption = {
   id: string;
   companyName: string;
@@ -163,6 +176,7 @@ type Collaborator = {
 export default function OpportunitiesPage() {
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [pipeline, setPipeline] = useState<PipelineRow[]>([]);
+  const [forecast, setForecast] = useState<Forecast | null>(null);
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [sellers, setSellers] = useState<Collaborator[]>([]);
   const [message, setMessage] = useState("");
@@ -223,21 +237,23 @@ export default function OpportunitiesPage() {
       const params = new URLSearchParams();
       if (activePipeline !== "ALL") params.set("pipeline", activePipeline);
       const suffix = params.toString() ? `?${params.toString()}` : "";
-      const [opportunitiesRes, pipelineRes] = await Promise.all([
+      const [opportunitiesRes, pipelineRes, forecastRes] = await Promise.all([
         apiFetch(`/crm/opportunities${suffix}`, {
           cache: "no-store",
         }),
         apiFetch(`/crm/opportunities/pipeline${suffix}`, {
           cache: "no-store",
         }),
+        apiFetch(`/crm/opportunities/forecast${suffix}`, { cache: "no-store" }),
       ]);
 
-      if (!opportunitiesRes.ok || !pipelineRes.ok) {
+      if (!opportunitiesRes.ok || !pipelineRes.ok || !forecastRes.ok) {
         throw new Error("Falha ao carregar dados do funil.");
       }
 
       setOpportunities((await opportunitiesRes.json()) as Opportunity[]);
       setPipeline((await pipelineRes.json()) as PipelineRow[]);
+      setForecast((await forecastRes.json()) as Forecast);
     } catch (loadError: unknown) {
       setError(
         loadError instanceof Error
@@ -598,6 +614,29 @@ export default function OpportunitiesPage() {
         </div>
       </section>
 
+      <section className="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div><p className="text-xs font-bold uppercase tracking-widest text-blue-600">Previsão comercial</p><h2 className="text-lg font-bold text-slate-900">Vendas previstas por mês</h2></div>
+          <p className="text-xs text-slate-600">Valor ponderado pela probabilidade da etapa ou da oportunidade.</p>
+        </div>
+        {forecast ? <>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <MiniMetric label="Oportunidades abertas" value={String(forecast.count)} />
+            <MiniMetric label="Valor em aberto" value={forecastCurrency.format(forecast.amount)} />
+            <MiniMetric label="Previsão ponderada" value={forecastCurrency.format(forecast.weightedAmount)} />
+            <MiniMetric label="Sem data / vencidas" value={`${forecast.unscheduled} / ${forecast.overdue}`} />
+          </div>
+          <div className="mt-4 overflow-x-auto"><div className="flex min-w-max gap-3">
+            {forecast.months.map((row) => <div key={row.month} className="min-w-44 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-bold uppercase text-slate-500">{new Date(`${row.month}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}</p>
+              <p className="mt-1 text-lg font-bold text-slate-900">{forecastCurrency.format(row.weightedAmount)}</p>
+              <p className="text-xs text-slate-600">{row.count} oportunidade(s) · {forecastCurrency.format(row.amount)} bruto</p>
+            </div>)}
+            {!forecast.months.length ? <p className="text-sm text-slate-500">Informe uma data prevista nas oportunidades para distribuir a previsão por mês.</p> : null}
+          </div></div>
+        </> : null}
+      </section>
+
       <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
         <h2 className="text-lg font-bold text-zinc-900">Nova Oportunidade</h2>
         <form
@@ -917,7 +956,7 @@ export default function OpportunitiesPage() {
                           : "border-zinc-200"
                       }`}
                     >
-                      <p className="text-sm font-bold text-zinc-900">{item.title}</p>
+                      <Link href={`/dashboard/opportunities/${item.id}`} className="text-sm font-bold text-blue-700 hover:underline">{item.title}</Link>
                       <div className="mt-2 flex flex-wrap gap-1">
                         <span className="rounded-full bg-indigo-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-indigo-700">
                           {PIPELINE_LABEL[item.pipeline]}
@@ -938,6 +977,10 @@ export default function OpportunitiesPage() {
                       <p className="mt-2 text-sm font-semibold text-zinc-800">
                         R$ {Number(item.estimatedValue || 0).toLocaleString("pt-BR")}
                       </p>
+                      {item.crmActivities?.[0] ? <Link href={`/dashboard/opportunities/${item.id}`} className={`mt-2 block rounded-lg px-2 py-1.5 text-xs ${item.crmActivities[0].dueAt && new Date(item.crmActivities[0].dueAt) < new Date() ? "bg-rose-50 text-rose-800" : "bg-blue-50 text-blue-800"}`}>
+                        <strong>Próxima ação:</strong> {item.crmActivities[0].subject}<br />
+                        {item.crmActivities[0].dueAt ? new Date(item.crmActivities[0].dueAt).toLocaleString("pt-BR") : "Sem prazo"}
+                      </Link> : null}
                       <div className="mt-2 flex flex-wrap gap-2">
                         <span className="rounded-full bg-zinc-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-600">
                           {(item.inspections || []).length} vistoria(s)

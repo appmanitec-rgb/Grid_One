@@ -314,9 +314,57 @@ export function parseSantanderCollectionReturn(
       'Arquivo de retorno Santander CNAB 240 inválido ou de outro beneficiário.',
     );
   const declaredCount = Number(lines.at(-1)!.slice(23, 29));
+  const declaredLots = Number(lines.at(-1)!.slice(17, 23));
   if (declaredCount !== lines.length)
     throw new BadRequestException(
       'Quantidade de registros do retorno não confere.',
+    );
+  let activeLot: string | null = null;
+  let detailCount = 0;
+  let detailSequence = 0;
+  let lotCount = 0;
+  for (const line of lines.slice(1, -1)) {
+    const type = line[7];
+    const lot = line.slice(3, 7);
+    if (type === '1' && activeLot === null) {
+      if (
+        digits(line.slice(18, 33)).replace(/^0+/, '') !==
+          digits(beneficiaryDocument).replace(/^0+/, '') ||
+        (account !== undefined &&
+          (line.slice(53, 57) !== account.agency ||
+            line.slice(57, 58) !== account.agencyDigit ||
+            line.slice(58, 67) !== account.accountNumber ||
+            line.slice(67, 68) !== account.accountDigit))
+      )
+        throw new BadRequestException(
+          'Lote de retorno de outro beneficiário ou conta.',
+        );
+      activeLot = lot;
+      detailCount = 0;
+      detailSequence = 0;
+      lotCount++;
+    } else if (type === '3' && activeLot === lot) {
+      const sequence = Number(line.slice(8, 13));
+      if (!Number.isInteger(sequence) || sequence !== ++detailSequence)
+        throw new BadRequestException(
+          'Sequência dos detalhes do retorno Santander inválida.',
+        );
+      detailCount++;
+    } else if (type === '5' && activeLot === lot) {
+      if (Number(line.slice(17, 23)) !== detailCount + 2)
+        throw new BadRequestException(
+          'Quantidade de registros do lote Santander não confere.',
+        );
+      activeLot = null;
+    } else {
+      throw new BadRequestException(
+        'Estrutura de lotes do retorno Santander inválida.',
+      );
+    }
+  }
+  if (activeLot !== null || lotCount < 1 || declaredLots !== lotCount)
+    throw new BadRequestException(
+      'Quantidade de lotes do retorno Santander não confere.',
     );
   const events: SantanderReturnEvent[] = [];
   for (let index = 0; index < lines.length; index++) {
@@ -338,6 +386,16 @@ export function parseSantanderCollectionReturn(
         `Movimento T/U divergente na linha ${index + 1}.`,
       );
     const ourNumber = line.slice(40, 53);
+    if (
+      account !== undefined &&
+      (line.slice(17, 21) !== account.agency ||
+        line.slice(21, 22) !== account.agencyDigit ||
+        line.slice(22, 31) !== account.accountNumber ||
+        line.slice(31, 32) !== account.accountDigit)
+    )
+      throw new BadRequestException(
+        `Conta divergente no segmento T da linha ${index + 1}.`,
+      );
     const documentNumber = line.slice(54, 69).trim();
     const nominal = line.slice(77, 92);
     const paid = next.slice(77, 92);

@@ -269,6 +269,19 @@ enum SalesOpportunityStage {
   LOST
 }
 
+enum CrmActivityType {
+  CALL
+  VISIT
+  MESSAGE
+  TASK
+}
+
+enum CrmActivityStatus {
+  PLANNED
+  COMPLETED
+  CANCELED
+}
+
 enum OpportunityTemperature {
   HOT
   WARM
@@ -860,6 +873,8 @@ model User {
   createdContracts               ServiceContract[]           @relation("ContractCreatedBy")
   createdContractRenewals        ContractRenewal[]           @relation("ContractRenewalCreatedBy")
   assignedOpportunities          SalesOpportunity[]          @relation("OpportunityAssignedSeller")
+  createdCrmActivities           CrmActivity[]              @relation("CrmActivityCreator")
+  ownedCrmActivities             CrmActivity[]              @relation("CrmActivityOwner")
   commercialInspections          CommercialInspection[]      @relation("InspectionInspector")
   companySettingsUpdated         CompanySettings[]           @relation("CompanySettingsUpdatedBy")
   financialAuditLogs             FinancialAuditLog[]         @relation("FinancialAuditActor")
@@ -1239,6 +1254,7 @@ model CompanySettings {
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
   fiscalDocuments           FiscalDocument[]
+  bankCollectionAgreements  BankCollectionAgreement[]
 
   @@index([cnpj])
   @@index([isPrimary])
@@ -1314,6 +1330,7 @@ model Client {
   proposals             Proposal[]
   salesOrders            SalesOrder[]
   opportunities         SalesOpportunity[]
+  crmActivities         CrmActivity[]
   commercialInspections CommercialInspection[]
   sites                 Site[]
   generators            Generator[]
@@ -2210,6 +2227,7 @@ model SalesOpportunity {
   opportunityType   SalesOpportunityType     @default(FIELD_SERVICE)
   temperature       OpportunityTemperature   @default(WARM)
   estimatedValue    Float                    @default(0)
+  probabilityPercent Int?
   expectedCloseDate DateTime?
   source            String?
   notes             String?
@@ -2231,6 +2249,7 @@ model SalesOpportunity {
 
   proposals   Proposal[]
   inspections CommercialInspection[]
+  crmActivities CrmActivity[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2241,6 +2260,32 @@ model SalesOpportunity {
   @@index([assignedSellerId])
   @@index([clientId, stage])
   @@map("sales_opportunities")
+}
+
+model CrmActivity {
+  id            String            @id @default(uuid())
+  type          CrmActivityType
+  status        CrmActivityStatus @default(COMPLETED)
+  subject       String
+  details       String?
+  occurredAt    DateTime          @default(now())
+  dueAt         DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  clientId      String
+  client        Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  opportunityId String?
+  opportunity   SalesOpportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  createdById   String?
+  createdBy     User?             @relation("CrmActivityCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  ownerId       String?
+  owner         User?             @relation("CrmActivityOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@index([clientId, occurredAt])
+  @@index([opportunityId, occurredAt])
+  @@index([status, dueAt])
+  @@map("crm_activities")
 }
 
 model CommercialInspection {
@@ -3532,6 +3577,8 @@ model BankCollectionAgreement {
   id                   String   @id @default(uuid())
   bankAccountId        String   @unique
   bankAccount          BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  issuerCompanyId      String?
+  issuerCompany        CompanySettings? @relation(fields: [issuerCompanyId], references: [id], onDelete: Restrict)
   transmissionCode     String
   beneficiaryName      String
   beneficiaryDocument  String
@@ -3545,12 +3592,16 @@ model BankCollectionAgreement {
   nextRemittanceNumber Int      @default(1)
   nextOurNumber        Int      @default(1)
   homologated          Boolean  @default(false)
+  homologationReference String?
+  homologatedAt         DateTime?
+  homologatedById       String?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
   batches              BankCollectionBatch[]
   returnImports        BankCollectionReturnImport[]
 
+  @@index([issuerCompanyId])
   @@map("bank_collection_agreements")
 }
 

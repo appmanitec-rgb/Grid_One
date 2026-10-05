@@ -283,6 +283,16 @@ export class CompanySettingsService {
       );
     }
 
+    const linkedBankAgreements =
+      await this.prisma.bankCollectionAgreement.count({
+        where: { issuerCompanyId: id },
+      });
+    if (linkedBankAgreements > 0) {
+      throw new ConflictException(
+        'Esta empresa está vinculada a um convênio bancário e não pode ser excluída.',
+      );
+    }
+
     return this.prisma.$transaction(async (tx) => {
       await tx.companySettings.delete({
         where: { id },

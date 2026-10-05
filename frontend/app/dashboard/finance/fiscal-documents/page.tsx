@@ -17,7 +17,8 @@ type FiscalDocument = {
   receivable: { description: string; client: { companyName: string } };
 };
 type Issuer = { id: string; companyName: string | null; cnpj: string | null; stateRegistration: string | null;
-  municipalRegistration: string | null; taxRegime: string | null; city: string | null; state: string | null; isPrimary: boolean };
+  municipalRegistration: string | null; taxRegime: string | null; city: string | null; state: string | null; isPrimary: boolean;
+  readiness: { NFE: string[]; NFSE: string[] } };
 type Overview = {
   issuers: Issuer[];
   receivables: Receivable[]; documents: FiscalDocument[]; issuanceConfigured: boolean;
@@ -100,6 +101,9 @@ export default function FiscalDocumentsPage() {
     <StatusBanner tone="amber">A emissão fiscal ainda não está conectada. Os rascunhos desta página não são notas autorizadas. A transmissão será liberada após configurar a integração e homologar os dados tributários.</StatusBanner>
 
     <SectionCard title="1. Escolher emitente" description="Selecione o CNPJ que emitirá esta nota. Os dados da empresa escolhida ficam registrados no rascunho.">
+      <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">
+        {data?.issuers.length || 0} empresa(s) cadastrada(s). Para operar com os dois CNPJs, complete os dois cadastros fiscais e homologue cada tipo de nota separadamente.
+      </div>
       <label className="mb-4 block max-w-xl text-xs font-semibold uppercase tracking-wide text-slate-600">Empresa emitente
         <select className={`${field} mt-1`} value={draft.issuerCompanyId} onChange={(event) => setDraft((current) => ({ ...current, issuerCompanyId: event.target.value }))}>
           <option value="">Selecione o CNPJ emitente</option>
@@ -115,6 +119,12 @@ export default function FiscalDocumentsPage() {
         ].map(([label, value]) => <div key={label} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 font-semibold text-slate-900">{value}</p></div>)}
       </div>
       <Link href="/dashboard/company-settings" className="mt-4 inline-block text-sm font-semibold text-blue-700 hover:underline">Revisar cadastro da empresa</Link>
+      {selectedIssuer && <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {(["NFE", "NFSE"] as const).map((kind) => <div key={kind} className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm font-bold text-amber-950">{kind === "NFE" ? "NF-e de produtos" : "NFS-e de serviços"} · pendências</p>
+          <ul className="mt-2 space-y-1 text-xs text-amber-950">{selectedIssuer.readiness[kind].map((item) => <li key={item}>• {item}</li>)}</ul>
+        </div>)}
+      </div>}
     </SectionCard>
 
     <SectionCard title={editingId ? "2. Editar rascunho" : "2. Preparar nota"} description="Selecione a conta a receber e descreva separadamente os produtos ou serviços. Os códigos fiscais exigem conferência da contabilidade.">

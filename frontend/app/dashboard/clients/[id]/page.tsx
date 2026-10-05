@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
+import CrmTimeline from "../../components/CrmTimeline";
 import {
   OperationalBreadcrumb,
   PermissionAwareLink,
@@ -682,6 +683,8 @@ export default function ClientProfilePage() {
           </div>
         )}
       </section>
+
+      <CrmTimeline clientId={client.id} />
 
       <section className="bg-white border border-zinc-200 rounded-xl p-6">
         <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">

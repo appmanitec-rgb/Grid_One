@@ -6,10 +6,12 @@ import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
 import { PageHero, SectionCard, StatusBanner } from "../../components/DashboardPageKit";
 
 type Account = { id: string; name: string; bankName: string | null; agency: string | null; accountNumber: string | null };
+type Issuer = { id: string; companyName: string | null; cnpj: string | null };
 type Agreement = {
-  id: string; bankAccountId: string; transmissionCode: string; beneficiaryName: string;
+  id: string; bankAccountId: string; issuerCompanyId: string | null; transmissionCode: string; beneficiaryName: string;
   beneficiaryDocument: string; agency: string; agencyDigit: string; accountNumber: string;
   accountDigit: string; walletCode: string; documentType: string; homologated: boolean;
+  homologationReference: string | null; homologatedAt: string | null;
 };
 type Receivable = { id: string; description: string; dueDate: string; netAmount: number; paidAmount: number; client: { companyName: string } | null; fiscalDocuments: { id: string; kind: "NFE" | "NFSE"; status: string; number: string | null }[] };
 type Title = {
@@ -21,12 +23,13 @@ type Title = {
 type Batch = { id: string; agreementId: string; fileName: string; status: string; createdAt: string; sentAt: string | null; items: { titleId: string }[] };
 type ReturnFile = { id: string; agreementId: string; fileName: string; importedAt: string; events: { id: string }[] };
 type Event = { id: string; importId: string; titleId: string | null; movementCode: string; reasonCodes: string | null; amount: number; outcome: string; message: string; eventDate: string | null; title: { documentNumber: string } | null };
-type Overview = { accounts: Account[]; agreements: Agreement[]; unprepared: Receivable[]; titles: Title[]; batches: Batch[]; returns: ReturnFile[]; events: Event[] };
+type ReturnPreview = { checksumSha256: string; alreadyImported: boolean; eventCount: number; matchedCount: number; reviewCount: number; events: { lineNumber: number; movementCode: string; documentNumber: string; ourNumber: string; paidAmount: number; netCreditAmount: number; titleId: string | null; requiresReview: boolean }[] };
+type Overview = { accounts: Account[]; issuers: Issuer[]; agreements: Agreement[]; unprepared: Receivable[]; titles: Title[]; batches: Batch[]; returns: ReturnFile[]; events: Event[] };
 
 const button = "rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-45";
 const secondary = "rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-45";
 const input = "w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
-const emptyAgreement = { transmissionCode: "", beneficiaryName: "", beneficiaryDocument: "", agency: "", agencyDigit: "", accountNumber: "", accountDigit: "", walletCode: "1", documentType: "2", homologated: false };
+const emptyAgreement = { issuerCompanyId: "", transmissionCode: "", beneficiaryName: "", beneficiaryDocument: "", agency: "", agencyDigit: "", accountNumber: "", accountDigit: "", walletCode: "1", documentType: "2" };
 const money = (value: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value || 0));
 const date = (value?: string | null) => value ? new Date(value).toLocaleDateString("pt-BR", { timeZone: "UTC" }) : "—";
 const statusLabel: Record<string, string> = { DRAFT: "Pronto para remessa", GENERATED: "Remessa gerada", SENT: "Enviado ao banco", REGISTERED: "Registrado", REJECTED: "Rejeitado", PAID: "Liquidado", APPLIED: "Tratado", PENDING_REVIEW: "Revisar", NEEDS_REVIEW: "Revisar", PENDING_SETTLEMENT: "Baixa pendente" };
@@ -37,12 +40,14 @@ export default function CollectionsPage() {
   const [agreement, setAgreement] = useState(emptyAgreement);
   const [selected, setSelected] = useState<string[]>([]);
   const [returnFile, setReturnFile] = useState<File | null>(null);
+  const [returnPreview, setReturnPreview] = useState<{ accountId: string; file: File; result: ReturnPreview } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [showSettings, setShowSettings] = useState(false);
   const [invoiceTitleId, setInvoiceTitleId] = useState("");
   const [invoiceDraft, setInvoiceDraft] = useState({ number: "", issuedAt: "", accessKey: "", url: "" });
+  const [bankTest, setBankTest] = useState({ batchId: "", bankTestReference: "" });
 
   const reload = useCallback(async () => {
     const response = await apiFetch(apiUrl("/finance/collections/overview"), { cache: "no-store" });
@@ -56,11 +61,12 @@ export default function CollectionsPage() {
   useEffect(() => {
     const configured = data?.agreements.find((item) => item.bankAccountId === accountId);
     setAgreement(configured ? {
+      issuerCompanyId: configured.issuerCompanyId || "",
       transmissionCode: configured.transmissionCode, beneficiaryName: configured.beneficiaryName,
       beneficiaryDocument: configured.beneficiaryDocument, agency: configured.agency,
       agencyDigit: configured.agencyDigit, accountNumber: configured.accountNumber,
       accountDigit: configured.accountDigit, walletCode: configured.walletCode,
-      documentType: configured.documentType, homologated: configured.homologated,
+      documentType: configured.documentType,
     } : emptyAgreement);
     setSelected([]);
   }, [accountId, data]);
@@ -102,16 +108,29 @@ export default function CollectionsPage() {
   }
 
   async function importReturn() {
-    if (!returnFile || !accountId) return;
+    if (!returnFile || !accountId || returnPreview?.file !== returnFile || returnPreview.accountId !== accountId || returnPreview.result.alreadyImported) return;
     setBusy(true); setError(""); setNotice("");
     try {
       const form = new FormData(); form.append("bankAccountId", accountId); form.append("file", returnFile);
       const response = await apiFetch(apiUrl("/finance/collections/returns/import"), { method: "POST", body: form });
       if (!response.ok) throw new Error(await readApiErrorMessage(response, "Não foi possível importar o retorno."));
       const result = await response.json() as { events: Event[] };
-      setReturnFile(null); await reload();
+      setReturnFile(null); setReturnPreview(null); await reload();
       setNotice(`Retorno importado: ${result.events.length} ocorrência(s). Confira a fila de revisão.`);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Falha ao importar retorno."); }
+    finally { setBusy(false); }
+  }
+
+  async function previewReturn() {
+    if (!returnFile || !accountId) return;
+    setBusy(true); setError(""); setNotice(""); setReturnPreview(null);
+    try {
+      const form = new FormData(); form.append("bankAccountId", accountId); form.append("file", returnFile);
+      const response = await apiFetch(apiUrl("/finance/collections/returns/preview"), { method: "POST", body: form });
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, "Não foi possível conferir o retorno."));
+      const result = await response.json() as ReturnPreview;
+      setReturnPreview({ accountId, file: returnFile, result });
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Falha ao conferir retorno."); }
     finally { setBusy(false); }
   }
 
@@ -137,16 +156,29 @@ export default function CollectionsPage() {
           </select>
         </label>
         <span className={`rounded-xl px-3 py-2 text-sm font-semibold ${currentAgreement?.homologated ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}>
-          {currentAgreement ? currentAgreement.homologated ? "Convênio homologado" : "Aguardando homologação" : "Convênio não configurado"}
+          {currentAgreement ? currentAgreement.homologated ? "Teste do banco registrado" : "Aguardando teste no banco" : "Convênio não configurado"}
         </span>
       </div>
       {showSettings && <div className="mt-5 grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-3">
+        <label className="text-xs font-semibold text-slate-700">Empresa beneficiária<select className={`${input} mt-1`} value={agreement.issuerCompanyId} onChange={(event) => {
+          const issuer = data?.issuers.find((item) => item.id === event.target.value);
+          setAgreement((previous) => ({ ...previous, issuerCompanyId: event.target.value, beneficiaryDocument: issuer?.cnpj || "" }));
+        }}><option value="">Selecione o CNPJ</option>{data?.issuers.map((issuer) => <option key={issuer.id} value={issuer.id}>{issuer.companyName || "Empresa"} · {issuer.cnpj || "CNPJ pendente"}</option>)}</select></label>
         {([ ["transmissionCode", "Código de transmissão (15 dígitos)"], ["beneficiaryName", "Nome do beneficiário"], ["beneficiaryDocument", "CPF/CNPJ do beneficiário"], ["agency", "Agência (4 dígitos)"], ["agencyDigit", "Dígito da agência"], ["accountNumber", "Conta (9 dígitos)"], ["accountDigit", "Dígito da conta"] ] as const).map(([key, label]) =>
           <label key={key} className="text-xs font-semibold text-slate-700">{label}<input className={`${input} mt-1`} value={agreement[key]} onChange={(event) => setAgreement((previous) => ({ ...previous, [key]: event.target.value }))} /></label>)}
         <label className="text-xs font-semibold text-slate-700">Carteira<select className={`${input} mt-1`} value={agreement.walletCode} onChange={(event) => setAgreement((previous) => ({ ...previous, walletCode: event.target.value }))}><option value="1">1 · Simples eletrônica</option><option value="3">3 · Caucionada</option><option value="5">5 · Simples rápida com registro</option></select></label>
         <label className="text-xs font-semibold text-slate-700">Tipo do documento<select className={`${input} mt-1`} value={agreement.documentType} onChange={(event) => setAgreement((previous) => ({ ...previous, documentType: event.target.value }))}><option value="2">2 · Tradicional</option><option value="1">1 · Escritural</option></select></label>
-        <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={agreement.homologated} onChange={(event) => setAgreement((previous) => ({ ...previous, homologated: event.target.checked }))} /> Arquivo validado no ambiente do banco</label>
-        <div className="md:col-span-3"><button disabled={busy || !accountId} className={button} onClick={() => void mutate("/finance/collections/agreement", "POST", { bankAccountId: accountId, ...agreement }, "Convênio salvo.")}>Salvar convênio</button></div>
+        <div className="md:col-span-3"><button disabled={busy || !accountId || !agreement.issuerCompanyId} className={button} onClick={() => void mutate("/finance/collections/agreement", "POST", { bankAccountId: accountId, ...agreement }, "Convênio salvo.")}>Salvar convênio</button></div>
+      </div>}
+      {currentAgreement && <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+        <p className="text-sm font-semibold text-amber-950">Validação no Santander</p>
+        <p className="mt-1 text-xs text-amber-900">Baixe uma remessa abaixo e teste em Internet Banking PJ → Cobrança e Recebimentos → Teste de Arquivos. Registre a referência do resultado aprovado e a remessa testada. O teste de arquivo não confirma o registro dos boletos; confira também o retorno real.</p>
+        {currentAgreement.homologated && <p className="mt-2 text-xs font-medium text-emerald-800">Referência registrada: {currentAgreement.homologationReference} · {date(currentAgreement.homologatedAt)}</p>}
+        <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+          <label className="text-xs font-semibold text-slate-700">Remessa testada<select className={`${input} mt-1`} value={bankTest.batchId} onChange={(event) => setBankTest((previous) => ({ ...previous, batchId: event.target.value }))}><option value="">Selecione</option>{batches.map((batch) => <option key={batch.id} value={batch.id}>{batch.fileName}</option>)}</select></label>
+          <label className="text-xs font-semibold text-slate-700">Referência do resultado aprovado<input className={`${input} mt-1`} maxLength={160} value={bankTest.bankTestReference} onChange={(event) => setBankTest((previous) => ({ ...previous, bankTestReference: event.target.value }))} /></label>
+          <button className={secondary} disabled={busy || !bankTest.batchId || bankTest.bankTestReference.trim().length < 6} onClick={() => void mutate(`/finance/collections/agreements/${currentAgreement.id}/homologation`, "POST", bankTest, "Validação do arquivo no banco registrada.")}>Registrar validação</button>
+        </div>
       </div>}
     </SectionCard>
 
@@ -189,8 +221,14 @@ export default function CollectionsPage() {
       <SectionCard title="4. Remessas" description="Baixe o arquivo, envie no Santander e marque o envio para controle da equipe.">
         <div className="space-y-2">{!batches.length && <p className="text-sm text-slate-500">Nenhuma remessa gerada.</p>}{batches.map((batch) => <div key={batch.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-3 text-sm"><div><p className="font-semibold">{batch.fileName} · {batch.items.length} boleto(s)</p><p className="text-xs text-slate-500">{date(batch.createdAt)} · {batch.status === "SENT" ? "Enviada" : "Aguardando envio"}</p></div><div className="flex gap-2"><button className={secondary} onClick={() => void download(batch)}>Baixar</button>{batch.status === "GENERATED" && <button disabled={busy} className={secondary} onClick={() => void mutate(`/finance/collections/batches/${batch.id}/sent`, "POST", undefined, "Remessa marcada como enviada.")}>Marcar enviada</button>}</div></div>)}</div>
       </SectionCard>
-      <SectionCard title="5. Retorno do banco" description="Importe o arquivo de retorno da mesma conta. Registros, rejeições e liquidações serão vinculados aos boletos.">
-        <div className="flex flex-wrap items-center gap-3"><input aria-label="Arquivo de retorno CNAB 240" className="max-w-full text-sm" type="file" accept=".RET,.ret,.txt" onChange={(event) => setReturnFile(event.target.files?.[0] || null)} /><button className={button} disabled={busy || !returnFile || !currentAgreement} onClick={() => void importReturn()}>Importar retorno</button></div>
+      <SectionCard title="5. Retorno do banco" description="Confira o arquivo da mesma conta antes de importar. A importação pode registrar confirmações, rejeições e pagamentos.">
+        <div className="flex flex-wrap items-center gap-3"><input aria-label="Arquivo de retorno CNAB 240" className="max-w-full text-sm" type="file" accept=".RET,.ret,.txt" onChange={(event) => { setReturnFile(event.target.files?.[0] || null); setReturnPreview(null); }} /><button className={secondary} disabled={busy || !returnFile || !currentAgreement} onClick={() => void previewReturn()}>Conferir arquivo</button><button className={button} disabled={busy || !returnFile || !currentAgreement || returnPreview?.file !== returnFile || returnPreview.accountId !== accountId || returnPreview.result.alreadyImported} onClick={() => void importReturn()}>Importar retorno</button></div>
+        {returnPreview?.accountId === accountId && returnPreview.file === returnFile && <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-slate-900">
+          <p className="font-semibold">Prévia: {returnPreview.result.eventCount} ocorrência(s) · {returnPreview.result.matchedCount} vinculada(s) a boletos · {returnPreview.result.reviewCount} para revisar</p>
+          {returnPreview.result.alreadyImported && <p className="mt-1 font-semibold text-amber-900">Este arquivo já foi importado. A nova importação está bloqueada.</p>}
+          <div className="mt-2 max-h-48 space-y-1 overflow-auto">{returnPreview.result.events.map((event) => <p key={event.lineNumber} className="rounded-lg bg-white px-2 py-1 text-xs">Linha {event.lineNumber} · {event.documentNumber} · ocorrência {event.movementCode} · pago {money(event.paidAmount)} · crédito {money(event.netCreditAmount)} · {event.titleId ? event.requiresReview ? "vinculado; revisar" : "vinculado" : "boleto não encontrado"}</p>)}</div>
+          <p className="mt-2 text-xs text-slate-600">A prévia não altera o financeiro. Depois de importar, confira as ocorrências e o extrato bancário.</p>
+        </div>}
         <div className="mt-4 space-y-2">{!returns.length && <p className="text-sm text-slate-500">Nenhum retorno importado.</p>}{returns.map((file) => <div key={file.id} className="rounded-xl border border-slate-200 p-3 text-sm"><strong>{file.fileName}</strong><span className="ml-2 text-slate-500">{file.events.length} ocorrência(s) · {date(file.importedAt)}</span></div>)}</div>
       </SectionCard>
     </div>

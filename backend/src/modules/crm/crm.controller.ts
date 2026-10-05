@@ -7,16 +7,20 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
 import { CrmService } from './crm.service';
 import {
   AddInspectionMediaDto,
   CreateInspectionDto,
+  CreateCrmActivityDto,
   CreateOpportunityDto,
   SetOpportunityStageDto,
   UpdateInspectionDto,
+  UpdateCrmActivityDto,
   UpdateOpportunityDto,
 } from './dto/crm.dto';
 import { RequireAccessPolicy } from '../auth/access-policy.decorator';
@@ -49,6 +53,35 @@ export class CrmController {
   @Get('opportunities/pipeline')
   pipeline(@Query('pipeline') pipeline?: string) {
     return this.crmService.opportunityPipeline(pipeline);
+  }
+
+  @Get('opportunities/forecast')
+  forecast(@Query('pipeline') pipeline?: string) {
+    return this.crmService.opportunityForecast(pipeline);
+  }
+
+  @Get('activities')
+  activities(
+    @Query('clientId') clientId?: string,
+    @Query('opportunityId') opportunityId?: string,
+    @Query('skip') skip?: string,
+  ) {
+    return this.crmService.listActivities(clientId, opportunityId, skip);
+  }
+
+  @Post('activities')
+  @RequireAccessPolicy('proposals.create')
+  createActivity(@Body() dto: CreateCrmActivityDto, @Req() req: Request) {
+    return this.crmService.createActivity(
+      dto,
+      (req['user'] as { sub: string }).sub,
+    );
+  }
+
+  @Patch('activities/:id')
+  @RequireAccessPolicy('proposals.update')
+  updateActivity(@Param('id') id: string, @Body() dto: UpdateCrmActivityDto) {
+    return this.crmService.updateActivity(id, dto);
   }
 
   @Get('opportunities/:id')

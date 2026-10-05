@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import {
   AccountsReceivableStatus,
+  FiscalDocumentStatus,
   PaymentMethod,
   Prisma,
 } from '@prisma/client';
@@ -29,7 +30,7 @@ export class BankCollectionService {
   ) {}
 
   async overview() {
-    const [accounts, agreements, titles, batches, returns, events] =
+    const [accounts, issuers, agreements, titles, batches, returns, events] =
       await Promise.all([
         this.prisma.bankAccount.findMany({
           where: { isActive: true },
@@ -41,6 +42,10 @@ export class BankCollectionService {
             accountNumber: true,
           },
           orderBy: { name: 'asc' },
+        }),
+        this.prisma.companySettings.findMany({
+          select: { id: true, companyName: true, cnpj: true },
+          orderBy: [{ isPrimary: 'desc' }, { companyName: 'asc' }],
         }),
         this.prisma.bankCollectionAgreement.findMany({
           orderBy: { updatedAt: 'desc' },
@@ -119,6 +124,7 @@ export class BankCollectionService {
     });
     return {
       accounts,
+      issuers,
       agreements,
       unprepared,
       titles,
@@ -131,6 +137,7 @@ export class BankCollectionService {
   async saveAgreement(
     input: {
       bankAccountId: string;
+      issuerCompanyId: string;
       transmissionCode: string;
       beneficiaryName: string;
       beneficiaryDocument: string;
@@ -140,7 +147,6 @@ export class BankCollectionService {
       accountDigit: string;
       walletCode?: string;
       documentType?: string;
-      homologated?: boolean;
     },
     actorUserId?: string,
   ) {
@@ -149,16 +155,37 @@ export class BankCollectionService {
     });
     if (!account?.isActive)
       throw new BadRequestException('Selecione uma conta bancária ativa.');
-    if (account.bankName && !/santander|\b033\b/i.test(account.bankName))
+    if (!account.bankName || !/santander|\b033\b/i.test(account.bankName))
       throw new BadRequestException(
         'Esta conta não está identificada como Santander.',
       );
     const beneficiaryDocument = digits(input.beneficiaryDocument || '');
+    const issuer = await this.prisma.companySettings.findUnique({
+      where: { id: input.issuerCompanyId },
+      select: { cnpj: true },
+    });
+    if (!issuer || digits(issuer.cnpj || '') !== beneficiaryDocument)
+      throw new BadRequestException(
+        'O CNPJ do beneficiário deve ser o da empresa emitente selecionada.',
+      );
     const transmissionCode = digits(input.transmissionCode || '');
     const agency = digits(input.agency || '');
     const agencyDigit = digits(input.agencyDigit || '');
     const accountNumber = digits(input.accountNumber || '');
     const accountDigit = digits(input.accountDigit || '');
+    const savedAgency = digits(account.agency || '');
+    const savedAccount = digits(account.accountNumber || '');
+    if (
+      (savedAgency &&
+        savedAgency !== agency &&
+        savedAgency !== `${agency}${agencyDigit}`) ||
+      (savedAccount &&
+        savedAccount !== accountNumber &&
+        savedAccount !== `${accountNumber}${accountDigit}`)
+    )
+      throw new BadRequestException(
+        'Agência e conta do convênio devem corresponder ao cadastro da conta bancária.',
+      );
     const beneficiaryName = input.beneficiaryName?.trim();
     if (
       !beneficiaryName ||
@@ -176,6 +203,7 @@ export class BankCollectionService {
         'Confira CNPJ/CPF, código de transmissão, agência, conta e carteira do convênio Santander.',
       );
     const data = {
+      issuerCompanyId: input.issuerCompanyId,
       transmissionCode,
       beneficiaryName,
       beneficiaryDocument,
@@ -186,7 +214,6 @@ export class BankCollectionService {
       walletCode: input.walletCode || '1',
       registrationForm: '1',
       documentType: input.documentType || '2',
-      homologated: input.homologated === true,
     };
     const prior = await this.prisma.bankCollectionAgreement.findUnique({
       where: { bankAccountId: input.bankAccountId },
@@ -204,16 +231,108 @@ export class BankCollectionService {
       throw new ConflictException(
         'Já existem remessas desta conta. Preserve os dados bancários do convênio para importar os retornos.',
       );
+    const changedLayout =
+      !!prior &&
+      (prior.transmissionCode !== transmissionCode ||
+        prior.beneficiaryDocument !== beneficiaryDocument ||
+        prior.agency !== agency ||
+        prior.agencyDigit !== agencyDigit ||
+        prior.accountNumber !== accountNumber ||
+        prior.accountDigit !== accountDigit ||
+        prior.walletCode !== data.walletCode ||
+        prior.documentType !== data.documentType ||
+        prior.beneficiaryName !== beneficiaryName ||
+        prior.issuerCompanyId !== input.issuerCompanyId);
     const saved = await this.prisma.bankCollectionAgreement.upsert({
       where: { bankAccountId: input.bankAccountId },
       create: { bankAccountId: input.bankAccountId, ...data },
-      update: data,
+      update: {
+        ...data,
+        ...(changedLayout
+          ? {
+              homologated: false,
+              homologationReference: null,
+              homologatedAt: null,
+              homologatedById: null,
+            }
+          : {}),
+      },
     });
     await this.audit('AGREEMENT', saved.id, 'SAVE', actorUserId, {
       bankAccountId: input.bankAccountId,
       homologated: saved.homologated,
     });
     return saved;
+  }
+
+  async registerHomologation(
+    agreementId: string,
+    input: { batchId: string; bankTestReference: string },
+    actorUserId?: string,
+  ) {
+    const bankTestReference = input.bankTestReference?.trim();
+    if (
+      !bankTestReference ||
+      bankTestReference.length < 6 ||
+      bankTestReference.length > 160
+    )
+      throw new BadRequestException(
+        'Informe a referência do resultado aprovado no Teste de Arquivos do Santander.',
+      );
+    const batch = await this.prisma.bankCollectionBatch.findUnique({
+      where: { id: input.batchId },
+      select: {
+        agreementId: true,
+        fileName: true,
+        checksumSha256: true,
+        createdAt: true,
+      },
+    });
+    if (!batch || batch.agreementId !== agreementId)
+      throw new BadRequestException(
+        'Selecione uma remessa deste convênio que foi validada pelo banco.',
+      );
+    const agreement = await this.prisma.bankCollectionAgreement.findUnique({
+      where: { id: agreementId },
+    });
+    if (!agreement) throw new NotFoundException('Convênio não encontrado.');
+    if (!agreement.issuerCompanyId || batch.createdAt < agreement.updatedAt)
+      throw new BadRequestException(
+        'Gere e teste uma nova remessa após salvar os dados atuais do convênio.',
+      );
+    return this.prisma.$transaction(async (tx) => {
+      const changed = await tx.bankCollectionAgreement.updateMany({
+        where: { id: agreementId, updatedAt: agreement.updatedAt },
+        data: {
+          homologated: true,
+          homologationReference: bankTestReference,
+          homologatedAt: new Date(),
+          homologatedById: actorUserId || null,
+        },
+      });
+      if (changed.count !== 1)
+        throw new ConflictException(
+          'O convênio mudou durante o registro. Gere e teste outra remessa.',
+        );
+      await tx.financialAuditLog.create({
+        data: {
+          module: 'FINANCE',
+          entityType: 'AGREEMENT',
+          entityId: agreementId,
+          action: 'BANK_TEST_RECORDED',
+          actorUserId,
+          payload: {
+            bankTestReference,
+            batchId: input.batchId,
+            fileName: batch.fileName,
+            checksumSha256: batch.checksumSha256,
+          },
+        },
+      });
+      return tx.bankCollectionAgreement.findUniqueOrThrow({
+        where: { id: agreementId },
+      });
+    });
   }
 
   async prepareTitle(
@@ -366,10 +485,22 @@ export class BankCollectionService {
     });
     if (!agreement)
       throw new BadRequestException('Convênio Santander não configurado.');
+    if (!agreement.issuerCompanyId)
+      throw new BadRequestException(
+        'Vincule o convênio a um CNPJ emitente antes de gerar a remessa.',
+      );
     const titles = await this.prisma.bankCollectionTitle.findMany({
       where: { id: { in: input.titleIds }, bankAccountId: input.bankAccountId },
       include: {
-        receivable: { include: { client: { include: { addresses: true } } } },
+        receivable: {
+          include: {
+            client: { include: { addresses: true } },
+            fiscalDocuments: {
+              where: { status: FiscalDocumentStatus.AUTHORIZED },
+              select: { issuerCompanyId: true },
+            },
+          },
+        },
       },
     });
     if (titles.length !== input.titleIds.length)
@@ -381,6 +512,14 @@ export class BankCollectionService {
     const today = this.todayInSaoPaulo();
     const rows: SantanderRemittanceTitle[] = ordered.map((title) => {
       const receivable = title.receivable;
+      if (
+        receivable.fiscalDocuments.some(
+          (document) => document.issuerCompanyId !== agreement.issuerCompanyId,
+        )
+      )
+        throw new BadRequestException(
+          `Boleto ${title.documentNumber} tem nota autorizada por outro CNPJ.`,
+        );
       if (
         !['DRAFT', 'REJECTED'].includes(title.status) ||
         receivable.status === AccountsReceivableStatus.PAID ||
@@ -692,6 +831,84 @@ export class BankCollectionService {
         },
       },
     });
+  }
+
+  async previewReturn(input: { bankAccountId: string; content: Buffer }) {
+    const agreement = await this.prisma.bankCollectionAgreement.findUnique({
+      where: { bankAccountId: input.bankAccountId },
+    });
+    if (!agreement)
+      throw new BadRequestException(
+        'Convênio Santander não configurado para esta conta.',
+      );
+    const parsed = parseSantanderCollectionReturn(
+      input.content,
+      agreement.beneficiaryDocument,
+      agreement,
+    );
+    const checksumSha256 = createHash('sha256')
+      .update(input.content)
+      .digest('hex');
+    const [priorImport, titles] = await Promise.all([
+      this.prisma.bankCollectionReturnImport.findUnique({
+        where: {
+          agreementId_checksumSha256: {
+            agreementId: agreement.id,
+            checksumSha256,
+          },
+        },
+        select: { id: true },
+      }),
+      this.prisma.bankCollectionTitle.findMany({
+        where: {
+          bankAccountId: input.bankAccountId,
+          ourNumber: {
+            in: [...new Set(parsed.map((event) => event.ourNumber))],
+          },
+        },
+        select: {
+          id: true,
+          ourNumber: true,
+          documentNumber: true,
+          status: true,
+        },
+      }),
+    ]);
+    const byOurNumber = new Map(
+      titles.map((title) => [title.ourNumber, title]),
+    );
+    const events = parsed.map((event) => {
+      const title = byOurNumber.get(event.ourNumber);
+      const matched =
+        !!title && title.documentNumber.trim() === event.documentNumber.trim();
+      return {
+        lineNumber: event.lineNumber,
+        movementCode: event.movementCode,
+        documentNumber: event.documentNumber,
+        ourNumber: event.ourNumber,
+        paidAmount: event.paidAmount,
+        netCreditAmount: event.netCreditAmount,
+        reasonCodes: event.reasonCodes,
+        eventDate: event.eventDate,
+        titleId: matched ? title.id : null,
+        titleStatus: matched ? title.status : null,
+        requiresReview:
+          !matched ||
+          title?.status === 'PAID' ||
+          (event.movementCode === '06' &&
+            (event.paidAmount <= 0 ||
+              Math.abs(event.paidAmount - event.netCreditAmount) > 0.009)) ||
+          !['02', '03', '06'].includes(event.movementCode),
+      };
+    });
+    return {
+      checksumSha256,
+      alreadyImported: !!priorImport,
+      eventCount: events.length,
+      matchedCount: events.filter((event) => event.titleId).length,
+      reviewCount: events.filter((event) => event.requiresReview).length,
+      events,
+    };
   }
 
   async applySettlement(eventId: string, actorUserId?: string) {

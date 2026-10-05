@@ -3,6 +3,8 @@ import {
   SalesOpportunityPipeline,
   SalesOpportunityStage,
   SalesOpportunityType,
+  CrmActivityType,
+  CrmActivityStatus,
   UserRole,
 } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
@@ -20,6 +22,15 @@ describe('CrmService', () => {
       findMany: jest.Mock;
       findUnique: jest.Mock;
     };
+    client: { findUnique: jest.Mock };
+    crmActivity: {
+      create: jest.Mock;
+      findUnique: jest.Mock;
+      update: jest.Mock;
+      findMany: jest.Mock;
+      findFirst: jest.Mock;
+      count: jest.Mock;
+    };
   };
 
   beforeEach(() => {
@@ -32,6 +43,15 @@ describe('CrmService', () => {
         create: jest.fn(),
         findMany: jest.fn(),
         findUnique: jest.fn(),
+      },
+      client: { findUnique: jest.fn() },
+      crmActivity: {
+        create: jest.fn(),
+        findUnique: jest.fn(),
+        update: jest.fn(),
+        findMany: jest.fn(),
+        findFirst: jest.fn(),
+        count: jest.fn(),
       },
     };
 
@@ -173,6 +193,124 @@ describe('CrmService', () => {
           pipeline: SalesOpportunityPipeline.COMMERCIAL_01_GENERATORS,
           opportunityType: SalesOpportunityType.GENERATOR_SALE,
         },
+      }),
+    );
+  });
+
+  it('impede vincular atividade a oportunidade de outro cliente', async () => {
+    database.salesOpportunity.findUnique.mockResolvedValue({
+      clientId: 'outro-cliente',
+      assignedSellerId: null,
+    });
+    await expect(
+      service.createActivity(
+        {
+          clientId: 'cliente-1',
+          opportunityId: 'oportunidade-1',
+          type: CrmActivityType.CALL,
+          subject: 'Ligação',
+        },
+        'usuario-1',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(database.crmActivity.create).not.toHaveBeenCalled();
+  });
+
+  it('preserva o cliente do historico ao editar uma oportunidade', async () => {
+    database.salesOpportunity.findUnique.mockResolvedValue({
+      id: 'oportunidade-1',
+      clientId: 'cliente-1',
+    });
+    database.crmActivity.count.mockResolvedValue(1);
+    await expect(
+      service.updateOpportunity('oportunidade-1', { clientId: 'cliente-2' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(database.crmActivity.count).toHaveBeenCalledWith({
+      where: { opportunityId: 'oportunidade-1' },
+    });
+  });
+
+  it('exige prazo para tarefas e preserva o responsável comercial', async () => {
+    database.salesOpportunity.findUnique.mockResolvedValue({
+      clientId: 'cliente-1',
+      assignedSellerId: 'vendedor-1',
+    });
+    await expect(
+      service.createActivity(
+        {
+          clientId: 'cliente-1',
+          opportunityId: 'oportunidade-1',
+          type: CrmActivityType.TASK,
+          subject: 'Retornar',
+        },
+        'usuario-1',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    await service.createActivity(
+      {
+        clientId: 'cliente-1',
+        opportunityId: 'oportunidade-1',
+        type: CrmActivityType.TASK,
+        subject: 'Retornar',
+        dueAt: '2026-10-10T15:00:00.000Z',
+      },
+      'usuario-1',
+    );
+    expect(database.crmActivity.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: CrmActivityStatus.PLANNED,
+          ownerId: 'vendedor-1',
+          createdById: 'usuario-1',
+        }),
+      }),
+    );
+  });
+
+  it('calcula previsão mensal ponderada sem misturar oportunidades ganhas', async () => {
+    database.salesOpportunity.findMany.mockResolvedValue([
+      {
+        id: '1',
+        stage: SalesOpportunityStage.PROSPECTION,
+        estimatedValue: 1000,
+        probabilityPercent: null,
+        expectedCloseDate: new Date('2027-01-15T12:00:00Z'),
+      },
+      {
+        id: '2',
+        stage: SalesOpportunityStage.NEGOTIATION,
+        estimatedValue: 2000,
+        probabilityPercent: 60,
+        expectedCloseDate: new Date('2027-01-20T12:00:00Z'),
+      },
+      {
+        id: '3',
+        stage: SalesOpportunityStage.PROPOSAL_SENT,
+        estimatedValue: 500,
+        probabilityPercent: null,
+        expectedCloseDate: null,
+      },
+    ]);
+    const forecast = await service.opportunityForecast();
+    expect(database.salesOpportunity.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          stage: {
+            notIn: [SalesOpportunityStage.WON, SalesOpportunityStage.LOST],
+          },
+        },
+      }),
+    );
+    expect(forecast).toEqual(
+      expect.objectContaining({
+        count: 3,
+        amount: 3500,
+        weightedAmount: 1550,
+        unscheduled: 1,
+        months: [
+          { month: '2027-01', count: 2, amount: 3000, weightedAmount: 1300 },
+        ],
       }),
     );
   });

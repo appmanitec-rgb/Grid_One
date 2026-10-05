@@ -1,6 +1,8 @@
 import { PartialType } from '@nestjs/mapped-types';
 import {
   CommercialInspectionStatus,
+  CrmActivityStatus,
+  CrmActivityType,
   OpportunityLossReason,
   OpportunityTemperature,
   SalesOpportunityPipeline,
@@ -12,11 +14,13 @@ import {
   IsDateString,
   IsEnum,
   IsNumber,
+  IsInt,
   IsObject,
   IsOptional,
   IsString,
   IsUUID,
   Min,
+  Max,
 } from 'class-validator';
 
 export class CreateOpportunityDto {
@@ -63,6 +67,12 @@ export class CreateOpportunityDto {
   @IsOptional()
   estimatedValue?: number;
 
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  @IsOptional()
+  probabilityPercent?: number | null;
+
   @IsDateString()
   @IsOptional()
   expectedCloseDate?: string;
@@ -97,6 +107,55 @@ export class SetOpportunityStageDto {
   @IsString()
   @IsOptional()
   lossReasonDetail?: string;
+}
+
+export class CreateCrmActivityDto {
+  @IsUUID()
+  clientId!: string;
+
+  @IsUUID()
+  @IsOptional()
+  opportunityId?: string;
+
+  @IsEnum(CrmActivityType)
+  type!: CrmActivityType;
+
+  @IsEnum(CrmActivityStatus)
+  @IsOptional()
+  status?: CrmActivityStatus;
+
+  @IsString()
+  subject!: string;
+
+  @IsString()
+  @IsOptional()
+  details?: string;
+
+  @IsDateString()
+  @IsOptional()
+  occurredAt?: string;
+
+  @IsDateString()
+  @IsOptional()
+  dueAt?: string;
+}
+
+export class UpdateCrmActivityDto {
+  @IsString()
+  @IsOptional()
+  subject?: string;
+
+  @IsString()
+  @IsOptional()
+  details?: string;
+
+  @IsDateString()
+  @IsOptional()
+  dueAt?: string;
+
+  @IsEnum(CrmActivityStatus)
+  @IsOptional()
+  status?: CrmActivityStatus;
 }
 
 export class CreateInspectionDto {
