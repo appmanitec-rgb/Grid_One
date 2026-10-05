@@ -6,7 +6,11 @@ Revisão de código, documentação, configuração local, banco e testes. Não 
 
 Versão auditada: branch `fix/studio-word-template-workflow`, commit `abf3784`. O código desse commit foi enviado ao GitHub antes desta auditoria. O próprio relatório é uma entrega adicional posterior ao commit auditado.
 
-## Evidência verificada
+### Atualização da Etapa 1 — 05/10/2026
+
+O commit `f2f1517` corrigiu os três fixtures de teste, regularizou a formatação e a tipagem apontadas pelo lint e reforçou o teste Playwright da edição sobreposta de modelos. Na versão desse commit, passaram localmente: lint backend (zero erros/avisos), lint frontend, 338 testes unitários backend, 5 E2E backend e builds backend/frontend. O Playwright encontrou o teste atualizado, mas ele não foi executado contra o banco operacional porque cria e altera registros. O commit foi enviado ao GitHub; a conclusão do GitHub Actions ainda não pôde ser consultada nesta sessão. Assim, o gate **local** está verde e a confirmação **remota** permanece pendente.
+
+## Evidência verificada na linha de base (`abf3784`)
 
 | Área | Resultado | Implicação |
 | --- | --- | --- |
