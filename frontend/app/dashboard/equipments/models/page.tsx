@@ -1,6 +1,7 @@
 "use client";
 
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
 import { getAccessFromToken } from "@/lib/access";
 import { loadControlOptions, optionLabel, type ControlOption } from "@/lib/control-options";
@@ -229,6 +230,10 @@ function describeMaintenance(item: ModelMaintenanceTemplate) {
   return time || hours || "conforme criterio tecnico";
 }
 
+function ModelEditorPortal({ open, children }: { open: boolean; children: ReactNode }) {
+  return open ? createPortal(children, document.body) : children;
+}
+
 export default function EquipmentModelsPage() {
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [models, setModels] = useState<ModelRow[]>([]);
@@ -239,11 +244,30 @@ export default function EquipmentModelsPage() {
   });
   const [form, setForm] = useState<ModelForm>(() => emptyForm());
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [openingModelId, setOpeningModelId] = useState<string | null>(null);
+  const newModelDraft = useRef<ModelForm>(emptyForm());
+  const editRequestId = useRef(0);
+  const editorRef = useRef<HTMLFormElement>(null);
+  const savingRef = useRef(false);
   const [canManageModels, setCanManageModels] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  savingRef.current = saving;
+
+  useEffect(() => {
+    if (!editingId) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    editorRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, [editingId]);
 
   useEffect(() => {
     setCanManageModels(getAccessFromToken().equipments.manageModels);
@@ -379,12 +403,17 @@ export default function EquipmentModelsPage() {
   }
 
   async function startEdit(model: ModelRow) {
-    if (!canManageModels) return;
+    if (!canManageModels || openingModelId) return;
+    const requestId = ++editRequestId.current;
+    setOpeningModelId(model.id);
     setError("");
     setSuccess("");
     try {
       const res = await apiFetch(`/generators/models/${model.id}`);
-      const detail = res.ok ? ((await res.json()) as ModelRow) : model;
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, "Nao foi possivel abrir o modelo."));
+      const detail = (await res.json()) as ModelRow;
+      if (requestId !== editRequestId.current) return;
+      newModelDraft.current = form;
       setEditingId(detail.id);
       setForm(toForm(detail));
       setCatalog((current) =>
@@ -397,16 +426,20 @@ export default function EquipmentModelsPage() {
           ).values(),
         ),
       );
-      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
-      setEditingId(model.id);
-      setForm(toForm(model));
+      if (requestId === editRequestId.current) {
+        setError("Nao foi possivel carregar o cadastro completo deste modelo. Tente novamente.");
+      }
+    } finally {
+      if (requestId === editRequestId.current) setOpeningModelId(null);
     }
   }
 
   function resetForm() {
+    editRequestId.current += 1;
+    const restoringNewDraft = Boolean(editingId);
     setEditingId(null);
-    setForm(emptyForm());
+    setForm(restoringNewDraft ? newModelDraft.current : emptyForm());
     setError("");
     setSuccess("");
   }
@@ -505,7 +538,7 @@ export default function EquipmentModelsPage() {
         </div>
       </div>
 
-      {error ? (
+      {error && !editingId ? (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
@@ -517,13 +550,44 @@ export default function EquipmentModelsPage() {
       ) : null}
 
       {canManageModels ? (
+        <ModelEditorPortal open={Boolean(editingId)}>
+        {editingId ? <div className="fixed inset-0 z-[90] bg-slate-950/60 backdrop-blur-[2px]" aria-hidden="true" /> : null}
         <form
+          ref={editorRef}
           onSubmit={saveModel}
-          className="space-y-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && editingId && !savingRef.current) {
+              event.preventDefault();
+              resetForm();
+            }
+            if (event.key === "Tab" && editingId) {
+              const focusable = Array.from(editorRef.current?.querySelectorAll<HTMLElement>(
+                'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+              ) || []).filter((element) => element.getClientRects().length > 0);
+              const first = focusable[0];
+              const last = focusable[focusable.length - 1];
+              if (event.shiftKey && (document.activeElement === first || document.activeElement === editorRef.current)) {
+                event.preventDefault();
+                last?.focus();
+              } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === editorRef.current)) {
+                event.preventDefault();
+                first?.focus();
+              }
+            }
+          }}
+          role={editingId ? "dialog" : undefined}
+          aria-modal={editingId ? true : undefined}
+          aria-labelledby={editingId ? "generator-model-editor-title" : undefined}
+          tabIndex={editingId ? -1 : undefined}
+          className={editingId
+            ? "fixed inset-3 z-[100] mx-auto max-w-6xl space-y-5 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:inset-6 lg:p-7"
+            : "space-y-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm"}
         >
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className={editingId
+            ? "sticky top-0 z-10 -mx-5 -mt-5 flex flex-col gap-3 border-b border-slate-200 bg-white px-5 py-4 md:flex-row md:items-center md:justify-between lg:-mx-7 lg:-mt-7 lg:px-7"
+            : "flex flex-col gap-3 md:flex-row md:items-center md:justify-between"}>
             <div>
-              <h2 className="text-lg font-bold text-slate-900">
+              <h2 id="generator-model-editor-title" className="text-lg font-bold text-slate-900">
                 {editingId ? "Editar modelo" : "Novo modelo"}
               </h2>
               <p className="text-sm text-slate-500">
@@ -535,12 +599,17 @@ export default function EquipmentModelsPage() {
               <button
                 type="button"
                 onClick={resetForm}
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                disabled={saving}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
               >
                 Cancelar edicao
               </button>
             ) : null}
           </div>
+
+          {editingId && error ? (
+            <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+          ) : null}
 
           <section className="space-y-3">
             <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-slate-500">
@@ -720,14 +789,22 @@ export default function EquipmentModelsPage() {
             )}
           </section>
 
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
-          >
-            {saving ? "Salvando..." : editingId ? "Salvar alteracoes" : "Salvar modelo"}
-          </button>
+          <div className={editingId ? "sticky bottom-0 z-10 -mx-5 -mb-5 flex flex-wrap justify-end gap-2 border-t border-slate-200 bg-white px-5 py-4 lg:-mx-7 lg:-mb-7 lg:px-7" : ""}>
+            {editingId ? (
+              <button type="button" onClick={resetForm} disabled={saving} className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60">
+                Cancelar
+              </button>
+            ) : null}
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+            >
+              {saving ? "Salvando..." : editingId ? "Salvar alteracoes" : "Salvar modelo"}
+            </button>
+          </div>
         </form>
+        </ModelEditorPortal>
       ) : (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           Seu perfil permite consultar modelos, mas nao editar dados tecnicos ou
@@ -768,8 +845,8 @@ export default function EquipmentModelsPage() {
                     <tr key={model.id} className="align-top">
                       <td className="px-3 py-3">
                         {canManageModels ? (
-                          <button type="button" onClick={() => void startEdit(model)} className="dashboard-record-link text-left font-semibold" title="Abrir cadastro do modelo">
-                            {model.brand ? `${model.brand} - ` : ""}{model.name}
+                          <button type="button" onClick={() => void startEdit(model)} disabled={Boolean(openingModelId)} className="dashboard-record-link text-left font-semibold disabled:opacity-50" title="Abrir cadastro do modelo">
+                            {openingModelId === model.id ? "Abrindo modelo..." : <>{model.brand ? `${model.brand} - ` : ""}{model.name}</>}
                           </button>
                         ) : (
                           <p className="font-semibold text-slate-900">
