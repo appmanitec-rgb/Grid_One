@@ -56,13 +56,16 @@ test.describe("modelos de geradores", () => {
       .locator("tr", { hasText: modelName })
       .getByRole("button", { name: /Editar/i })
       .click();
-    await expect(page.getByRole("button", { name: /Salvar alteracoes/i })).toBeVisible();
+    const editor = page.getByRole("dialog", { name: "Editar modelo" });
+    await expect(editor).toBeVisible();
+    await expect(editor.getByRole("button", { name: /Salvar alteracoes/i })).toBeVisible();
     await expect(page.getByLabel(/^Modelo$/i)).toHaveValue(modelName);
     await page.getByLabel(/^Modelo$/i).fill(updatedName);
     await page.getByLabel(/Potencia kVA/i).fill("200");
     await page.getByRole("button", { name: /^Adicionar item$/i }).click();
     await page.getByLabel("Nome do item de manutencao 2").fill("Filtro de oleo");
     await page.getByRole("button", { name: /Salvar alteracoes/i }).click();
+    await expect(editor).toBeHidden();
     await expect(page.locator("body")).toContainText(
       /Modelo atualizado com plano de manutencao/i,
     );

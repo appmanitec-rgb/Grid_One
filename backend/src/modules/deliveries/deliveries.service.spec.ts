@@ -22,7 +22,7 @@ describe('DeliveriesService', () => {
     salesOpportunity: { update: jest.Mock };
     generator: { findUnique: jest.Mock };
     proposalItem: { findMany: jest.Mock };
-    maintenanceOrder: { create: jest.Mock };
+    maintenanceOrder: { upsert: jest.Mock };
   };
   let auditLogsService: { record: jest.Mock };
 
@@ -57,7 +57,7 @@ describe('DeliveriesService', () => {
       salesOpportunity: { update: jest.fn() },
       generator: { findUnique: jest.fn() },
       proposalItem: { findMany: jest.fn() },
-      maintenanceOrder: { create: jest.fn() },
+      maintenanceOrder: { upsert: jest.fn() },
     };
     auditLogsService = { record: jest.fn() };
     service = new DeliveriesService(
@@ -93,7 +93,7 @@ describe('DeliveriesService', () => {
     });
     prisma.generator.findUnique.mockResolvedValue({ currentSiteId: 'site-1' });
     prisma.proposalItem.findMany.mockResolvedValue([]);
-    prisma.maintenanceOrder.create.mockResolvedValue({ id: 'order-1' });
+    prisma.maintenanceOrder.upsert.mockResolvedValue({ id: 'order-1' });
 
     const result = await service.approveSharedProposal(
       'token-publico',
@@ -125,8 +125,10 @@ describe('DeliveriesService', () => {
         toStatus: ProposalStatus.WON,
       }),
     });
-    expect(prisma.maintenanceOrder.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+    expect(prisma.maintenanceOrder.upsert).toHaveBeenCalledWith({
+      where: { sourceProposalId: 'proposal-1' },
+      update: {},
+      create: expect.objectContaining({
         generatorId: 'generator-1',
         siteId: 'site-1',
       }),

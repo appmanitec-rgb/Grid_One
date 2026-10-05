@@ -1224,13 +1224,14 @@ export class StudioService {
     }
   }
 
-  private pickChangedFields(
-    record: Record<string, unknown>,
-    patch: Record<string, unknown>,
-  ) {
+  private pickChangedFields(record: unknown, patch: Record<string, unknown>) {
     const picked: Record<string, unknown> = {};
+    const source =
+      record && typeof record === 'object'
+        ? (record as Record<string, unknown>)
+        : {};
     for (const key of Object.keys(patch)) {
-      picked[key] = record?.[key];
+      picked[key] = source[key];
     }
     return picked;
   }

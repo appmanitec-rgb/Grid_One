@@ -75,10 +75,13 @@ export class FiscalDocumentsController {
   @Post('certificates/:issuerCompanyId')
   @RequireAccessPolicy('finance.view', 'settings.admin')
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 2 * 1024 * 1024 } }))
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 2 * 1024 * 1024 } }),
+  )
   installCertificate(
     @Param('issuerCompanyId') issuerCompanyId: string,
-    @UploadedFile() file: { buffer?: Buffer; originalname?: string; size?: number } | undefined,
+    @UploadedFile()
+    file: { buffer?: Buffer; originalname?: string; size?: number } | undefined,
     @Body('password') password: string | undefined,
     @Req() req: Request,
   ) {
@@ -87,7 +90,8 @@ export class FiscalDocumentsController {
     let trustedOrigin = false;
     try {
       const parsed = new URL(origin ?? '');
-      trustedOrigin = parsed.protocol === 'https:' ||
+      trustedOrigin =
+        parsed.protocol === 'https:' ||
         (parsed.protocol === 'http:' &&
           ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname));
     } catch {
@@ -101,7 +105,12 @@ export class FiscalDocumentsController {
         'Instale o A1 usando o navegador no servidor local ou uma conexao HTTPS configurada.',
       );
     }
-    return this.certificates.install(issuerCompanyId, file, password, this.actor(req));
+    return this.certificates.install(
+      issuerCompanyId,
+      file,
+      password,
+      this.actor(req),
+    );
   }
 
   @Get('overview')

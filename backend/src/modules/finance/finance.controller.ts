@@ -174,7 +174,11 @@ export class FinanceController {
     @Body() dto: ReviewExecutionBillingDto,
     @Req() req: Request,
   ) {
-    return this.financeService.createReceivablesFromExecutionProposal(orderId, dto.dueDate, this.getActorUserId(req));
+    return this.financeService.createReceivablesFromExecutionProposal(
+      orderId,
+      dto.dueDate,
+      this.getActorUserId(req),
+    );
   }
 
   @UseGuards(AuthGuard)

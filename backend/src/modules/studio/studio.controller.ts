@@ -96,7 +96,10 @@ export class StudioController {
 
   @Post('imports/preview')
   @RequireAccessPolicy('studio.access', 'studio.dataImport')
-  previewImport(@Body() body: any, @Req() req: AuthRequest) {
+  previewImport(
+    @Body() body: Parameters<StudioImportService['preview']>[0],
+    @Req() req: AuthRequest,
+  ) {
     return this.studioImportService.preview(body, req.user ?? {});
   }
 

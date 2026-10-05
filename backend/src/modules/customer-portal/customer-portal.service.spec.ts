@@ -163,7 +163,7 @@ describe('CustomerPortalService', () => {
     db.proposalItem.findMany.mockResolvedValue([
       { catalogItemId: 'part-a', quantity: 2 },
     ]);
-    db.maintenanceOrder.create.mockResolvedValue({ id: 'order-a' });
+    db.maintenanceOrder.upsert.mockResolvedValue({ id: 'order-a' });
 
     await service.approveProposal(
       'user-a',
@@ -172,8 +172,10 @@ describe('CustomerPortalService', () => {
       {},
     );
 
-    expect(db.maintenanceOrder.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+    expect(db.maintenanceOrder.upsert).toHaveBeenCalledWith({
+      where: { sourceProposalId: 'proposal-service' },
+      update: {},
+      create: expect.objectContaining({
         generatorId: 'equipment-a',
         siteId: 'site-a',
         materials: { create: [{ catalogItemId: 'part-a', quantity: 2 }] },
@@ -331,7 +333,7 @@ function createDbMock(): CustomerPortalDbMock {
       count: jest.fn(),
       findMany: jest.fn(),
       findFirst: jest.fn(),
-      create: jest.fn(),
+      upsert: jest.fn(),
     },
     documentDelivery: { findMany: jest.fn() },
     contractPreventiveSchedule: { findMany: jest.fn() },
@@ -368,7 +370,7 @@ type CustomerPortalDbMock = {
     count: jest.Mock;
     findMany: jest.Mock;
     findFirst: jest.Mock;
-    create: jest.Mock;
+    upsert: jest.Mock;
   };
   documentDelivery: { findMany: jest.Mock };
   contractPreventiveSchedule: { findMany: jest.Mock };

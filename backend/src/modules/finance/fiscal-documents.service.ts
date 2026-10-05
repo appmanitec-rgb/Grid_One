@@ -30,84 +30,105 @@ export class FiscalDocumentsService {
   constructor(private readonly prisma: DatabaseService) {}
 
   async overview() {
-    const [companies, receivables, documents, certificates] = await Promise.all([
-      this.prisma.companySettings.findMany({
-        select: {
-          id: true,
-          companyName: true,
-          cnpj: true,
-          stateRegistration: true,
-          municipalRegistration: true,
-          taxRegime: true,
-          city: true,
-          state: true,
-          address: true,
-          addressNumber: true,
-          district: true,
-          zipCode: true,
-          isPrimary: true,
-        },
-        orderBy: [{ isPrimary: 'desc' }, { companyName: 'asc' }],
-      }),
-      this.prisma.accountsReceivable.findMany({
-        where: { status: { not: AccountsReceivableStatus.CANCELED } },
-        select: {
-          id: true,
-          description: true,
-          grossAmount: true,
-          dueDate: true,
-          client: { select: { id: true, companyName: true, cnpj: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 300,
-      }),
-      this.prisma.fiscalDocument.findMany({
-        select: {
-          id: true,
-          receivableId: true,
-          issuerCompanyId: true,
-          kind: true,
-          status: true,
-          items: true,
-          totalAmount: true,
-          fiscalNotes: true,
-          issuerSnapshot: true,
-          recipientSnapshot: true,
-          provider: true,
-          number: true,
-          series: true,
-          accessKey: true,
-          issuedAt: true,
-          authorizedAt: true,
-          rejectionReason: true,
-          createdAt: true,
-          updatedAt: true,
-          receivable: {
-            select: {
-              description: true,
-              client: { select: { companyName: true } },
+    const [companies, receivables, documents, certificates] = await Promise.all(
+      [
+        this.prisma.companySettings.findMany({
+          select: {
+            id: true,
+            companyName: true,
+            cnpj: true,
+            stateRegistration: true,
+            municipalRegistration: true,
+            taxRegime: true,
+            city: true,
+            state: true,
+            address: true,
+            addressNumber: true,
+            district: true,
+            zipCode: true,
+            isPrimary: true,
+          },
+          orderBy: [{ isPrimary: 'desc' }, { companyName: 'asc' }],
+        }),
+        this.prisma.accountsReceivable.findMany({
+          where: { status: { not: AccountsReceivableStatus.CANCELED } },
+          select: {
+            id: true,
+            description: true,
+            grossAmount: true,
+            dueDate: true,
+            client: { select: { id: true, companyName: true, cnpj: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 300,
+        }),
+        this.prisma.fiscalDocument.findMany({
+          select: {
+            id: true,
+            receivableId: true,
+            issuerCompanyId: true,
+            kind: true,
+            status: true,
+            items: true,
+            totalAmount: true,
+            fiscalNotes: true,
+            issuerSnapshot: true,
+            recipientSnapshot: true,
+            provider: true,
+            number: true,
+            series: true,
+            accessKey: true,
+            issuedAt: true,
+            authorizedAt: true,
+            rejectionReason: true,
+            createdAt: true,
+            updatedAt: true,
+            receivable: {
+              select: {
+                description: true,
+                client: { select: { companyName: true } },
+              },
             },
           },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 300,
-      }),
-      this.prisma.fiscalCertificate.findMany({
-        select: { issuerCompanyId: true, certificateCnpj: true, validTo: true },
-      }),
-    ]);
+          orderBy: { createdAt: 'desc' },
+          take: 300,
+        }),
+        this.prisma.fiscalCertificate.findMany({
+          select: {
+            issuerCompanyId: true,
+            certificateCnpj: true,
+            validTo: true,
+          },
+        }),
+      ],
+    );
     const validCertificateIssuers = new Set(
-      certificates.filter((certificate) => certificate.validTo > new Date() &&
-        companies.some((company) => company.id === certificate.issuerCompanyId &&
-          digits(company.cnpj) === certificate.certificateCnpj))
+      certificates
+        .filter(
+          (certificate) =>
+            certificate.validTo > new Date() &&
+            companies.some(
+              (company) =>
+                company.id === certificate.issuerCompanyId &&
+                digits(company.cnpj) === certificate.certificateCnpj,
+            ),
+        )
         .map((certificate) => certificate.issuerCompanyId),
     );
     return {
       issuers: companies.map((company) => ({
         ...company,
         readiness: {
-          NFE: this.issuerMissing(company, FiscalDocumentKind.NFE, validCertificateIssuers.has(company.id)),
-          NFSE: this.issuerMissing(company, FiscalDocumentKind.NFSE, validCertificateIssuers.has(company.id)),
+          NFE: this.issuerMissing(
+            company,
+            FiscalDocumentKind.NFE,
+            validCertificateIssuers.has(company.id),
+          ),
+          NFSE: this.issuerMissing(
+            company,
+            FiscalDocumentKind.NFSE,
+            validCertificateIssuers.has(company.id),
+          ),
         },
       })),
       receivables,
@@ -450,7 +471,8 @@ export class FiscalDocumentsService {
       missing.push('inscrição estadual');
     if (kind === FiscalDocumentKind.NFSE && !company.municipalRegistration)
       missing.push('inscrição municipal');
-    if (!hasValidCertificate) missing.push('certificado A1 instalado e no prazo');
+    if (!hasValidCertificate)
+      missing.push('certificado A1 instalado e no prazo');
     missing.push('parâmetros fiscais homologados');
     missing.push(
       kind === FiscalDocumentKind.NFE

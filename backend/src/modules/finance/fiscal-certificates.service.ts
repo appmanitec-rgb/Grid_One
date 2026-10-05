@@ -5,7 +5,12 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+} from 'crypto';
 import { createSecureContext } from 'tls';
 import forge from 'node-forge';
 import { DatabaseService } from '../../database/database.service';
@@ -13,7 +18,11 @@ import { DatabaseService } from '../../database/database.service';
 const MAX_CERTIFICATE_BYTES = 2 * 1024 * 1024;
 const digits = (value?: string | null) => (value ?? '').replace(/\D/g, '');
 
-type CertificateFile = { buffer?: Buffer; originalname?: string; size?: number };
+type CertificateFile = {
+  buffer?: Buffer;
+  originalname?: string;
+  size?: number;
+};
 
 @Injectable()
 export class FiscalCertificatesService {
@@ -38,10 +47,13 @@ export class FiscalCertificatesService {
     });
     return {
       storageConfigured: this.isStorageConfigured(),
-      certificates: certificates.map((certificate) => this.status(
-        certificate,
-        digits(certificate.issuerCompany.cnpj) === certificate.certificateCnpj,
-      )),
+      certificates: certificates.map((certificate) =>
+        this.status(
+          certificate,
+          digits(certificate.issuerCompany.cnpj) ===
+            certificate.certificateCnpj,
+        ),
+      ),
     };
   }
 
@@ -69,21 +81,30 @@ export class FiscalCertificatesService {
       where: { id: issuerCompanyId },
       select: { cnpj: true },
     });
-    if (!company) throw new NotFoundException('Empresa emitente nao encontrada.');
+    if (!company)
+      throw new NotFoundException('Empresa emitente nao encontrada.');
     const companyCnpj = digits(company.cnpj);
     if (companyCnpj.length !== 14) {
-      throw new BadRequestException('Cadastre o CNPJ da empresa antes de instalar o A1.');
+      throw new BadRequestException(
+        'Cadastre o CNPJ da empresa antes de instalar o A1.',
+      );
     }
 
     const certificate = this.inspect(file.buffer, passphrase, companyCnpj);
     const initializationVec = randomBytes(12);
     const cipher = createCipheriv('aes-256-gcm', key, initializationVec);
     cipher.setAAD(Buffer.from(issuerCompanyId, 'utf8'));
-    const payload = Buffer.from(JSON.stringify({
-      pfx: file.buffer.toString('base64'),
-      passphrase,
-    }), 'utf8');
-    const encryptedBundle = Buffer.concat([cipher.update(payload), cipher.final()]);
+    const payload = Buffer.from(
+      JSON.stringify({
+        pfx: file.buffer.toString('base64'),
+        passphrase,
+      }),
+      'utf8',
+    );
+    const encryptedBundle = Buffer.concat([
+      cipher.update(payload),
+      cipher.final(),
+    ]);
     const authenticationTag = cipher.getAuthTag();
     payload.fill(0);
 
@@ -142,14 +163,18 @@ export class FiscalCertificatesService {
         'Certificado A1 ausente ou vencido para este CNPJ.',
       );
     }
-    if (digits(certificate.issuerCompany.cnpj) !== certificate.certificateCnpj) {
+    if (
+      digits(certificate.issuerCompany.cnpj) !== certificate.certificateCnpj
+    ) {
       throw new ServiceUnavailableException(
         'O CNPJ da empresa mudou apos a instalacao do A1. Instale o certificado correto.',
       );
     }
     try {
       const decipher = createDecipheriv(
-        'aes-256-gcm', key, certificate.initializationVec,
+        'aes-256-gcm',
+        key,
+        certificate.initializationVec,
       );
       decipher.setAAD(Buffer.from(issuerCompanyId, 'utf8'));
       decipher.setAuthTag(certificate.authenticationTag);
@@ -162,7 +187,10 @@ export class FiscalCertificatesService {
         passphrase: string;
       };
       plaintext.fill(0);
-      return { pfx: Buffer.from(material.pfx, 'base64'), passphrase: material.passphrase };
+      return {
+        pfx: Buffer.from(material.pfx, 'base64'),
+        passphrase: material.passphrase,
+      };
     } catch {
       throw new ServiceUnavailableException(
         'Nao foi possivel abrir o A1 instalado. Verifique a chave do servidor.',
@@ -191,12 +219,15 @@ export class FiscalCertificatesService {
       ] ?? []),
     ];
     if (!keyBags.some((bag) => bag.key)) {
-      throw new BadRequestException('O arquivo nao contem uma chave privada utilizavel.');
+      throw new BadRequestException(
+        'O arquivo nao contem uma chave privada utilizavel.',
+      );
     }
 
-    const certBags = p12.getBags({ bagType: forge.pki.oids.certBag })[
-      forge.pki.oids.certBag
-    ] ?? [];
+    const certBags =
+      p12.getBags({ bagType: forge.pki.oids.certBag })[
+        forge.pki.oids.certBag
+      ] ?? [];
     const certificate = certBags
       .map((bag) => bag.cert)
       .find((cert) => cert && this.certificateCnpj(cert) === expectedCnpj);
@@ -208,8 +239,9 @@ export class FiscalCertificatesService {
     const publicKey = certificate.publicKey;
     if (
       !('n' in publicKey) ||
-      !keyBags.some((bag) =>
-        bag.key?.n.equals(publicKey.n) && bag.key.e.equals(publicKey.e),
+      !keyBags.some(
+        (bag) =>
+          bag.key?.n.equals(publicKey.n) && bag.key.e.equals(publicKey.e),
       )
     ) {
       throw new BadRequestException(
@@ -221,12 +253,18 @@ export class FiscalCertificatesService {
     const validTo = certificate.validity.notAfter;
     const now = new Date();
     if (validFrom > now || validTo <= now) {
-      throw new BadRequestException('O certificado ainda nao e valido ou ja venceu.');
+      throw new BadRequestException(
+        'O certificado ainda nao e valido ou ja venceu.',
+      );
     }
 
-    const der = forge.asn1.toDer(forge.pki.certificateToAsn1(certificate)).getBytes();
+    const der = forge.asn1
+      .toDer(forge.pki.certificateToAsn1(certificate))
+      .getBytes();
     return {
-      fingerprintSha256: createHash('sha256').update(Buffer.from(der, 'binary')).digest('hex'),
+      fingerprintSha256: createHash('sha256')
+        .update(Buffer.from(der, 'binary'))
+        .digest('hex'),
       serialNumber: certificate.serialNumber,
       subjectName: String(certificate.subject.getField('CN')?.value ?? ''),
       certificateCnpj: expectedCnpj,
@@ -237,12 +275,14 @@ export class FiscalCertificatesService {
 
   private certificateCnpj(certificate: forge.pki.Certificate) {
     const subjectOid = '2.16.76.1.3.3';
-    const subjectAltName = certificate.extensions.find((extension) =>
-      extension.name === 'subjectAltName' || extension.id === '2.5.29.17',
+    const subjectAltName = certificate.extensions.find(
+      (extension) =>
+        extension.name === 'subjectAltName' || extension.id === '2.5.29.17',
     );
-    if (typeof subjectAltName?.value === 'string') {
+    const subjectAltNameValue: unknown = subjectAltName?.value;
+    if (typeof subjectAltNameValue === 'string') {
       try {
-        const root = forge.asn1.fromDer(subjectAltName.value);
+        const root = forge.asn1.fromDer(subjectAltNameValue);
         const leafBytes = (node: forge.asn1.Asn1): string =>
           Array.isArray(node.value)
             ? node.value.map(leafBytes).join('')
@@ -274,7 +314,9 @@ export class FiscalCertificatesService {
         // Fall back to subject fields for certificates without this extension.
       }
     }
-    const oidField = certificate.subject.attributes.find((field) => field.type === subjectOid);
+    const oidField = certificate.subject.attributes.find(
+      (field) => field.type === subjectOid,
+    );
     if (oidField && digits(String(oidField.value)).length === 14) {
       return digits(String(oidField.value));
     }
@@ -282,29 +324,41 @@ export class FiscalCertificatesService {
     return commonName.match(/:(\d{14})$/)?.[1] ?? null;
   }
 
-  private status(certificate: {
-    issuerCompanyId: string;
-    fingerprintSha256: string;
-    serialNumber: string;
-    subjectName: string;
-    certificateCnpj: string;
-    validFrom: Date;
-    validTo: Date;
-    installedAt: Date;
-  }, cnpjMatches = true) {
+  private status(
+    certificate: {
+      issuerCompanyId: string;
+      fingerprintSha256: string;
+      serialNumber: string;
+      subjectName: string;
+      certificateCnpj: string;
+      validFrom: Date;
+      validTo: Date;
+      installedAt: Date;
+    },
+    cnpjMatches = true,
+  ) {
     const daysRemaining = Math.ceil(
       (certificate.validTo.getTime() - Date.now()) / 86_400_000,
     );
     return {
       ...certificate,
       daysRemaining,
-      status: !cnpjMatches ? 'MISMATCH' : daysRemaining <= 0 ? 'EXPIRED' : daysRemaining <= 30 ? 'CRITICAL' :
-        daysRemaining <= 90 ? 'EXPIRING' : 'VALID',
+      status: !cnpjMatches
+        ? 'MISMATCH'
+        : daysRemaining <= 0
+          ? 'EXPIRED'
+          : daysRemaining <= 30
+            ? 'CRITICAL'
+            : daysRemaining <= 90
+              ? 'EXPIRING'
+              : 'VALID',
     };
   }
 
   private isStorageConfigured() {
-    const raw = this.config.get<string>('FISCAL_CERTIFICATE_KEY_BASE64')?.trim();
+    const raw = this.config
+      .get<string>('FISCAL_CERTIFICATE_KEY_BASE64')
+      ?.trim();
     if (!raw) return false;
     const key = Buffer.from(raw, 'base64');
     return key.length === 32 && key.toString('base64') === raw;

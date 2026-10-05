@@ -129,7 +129,10 @@ describe('StudioService payment profile issuer', () => {
         Promise.resolve(callback(tx)),
       ),
     };
-    tx.proposalPaymentProfile.create.mockImplementation(({ data }) => ({ id: 'profile-1', ...data }));
+    tx.proposalPaymentProfile.create.mockImplementation(({ data }) => ({
+      id: 'profile-1',
+      ...data,
+    }));
     const service = new StudioService(prisma as unknown as DatabaseService);
     const profile = {
       name: 'PIX servicos',
@@ -147,20 +150,29 @@ describe('StudioService payment profile issuer', () => {
 
   it('rejects an active account with a different beneficiary CNPJ', async () => {
     const { tx, service, profile } = createContext();
-    tx.companySettings.findUnique.mockResolvedValue({ cnpj: '98.765.432/0001-10' });
+    tx.companySettings.findUnique.mockResolvedValue({
+      cnpj: '98.765.432/0001-10',
+    });
 
-    await expect(service.createRecord('proposalPaymentProfiles', profile, actor))
-      .rejects.toThrow('O CNPJ do favorecido deve ser igual');
+    await expect(
+      service.createRecord('proposalPaymentProfiles', profile, actor),
+    ).rejects.toThrow('O CNPJ do favorecido deve ser igual');
     expect(tx.proposalPaymentProfile.create).not.toHaveBeenCalled();
   });
 
   it('requires an issuer before activating an account', async () => {
     const { tx, service, profile } = createContext();
 
-    await expect(service.createRecord('proposalPaymentProfiles', {
-      ...profile,
-      issuerCompanyId: '',
-    }, actor)).rejects.toThrow('Selecione o CNPJ emitente');
+    await expect(
+      service.createRecord(
+        'proposalPaymentProfiles',
+        {
+          ...profile,
+          issuerCompanyId: '',
+        },
+        actor,
+      ),
+    ).rejects.toThrow('Selecione o CNPJ emitente');
     expect(tx.proposalPaymentProfile.create).not.toHaveBeenCalled();
   });
 
@@ -168,7 +180,11 @@ describe('StudioService payment profile issuer', () => {
     const { tx, service, profile } = createContext();
     tx.companySettings.findUnique.mockResolvedValue({ cnpj: '12345678000190' });
 
-    const created = await service.createRecord('proposalPaymentProfiles', profile, actor);
+    const created = await service.createRecord(
+      'proposalPaymentProfiles',
+      profile,
+      actor,
+    );
 
     expect(created.issuerCompanyId).toBe('issuer-1');
     expect(tx.proposalPaymentProfile.create).toHaveBeenCalled();

@@ -16,7 +16,12 @@ import { FiscalCertificatesService } from './fiscal-certificates.service';
     BankCollectionController,
     FiscalDocumentsController,
   ],
-  providers: [FinanceService, BankCollectionService, FiscalDocumentsService, FiscalCertificatesService],
+  providers: [
+    FinanceService,
+    BankCollectionService,
+    FiscalDocumentsService,
+    FiscalCertificatesService,
+  ],
   exports: [FinanceService],
 })
 export class FinanceModule {}

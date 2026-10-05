@@ -5,7 +5,9 @@ import { FiscalDocumentsController } from './fiscal-documents.controller';
 import { FiscalDocumentsService } from './fiscal-documents.service';
 
 describe('FiscalDocumentsController certificate transport', () => {
-  const certificates = { install: jest.fn().mockResolvedValue({ status: 'VALID' }) };
+  const certificates = {
+    install: jest.fn().mockResolvedValue({ status: 'VALID' }),
+  };
   const controller = new FiscalDocumentsController(
     {} as FiscalDocumentsService,
     certificates as unknown as FiscalCertificatesService,
@@ -19,8 +21,9 @@ describe('FiscalDocumentsController certificate transport', () => {
       socket: { remoteAddress: '::ffff:127.0.0.1' },
       headers: { origin: 'http://192.168.0.25:3001' },
     } as Request;
-    expect(() => controller.installCertificate('issuer-1', file, 'password', request))
-      .toThrow(ForbiddenException);
+    expect(() =>
+      controller.installCertificate('issuer-1', file, 'password', request),
+    ).toThrow(ForbiddenException);
     expect(certificates.install).not.toHaveBeenCalled();
   });
 
@@ -31,7 +34,10 @@ describe('FiscalDocumentsController certificate transport', () => {
     } as Request;
     await controller.installCertificate('issuer-1', file, 'password', request);
     expect(certificates.install).toHaveBeenCalledWith(
-      'issuer-1', file, 'password', undefined,
+      'issuer-1',
+      file,
+      'password',
+      undefined,
     );
   });
 });
