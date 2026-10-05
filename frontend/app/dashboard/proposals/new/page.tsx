@@ -120,6 +120,7 @@ type HourlyRateOption = {
 
 type PaymentProfile = {
   id: string;
+  issuerCompany?: { id: string; companyName: string | null } | null;
   name: string;
   purpose: "PARTS" | "SERVICES";
   method: "PIX" | "BOLETO";
@@ -402,7 +403,7 @@ function PaymentProfileSelector({ label, purpose, profiles, value, onChange }: {
         <option value="">Selecione PIX ou boleto</option>
         {choices.map((profile) => (
           <option key={profile.id} value={profile.id}>
-            {profile.method === "PIX" ? "PIX" : "Boleto"} · {profile.name}
+            {profile.method === "PIX" ? "PIX" : "Boleto"} · {profile.name}{profile.issuerCompany?.companyName ? ` · ${profile.issuerCompany.companyName}` : ""}
           </option>
         ))}
       </select>
@@ -411,6 +412,7 @@ function PaymentProfileSelector({ label, purpose, profiles, value, onChange }: {
       ) : null}
       {selected ? (
         <div className="mt-3 rounded-lg border border-zinc-200 bg-white p-3 text-sm text-zinc-700">
+          {selected.issuerCompany?.companyName ? <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">Empresa emitente: {selected.issuerCompany.companyName}</p> : null}
           <p className="font-bold text-zinc-900">{selected.beneficiary}</p>
           {selected.beneficiaryDocument ? <p>CPF/CNPJ: {selected.beneficiaryDocument}</p> : null}
           {selected.bankName ? <p>Banco: {selected.bankName}</p> : null}

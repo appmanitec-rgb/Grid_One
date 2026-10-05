@@ -1255,6 +1255,7 @@ model CompanySettings {
   updatedAt                 DateTime @updatedAt
   fiscalDocuments           FiscalDocument[]
   bankCollectionAgreements  BankCollectionAgreement[]
+  paymentProfiles           ProposalPaymentProfile[]
 
   @@index([cnpj])
   @@index([isPrimary])
@@ -2507,6 +2508,8 @@ model ProposalHourlyRate {
 
 model ProposalPaymentProfile {
   id                  String                 @id @default(uuid())
+  issuerCompanyId     String?
+  issuerCompany       CompanySettings?       @relation(fields: [issuerCompanyId], references: [id], onDelete: Restrict)
   name                String
   purpose             ProposalPaymentPurpose
   method              ProposalPaymentMethod
@@ -2524,6 +2527,7 @@ model ProposalPaymentProfile {
   updatedAt           DateTime               @updatedAt
 
   @@index([purpose, method, isActive, sortOrder])
+  @@index([issuerCompanyId])
   @@map("proposal_payment_profiles")
 }
 

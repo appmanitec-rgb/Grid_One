@@ -88,6 +88,8 @@ export default function DataExplorer({
   const [executingImport, setExecutingImport] = useState(false);
   const [importError, setImportError] = useState("");
   const [access, setAccess] = useState(() => getAccessFromToken());
+  const [paymentIssuerOptions, setPaymentIssuerOptions] = useState<Array<{ value: string; label: string }>>([]);
+  const [paymentIssuerLoadError, setPaymentIssuerLoadError] = useState("");
 
   const editableFields = useMemo(
     () =>
@@ -136,6 +138,28 @@ export default function DataExplorer({
   useEffect(() => {
     setAccess(getAccessFromToken());
   }, []);
+
+  useEffect(() => {
+    if (resource.key !== "proposalPaymentProfiles") return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await apiFetch("/studio/payment-issuers", { cache: "no-store" });
+        if (!response.ok) throw new Error("Nao foi possivel carregar as empresas emitentes.");
+        const issuers = await response.json() as Array<{ id: string; companyName: string | null; cnpj: string | null }>;
+        if (!cancelled) {
+          setPaymentIssuerOptions(issuers.map((issuer) => ({
+            value: issuer.id,
+            label: `${issuer.companyName || "Empresa sem nome"}${issuer.cnpj ? ` · ${issuer.cnpj}` : " · CNPJ pendente"}`,
+          })));
+          setPaymentIssuerLoadError("");
+        }
+      } catch {
+        if (!cancelled) setPaymentIssuerLoadError("Nao foi possivel carregar as empresas emitentes.");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [resource.key]);
 
   useEffect(() => {
     if (visibleKeys.length === 0) return;
@@ -1019,7 +1043,7 @@ export default function DataExplorer({
                   {editableFields.map((field) => (
                     <EditField
                       key={field.key}
-                      field={field}
+                      field={field.key === "issuerCompanyId" ? { ...field, options: paymentIssuerOptions } : field}
                       value={draft[field.key]}
                       onChange={(value) =>
                         setDraft((current) => ({
@@ -1029,6 +1053,9 @@ export default function DataExplorer({
                       }
                     />
                   ))}
+                  {resource.key === "proposalPaymentProfiles" && paymentIssuerLoadError ? (
+                    <p role="alert" className="text-sm text-red-700">{paymentIssuerLoadError}</p>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => void saveRecord()}

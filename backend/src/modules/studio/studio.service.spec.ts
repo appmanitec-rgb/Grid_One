@@ -114,3 +114,64 @@ describe('StudioService commercial delivery 01', () => {
     });
   });
 });
+
+describe('StudioService payment profile issuer', () => {
+  const actor = { sub: 'user-1', role: 'ADMIN' };
+
+  function createContext() {
+    const tx = {
+      companySettings: { findUnique: jest.fn() },
+      proposalPaymentProfile: { create: jest.fn() },
+      systemAuditLog: { create: jest.fn() },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback: (client: typeof tx) => unknown) =>
+        Promise.resolve(callback(tx)),
+      ),
+    };
+    tx.proposalPaymentProfile.create.mockImplementation(({ data }) => ({ id: 'profile-1', ...data }));
+    const service = new StudioService(prisma as unknown as DatabaseService);
+    const profile = {
+      name: 'PIX servicos',
+      purpose: 'SERVICES',
+      method: 'PIX',
+      beneficiary: 'Empresa teste',
+      beneficiaryDocument: '12.345.678/0001-90',
+      issuerCompanyId: 'issuer-1',
+      pixKey: 'chave-teste',
+      pixCopyPaste: 'codigo-teste',
+      isActive: true,
+    };
+    return { tx, service, profile };
+  }
+
+  it('rejects an active account with a different beneficiary CNPJ', async () => {
+    const { tx, service, profile } = createContext();
+    tx.companySettings.findUnique.mockResolvedValue({ cnpj: '98.765.432/0001-10' });
+
+    await expect(service.createRecord('proposalPaymentProfiles', profile, actor))
+      .rejects.toThrow('O CNPJ do favorecido deve ser igual');
+    expect(tx.proposalPaymentProfile.create).not.toHaveBeenCalled();
+  });
+
+  it('requires an issuer before activating an account', async () => {
+    const { tx, service, profile } = createContext();
+
+    await expect(service.createRecord('proposalPaymentProfiles', {
+      ...profile,
+      issuerCompanyId: '',
+    }, actor)).rejects.toThrow('Selecione o CNPJ emitente');
+    expect(tx.proposalPaymentProfile.create).not.toHaveBeenCalled();
+  });
+
+  it('saves a matching issuer and beneficiary', async () => {
+    const { tx, service, profile } = createContext();
+    tx.companySettings.findUnique.mockResolvedValue({ cnpj: '12345678000190' });
+
+    const created = await service.createRecord('proposalPaymentProfiles', profile, actor);
+
+    expect(created.issuerCompanyId).toBe('issuer-1');
+    expect(tx.proposalPaymentProfile.create).toHaveBeenCalled();
+    expect(tx.systemAuditLog.create).toHaveBeenCalled();
+  });
+});

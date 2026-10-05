@@ -203,6 +203,48 @@ function controlOptionDefinition(
   };
 }
 
+async function validatePaymentProfileIssuer(
+  tx: Prisma.TransactionClient,
+  profile: Record<string, unknown>,
+) {
+  const issuerCompanyId = studioString(profile.issuerCompanyId).trim();
+  if (!issuerCompanyId) {
+    if (profile.isActive === true) {
+      throw new BadRequestException(
+        'Selecione o CNPJ emitente antes de ativar a conta de pagamento.',
+      );
+    }
+    return;
+  }
+
+  const issuer = await tx.companySettings.findUnique({
+    where: { id: issuerCompanyId },
+    select: { cnpj: true },
+  });
+  if (!issuer) {
+    throw new BadRequestException('CNPJ emitente nao encontrado.');
+  }
+
+  const issuerCnpj = (issuer.cnpj ?? '').replace(/\D/g, '');
+  const beneficiaryCnpj = studioString(profile.beneficiaryDocument).replace(
+    /\D/g,
+    '',
+  );
+  if (
+    profile.isActive === true &&
+    (issuerCnpj.length !== 14 || beneficiaryCnpj.length !== 14)
+  ) {
+    throw new BadRequestException(
+      'Informe o CNPJ do emitente e o CNPJ do favorecido antes de ativar a conta.',
+    );
+  }
+  if (beneficiaryCnpj && issuerCnpj && beneficiaryCnpj !== issuerCnpj) {
+    throw new BadRequestException(
+      'O CNPJ do favorecido deve ser igual ao CNPJ emitente selecionado.',
+    );
+  }
+}
+
 const DEFINITIONS: Record<string, StudioResourceDefinition> = {
   clients: {
     entityType: 'Client',
@@ -662,6 +704,7 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
     domain: AuditDomain.PROPOSALS,
     resourcePermission: 'finance.update',
     editableFields: {
+      issuerCompanyId: 'string',
       name: 'string',
       purpose: 'enum',
       method: 'enum',
@@ -683,6 +726,7 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
     list: (tx) =>
       tx.proposalPaymentProfile.findMany({
         orderBy: [{ purpose: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
+        include: { issuerCompany: { select: { id: true, companyName: true } } },
       }),
     validate: (data, creating) => {
       if (
@@ -714,9 +758,11 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
         );
       }
     },
-    create: (tx, data) =>
-      tx.proposalPaymentProfile.create({
+    create: async (tx, data) => {
+      await validatePaymentProfileIssuer(tx, data);
+      return tx.proposalPaymentProfile.create({
         data: {
+          issuerCompanyId: studioString(data.issuerCompanyId).trim() || null,
           name: studioString(data.name).trim(),
           purpose: data.purpose as ProposalPaymentPurpose,
           method: data.method as ProposalPaymentMethod,
@@ -733,7 +779,9 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
           isActive: data.isActive === true,
           sortOrder: Number(data.sortOrder ?? 0),
         },
-      }),
+        include: { issuerCompany: { select: { id: true, companyName: true } } },
+      });
+    },
     findUnique: (tx, id) =>
       tx.proposalPaymentProfile.findUnique({ where: { id } }),
     update: async (tx, id, data) => {
@@ -768,7 +816,12 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
           'Boleto ativo exige instrucoes de cobranca.',
         );
       }
-      return tx.proposalPaymentProfile.update({ where: { id }, data });
+      await validatePaymentProfileIssuer(tx, merged);
+      return tx.proposalPaymentProfile.update({
+        where: { id },
+        data,
+        include: { issuerCompany: { select: { id: true, companyName: true } } },
+      });
     },
   },
   commercialGenerators: {
@@ -917,6 +970,23 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
 @Injectable()
 export class StudioService {
   constructor(private readonly prisma: DatabaseService) {}
+
+  async listPaymentIssuers(actor: StudioActor) {
+    if (
+      !actor.isSystemMaster &&
+      actor.role !== 'ADMIN' &&
+      !this.hasPermission(actor.accessPolicy, 'finance.view') &&
+      !this.hasPermission(actor.accessPolicy, 'finance.update')
+    ) {
+      throw new ForbiddenException(
+        'Seu perfil nao possui permissao para visualizar contas de pagamento.',
+      );
+    }
+    return this.prisma.companySettings.findMany({
+      select: { id: true, companyName: true, cnpj: true },
+      orderBy: [{ isPrimary: 'desc' }, { companyName: 'asc' }],
+    });
+  }
 
   async listControlOptions(type: string) {
     const config = Object.values(CONTROL_OPTION_TYPES).find(

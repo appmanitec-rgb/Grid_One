@@ -26,12 +26,17 @@ $frontend = Start-Process -FilePath "node" -ArgumentList ".\node_modules\next\di
   frontendPid = $frontend.Id
 } | ConvertTo-Json | Set-Content (Join-Path $LogRoot "server-pids.json")
 
-Start-Sleep -Seconds 8
-try {
-  $api = Invoke-WebRequest "http://127.0.0.1:3000/health" -UseBasicParsing -TimeoutSec 10
-  $web = Invoke-WebRequest "http://127.0.0.1:3001" -UseBasicParsing -TimeoutSec 10
-  Write-Host "GridOne iniciado. API=$($api.StatusCode), Frontend=$($web.StatusCode)" -ForegroundColor Green
-} catch {
-  Write-Host "Os processos iniciaram, mas a verificacao falhou. Consulte runtime-logs." -ForegroundColor Yellow
-  throw
+for ($attempt = 1; $attempt -le 12; $attempt++) {
+  try {
+    $api = Invoke-WebRequest "http://127.0.0.1:3000/health" -UseBasicParsing -TimeoutSec 5
+    $web = Invoke-WebRequest "http://127.0.0.1:3001" -UseBasicParsing -TimeoutSec 5
+    Write-Host "GridOne iniciado. API=$($api.StatusCode), Frontend=$($web.StatusCode)" -ForegroundColor Green
+    return
+  } catch {
+    if ($attempt -eq 12) {
+      Write-Host "Os processos iniciaram, mas a verificacao falhou. Consulte runtime-logs." -ForegroundColor Yellow
+      throw
+    }
+    Start-Sleep -Seconds 5
+  }
 }

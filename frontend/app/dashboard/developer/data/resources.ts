@@ -1467,6 +1467,8 @@ export const STUDIO_RESOURCES: StudioResource[] = [
     canExport: false,
     importMode: "DISABLED",
     fields: [
+      { key: "issuerCompany.companyName", label: "Empresa emitente", searchable: true, sortable: true, readOnly: true },
+      { key: "issuerCompanyId", label: "CNPJ emitente", type: "select", editable: true, hiddenByDefault: true },
       { key: "name", label: "Nome do perfil", editable: true, required: true, searchable: true },
       { key: "purpose", label: "Destino", type: "select", editable: true, required: true, options: [
         { value: "PARTS", label: "Pecas" }, { value: "SERVICES", label: "Servicos" },

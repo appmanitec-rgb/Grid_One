@@ -71,6 +71,12 @@ export class StudioController {
     });
   }
 
+  @Get('payment-issuers')
+  @RequireAccessPolicy('studio.access', 'studio.dataView')
+  listPaymentIssuers(@Req() req: AuthRequest) {
+    return this.studioService.listPaymentIssuers(req.user ?? {});
+  }
+
   @Patch('data/:resource/:id')
   @RequireAccessPolicy('studio.access', 'studio.dataEdit')
   updateRecord(

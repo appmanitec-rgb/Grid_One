@@ -1,5 +1,12 @@
 # Fiscal e cobrança Santander: preparação para uso real
 
+## Conferência dos arquivos operacionais (outubro de 2026)
+
+- Os dois documentos de orientação de pagamento da pasta compartilhada separam recebimentos de **serviços** para Manitec Services Geradores Ltda e de **peças** para Manitec Energia Equipamentos Ltda. Ambos trazem contas e chaves PIX distintas. Conferir esses dados com o financeiro antes de cadastrá-los: arquivos de orientação não substituem confirmação bancária atual.
+- O Studio permite associar cada perfil de pagamento a uma empresa emitente. Ao ativar um perfil, o CNPJ do favorecido deve ser igual ao CNPJ da empresa escolhida. Nenhum dado bancário desses documentos foi importado automaticamente.
+- As primeiras páginas dos PDFs de notas de janeiro mostram NF-e **recebidas** pela Manitec como destinatária. Os CNPJs destinatários coincidem com os CNPJs dos documentos de pagamento. Essas notas não comprovam regime tributário, parâmetros de emissão nem dados do convênio de cobrança.
+- Os documentos não contêm código de transmissão, carteira e comprovante de homologação de remessa/retorno Santander. O responsável informou que há um certificado A1 para cada CNPJ; ainda falta conferir titularidade, validade, senha e instalação segura no servidor antes da homologação fiscal.
+
 ## Situação implementada
 
 - Rascunhos de NF-e e NFS-e são separados por CNPJ emitente e exibem pendências por empresa. Um rascunho não tem valor fiscal.

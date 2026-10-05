@@ -881,7 +881,12 @@ describe('ProposalsService', () => {
                   purpose: ProposalPaymentPurpose.SERVICES,
                   method: ProposalPaymentMethod.PIX,
                   beneficiary: 'Manitec',
-                  beneficiaryDocument: null,
+                  beneficiaryDocument: '12.345.678/0001-90',
+                  issuerCompanyId: 'issuer-1',
+                  issuerCompany: {
+                    companyName: 'Manitec',
+                    cnpj: '12345678000190',
+                  },
                   bankName: null,
                   agency: null,
                   accountNumber: null,

@@ -1128,6 +1128,7 @@ export class ProposalsService {
     const profiles = await this.prisma.proposalPaymentProfile.findMany({
       where: { isActive: true },
       orderBy: [{ purpose: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
+      include: { issuerCompany: { select: { id: true, companyName: true } } },
     });
     return Promise.all(
       profiles.map(async (profile) => ({
@@ -2135,6 +2136,7 @@ export class ProposalsService {
 
     const profiles = await tx.proposalPaymentProfile.findMany({
       where: { id: { in: requested.map((entry) => entry.id) }, isActive: true },
+      include: { issuerCompany: { select: { id: true, companyName: true, cnpj: true } } },
     });
     const profileById = new Map(
       profiles.map((profile) => [profile.id, profile]),
@@ -2145,6 +2147,13 @@ export class ProposalsService {
         if (!profile || profile.purpose !== purpose) {
           throw new BadRequestException(
             `Selecione um perfil de pagamento ativo para ${purpose === ProposalPaymentPurpose.PARTS ? 'pecas' : 'servicos'}.`,
+          );
+        }
+        const issuerCnpj = (profile.issuerCompany?.cnpj ?? '').replace(/\D/g, '');
+        const beneficiaryCnpj = (profile.beneficiaryDocument ?? '').replace(/\D/g, '');
+        if (issuerCnpj.length !== 14 || beneficiaryCnpj !== issuerCnpj) {
+          throw new BadRequestException(
+            'O perfil de pagamento precisa de CNPJ emitente valido e igual ao favorecido.',
           );
         }
         if (
@@ -2165,6 +2174,8 @@ export class ProposalsService {
         }
         return {
           id: profile.id,
+          issuerCompanyId: profile.issuerCompanyId,
+          issuerCompanyName: profile.issuerCompany?.companyName ?? null,
           name: profile.name,
           purpose: profile.purpose,
           method: profile.method,
