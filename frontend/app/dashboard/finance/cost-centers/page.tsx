@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
 import { clearAuthSession } from "@/lib/auth-session";
@@ -16,6 +16,7 @@ import {
   TextAreaInput,
   TextInput,
 } from "../../components/DashboardPageKit";
+import EditOverlay from "../../components/EditOverlay";
 
 type Tone = "blue" | "emerald" | "amber" | "rose" | "slate";
 type CostCenterType = "CLIENT" | "CONTRACT" | "GENERATOR" | "INTERNAL";
@@ -254,6 +255,8 @@ export default function CostCentersPage() {
   const [toDate, setToDate] = useState("");
   const [centerDraft, setCenterDraft] =
     useState<CostCenterDraft>(emptyCenterDraft);
+  const newCenterDraft = useRef<CostCenterDraft>(emptyCenterDraft());
+  const originalCenterEdit = useRef<CostCenterDraft>(emptyCenterDraft());
   const [entryDraft, setEntryDraft] = useState<EntryDraft>(emptyEntryDraft);
   const [loading, setLoading] = useState(true);
   const [dreLoading, setDreLoading] = useState(false);
@@ -413,12 +416,21 @@ export default function CostCentersPage() {
   }, [centers, dre, selectedCenter]);
 
   function resetCenterDraft() {
-    setCenterDraft(emptyCenterDraft());
+    setCenterDraft(editingId ? newCenterDraft.current : emptyCenterDraft());
     setEditingId(null);
   }
 
+  function closeCenterEditor() {
+    if (savingCenter) return;
+    if (JSON.stringify(centerDraft) !== JSON.stringify(originalCenterEdit.current) && !window.confirm("Descartar as alterações deste centro de custo?")) return;
+    resetCenterDraft();
+  }
+
   function startEditing(center: CostCenter) {
-    setCenterDraft(centerDraftFromCenter(center));
+    if (!editingId) newCenterDraft.current = centerDraft;
+    const nextDraft = centerDraftFromCenter(center);
+    originalCenterEdit.current = nextDraft;
+    setCenterDraft(nextDraft);
     setEditingId(center.id);
     setSelectedId(center.id);
     setError("");
@@ -674,7 +686,7 @@ export default function CostCentersPage() {
         }
       />
 
-      {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
+      {error && !editingId ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
       {successMessage ? (
         <StatusBanner tone="emerald">{successMessage}</StatusBanner>
       ) : null}
@@ -971,6 +983,7 @@ export default function CostCentersPage() {
         </div>
 
         <div className="space-y-6">
+          <EditOverlay open={Boolean(editingId)} title={centerDraft.name || "Centro de custo"} busy={savingCenter} onClose={closeCenterEditor}>
           <SectionCard
             eyebrow="Cadastro e governanca"
             title={
@@ -983,14 +996,15 @@ export default function CostCentersPage() {
               editingId ? (
                 <button
                   type="button"
-                  onClick={resetCenterDraft}
+                  onClick={closeCenterEditor}
                   className={SECONDARY_BUTTON}
                 >
-                  Novo centro
+                  Cancelar edição
                 </button>
               ) : null
             }
           >
+            {editingId && error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
             <form className="space-y-4" onSubmit={handleCenterSubmit}>
               <div className="grid gap-3 md:grid-cols-2">
                 <FormField label="Codigo">
@@ -1142,15 +1156,16 @@ export default function CostCentersPage() {
 
                 <button
                   type="button"
-                  onClick={resetCenterDraft}
+                  onClick={editingId ? closeCenterEditor : resetCenterDraft}
                   className={SECONDARY_BUTTON}
                   disabled={savingCenter}
                 >
-                  Limpar formulario
+                  {editingId ? "Cancelar edição" : "Limpar formulário"}
                 </button>
               </div>
             </form>
           </SectionCard>
+          </EditOverlay>
 
           <SectionCard
             eyebrow="Lancar no DRE"

@@ -8,6 +8,7 @@ import { getAccessFromToken } from "@/lib/access";
 import ListPagination, {
   useListPagination,
 } from "../components/ListPagination";
+import QuickRecordEditor from "../components/QuickRecordEditor";
 
 type EquipmentListItem = {
   id: string;
@@ -69,6 +70,7 @@ export default function EquipmentsPage() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [ticketFilter, setTicketFilter] = useState("ALL");
   const [access, setAccess] = useState(() => getAccessFromToken());
+  const [selectedEquipmentId, setSelectedEquipmentId] = useState<string | null>(null);
 
   useEffect(() => {
     setAccess(getAccessFromToken());
@@ -318,9 +320,9 @@ export default function EquipmentsPage() {
                     className="break-words text-lg font-bold leading-snug text-slate-950"
                     title={displayTitle}
                   >
-                    <Link href={`/dashboard/equipments/${item.id}`} className="dashboard-record-link" title="Abrir ficha do equipamento">
+                    <button type="button" onClick={() => setSelectedEquipmentId(item.id)} className="dashboard-record-link text-left" title="Abrir cadastro rápido do equipamento">
                       {displayTitle}
-                    </Link>
+                    </button>
                   </h2>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <Badge className={CRITICALITY_STYLES[item.criticality || ""]}>
@@ -423,6 +425,9 @@ export default function EquipmentsPage() {
 
       {!loading && !error && filtered.length > 0 ? (
         <ListPagination {...paginationProps} />
+      ) : null}
+      {selectedEquipmentId ? (
+        <QuickRecordEditor kind="equipment" id={selectedEquipmentId} canEdit={access.equipments.update} onClose={() => setSelectedEquipmentId(null)} onSaved={loadEquipments} />
       ) : null}
     </div>
   );

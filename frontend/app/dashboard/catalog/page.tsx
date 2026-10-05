@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getAccessFromToken } from "@/lib/access";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
+import QuickRecordEditor from "../components/QuickRecordEditor";
 
 type CatalogItem = {
   id: string;
@@ -47,7 +48,9 @@ export default function CatalogPage() {
   const [loading, setLoading] = useState(true);
   const [hydrated, setHydrated] = useState(false);
   const [canCreateItem, setCanCreateItem] = useState(false);
+  const [canUpdateItem, setCanUpdateItem] = useState(false);
   const [canViewSuppliers, setCanViewSuppliers] = useState(false);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [activeGroup, setActiveGroup] = useState<CatalogGroupKey>("all");
@@ -55,33 +58,28 @@ export default function CatalogPage() {
   useEffect(() => {
     const access = getAccessFromToken();
     setCanCreateItem(access.catalog.create);
+    setCanUpdateItem(access.catalog.update);
     setCanViewSuppliers(access.purchaseOrders.view);
     setHydrated(true);
   }, []);
 
   useEffect(() => {
-    async function load() {
-      try {
-        const res = await apiFetch("/catalogs");
-        if (!res.ok) {
-          throw new Error(
-            await readApiErrorMessage(res, "Falha ao carregar catalogo."),
-          );
-        }
-        setItems(await res.json());
-      } catch (loadError: unknown) {
-        setError(
-          loadError instanceof Error
-            ? loadError.message
-            : "Erro ao carregar catalogo.",
-        );
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    load();
+    void loadItems();
   }, []);
+
+  async function loadItems() {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await apiFetch("/catalogs", { cache: "no-store" });
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, "Falha ao carregar catalogo."));
+      setItems((await res.json()) as CatalogItem[]);
+    } catch (loadError: unknown) {
+      setError(loadError instanceof Error ? loadError.message : "Erro ao carregar catalogo.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -250,13 +248,14 @@ export default function CatalogPage() {
                       className="hover:bg-zinc-50 transition-colors"
                     >
                       <td className="p-4 font-bold text-zinc-800">
-                        <Link
-                          href={`/dashboard/catalog/${item.id}`}
-                          className="dashboard-record-link"
-                          title="Abrir cadastro do item"
+                        <button
+                          type="button"
+                          onClick={() => setSelectedItemId(item.id)}
+                          className="dashboard-record-link text-left"
+                          title="Abrir cadastro rápido do item"
                         >
                           {item.name}
-                        </Link>
+                        </button>
                       </td>
                       <td className="p-4 text-zinc-600 text-sm max-w-md truncate">
                         {item.description ||
@@ -319,6 +318,9 @@ export default function CatalogPage() {
           </table>
         </div>
       </div>
+      {selectedItemId ? (
+        <QuickRecordEditor kind="catalog" id={selectedItemId} canEdit={canUpdateItem} onClose={() => setSelectedItemId(null)} onSaved={loadItems} />
+      ) : null}
     </div>
   );
 }

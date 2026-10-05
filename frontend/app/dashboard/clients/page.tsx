@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
+import { getAccessFromToken } from "@/lib/access";
+import QuickRecordEditor from "../components/QuickRecordEditor";
 
 type ClientListItem = {
   id: string;
@@ -50,6 +52,8 @@ export default function ClientsPage() {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [canEditClients, setCanEditClients] = useState(false);
   const [inssFilter, setInssFilter] = useState<FilterOption>("ALL");
   const [retentionFilter, setRetentionFilter] = useState<FilterOption>("ALL");
   const [delinquentFilter, setDelinquentFilter] = useState<FilterOption>("ALL");
@@ -58,6 +62,7 @@ export default function ClientsPage() {
   const [contractFilter, setContractFilter] = useState<ContractFilter>("ALL");
 
   useEffect(() => {
+    setCanEditClients(getAccessFromToken().clients.update);
     void loadClients();
   }, []);
 
@@ -317,9 +322,9 @@ export default function ClientsPage() {
                       {client.code}
                     </td>
                     <td className="p-4">
-                      <Link href={`/dashboard/clients/${client.id}`} className="dashboard-record-link font-bold" title="Abrir cadastro do cliente">
+                      <button type="button" onClick={() => setSelectedClientId(client.id)} className="dashboard-record-link text-left font-bold" title="Abrir cadastro rápido do cliente">
                         {client.companyName}
-                      </Link>
+                      </button>
                       <p className="text-xs text-zinc-500">
                         {client.tradeName || "---"}
                       </p>
@@ -371,6 +376,9 @@ export default function ClientsPage() {
           </table>
         </div>
       </div>
+      {selectedClientId ? (
+        <QuickRecordEditor kind="client" id={selectedClientId} canEdit={canEditClients} onClose={() => setSelectedClientId(null)} onSaved={loadClients} />
+      ) : null}
     </div>
   );
 }

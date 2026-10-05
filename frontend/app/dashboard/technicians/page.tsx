@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, apiUrl } from "@/lib/api";
 import {
   DataPill,
@@ -14,6 +14,7 @@ import {
   StatusBanner,
   TextInput,
 } from "../components/DashboardPageKit";
+import EditOverlay from "../components/EditOverlay";
 
 type TechnicianOrder = {
   id: string;
@@ -87,6 +88,8 @@ export default function TechniciansPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const newTechnicianDraft = useRef<TechnicianForm>(EMPTY_FORM);
+  const originalEditDraft = useRef<TechnicianForm>(EMPTY_FORM);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -157,12 +160,19 @@ export default function TechniciansPage() {
   }
 
   function resetForm() {
-    setForm(EMPTY_FORM);
+    setForm(editingId ? newTechnicianDraft.current : EMPTY_FORM);
     setEditingId(null);
   }
 
+  function closeEditor() {
+    if (saving) return;
+    if (JSON.stringify(form) !== JSON.stringify(originalEditDraft.current) && !window.confirm("Descartar as alterações deste técnico?")) return;
+    resetForm();
+  }
+
   function fillFormFromRow(row: TechnicianRow) {
-    setForm({
+    if (!editingId) newTechnicianDraft.current = form;
+    const nextForm = {
       userId: row.userId,
       cpf: row.cpf,
       phone: row.phone,
@@ -175,7 +185,9 @@ export default function TechniciansPage() {
         row.longitude !== null && row.longitude !== undefined
           ? String(row.longitude)
           : "",
-    });
+    };
+    originalEditDraft.current = nextForm;
+    setForm(nextForm);
     setEditingId(row.id);
     setMessage("");
     setError("");
@@ -335,9 +347,10 @@ export default function TechniciansPage() {
       />
 
       {message ? <StatusBanner tone="emerald">{message}</StatusBanner> : null}
-      {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
+      {error && !editingId ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(340px,0.9fr)_minmax(0,1.35fr)]">
+        <EditOverlay open={Boolean(editingId)} title={editingTechnician?.user.name || "Técnico"} busy={saving} onClose={closeEditor}>
         <SectionCard
           eyebrow="Cadastro"
           title={editingId ? "Atualizar tecnico" : "Novo tecnico"}
@@ -346,7 +359,7 @@ export default function TechniciansPage() {
             editingId ? (
               <button
                 type="button"
-                onClick={resetForm}
+                onClick={closeEditor}
                 className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
               >
                 Cancelar edicao
@@ -358,6 +371,7 @@ export default function TechniciansPage() {
             )
           }
         >
+          {editingId && error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
           <form
             onSubmit={(event) => void handleSubmit(event)}
             className="grid grid-cols-1 gap-4 md:grid-cols-2"
@@ -470,6 +484,7 @@ export default function TechniciansPage() {
             </div>
           </form>
         </SectionCard>
+        </EditOverlay>
 
         <SectionCard
           eyebrow="Operacao"

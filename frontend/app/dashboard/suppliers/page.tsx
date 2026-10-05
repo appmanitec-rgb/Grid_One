@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
+import { getAccessFromToken } from "@/lib/access";
+import QuickRecordEditor from "../components/QuickRecordEditor";
 
 type Supplier = {
   id: string;
@@ -21,8 +23,11 @@ export default function SuppliersPage() {
   const [items, setItems] = useState<Supplier[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
+  const [canEditSuppliers, setCanEditSuppliers] = useState(false);
 
   useEffect(() => {
+    setCanEditSuppliers(getAccessFromToken().purchaseOrders.update);
     void load();
   }, []);
 
@@ -87,9 +92,9 @@ export default function SuppliersPage() {
               {!loading && items.map((supplier) => (
                 <tr key={supplier.id} className="transition-colors hover:bg-zinc-50">
                   <td className="p-4">
-                    <Link href={`/dashboard/suppliers/${supplier.id}`} className="dashboard-record-link font-bold" title="Abrir cadastro do fornecedor">
+                    <button type="button" onClick={() => setSelectedSupplierId(supplier.id)} className="dashboard-record-link text-left font-bold" title="Abrir cadastro rápido do fornecedor">
                       {supplier.companyName}
-                    </Link>
+                    </button>
                     <p className="text-xs text-zinc-500">{supplier.tradeName || "-"}</p>
                   </td>
                   <td className="p-4 text-sm text-zinc-600">{supplier.cnpj || "Nao informado"}</td>
@@ -117,6 +122,9 @@ export default function SuppliersPage() {
           </table>
         </div>
       </div>
+      {selectedSupplierId ? (
+        <QuickRecordEditor kind="supplier" id={selectedSupplierId} canEdit={canEditSuppliers} onClose={() => setSelectedSupplierId(null)} onSaved={load} />
+      ) : null}
     </div>
   );
 }
