@@ -33,6 +33,7 @@
     "db:migrate:dev": "npm run prisma:ensure:local && prisma migrate dev && npm run db:preflight",
     "db:backup": "node scripts/db-backup.js",
     "db:restore": "node scripts/db-restore.js",
+    "db:bootstrap:staging": "node scripts/bootstrap-fresh-staging-db.js",
     "db:reset": "node scripts/db-block-reset.js",
     "db:clean:operational": "node scripts/clean-operational-data.js",
     "legacy:import:check": "node scripts/import-legacy-workbooks.js --dry-run",

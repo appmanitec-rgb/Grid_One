@@ -46,7 +46,7 @@ Nao apagar migrations ja aplicadas. Se migration incompatvel foi aplicada, docum
 Restore sempre inicia em banco descartavel:
 
 ```powershell
-.\scripts\restore-db.ps1 -BackupPath CAMINHO_DO_BACKUP -BackendDir .\backend -ConfirmRestore
+.\scripts\restore-db.ps1 -BackupPath CAMINHO_DO_BACKUP -BackendDir .\backend -TargetDatabase gridone_stage_restore -ConfirmRestore
 ```
 
 Nunca restaurar sobre banco principal sem aprovacao humana explicita.

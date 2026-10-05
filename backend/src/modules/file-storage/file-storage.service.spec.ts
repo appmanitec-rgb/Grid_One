@@ -3,7 +3,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { mkdtemp, rm } from 'fs/promises';
+import { mkdtemp, readdir, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { S3StorageAdapter, S3Transport } from './external-storage.adapter';
@@ -75,6 +75,8 @@ describe('FileStorageService', () => {
     expect(service.getDriver()).toBe('local');
     expect(loaded.buffer.length).toBe(8);
     await expect(service.remove(stored.storageKey)).resolves.toBeUndefined();
+    await expect(service.probe()).resolves.toBeUndefined();
+    await expect(readdir(join(tempDir, 'healthchecks'))).resolves.toEqual([]);
   });
 
   it('falha claramente quando S3 e configurado sem credenciais', () => {

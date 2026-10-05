@@ -20,6 +20,6 @@ export class HealthController {
   @Get('storage')
   @UseGuards(AuthGuard)
   storage() {
-    return this.healthService.storageStatus();
+    return this.healthService.storageProbeStatus();
   }
 }

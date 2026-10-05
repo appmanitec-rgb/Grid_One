@@ -1,9 +1,10 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import { HealthService } from './health.service';
 
 describe('HealthService', () => {
   let service: HealthService;
   let database: { $queryRawUnsafe: jest.Mock };
-  let fileStorage: { getDriver: jest.Mock };
+  let fileStorage: { getDriver: jest.Mock; probe: jest.Mock };
 
   beforeEach(() => {
     database = {
@@ -14,7 +15,10 @@ describe('HealthService', () => {
           { total: 44, latest: '20260715210000_ciclo_16' },
         ]),
     };
-    fileStorage = { getDriver: jest.fn().mockReturnValue('local') };
+    fileStorage = {
+      getDriver: jest.fn().mockReturnValue('local'),
+      probe: jest.fn().mockResolvedValue(undefined),
+    };
     service = new HealthService(database as never, fileStorage as never);
   });
 
@@ -59,6 +63,20 @@ describe('HealthService', () => {
         external: false,
         configured: true,
       }),
+    );
+  });
+
+  it('verifies storage read and write for the protected health endpoint', async () => {
+    await expect(service.storageProbeStatus()).resolves.toEqual(
+      expect.objectContaining({ status: 'ok', verified: true }),
+    );
+    expect(fileStorage.probe).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports storage probe failures as unavailable', async () => {
+    fileStorage.probe.mockRejectedValue(new Error('bucket offline'));
+    await expect(service.storageProbeStatus()).rejects.toThrow(
+      ServiceUnavailableException,
     );
   });
 });

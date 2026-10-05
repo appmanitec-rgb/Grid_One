@@ -57,6 +57,8 @@ Os documentos `docs/staging-backup-restore-report.md`, `docs/ciclo-18-staging-ho
 
 **Aceite:** relatório de staging com commit, horários, resultados, evidência de restauração e responsáveis; checklist de deploy preenchido; nenhum dado real copiado sem tratamento autorizado.
 
+**Andamento em 05/10/2026:** o ensaio local isolado de bootstrap, backup e restore passou, conforme `docs/staging-backup-restore-report.md`. A cadeia antiga de migrations falhou em banco novo e recebeu um comando de bootstrap restrito a staging vazio; `prisma migrate dev` ainda requer rebaseline do histórico. O endpoint autenticado de storage agora faz leitura/gravação/remoção de objeto temporário. Staging remoto, bucket, HTTPS, backup externo, logs/alertas e rollback remoto permanecem sem homologação.
+
 ## Etapa 3 — Testar o ciclo CRM → operação → financeiro
 
 **Execução:** em staging, executar matriz de 10 a 15 clientes fictícios cobrindo oportunidade, atividade e prazo, proposta (peças de máquina, avulsas, mão de obra, horas e combinações), aprovação, contrato/OS/entrega, estoque, conclusão, revisão do financeiro, título e cobrança. Repetir cancelamento, devolução, atraso, retrabalho, acesso por perfil e chamadas repetidas. Conferir valores, CNPJ, conta, rastreabilidade e ausência de duplicatas/orfandade. Usar automação de API e navegador, registrar cada cenário e corrigir qualquer discrepância antes de aprovar.

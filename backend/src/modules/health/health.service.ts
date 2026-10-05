@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { DatabaseService } from 'src/database/database.service';
 import { FileStorageService } from '../file-storage/file-storage.service';
 
@@ -46,6 +46,17 @@ export class HealthService {
       external: driver !== 'local',
       configured: true,
     };
+  }
+
+  async storageProbeStatus() {
+    try {
+      await this.fileStorage.probe();
+    } catch {
+      throw new ServiceUnavailableException(
+        'Armazenamento indisponivel ou inconsistente.',
+      );
+    }
+    return { ...this.storageStatus(), verified: true };
   }
 
   private async readMigrationDiagnostics() {

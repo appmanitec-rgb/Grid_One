@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { createHash, randomBytes } = require('crypto');
 const { spawnSync } = require('child_process');
 
 function loadEnvFile() {
@@ -42,6 +43,21 @@ function parseDbName(databaseUrl) {
   return parsed.pathname.replace(/^\//, '') || 'database';
 }
 
+function dockerContainerFor(databaseUrl) {
+  if (process.env.DB_CONTAINER) return process.env.DB_CONTAINER;
+  const parsed = new URL(databaseUrl);
+  if (
+    ['localhost', '127.0.0.1'].includes(parsed.hostname) &&
+    parsed.port === '5433' &&
+    parseDbName(databaseUrl) === 'gridone_db'
+  ) {
+    return 'gridone_db';
+  }
+  throw new Error(
+    'DB_CONTAINER must be set explicitly when backing up a database outside the local gridone_db container.',
+  );
+}
+
 function isValidCustomDump(filePath) {
   if (!fs.existsSync(filePath) || fs.statSync(filePath).size === 0)
     return false;
@@ -65,7 +81,7 @@ function runLocalBackup(databaseUrl, filePath) {
 
 function runDockerBackup(databaseUrl, filePath) {
   const parsed = new URL(databaseUrl);
-  const container = process.env.DB_CONTAINER || 'gridone_db';
+  const container = dockerContainerFor(databaseUrl);
   const database = parseDbName(databaseUrl);
   const username = decodeURIComponent(
     parsed.username || process.env.DB_USER || 'postgres',
@@ -91,8 +107,8 @@ function runDockerBackup(databaseUrl, filePath) {
   }
 }
 
-function verifyDockerBackup(filePath) {
-  const container = process.env.DB_CONTAINER || 'gridone_db';
+function verifyDockerBackup(databaseUrl, filePath) {
+  const container = dockerContainerFor(databaseUrl);
   const input = fs.openSync(filePath, 'r');
   try {
     return spawnSync(
@@ -109,6 +125,7 @@ function verifyDockerBackup(filePath) {
 }
 
 function main() {
+  const startedAt = Date.now();
   loadEnvFile();
 
   const databaseUrl = process.env.DATABASE_URL;
@@ -119,7 +136,7 @@ function main() {
   const backupsDir = path.resolve(__dirname, '..', 'backups');
   fs.mkdirSync(backupsDir, { recursive: true });
 
-  const fileName = `${timestamp()}_${parseDbName(databaseUrl)}.dump`;
+  const fileName = `${timestamp()}_${parseDbName(databaseUrl)}_${randomBytes(4).toString('hex')}.dump`;
   const filePath = path.join(backupsDir, fileName);
 
   let run = runLocalBackup(databaseUrl, filePath);
@@ -128,7 +145,12 @@ function main() {
     console.log(
       '[db:backup] pg_dump local indisponivel; tentando o PostgreSQL do container Docker.',
     );
-    run = runDockerBackup(databaseUrl, filePath);
+    try {
+      run = runDockerBackup(databaseUrl, filePath);
+    } catch (error) {
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      throw error;
+    }
     source = 'docker';
   }
 
@@ -140,15 +162,43 @@ function main() {
   }
 
   if (source === 'docker') {
-    const verification = verifyDockerBackup(filePath);
+    const verification = verifyDockerBackup(databaseUrl, filePath);
     if (verification.status !== 0) {
       fs.unlinkSync(filePath);
       throw new Error('pg_restore could not read the generated Docker dump.');
     }
   }
 
+  const hash = createHash('sha256');
+  const input = fs.openSync(filePath, 'r');
+  try {
+    const chunk = Buffer.alloc(1024 * 1024);
+    let bytesRead;
+    while ((bytesRead = fs.readSync(input, chunk, 0, chunk.length, null)) > 0) {
+      hash.update(chunk.subarray(0, bytesRead));
+    }
+  } finally {
+    fs.closeSync(input);
+  }
+  const manifest = {
+    createdAt: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    database: parseDbName(databaseUrl),
+    file: fileName,
+    bytes: fs.statSync(filePath).size,
+    sha256: hash.digest('hex'),
+    source,
+    durationMs: Date.now() - startedAt,
+    migrations: fs.readdirSync(path.resolve(__dirname, '..', 'prisma', 'migrations'), { withFileTypes: true }).filter((entry) => entry.isDirectory()).length,
+  };
+  fs.writeFileSync(
+    `${filePath}.manifest.json`,
+    `${JSON.stringify(manifest, null, 2)}\n`,
+    { flag: 'wx', mode: 0o600 },
+  );
+
   console.log(
-    `[db:backup] OK. file=${filePath}; bytes=${fs.statSync(filePath).size}; source=${source}`,
+    `[db:backup] OK. file=${filePath}; bytes=${manifest.bytes}; sha256=${manifest.sha256}; source=${source}`,
   );
 }
 

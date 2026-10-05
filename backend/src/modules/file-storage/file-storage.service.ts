@@ -69,6 +69,22 @@ export class FileStorageService {
     return this.adapter.driver;
   }
 
+  async probe() {
+    const storageKey = `healthchecks/${randomBytes(16).toString('hex')}`;
+    const buffer = Buffer.from('gridone-storage-health');
+    let saved = false;
+    try {
+      await this.adapter.save({ storageKey, buffer });
+      saved = true;
+      const loaded = await this.adapter.load(storageKey);
+      if (!loaded.equals(buffer)) {
+        throw new Error('Storage health check returned different content.');
+      }
+    } finally {
+      if (saved) await this.adapter.remove(storageKey);
+    }
+  }
+
   async saveServiceReportFile(file: UploadFile): Promise<StoredFile> {
     this.validateFile(file);
     const mimeType = file.mimetype!;
