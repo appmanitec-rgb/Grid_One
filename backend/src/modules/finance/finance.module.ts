@@ -7,6 +7,7 @@ import { BankCollectionController } from './bank-collection.controller';
 import { BankCollectionService } from './bank-collection.service';
 import { FiscalDocumentsController } from './fiscal-documents.controller';
 import { FiscalDocumentsService } from './fiscal-documents.service';
+import { FiscalCertificatesService } from './fiscal-certificates.service';
 
 @Module({
   imports: [DatabaseModule, AuditLogsModule],
@@ -15,7 +16,7 @@ import { FiscalDocumentsService } from './fiscal-documents.service';
     BankCollectionController,
     FiscalDocumentsController,
   ],
-  providers: [FinanceService, BankCollectionService, FiscalDocumentsService],
+  providers: [FinanceService, BankCollectionService, FiscalDocumentsService, FiscalCertificatesService],
   exports: [FinanceService],
 })
 export class FinanceModule {}

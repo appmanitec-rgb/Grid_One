@@ -9,6 +9,10 @@
 
 ## Situação implementada
 
+- A tela **Financeiro → Notas fiscais → Certificados A1 dos emitentes** recebe um `.pfx` ou `.p12` e a senha para cada CNPJ. O backend confere senha, presença da chave privada, correspondência do CNPJ e período de validade; só depois substitui o certificado instalado. A tela mostra o vencimento lido do arquivo e alertas de renovação.
+- O conteúdo do certificado e a senha ficam criptografados no banco com AES-256-GCM. A chave `FISCAL_CERTIFICATE_KEY_BASE64` fica somente no ambiente do servidor, separada do backup do banco, e deve ter 32 bytes codificados em Base64. Guarde uma cópia dessa chave em local seguro: sem ela, os certificados armazenados não poderão ser usados ou recuperados. Arquivos e senhas nunca são devolvidos pela API nem registrados no histórico de auditoria.
+- O envio do A1 é permitido somente pelo navegador em `localhost` no próprio servidor ou por HTTPS com proxy local. O acesso atual pela rede em `http://192.168...` permanece bloqueado para essa operação, pois enviaria a senha e o arquivo sem proteção de transporte. A conferência local verifica senha, chave privada correspondente, CNPJ e datas; a situação de revogação/cadeia e a aptidão fiscal serão verificadas na homologação das integrações.
+- O responsável informou vencimento em **12/07/2027** para os dois A1. A data efetiva será confirmada pelo sistema quando cada arquivo for anexado. Ainda não foram fornecidos os arquivos nem as senhas para instalação.
 - Rascunhos de NF-e e NFS-e são separados por CNPJ emitente e exibem pendências por empresa. Um rascunho não tem valor fiscal.
 - O convênio CNAB 240 H7815 v8.5 é vinculado ao CNPJ beneficiário. A remessa impede mistura com nota autorizada por outra empresa.
 - A validação do arquivo no Santander exige referência do resultado aprovado e identificação da remessa testada. O sistema registra responsável, data e hash da remessa. Essa informação é declarada pelo operador; não substitui a resposta do banco.

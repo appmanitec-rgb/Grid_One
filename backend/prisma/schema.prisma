@@ -1254,6 +1254,7 @@ model CompanySettings {
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
   fiscalDocuments           FiscalDocument[]
+  fiscalCertificate         FiscalCertificate?
   bankCollectionAgreements  BankCollectionAgreement[]
   paymentProfiles           ProposalPaymentProfile[]
 
@@ -3575,6 +3576,27 @@ model FiscalDocument {
   @@index([issuerCompanyId, status, createdAt])
   @@index([status, createdAt])
   @@map("fiscal_documents")
+}
+
+model FiscalCertificate {
+  id                String          @id @default(uuid())
+  issuerCompanyId   String          @unique
+  issuerCompany     CompanySettings @relation(fields: [issuerCompanyId], references: [id], onDelete: Restrict)
+  encryptedBundle   Bytes
+  initializationVec Bytes
+  authenticationTag Bytes
+  fingerprintSha256 String
+  serialNumber      String
+  subjectName       String
+  certificateCnpj   String
+  validFrom         DateTime
+  validTo           DateTime
+  installedByUserId String?
+  installedAt       DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([validTo])
+  @@map("fiscal_certificates")
 }
 
 model BankCollectionAgreement {

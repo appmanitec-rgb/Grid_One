@@ -30,7 +30,7 @@ export class FiscalDocumentsService {
   constructor(private readonly prisma: DatabaseService) {}
 
   async overview() {
-    const [companies, receivables, documents] = await Promise.all([
+    const [companies, receivables, documents, certificates] = await Promise.all([
       this.prisma.companySettings.findMany({
         select: {
           id: true,
@@ -92,13 +92,22 @@ export class FiscalDocumentsService {
         orderBy: { createdAt: 'desc' },
         take: 300,
       }),
+      this.prisma.fiscalCertificate.findMany({
+        select: { issuerCompanyId: true, certificateCnpj: true, validTo: true },
+      }),
     ]);
+    const validCertificateIssuers = new Set(
+      certificates.filter((certificate) => certificate.validTo > new Date() &&
+        companies.some((company) => company.id === certificate.issuerCompanyId &&
+          digits(company.cnpj) === certificate.certificateCnpj))
+        .map((certificate) => certificate.issuerCompanyId),
+    );
     return {
       issuers: companies.map((company) => ({
         ...company,
         readiness: {
-          NFE: this.issuerMissing(company, FiscalDocumentKind.NFE),
-          NFSE: this.issuerMissing(company, FiscalDocumentKind.NFSE),
+          NFE: this.issuerMissing(company, FiscalDocumentKind.NFE, validCertificateIssuers.has(company.id)),
+          NFSE: this.issuerMissing(company, FiscalDocumentKind.NFSE, validCertificateIssuers.has(company.id)),
         },
       })),
       receivables,
@@ -422,6 +431,7 @@ export class FiscalDocumentsService {
       zipCode: string | null;
     },
     kind: FiscalDocumentKind,
+    hasValidCertificate: boolean,
   ) {
     const missing: string[] = [];
     if (!company.companyName) missing.push('razão social');
@@ -440,7 +450,8 @@ export class FiscalDocumentsService {
       missing.push('inscrição estadual');
     if (kind === FiscalDocumentKind.NFSE && !company.municipalRegistration)
       missing.push('inscrição municipal');
-    missing.push('certificado A1 e parâmetros fiscais homologados');
+    if (!hasValidCertificate) missing.push('certificado A1 instalado e no prazo');
+    missing.push('parâmetros fiscais homologados');
     missing.push(
       kind === FiscalDocumentKind.NFE
         ? 'integração SEFAZ para emissão e cancelamento'

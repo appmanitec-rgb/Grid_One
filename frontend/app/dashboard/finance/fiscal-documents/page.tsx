@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
 import { PageHero, SectionCard, StatusBanner } from "../../components/DashboardPageKit";
+import FiscalCertificateManager from "./FiscalCertificateManager";
 
 type Kind = "NFE" | "NFSE";
 type Item = { description: string; quantity: number; unitAmount: number; ncm: string; cfop: string; serviceCode: string };
@@ -99,6 +100,8 @@ export default function FiscalDocumentsPage() {
     {error && <StatusBanner tone="rose">{error}</StatusBanner>}
     {notice && <StatusBanner tone="emerald">{notice}</StatusBanner>}
     <StatusBanner tone="amber">A emissão fiscal ainda não está conectada. Os rascunhos desta página não são notas autorizadas. A transmissão será liberada após configurar a integração e homologar os dados tributários.</StatusBanner>
+
+    <FiscalCertificateManager issuers={data?.issuers || []} onInstalled={reload} />
 
     <SectionCard title="1. Escolher emitente" description="Selecione o CNPJ que emitirá esta nota. Os dados da empresa escolhida ficam registrados no rascunho.">
       <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">
