@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { createHash, randomBytes } = require('crypto');
 const { spawnSync } = require('child_process');
+const explicitDbContainer = process.env.DB_CONTAINER?.trim();
 
 function loadEnvFile() {
   const envPath = path.resolve(__dirname, '..', '.env');
@@ -44,7 +45,7 @@ function parseDbName(databaseUrl) {
 }
 
 function dockerContainerFor(databaseUrl) {
-  if (process.env.DB_CONTAINER) return process.env.DB_CONTAINER;
+  if (explicitDbContainer) return explicitDbContainer;
   const parsed = new URL(databaseUrl);
   if (
     ['localhost', '127.0.0.1'].includes(parsed.hostname) &&
