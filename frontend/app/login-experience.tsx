@@ -98,7 +98,7 @@ export function LoginExperience({
 
         <section className="flex min-w-0 flex-col justify-between bg-[#f9fbfe] px-6 py-8 sm:px-10 lg:px-12 lg:py-10 xl:px-16" aria-label="Acesso ao GridOne">
           <div className="flex justify-end">
-            <span className="rounded-full border border-[#dce6f2] bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#526a85]">Acesso seguro</span>
+            <span className="rounded-full border border-[#dce6f2] bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#526a85]">Sistema interno</span>
           </div>
 
           <div className="mx-auto w-full max-w-[390px] py-7 lg:py-12">
