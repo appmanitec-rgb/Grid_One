@@ -136,8 +136,8 @@ const FABRICANTES = {
 } as const;
 
 function inferPersonType(documentValue: string): PersonType {
-  const digits = documentValue.replace(/\D/g, "");
-  return digits.length <= 11 ? "INDIVIDUAL" : "LEGAL_ENTITY";
+  const document = documentValue.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return document.length <= 11 && !/[A-Z]/.test(document) ? "INDIVIDUAL" : "LEGAL_ENTITY";
 }
 
 export default function NewClientPage() {
@@ -432,7 +432,7 @@ export default function NewClientPage() {
 
     const primaryContact =
       validContacts.find((c) => c.status === "ACTIVE") ?? validContacts[0];
-    const normalizedDocument = formData.document.replace(/\D/g, "");
+    const normalizedDocument = formData.document.toUpperCase().replace(/[^A-Z0-9]/g, "");
 
     const normalizedContacts = validContacts.map((contact) => ({
       name: contact.name.trim(),
@@ -618,7 +618,7 @@ export default function NewClientPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, document: e.target.value })
                   }
-                  placeholder="Somente numeros ou com mascara"
+                  placeholder="CPF numerico ou CNPJ com letras e numeros"
                   className="w-full border border-zinc-300 rounded-lg p-3 font-mono bg-zinc-50 focus:bg-white outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>

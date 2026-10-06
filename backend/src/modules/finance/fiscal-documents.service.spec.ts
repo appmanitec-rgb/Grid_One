@@ -35,14 +35,22 @@ describe('FiscalDocumentsService', () => {
 
   function setup(
     status: AccountsReceivableStatus = AccountsReceivableStatus.OPEN,
+    issuerCnpj = company.cnpj,
+    recipientCnpj = client.cnpj,
   ) {
     const tx = {
       accountsReceivable: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'receivable-id',
+          status,
+          client: { ...client, cnpj: recipientCnpj },
+        }),
+      },
+      companySettings: {
         findUnique: jest
           .fn()
-          .mockResolvedValue({ id: 'receivable-id', status, client }),
+          .mockResolvedValue({ ...company, cnpj: issuerCnpj }),
       },
-      companySettings: { findUnique: jest.fn().mockResolvedValue(company) },
       fiscalDocument: {
         create: jest.fn().mockImplementation(({ data }) =>
           Promise.resolve({
@@ -130,6 +138,34 @@ describe('FiscalDocumentsService', () => {
       }),
     ).rejects.toThrow(BadRequestException);
     expect(tx.fiscalDocument.create).not.toHaveBeenCalled();
+  });
+
+  it('keeps alphanumeric CNPJ in fiscal snapshots and checklist', async () => {
+    const { service } = setup(
+      AccountsReceivableStatus.OPEN,
+      '12.ABC.345/01DE-35',
+      '00.000.000/E08G-12',
+    );
+    const result = await service.createDraft({
+      receivableId: 'receivable-id',
+      issuerCompanyId: 'issuer-id',
+      kind: FiscalDocumentKind.NFE,
+      items: [
+        {
+          description: 'Filtro',
+          quantity: 1,
+          unitAmount: 10,
+          ncm: '84212300',
+          cfop: '5102',
+        },
+      ],
+    });
+    expect(result.issuerSnapshot).toMatchObject({ cnpj: '12ABC34501DE35' });
+    expect(result.recipientSnapshot).toMatchObject({
+      document: '00000000E08G12',
+    });
+    expect(result.checklist).not.toContain('CNPJ válido da empresa');
+    expect(result.checklist).not.toContain('CPF/CNPJ do cliente');
   });
 
   it('does not accept an issuer that is absent from company settings', async () => {

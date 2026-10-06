@@ -118,8 +118,12 @@ function passthroughImageLoader({ src }: ImageLoaderProps) {
 }
 
 function formatCnpj(value: string) {
-  const digits = value.replace(/\D/g, "").slice(0, 14);
-  return digits.replace(/^(\d{2})(\d)/, "$1.$2").replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3").replace(/\.(\d{3})(\d)/, ".$1/$2").replace(/(\d{4})(\d)/, "$1-$2");
+  const characters = value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 14);
+  return characters
+    .replace(/^([A-Z0-9]{2})([A-Z0-9])/, "$1.$2")
+    .replace(/^([A-Z0-9]{2})\.([A-Z0-9]{3})([A-Z0-9])/, "$1.$2.$3")
+    .replace(/\.([A-Z0-9]{3})([A-Z0-9])/, ".$1/$2")
+    .replace(/([A-Z0-9]{4})([0-9])$/, "$1-$2");
 }
 
 function formatPhone(value: string) {
@@ -394,7 +398,7 @@ export default function CompanySettingsPage() {
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                   <Field label="Razao social" value={form.companyName} onChange={(value) => updateField("companyName", value)} placeholder="Manitec Energia e Servicos Ltda" />
                   <Field label="Nome fantasia" value={form.tradeName} onChange={(value) => updateField("tradeName", value)} placeholder="Manitec" />
-                  <Field label="CNPJ" value={form.cnpj} onChange={(value) => updateField("cnpj", formatCnpj(value))} placeholder="00.000.000/0000-00" inputMode="numeric" />
+                  <Field label="CNPJ" value={form.cnpj} onChange={(value) => updateField("cnpj", formatCnpj(value))} placeholder="00.000.000/0000-00" inputMode="text" />
                   <Field label="Inscricao estadual" value={form.stateRegistration} onChange={(value) => updateField("stateRegistration", value)} />
                   <Field label="Inscricao municipal" value={form.municipalRegistration} onChange={(value) => updateField("municipalRegistration", value)} />
                   <SelectField label="Regime tributario" value={form.taxRegime} onChange={(value) => updateField("taxRegime", value)} options={TAX_REGIMES} />

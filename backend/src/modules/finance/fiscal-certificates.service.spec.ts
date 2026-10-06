@@ -10,6 +10,7 @@ describe('FiscalCertificatesService', () => {
   const password = 'senha-de-teste';
   let pfx: Buffer;
   let sanPfx: Buffer;
+  let alphaPfx: Buffer;
 
   beforeAll(() => {
     const keys = forge.pki.rsa.generateKeyPair(2048);
@@ -86,6 +87,32 @@ describe('FiscalCertificatesService', () => {
           forge.pkcs12.toPkcs12Asn1(keys.privateKey, sanCertificate, password, {
             algorithm: '3des',
           }),
+        )
+        .getBytes(),
+      'binary',
+    );
+
+    const alphaCertificate = forge.pki.createCertificate();
+    alphaCertificate.publicKey = keys.publicKey;
+    alphaCertificate.serialNumber = '03';
+    alphaCertificate.validity.notBefore = certificate.validity.notBefore;
+    alphaCertificate.validity.notAfter = certificate.validity.notAfter;
+    alphaCertificate.setSubject([
+      { name: 'commonName', value: 'Empresa Teste:12ABC34501DE35' },
+    ]);
+    alphaCertificate.setIssuer([
+      { name: 'commonName', value: 'Empresa Teste:12ABC34501DE35' },
+    ]);
+    alphaCertificate.sign(keys.privateKey, forge.md.sha256.create());
+    alphaPfx = Buffer.from(
+      forge.asn1
+        .toDer(
+          forge.pkcs12.toPkcs12Asn1(
+            keys.privateKey,
+            alphaCertificate,
+            password,
+            { algorithm: '3des' },
+          ),
         )
         .getBytes(),
       'binary',
@@ -173,6 +200,16 @@ describe('FiscalCertificatesService', () => {
       password,
     );
     expect(result.certificateCnpj).toBe(companyCnpj);
+  });
+
+  it('matches an alphanumeric CNPJ in an A1 without losing its letters', async () => {
+    const { service } = setup('12.ABC.345/01DE-35');
+    const result = await service.install(
+      'issuer-1',
+      { originalname: 'empresa.pfx', buffer: alphaPfx },
+      password,
+    );
+    expect(result.certificateCnpj).toBe('12ABC34501DE35');
   });
 
   it('stops signing if the issuer CNPJ changes after installation', async () => {

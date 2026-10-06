@@ -14,9 +14,9 @@ import {
 import { createSecureContext } from 'tls';
 import forge from 'node-forge';
 import { DatabaseService } from '../../database/database.service';
+import { hasCnpjFormat, normalizeCnpj } from '../../common/cnpj';
 
 const MAX_CERTIFICATE_BYTES = 2 * 1024 * 1024;
-const digits = (value?: string | null) => (value ?? '').replace(/\D/g, '');
 
 type CertificateFile = {
   buffer?: Buffer;
@@ -50,7 +50,7 @@ export class FiscalCertificatesService {
       certificates: certificates.map((certificate) =>
         this.status(
           certificate,
-          digits(certificate.issuerCompany.cnpj) ===
+          normalizeCnpj(certificate.issuerCompany.cnpj) ===
             certificate.certificateCnpj,
         ),
       ),
@@ -83,8 +83,8 @@ export class FiscalCertificatesService {
     });
     if (!company)
       throw new NotFoundException('Empresa emitente nao encontrada.');
-    const companyCnpj = digits(company.cnpj);
-    if (companyCnpj.length !== 14) {
+    const companyCnpj = normalizeCnpj(company.cnpj);
+    if (!hasCnpjFormat(companyCnpj)) {
       throw new BadRequestException(
         'Cadastre o CNPJ da empresa antes de instalar o A1.',
       );
@@ -164,7 +164,8 @@ export class FiscalCertificatesService {
       );
     }
     if (
-      digits(certificate.issuerCompany.cnpj) !== certificate.certificateCnpj
+      normalizeCnpj(certificate.issuerCompany.cnpj) !==
+      certificate.certificateCnpj
     ) {
       throw new ServiceUnavailableException(
         'O CNPJ da empresa mudou apos a instalacao do A1. Instale o certificado correto.',
@@ -298,8 +299,8 @@ export class FiscalCertificatesService {
               typeof candidate.value === 'string' &&
               forge.asn1.derToOid(candidate.value) === subjectOid
             ) {
-              const value = digits(leafBytes(children[index + 1]));
-              if (value.length === 14) return value;
+              const value = normalizeCnpj(leafBytes(children[index + 1]));
+              if (hasCnpjFormat(value)) return value;
             }
           }
           for (const child of children) {
@@ -317,11 +318,12 @@ export class FiscalCertificatesService {
     const oidField = certificate.subject.attributes.find(
       (field) => field.type === subjectOid,
     );
-    if (oidField && digits(String(oidField.value)).length === 14) {
-      return digits(String(oidField.value));
+    if (oidField && hasCnpjFormat(String(oidField.value))) {
+      return normalizeCnpj(String(oidField.value));
     }
     const commonName = String(certificate.subject.getField('CN')?.value ?? '');
-    return commonName.match(/:(\d{14})$/)?.[1] ?? null;
+    const suffix = commonName.match(/:([A-Z0-9./-]{14,18})$/i)?.[1];
+    return suffix && hasCnpjFormat(suffix) ? normalizeCnpj(suffix) : null;
   }
 
   private status(

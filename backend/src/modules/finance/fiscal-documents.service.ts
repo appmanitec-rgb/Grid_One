@@ -11,6 +11,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
+import { isValidCnpj, normalizeCnpj } from '../../common/cnpj';
 import { SaveFiscalDraftDto } from './fiscal-documents.controller';
 
 type DraftItem = {
@@ -110,7 +111,7 @@ export class FiscalDocumentsService {
             companies.some(
               (company) =>
                 company.id === certificate.issuerCompanyId &&
-                digits(company.cnpj) === certificate.certificateCnpj,
+                normalizeCnpj(company.cnpj) === certificate.certificateCnpj,
             ),
         )
         .map((certificate) => certificate.issuerCompanyId),
@@ -345,7 +346,7 @@ export class FiscalDocumentsService {
   ) {
     return {
       name: company?.companyName || null,
-      cnpj: digits(company?.cnpj),
+      cnpj: normalizeCnpj(company?.cnpj),
       stateRegistration: company?.stateRegistration || null,
       municipalRegistration: company?.municipalRegistration || null,
       taxRegime: company?.taxRegime || null,
@@ -378,7 +379,7 @@ export class FiscalDocumentsService {
     const address = client.addresses[0];
     return {
       name: client.companyName,
-      document: digits(client.cnpj),
+      document: normalizeCnpj(client.cnpj),
       stateRegistration: client.stateRegistration || null,
       municipalRegistration: client.municipalRegistration || null,
       address: address?.street || client.address || null,
@@ -402,9 +403,7 @@ export class FiscalDocumentsService {
     const items = itemsValue as unknown as DraftItem[];
     const missing: string[] = [];
     if (!issuerCompanyId) missing.push('empresa emitente');
-    if (
-      digits(typeof issuer.cnpj === 'string' ? issuer.cnpj : '').length !== 14
-    )
+    if (!isValidCnpj(typeof issuer.cnpj === 'string' ? issuer.cnpj : ''))
       missing.push('CNPJ válido da empresa');
     if (!issuer.name || !issuer.city || !issuer.state)
       missing.push('nome e endereço da empresa');
@@ -413,11 +412,11 @@ export class FiscalDocumentsService {
       missing.push('inscrição estadual da empresa');
     if (kind === FiscalDocumentKind.NFSE && !issuer.municipalRegistration)
       missing.push('inscrição municipal da empresa');
+    const recipientDocument =
+      typeof recipient.document === 'string' ? recipient.document : '';
     if (
-      ![11, 14].includes(
-        digits(typeof recipient.document === 'string' ? recipient.document : '')
-          .length,
-      )
+      !/^\d{11}$/.test(normalizeCnpj(recipientDocument)) &&
+      !isValidCnpj(recipientDocument)
     )
       missing.push('CPF/CNPJ do cliente');
     if (!recipient.name || !recipient.city || !recipient.state)
@@ -456,7 +455,7 @@ export class FiscalDocumentsService {
   ) {
     const missing: string[] = [];
     if (!company.companyName) missing.push('razão social');
-    if (digits(company.cnpj).length !== 14) missing.push('CNPJ com 14 dígitos');
+    if (!isValidCnpj(company.cnpj)) missing.push('CNPJ válido');
     if (!company.taxRegime) missing.push('regime tributário');
     if (
       !company.address ||

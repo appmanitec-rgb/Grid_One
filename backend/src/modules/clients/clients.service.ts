@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client';
 import { CreateClientDto, ClientPersonTypeDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { DatabaseService } from 'src/database/database.service';
+import { isValidCnpj, normalizeCnpj } from '../../common/cnpj';
 
 @Injectable()
 export class ClientsService {
@@ -87,12 +88,16 @@ export class ClientsService {
   }
 
   private normalizeDocument(value: string) {
-    return value.replace(/\D/g, '');
+    const document = normalizeCnpj(value);
+    if (/[A-Z]/.test(document) && !isValidCnpj(document)) {
+      throw new BadRequestException('Informe um CNPJ alfanumérico válido.');
+    }
+    return document;
   }
 
   private inferPersonType(document: string): ClientPersonTypeDto {
     const digits = this.normalizeDocument(document);
-    return digits.length <= 11
+    return digits.length <= 11 && !/[A-Z]/.test(digits)
       ? ClientPersonTypeDto.INDIVIDUAL
       : ClientPersonTypeDto.LEGAL_ENTITY;
   }
@@ -318,7 +323,10 @@ export class ClientsService {
 
   lookup(query?: string, take?: string | number) {
     const search = query?.trim();
-    const digits = search?.replace(/\D/g, '') ?? '';
+    const documentCandidate = /^[A-Za-z0-9./-]+$/.test(search ?? '')
+      ? normalizeCnpj(search)
+      : (search?.replace(/\D/g, '') ?? '');
+    const document = /\d/.test(documentCandidate) ? documentCandidate : '';
     const limit = this.parseLookupLimit(take);
 
     const where: Prisma.ClientWhereInput = search
@@ -354,11 +362,11 @@ export class ClientsService {
                 mode: 'insensitive',
               },
             },
-            ...(digits
+            ...(document
               ? [
                   {
                     cnpj: {
-                      contains: digits,
+                      contains: document,
                     },
                   },
                 ]

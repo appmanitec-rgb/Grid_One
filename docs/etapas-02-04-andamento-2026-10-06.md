@@ -28,3 +28,9 @@ Fontes oficiais verificadas nesta rodada:
 Sequencia para a proxima rodada fiscal: cadastrar os dois emitentes com dados conferidos pela contabilidade; obter tabela de tributacao por operacao/produto/servico, serie e numeracao; adaptar validacao de identificadores fiscais ao CNPJ alfanumerico; implementar assinatura e transporte por tipo, estado de submissao idempotente, consulta apos resposta incerta, armazenamento de XML/protocolo/eventos e cancelamento. Depois instalar os dois A1 por localhost/HTTPS e executar emissao, consulta e cancelamento em homologacao oficial para cada CNPJ e tipo. Liberacao em producao depende dessas provas e do aceite contabil.
 
 A etapa 05 do Santander permanece adiada conforme orientacao do responsavel.
+
+### Complemento: CNPJ alfanumerico e preparacao do piloto
+
+O cadastro das empresas, o cadastro/busca de clientes, os rascunhos fiscais e a conferência de CNPJ do A1 foram adaptados para preservar letras e números. A entrada do emitente valida os dígitos verificadores; os exemplos oficiais da Receita Federal e os caminhos de rascunho/A1 têm testes automatizados. Isso prepara a estrutura de dados, mas não autoriza emissão: configuração tributária, integrações oficiais e homologação por emitente continuam pendentes.
+
+A preparação da etapa 06 está em `docs/etapa-06-piloto-2026-10-06.md`. O piloto formal permanece sem aceite enquanto as evidências externas das etapas 02 a 05 e a revisão visual não forem concluídas.

@@ -141,6 +141,63 @@ describe('ClientsService', () => {
     expect(database.$transaction).not.toHaveBeenCalled();
   });
 
+  it('preserves an alphanumeric CNPJ when registering and searching for a client', async () => {
+    database.client.findUnique.mockResolvedValue(null);
+    database.client.create.mockResolvedValue({
+      id: 'client-alpha',
+      cnpj: '12ABC34501DE35',
+      addresses: [],
+      contacts: [],
+    });
+    await service.create({
+      companyName: 'Cliente alfanumérico',
+      cnpj: '12.abc.345/01de-35',
+      phone: '11999999999',
+      city: 'Indaiatuba',
+      state: 'SP',
+      addresses: [],
+    });
+    expect(database.client.findUnique).toHaveBeenCalledWith({
+      where: { cnpj: '12ABC34501DE35' },
+    });
+    expect(database.client.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          cnpj: '12ABC34501DE35',
+          personType: 'LEGAL_ENTITY',
+        }),
+      }),
+    );
+
+    database.client.findMany.mockResolvedValue([]);
+    await service.lookup('12.ABC.345/01DE-35');
+    expect(database.client.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: expect.arrayContaining([
+            expect.objectContaining({
+              cnpj: { contains: '12ABC34501DE35' },
+            }),
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it('rejects an alphanumeric CNPJ with an incorrect check digit', async () => {
+    await expect(
+      service.create({
+        companyName: 'Cliente inválido',
+        cnpj: '12.ABC.345/01DE-36',
+        phone: '11999999999',
+        city: 'Indaiatuba',
+        state: 'SP',
+        addresses: [],
+      }),
+    ).rejects.toThrow('CNPJ alfanumérico válido');
+    expect(database.client.create).not.toHaveBeenCalled();
+  });
+
   it('busca referencias operacionais do cliente sem campos sensiveis', async () => {
     database.client.findUnique.mockResolvedValue({
       id: 'client-1',
