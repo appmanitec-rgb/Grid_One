@@ -103,6 +103,20 @@ export class ProposalsService {
     private readonly fileStorageService: FileStorageService,
   ) {}
 
+  async getAccessoryRules() {
+    return this.prisma.controlOption.findMany({
+      where: { type: 'PROPOSAL_ACCESSORY_RULE', isActive: true },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        description: true,
+        sortOrder: true,
+      },
+      orderBy: [{ name: 'asc' }],
+    });
+  }
+
   async create(createProposalDto: CreateProposalDto, actorUserId?: string) {
     await this.assertInternalActor(actorUserId);
     const origin = createProposalDto.origin ?? ProposalOrigin.MANITEC;

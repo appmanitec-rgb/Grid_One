@@ -123,6 +123,12 @@ const CONTROL_OPTION_TYPES = {
     domain: AuditDomain.FINANCE,
     permission: 'finance.update',
   },
+  proposalAccessoryRules: {
+    group: 'commercial',
+    type: 'PROPOSAL_ACCESSORY_RULE',
+    domain: AuditDomain.PROPOSALS,
+    permission: 'proposals.update',
+  },
   brazilStates: {
     group: 'address',
     type: 'BRAZIL_STATE',
@@ -145,6 +151,27 @@ function controlOptionDefinition(
       sortOrder: 'number',
       isActive: 'boolean',
       isBlockedForNewClients: 'boolean',
+    },
+    validate: (data, creating) => {
+      if (config.type !== 'PROPOSAL_ACCESSORY_RULE') return;
+      if (
+        (creating || 'description' in data) &&
+        !studioString(data.description).trim()
+      ) {
+        throw new BadRequestException(
+          'Informe a pergunta que sera exibida na proposta.',
+        );
+      }
+      if (
+        (creating || 'sortOrder' in data) &&
+        (!Number.isInteger(data.sortOrder) ||
+          Number(data.sortOrder) < 1 ||
+          Number(data.sortOrder) > 20)
+      ) {
+        throw new BadRequestException(
+          'A quantidade sugerida deve ser de 1 a 20 por unidade.',
+        );
+      }
     },
     create: (tx, data) =>
       tx.controlOption.create({

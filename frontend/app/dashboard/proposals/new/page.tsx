@@ -11,6 +11,12 @@ import OperationalExpensesEditor, {
   operationalExpensesTotal,
   type OperationalExpenseSelection,
 } from "../OperationalExpensesEditor";
+import {
+  buildProposalAccessoryWarnings,
+  normalizeProposalItemName,
+  type ProposalAccessoryRule,
+  type ProposalAccessoryWarning,
+} from "./proposal-assistance";
 
 type CatalogItem = {
   id: string;
@@ -451,6 +457,11 @@ export default function NewProposalPage() {
 
   const [clients, setClients] = useState<Client[]>([]);
   const [partOptions, setPartOptions] = useState<CatalogItem[]>([]);
+  const [accessoryRules, setAccessoryRules] = useState<ProposalAccessoryRule[]>([]);
+  const [assistanceLoadState, setAssistanceLoadState] = useState<"loading" | "ready" | "error">("loading");
+  const [accessoryCandidates, setAccessoryCandidates] = useState<Record<string, CatalogItem[]>>({});
+  const [assistanceReasons, setAssistanceReasons] = useState<Record<string, string>>({});
+  const [assistanceReviews, setAssistanceReviews] = useState<Record<string, { signature: string; reason: string }>>({});
   const [serviceOptions, setServiceOptions] = useState<CatalogItem[]>([]);
   const [generators, setGenerators] = useState<Generator[]>([]);
   const [sellers, setSellers] = useState<SellerOption[]>([]);
@@ -544,6 +555,23 @@ export default function NewProposalPage() {
   const [discountInput, setDiscountInput] = useState("");
   const [allowOperationalExpenseDiscount, setAllowOperationalExpenseDiscount] =
     useState(false);
+
+  const loadAccessoryRules = useCallback(async () => {
+    setAssistanceLoadState("loading");
+    try {
+      const response = await apiFetch(apiUrl("/proposals/accessory-rules"), { cache: "no-store" });
+      if (!response.ok) throw new Error("Falha ao carregar lembretes.");
+      setAccessoryRules((await response.json()) as ProposalAccessoryRule[]);
+      setAssistanceLoadState("ready");
+    } catch {
+      setAssistanceLoadState("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadAccessoryRules();
+  }, [loadAccessoryRules]);
+
   useEffect(() => {
     async function fetchData() {
       try {
@@ -905,8 +933,8 @@ export default function NewProposalPage() {
     );
     if (!res.ok) return;
     const payload = (await res.json()) as CatalogItem[];
-    if (type === "PART") setPartOptions(payload);
-    if (type === "SERVICE") setServiceOptions(payload);
+    if (type === "PART") setPartOptions((current) => Array.from(new Map([...current, ...payload].map((item) => [item.id, item])).values()));
+    if (type === "SERVICE") setServiceOptions((current) => Array.from(new Map([...current, ...payload].map((item) => [item.id, item])).values()));
   }
 
   const hourlyRateFor = (item: Pick<HourlyItem, "hourType" | "technicianType">) =>
@@ -1291,6 +1319,94 @@ export default function NewProposalPage() {
     });
   };
 
+  const selectedPartItems = useMemo(() => [
+    ...parts.flatMap((row) => {
+      const item = partOptions.find((option) => option.id === row.catalogItemId);
+      return item ? [{ name: item.name, quantity: Number(row.quantity || 0) }] : [];
+    }),
+    ...otherItems.filter((row) => row.description.trim()).map((row) => ({
+      name: row.description,
+      quantity: Number(row.quantity || 0),
+    })),
+  ], [parts, partOptions, otherItems]);
+
+  const accessoryWarnings = useMemo(
+    () => buildProposalAccessoryWarnings(accessoryRules, selectedPartItems, selectedPartItems),
+    [accessoryRules, selectedPartItems],
+  );
+  const accessoryWarningKeys = accessoryWarnings.map((warning) => `${warning.rule.id}:${warning.rule.name}`).join("|");
+
+  useEffect(() => {
+    setAssistanceReviews((current) => {
+      const valid = Object.entries(current).filter(([id, review]) =>
+        accessoryWarnings.some((warning) => warning.rule.id === id && warning.signature === review.signature),
+      );
+      return valid.length === Object.keys(current).length ? current : Object.fromEntries(valid);
+    });
+  }, [accessoryWarnings]);
+
+  useEffect(() => {
+    const pending = accessoryWarnings.filter((warning) => !(warning.rule.id in accessoryCandidates));
+    if (pending.length === 0) return;
+    let cancelled = false;
+
+    void Promise.all(pending.map(async (warning) => {
+      const terms = Array.from(new Set([
+        warning.rule.name,
+        normalizeProposalItemName(warning.rule.name).toLowerCase(),
+      ]));
+      const responses = await Promise.allSettled(terms.map(async (term) => {
+        const params = new URLSearchParams({ type: "PART", take: "10", q: term });
+        const response = await apiFetch(apiUrl(`/catalogs/lookup?${params.toString()}`), { cache: "no-store" });
+        return response.ok ? (await response.json()) as CatalogItem[] : [];
+      }));
+      const options = responses.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+      const needle = normalizeProposalItemName(warning.rule.name);
+      return [warning.rule.id, Array.from(new Map(options.filter((item) => normalizeProposalItemName(item.name).includes(needle)).map((item) => [item.id, item])).values()).slice(0, 4)] as const;
+    })).then((results) => {
+      if (cancelled) return;
+      setAccessoryCandidates((current) => ({ ...current, ...Object.fromEntries(results) }));
+    });
+
+    return () => { cancelled = true; };
+  }, [accessoryWarningKeys, accessoryWarnings, accessoryCandidates]);
+
+  function addSuggestedAccessory(warning: ProposalAccessoryWarning, item: CatalogItem) {
+    if (!Number.isFinite(item.basePrice) || Number(item.basePrice) <= 0) {
+      setFeedback({ kind: "error", text: "Este acessório está sem preço no catálogo. Revise o cadastro antes de incluí-lo." });
+      return;
+    }
+    setPartOptions((current) => Array.from(new Map([...current, item].map((option) => [option.id, option])).values()));
+    setParts((current) => {
+      const existingIndex = current.findIndex((row) => row.catalogItemId === item.id);
+      if (existingIndex < 0) {
+        return [...current, {
+          catalogItemId: item.id,
+          quantity: String(warning.missingQuantity),
+          unitPrice: String(item.basePrice ?? 0),
+          origin: "GENERAL",
+        }];
+      }
+      return current.map((row, index) => index === existingIndex
+        ? { ...row, quantity: String(Number(row.quantity || 0) + warning.missingQuantity) }
+        : row);
+    });
+    setFeedback({ kind: "success", text: `${item.name} incluído na proposta para conferência.` });
+  }
+
+  function reviewAccessoryWarning(warning: ProposalAccessoryWarning) {
+    const reason = (assistanceReasons[warning.rule.id] ?? assistanceReviews[warning.rule.id]?.reason ?? "").trim();
+    if (reason.length < 8) {
+      setFeedback({ kind: "error", text: "Explique em pelo menos 8 caracteres por que o acessório não será incluído." });
+      return;
+    }
+    setAssistanceReviews((current) => ({
+      ...current,
+      [warning.rule.id]: { signature: warning.signature, reason },
+    }));
+    setFeedback(null);
+  }
+
   const partsTotal = useMemo(
     () =>
       parts.reduce(
@@ -1478,6 +1594,24 @@ export default function NewProposalPage() {
       return;
     }
 
+    if (assistanceLoadState !== "ready") {
+      setFeedback({ kind: "error", text: "Carregue os lembretes de itens complementares antes de salvar a proposta." });
+      document.getElementById("proposal-assistance")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    const unresolvedAccessoryWarnings = accessoryWarnings.filter((warning) =>
+      assistanceReviews[warning.rule.id]?.signature !== warning.signature,
+    );
+    if (unresolvedAccessoryWarnings.length > 0) {
+      setFeedback({ kind: "error", text: "Revise os itens complementares antes de salvar a proposta." });
+      document.getElementById("proposal-assistance")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
+    const assistanceAudit = accessoryWarnings.map((warning) =>
+      `- ${warning.rule.code} → ${warning.rule.name}: ${assistanceReviews[warning.rule.id]?.reason ?? ""}`,
+    ).join("\n");
+
     setIsSubmitting(true);
     setFeedback(null);
 
@@ -1537,7 +1671,10 @@ export default function NewProposalPage() {
         ? Number(installmentIntervalDays)
         : undefined,
       firstDueDate: firstDueDate || undefined,
-      internalNotes,
+      internalNotes: [
+        internalNotes.trim(),
+        assistanceAudit ? `Conferência de itens complementares (não incluídos):\n${assistanceAudit}` : "",
+      ].filter(Boolean).join("\n\n"),
       externalNotes,
       discount: finalDiscount,
       allowOperationalExpenseDiscount,
@@ -2245,7 +2382,7 @@ export default function NewProposalPage() {
           ) : null}
         </div>
 
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+        <div id="proposal-parts-section" className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
           <div className="mb-4 flex items-center justify-between border-b pb-2">
             <div>
               <h2 className="text-lg font-bold text-zinc-800">2. Pecas</h2>
@@ -2318,6 +2455,81 @@ export default function NewProposalPage() {
             </div>
           ))}
         </div>
+        <section id="proposal-assistance" className="rounded-xl border border-amber-200 bg-amber-50/60 p-5 shadow-sm sm:p-6" aria-label="Conferência de itens complementares">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.15em] text-amber-700">Auxílio à proposta</p>
+              <h2 className="mt-1 text-lg font-bold text-slate-900">Conferência de itens complementares</h2>
+              <p className="mt-1 text-sm text-slate-600">O sistema pergunta por acessórios comuns quando identifica uma peça relacionada. Confirme cada caso antes de salvar.</p>
+            </div>
+            {assistanceLoadState === "ready" ? (
+              <span className={`rounded-full px-3 py-1 text-xs font-bold ${accessoryWarnings.some((warning) => assistanceReviews[warning.rule.id]?.signature !== warning.signature) ? "bg-amber-200 text-amber-900" : "bg-emerald-100 text-emerald-800"}`}>
+                {accessoryWarnings.filter((warning) => assistanceReviews[warning.rule.id]?.signature !== warning.signature).length} pendência(s)
+              </span>
+            ) : null}
+          </div>
+
+          {assistanceLoadState === "loading" ? <p className="mt-4 text-sm text-slate-600">Carregando lembretes...</p> : null}
+          {assistanceLoadState === "error" ? (
+            <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-red-200 bg-white p-4">
+              <p className="text-sm text-red-700">Não foi possível carregar as regras de conferência.</p>
+              <button type="button" onClick={() => void loadAccessoryRules()} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white">Tentar novamente</button>
+            </div>
+          ) : null}
+          {assistanceLoadState === "ready" && accessoryWarnings.length === 0 ? (
+            <p className="mt-4 rounded-xl border border-emerald-200 bg-white px-4 py-3 text-sm text-emerald-800">
+              Nenhum item complementar pendente para as peças selecionadas.
+            </p>
+          ) : null}
+
+          <div className="mt-4 space-y-3">
+            {accessoryWarnings.map((warning) => {
+              const review = assistanceReviews[warning.rule.id];
+              const reviewed = review?.signature === warning.signature;
+              const candidates = accessoryCandidates[warning.rule.id];
+              return (
+                <div key={warning.rule.id} className={`rounded-xl border bg-white p-4 ${reviewed ? "border-emerald-200" : "border-amber-300"}`}>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wide text-amber-700">Conferir {warning.rule.name}</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{warning.rule.description || `Este item precisa de ${warning.rule.name}?`}</p>
+                      <p className="mt-1 text-xs text-slate-600">{warning.rule.code}: {warning.triggerQuantity} un. {warning.rule.name} na proposta: {warning.accessoryQuantity} un. Quantidade a conferir: {warning.missingQuantity} un.</p>
+                    </div>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${reviewed ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{reviewed ? "Justificado" : "Aguardando revisão"}</span>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {candidates === undefined ? <span className="text-xs text-slate-500">Buscando acessórios no catálogo...</span> : null}
+                    {candidates?.map((candidate) => (
+                      <button key={candidate.id} type="button" onClick={() => addSuggestedAccessory(warning, candidate)} disabled={!Number.isFinite(candidate.basePrice) || Number(candidate.basePrice) <= 0} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-left text-xs font-semibold text-blue-900 hover:border-blue-400 hover:bg-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500">
+                        {Number(candidate.basePrice) > 0 ? `+ Incluir ${candidate.name} · ${warning.missingQuantity} un.` : `${candidate.name} · sem preço cadastrado`}
+                      </button>
+                    ))}
+                    {candidates?.length === 0 ? (
+                      <button type="button" onClick={() => { addPart(); document.getElementById("proposal-parts-section")?.scrollIntoView({ behavior: "smooth", block: "center" }); }} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">Adicionar peça manualmente</button>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-4 border-t border-slate-100 pt-4">
+                    <label htmlFor={`assistance-reason-${warning.rule.id}`} className="block text-xs font-semibold text-slate-700">Se não se aplica, explique o motivo</label>
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                      <input id={`assistance-reason-${warning.rule.id}`} maxLength={500} value={assistanceReasons[warning.rule.id] ?? review?.reason ?? ""} onChange={(event) => {
+                        setAssistanceReasons((current) => ({ ...current, [warning.rule.id]: event.target.value }));
+                        setAssistanceReviews((current) => {
+                          const next = { ...current };
+                          delete next[warning.rule.id];
+                          return next;
+                        });
+                      }} placeholder="Ex.: mangueira já vem com fixação integrada" className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-500" />
+                      <button type="button" onClick={() => reviewAccessoryWarning(warning)} className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-700">Registrar justificativa</button>
+                    </div>
+                    {reviewed ? <p className="mt-2 text-xs text-emerald-700">Justificativa registrada nas observações internas da proposta ao salvar.</p> : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
         <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
           <div className="mb-4 flex items-center justify-between border-b pb-2">
             <div>

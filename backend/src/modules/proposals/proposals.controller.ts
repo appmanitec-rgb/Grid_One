@@ -270,6 +270,12 @@ export class ProposalsController {
     return this.proposalsService.getScopeTemplates(opportunityType);
   }
 
+  @RequireAccessPolicy('proposals.view')
+  @Get('accessory-rules')
+  accessoryRules() {
+    return this.proposalsService.getAccessoryRules();
+  }
+
   @RequireAccessPolicy('proposals.create')
   @UseInterceptors(
     FileInterceptor('file', { limits: { fileSize: 256 * 1024 } }),

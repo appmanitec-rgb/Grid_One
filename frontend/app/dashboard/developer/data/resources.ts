@@ -722,7 +722,15 @@ function controlResource({
     canExport: true,
     importMode: "DISABLED",
     fields:
-      type === "PAYMENT_TERM"
+      type === "PROPOSAL_ACCESSORY_RULE"
+        ? [
+            { key: "code", label: "Quando o item contém", editable: true, required: true, searchable: true },
+            { key: "name", label: "Acessório a conferir", editable: true, required: true, searchable: true },
+            { key: "description", label: "Pergunta ao vendedor", type: "textarea", editable: true, required: true },
+            { key: "sortOrder", label: "Qtd. por unidade", type: "number", editable: true, required: true, defaultValue: 1 },
+            { key: "isActive", label: "Ativo", type: "boolean", editable: true, defaultValue: true },
+          ]
+        : type === "PAYMENT_TERM"
         ? [
             ...controlOptionFields,
             {
@@ -2925,6 +2933,14 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
     ],
   },
+  controlResource({
+    key: "proposalAccessoryRules",
+    label: "Lembrete de proposta",
+    pluralLabel: "Lembretes de itens complementares",
+    category: "Comercial",
+    description: "Perguntas que aparecem quando uma peça pede um acessório complementar. Exemplo: mangueira e abraçadeira.",
+    type: "PROPOSAL_ACCESSORY_RULE",
+  }),
   controlResource({
     key: "catalogUnits",
     label: "Unidade",
