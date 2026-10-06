@@ -68,6 +68,39 @@ async function main() {
   const extensionClient = new PrismaClient();
   try {
     await extensionClient.$executeRawUnsafe('CREATE EXTENSION IF NOT EXISTS pgcrypto;');
+    // db push cannot materialize Prisma's dbgenerated() entity-code defaults.
+    // These four sequences and three column defaults come from the historical
+    // entity-code migration and are required before the first staging seed.
+    for (const sequence of [
+      'client_code_number_seq',
+      'equipment_code_number_seq',
+      'agent_code_number_seq',
+      'catalog_sku_number_seq',
+    ]) {
+      await extensionClient.$executeRawUnsafe(
+        `CREATE SEQUENCE IF NOT EXISTS "${sequence}" AS INTEGER MINVALUE 0 START WITH 0 INCREMENT BY 1;`,
+      );
+    }
+    for (const [table, sequence, suffix] of [
+      ['clients', 'client_code_number_seq', 'CLI'],
+      ['generators', 'equipment_code_number_seq', 'EQP'],
+      ['users', 'agent_code_number_seq', 'AGT'],
+    ]) {
+      await extensionClient.$executeRawUnsafe(
+        `ALTER TABLE "${table}" ALTER COLUMN "code" SET DEFAULT (nextval('${sequence}')::text || '${suffix}');`,
+      );
+    }
+    const defaults = await extensionClient.$queryRawUnsafe(
+      `SELECT table_name, column_default FROM information_schema.columns
+       WHERE table_schema = 'public' AND column_name = 'code'
+       AND table_name IN ('clients', 'generators', 'users');`,
+    );
+    if (
+      defaults.length !== 3 ||
+      defaults.some((row) => !row.column_default?.includes('nextval'))
+    ) {
+      throw new Error('Entity code defaults were not installed.');
+    }
   } finally {
     await extensionClient.$disconnect();
   }

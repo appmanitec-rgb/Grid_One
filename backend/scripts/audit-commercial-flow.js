@@ -1,6 +1,6 @@
 /*
- * Full commercial-flow audit against an isolated copy of the operational DB.
- * Refuses to run unless DATABASE_URL names a local gridone_flow_qa_* database.
+ * Full commercial-flow audit against a disposable, local QA database.
+ * Refuses to run unless DATABASE_URL names an explicitly isolated database.
  * Usage: node scripts/audit-commercial-flow.js [--inspect | --prepare]
  */
 const assert = require('node:assert/strict');
@@ -15,13 +15,18 @@ const databaseUrl = new URL(
 );
 const databaseName = decodeURIComponent(databaseUrl.pathname.slice(1));
 const apiBase = process.env.FLOW_QA_API_URL || 'http://127.0.0.1:3100';
+const stage3 =
+  databaseName === 'gridone_stage3_stage' &&
+  databaseUrl.hostname === '127.0.0.1' &&
+  databaseUrl.port === '5545' &&
+  process.env.STAGE3_CONFIRM_FICTIONAL_SEED === 'yes';
 if (
-  !/^gridone_flow_qa_[a-zA-Z0-9_]+$/.test(databaseName) ||
+  (!stage3 && !/^gridone_flow_qa_[a-zA-Z0-9_]+$/.test(databaseName)) ||
   !['localhost', '127.0.0.1', '[::1]'].includes(databaseUrl.hostname) ||
   !/^http:\/\/127\.0\.0\.1:3100$/.test(apiBase)
 ) {
   throw new Error(
-    'Auditoria permitida somente no banco local gridone_flow_qa_* e API local :3100.',
+    'Auditoria permitida somente em banco QA local explicitamente isolado e API local :3100.',
   );
 }
 if (!process.env.FLOW_QA_PASSWORD)
@@ -36,6 +41,7 @@ const round = (value) =>
 const datePlus = (days) => new Date(Date.now() + days * 86400000).toISOString();
 
 async function prepareIsolatedFixtures() {
+  const issuers = await prepareFiscalIssuers();
   for (const [technicianType, unitPrice] of [
     ['ASSISTANT', 100],
     ['JUNIOR_TECHNICIAN', 150],
@@ -59,6 +65,7 @@ async function prepareIsolatedFixtures() {
     });
   }
   for (const purpose of ['PARTS', 'SERVICES']) {
+    const issuer = purpose === 'PARTS' ? issuers[1] : issuers[0];
     const name = `QA ISOLADA ${purpose} - NUNCA PAGAR`;
     const existing = await prisma.proposalPaymentProfile.findFirst({
       where: { name, purpose },
@@ -67,7 +74,9 @@ async function prepareIsolatedFixtures() {
       name,
       purpose,
       method: 'PIX',
-      beneficiary: 'QA ISOLADA SEM CONTA REAL',
+      issuerCompanyId: issuer.id,
+      beneficiary: issuer.companyName,
+      beneficiaryDocument: issuer.cnpj,
       pixKey: `${purpose.toLowerCase()}@qa.invalid`,
       pixCopyPaste: `QA-FLOW-${purpose}-NAO-PAGAR`,
       isActive: true,
@@ -235,6 +244,7 @@ async function login(email) {
 async function candidates() {
   const rows = await prisma.client.findMany({
     where: {
+      ...(stage3 ? { email: { endsWith: '@stage3.invalid' } } : {}),
       isActive: true,
       proposalCreationBlocked: false,
       isDelinquent: false,
@@ -537,6 +547,17 @@ async function auditCase(index, client, setup) {
       }),
     );
     result.opportunityId = opportunity.id;
+    const activity = step(
+      'atividade-e-prazo',
+      await request(setup.sales.access_token, '/crm/activities', 'POST', {
+        clientId: client.id,
+        opportunityId: opportunity.id,
+        type: 'TASK',
+        subject: `Retorno comercial ${label}`,
+        dueAt: datePlus(2),
+      }),
+    );
+    assert.equal(activity.opportunityId, opportunity.id);
     const proposalBody = {
       clientId: client.id,
       salesOpportunityId: opportunity.id,
@@ -654,7 +675,55 @@ async function auditCase(index, client, setup) {
       );
       orderId = portalOrders[0].id;
     }
-    if (itemCase.type === 'CONTRACT') {
+    if (itemCase.type === 'PARTS') {
+      const sale = await prisma.salesOrder.findUnique({
+        where: { proposalId: proposal.id },
+        include: { items: true },
+      });
+      assert.ok(sale, 'Aprovacao de pecas nao criou pedido de venda');
+      assert.equal(sale.items.length, proposal.items.length);
+      result.salesOrderId = sale.id;
+      await expectHttpError(
+        setup.finance.access_token,
+        `/finance/receivables/sync/sales-orders/${sale.id}`,
+        'POST',
+        { dueDate: datePlus(15) },
+        [400],
+      );
+      await request(setup.admin.access_token, '/inventory/adjust', 'POST', {
+        warehouseId: setup.warehouseId,
+        reason: `${label}: entrada ficticia`,
+        items: sale.items.map((item) => ({ catalogItemId: item.catalogItemId, delta: item.quantity })),
+      });
+      for (const item of sale.items) {
+        const stock = {
+          itemId: item.id,
+          warehouseId: setup.warehouseId,
+          quantity: item.quantity,
+        };
+        step('reserva-peca', await request(setup.admin.access_token, `/sales-orders/${sale.id}/reserve`, 'POST', stock));
+        step('separacao-peca', await request(setup.admin.access_token, `/sales-orders/${sale.id}/pick`, 'POST', stock));
+      }
+      const delivery = step('entrega', await request(setup.admin.access_token, `/sales-orders/${sale.id}/deliveries`, 'POST', {
+        receivedByName: 'Recebedor QA ficticio',
+        items: sale.items.map((item) => ({
+          itemId: item.id,
+          warehouseId: setup.warehouseId,
+          quantity: item.quantity,
+        })),
+      }));
+      assert.equal(delivery.status, 'DELIVERED');
+      const ar = step('faturamento-pedido', await request(setup.finance.access_token, `/finance/receivables/sync/sales-orders/${sale.id}`, 'POST', {
+        dueDate: datePlus(15),
+      }));
+      const duplicate = await request(setup.finance.access_token, `/finance/receivables/sync/sales-orders/${sale.id}`, 'POST', {
+        dueDate: datePlus(15),
+      });
+      assert.equal(duplicate.id, ar.id, 'Pedido duplicou titulo');
+      assert.equal(ar.clientId, client.id);
+      assert.equal(round(ar.netAmount), expected);
+      result.receivableIds = [ar.id];
+    } else if (itemCase.type === 'CONTRACT') {
       const converted = step(
         'contrato',
         await request(
@@ -792,26 +861,18 @@ async function auditCase(index, client, setup) {
           'Materiais nao foram baixados do almoxarifado',
         );
       }
-      const ar = step(
-        'faturamento-os',
-        await request(
-          setup.finance.access_token,
-          `/finance/receivables/sync/orders/${orderId}`,
-          'POST',
-          { amount: expected, dueDate: datePlus(15), description: label },
-        ),
-      );
-      const duplicate = await request(
-        setup.finance.access_token,
-        `/finance/receivables/sync/orders/${orderId}`,
-        'POST',
-        { amount: expected, dueDate: datePlus(15), description: label },
-      );
-      assert.equal(duplicate.id, ar.id, 'OS duplicou titulo financeiro');
-      assert.equal(ar.clientId, client.id);
-      assert.equal(round(ar.netAmount), expected);
-      result.receivableIds = [ar.id];
+      const billed = await prisma.accountsReceivable.findMany({
+        where: { maintenanceOrderId: orderId, status: { not: 'CANCELED' } },
+      });
+      assert.ok(billed.length > 0, 'OS concluida sem titulo financeiro');
+      assert.equal(round(billed.reduce((sum, row) => sum + row.netAmount, 0)), expected);
+      assert.ok(billed.every((row) => row.clientId === client.id));
+      const repeated = step('faturamento-os-idempotente', await request(setup.finance.access_token, `/finance/execution-billing/orders/${orderId}/confirm`, 'POST', { dueDate: datePlus(15) }));
+      assert.equal(repeated.status, 'ALREADY_BILLED');
+      assert.equal((await prisma.accountsReceivable.count({ where: { maintenanceOrderId: orderId } })), billed.length);
+      result.receivableIds = billed.map((row) => row.id);
       if (setup.bankAccountId) {
+        const ar = billed[0];
         const paid = step(
           'baixa-financeira',
           await request(
@@ -819,7 +880,7 @@ async function auditCase(index, client, setup) {
             `/finance/receivables/${ar.id}/pay`,
             'PATCH',
             {
-              amount: expected,
+              amount: ar.netAmount,
               method: 'PIX',
               bankAccountId: setup.bankAccountId,
               paidAt: new Date().toISOString(),
@@ -828,7 +889,7 @@ async function auditCase(index, client, setup) {
           ),
         );
         assert.equal(paid.status, 'PAID', 'Titulo nao foi quitado');
-        assert.equal(round(paid.paidAmount), expected);
+        assert.equal(round(paid.paidAmount), round(ar.netAmount));
       }
     } else {
       result.steps.push('sem-os-automatica');
@@ -838,12 +899,7 @@ async function auditCase(index, client, setup) {
     });
     assert.ok(movements >= 4, 'Historico comercial incompleto');
     result.total = expected;
-    result.status = itemCase.type === 'PARTS' ? 'GAP' : 'PASS';
-    if (result.status === 'GAP') {
-      result.error =
-        'Proposta de pecas ganha sem entrega, estoque ou titulo financeiro vinculado.';
-      failures.push(`${label}: ${result.error}`);
-    }
+    result.status = 'PASS';
   } catch (error) {
     result.status = 'FAIL';
     result.error = error.message;
@@ -934,24 +990,12 @@ async function auditFinanceAndValidation(setup) {
     return { draftId: draft.id, checklist: draft.checklist };
   });
   await check('fiscal-nfe-rascunho-pecas', async () => {
-    const ar = await request(
-      setup.finance.access_token,
-      '/finance/receivables',
-      'POST',
-      {
-        clientId: parts.clientId,
-        description: `MANUAL SEM VINCULO ${parts.case}`,
-        competenceDate: new Date().toISOString(),
-        dueDate: datePlus(15),
-        grossAmount: parts.total,
-      },
-    );
     const draft = await request(
       setup.finance.access_token,
       '/finance/fiscal-documents/drafts',
       'POST',
       {
-        receivableId: ar.id,
+        receivableId: parts.receivableIds[0],
         issuerCompanyId: setup.issuers[1].id,
         kind: 'NFE',
         items: [
@@ -970,9 +1014,9 @@ async function auditFinanceAndValidation(setup) {
     assert.equal(Number(draft.totalAmount), parts.total);
     return {
       draftId: draft.id,
-      receivableId: ar.id,
+      receivableId: parts.receivableIds[0],
       checklist: draft.checklist,
-      warning: 'AR manual sem FK para proposta',
+      salesOrderId: parts.salesOrderId,
     };
   });
   await check('santander-remessa-homologacao', async () => {
@@ -995,14 +1039,14 @@ async function auditFinanceAndValidation(setup) {
       'POST',
       {
         bankAccountId: bank.id,
+        issuerCompanyId: setup.issuers[0].id,
         transmissionCode: '123456789012345',
         beneficiaryName: 'QA ISOLADA NAO ENVIAR',
-        beneficiaryDocument: '12345678000195',
+        beneficiaryDocument: setup.issuers[0].cnpj,
         agency: '1234',
         agencyDigit: '5',
         accountNumber: '123456789',
         accountDigit: '0',
-        homologated: false,
       },
     );
     assert.equal(agreement.homologated, false);
@@ -1112,6 +1156,136 @@ async function auditFinanceAndValidation(setup) {
     }, [400]);
     return { proposalId: proposal.id, orderId: orders[0].id };
   });
+  await check('revisao-financeira-sem-vencimento', async () => {
+    const reference = results[2];
+    const opportunity = await request(setup.sales.access_token, '/crm/opportunities', 'POST', {
+      title: 'QA-FLOW-REVISAO-FINANCEIRA', clientId: reference.clientId,
+      assignedSellerId: setup.sales.user.id, opportunityType: 'FIELD_SERVICE', source: 'QA_ISOLATED_FULL_FLOW',
+    });
+    const proposal = await request(setup.sales.access_token, '/proposals', 'POST', {
+      clientId: reference.clientId, generatorId: reference.generatorId, salesOpportunityId: opportunity.id,
+      userId: setup.sales.user.id, type: 'SERVICES', scope: 'QA revisao financeira sem vencimento',
+      validUntil: datePlus(30), paymentTerm: 'Mensal',
+      servicesPaymentProfileId: setup.servicesProfile.id,
+      items: [{ catalogItemId: setup.service.id, kind: 'CATALOG_SERVICE', quantity: 1, unitPrice: setup.service.basePrice }],
+    });
+    await request(setup.sales.access_token, `/proposals/${proposal.id}/submit-board`, 'POST', {});
+    await request(setup.admin.access_token, `/proposals/${proposal.id}/board-approve`, 'POST', {});
+    const won = await request(setup.admin.access_token, `/proposals/${proposal.id}/client-approve`, 'POST', {});
+    const orderId = won.ordemDeServico?.id;
+    assert.ok(orderId);
+    await request(setup.admin.access_token, `/maintenance-orders/${orderId}`, 'PATCH', {
+      status: 'IN_PROGRESS', startedAt: new Date().toISOString(),
+    });
+    await request(setup.admin.access_token, `/maintenance-orders/${orderId}`, 'PATCH', {
+      status: 'COMPLETED', finishedAt: new Date().toISOString(), laborHours: 1,
+    });
+    assert.equal(await prisma.accountsReceivable.count({ where: { maintenanceOrderId: orderId } }), 0);
+    const queue = await request(setup.finance.access_token, '/finance/execution-billing/queue');
+    assert.ok(queue.some((entry) => entry.id === orderId));
+    await expectHttpError(setup.finance.access_token, `/finance/receivables/sync/orders/${orderId}`, 'POST', {
+      amount: 1, dueDate: datePlus(15), description: 'Valor divergente QA',
+    }, [400]);
+    const billed = await request(setup.finance.access_token, `/finance/execution-billing/orders/${orderId}/confirm`, 'POST', { dueDate: datePlus(15) });
+    assert.equal(billed.status, 'CREATED');
+    const again = await request(setup.finance.access_token, `/finance/execution-billing/orders/${orderId}/confirm`, 'POST', { dueDate: datePlus(15) });
+    assert.equal(again.status, 'ALREADY_BILLED');
+    const receivables = await prisma.accountsReceivable.findMany({ where: { maintenanceOrderId: orderId } });
+    assert.equal(receivables.length, billed.receivableIds.length);
+    assert.equal(round(receivables.reduce((sum, row) => sum + row.netAmount, 0)), round(proposal.totalValue));
+    return { proposalId: proposal.id, orderId, receivableIds: billed.receivableIds };
+  });
+  await check('permissao-comercial-sem-baixa-financeira', async () => {
+    const receivableId = parts.receivableIds[0];
+    await expectHttpError(setup.sales.access_token, `/finance/receivables/${receivableId}/pay`, 'PATCH', {
+      amount: 1, bankAccountId: setup.bankAccountId,
+    }, [403]);
+    return { receivableId };
+  });
+}
+
+async function auditSalesOrderExceptions(setup, client) {
+  const checks = [];
+  const generator = client.generators[0];
+  async function approvedParts(label) {
+    const opportunity = await request(setup.sales.access_token, '/crm/opportunities', 'POST', {
+      title: label, clientId: client.id, assignedSellerId: setup.sales.user.id,
+      opportunityType: 'PARTS_SALE', source: 'QA_ISOLATED_FULL_FLOW',
+    });
+    const proposal = await request(setup.sales.access_token, '/proposals', 'POST', {
+      clientId: client.id, generatorId: generator.id, salesOpportunityId: opportunity.id,
+      userId: setup.sales.user.id, type: 'PARTS', scope: label,
+      validUntil: datePlus(30), paymentTerm: 'Mensal', firstDueDate: datePlus(15),
+      partsPaymentProfileId: setup.partsProfile.id,
+      items: [{ catalogItemId: setup.avulsa.id, kind: 'PART_MATERIAL', quantity: 2, unitPrice: setup.avulsa.basePrice }],
+    });
+    await request(setup.sales.access_token, `/proposals/${proposal.id}/submit-board`, 'POST', {});
+    await request(setup.admin.access_token, `/proposals/${proposal.id}/board-approve`, 'POST', {});
+    await request(setup.admin.access_token, `/proposals/${proposal.id}/client-approve`, 'POST', {});
+    const sale = await prisma.salesOrder.findUnique({ where: { proposalId: proposal.id }, include: { items: true } });
+    assert.ok(sale && sale.items.length === 1);
+    return { proposal, sale, item: sale.items[0] };
+  }
+  async function check(name, action) {
+    try {
+      checks.push({ name, status: 'PASS', ...(await action()) });
+      console.log(`PASS ${name}`);
+    } catch (error) {
+      checks.push({ name, status: 'FAIL', error: error.message });
+      console.log(`FAIL ${name}: ${error.message}`);
+    }
+  }
+  await check('cancelamento-libera-reserva-sem-cobranca', async () => {
+    const { sale, item } = await approvedParts(`QA-FLOW-CANCEL-${Date.now()}`);
+    await request(setup.admin.access_token, '/inventory/adjust', 'POST', {
+      warehouseId: setup.warehouseId, reason: 'Entrada ficticia para cancelamento QA',
+      items: [{ catalogItemId: item.catalogItemId, delta: 2 }],
+    });
+    await request(setup.admin.access_token, `/sales-orders/${sale.id}/reserve`, 'POST', {
+      itemId: item.id, warehouseId: setup.warehouseId, quantity: 2,
+    });
+    const canceled = await request(setup.admin.access_token, `/sales-orders/${sale.id}/close`, 'POST', {
+      reason: 'Cancelamento ficticio de teste',
+    });
+    assert.equal(canceled.status, 'CANCELED');
+    const balance = await prisma.inventoryBalance.findUnique({
+      where: { warehouseId_catalogItemId: { warehouseId: setup.warehouseId, catalogItemId: item.catalogItemId } },
+    });
+    assert.equal(balance.reservedQty, 0);
+    assert.equal(await prisma.accountsReceivable.count({ where: { salesOrderId: sale.id } }), 0);
+    await expectHttpError(setup.finance.access_token, `/finance/receivables/sync/sales-orders/${sale.id}`, 'POST', {
+      dueDate: datePlus(15),
+    }, [400]);
+    return { salesOrderId: sale.id };
+  });
+  await check('entrega-parcial-cobra-somente-entregue', async () => {
+    const { sale, item } = await approvedParts(`QA-FLOW-PARTIAL-${Date.now()}`);
+    await request(setup.admin.access_token, '/inventory/adjust', 'POST', {
+      warehouseId: setup.warehouseId, reason: 'Entrada ficticia para entrega parcial QA',
+      items: [{ catalogItemId: item.catalogItemId, delta: 2 }],
+    });
+    const stock = { itemId: item.id, warehouseId: setup.warehouseId, quantity: 1 };
+    await request(setup.admin.access_token, `/sales-orders/${sale.id}/reserve`, 'POST', stock);
+    await request(setup.admin.access_token, `/sales-orders/${sale.id}/pick`, 'POST', stock);
+    const delivery = await request(setup.admin.access_token, `/sales-orders/${sale.id}/deliveries`, 'POST', {
+      receivedByName: 'Recebedor QA ficticio', items: [stock],
+    });
+    assert.equal(delivery.status, 'PARTIALLY_DELIVERED');
+    const closed = await request(setup.admin.access_token, `/sales-orders/${sale.id}/close`, 'POST', {
+      reason: 'Saldo nao entregue cancelado para teste',
+    });
+    assert.equal(closed.status, 'CLOSED');
+    const ar = await request(setup.finance.access_token, `/finance/receivables/sync/sales-orders/${sale.id}`, 'POST', {
+      dueDate: datePlus(15),
+    });
+    assert.equal(round(ar.netAmount), round(sale.totalValue / 2));
+    const again = await request(setup.finance.access_token, `/finance/receivables/sync/sales-orders/${sale.id}`, 'POST', {
+      dueDate: datePlus(15),
+    });
+    assert.equal(again.id, ar.id);
+    return { salesOrderId: sale.id, receivableId: ar.id, amount: ar.netAmount };
+  });
+  return checks;
 }
 
 async function main() {
@@ -1220,6 +1394,15 @@ async function main() {
     warehouseId: warehouse.id,
     issuers,
   });
+  if (process.argv.includes('--exceptions')) {
+    const checks = await auditSalesOrderExceptions(setup, clients[0]);
+    const report = { databaseName, checks, failures: checks.filter((row) => row.status === 'FAIL') };
+    if (process.env.FLOW_QA_REPORT_FILE)
+      writeFileSync(process.env.FLOW_QA_REPORT_FILE, JSON.stringify(report, null, 2));
+    else console.log(JSON.stringify(report, null, 2));
+    if (report.failures.length) process.exitCode = 1;
+    return;
+  }
   for (let i = 0; i < clients.length; i += 1) {
     await auditCase(i, clients[i], setup);
     console.log(

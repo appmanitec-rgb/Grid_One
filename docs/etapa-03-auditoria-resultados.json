@@ -1,0 +1,538 @@
+{
+  "facts": {
+    "databaseName": "gridone_stage3_stage",
+    "clientCount": 14,
+    "generatorCount": 14,
+    "catalogCount": 4,
+    "companySettings": [
+      {
+        "id": "e5574e08-3d64-455f-b88a-300e5ae708b9",
+        "key": "qa-flow-issuer-a",
+        "companyName": "EMITENTE QA A - NAO EMITIR",
+        "cnpj": "00000000000000",
+        "isPrimary": false
+      },
+      {
+        "id": "4bf414db-ab9a-4f93-86f9-d30d6e25cdd3",
+        "key": "qa-flow-issuer-b",
+        "companyName": "EMITENTE QA B - NAO EMITIR",
+        "cnpj": "11111111111111",
+        "isPrimary": false
+      }
+    ],
+    "collectionAgreementCount": 0,
+    "selectedClients": [
+      {
+        "id": "62d2bd40-71c5-4fb5-88cb-442bce0d05ed",
+        "name": "Cliente Ficticio QA 01",
+        "generator": "Gerador ficticio QA 01",
+        "machineParts": 2
+      },
+      {
+        "id": "664aa364-9c08-4230-9ee3-9ddefd136406",
+        "name": "Cliente Ficticio QA 02",
+        "generator": "Gerador ficticio QA 02",
+        "machineParts": 2
+      },
+      {
+        "id": "3176e0de-878c-4b30-b5b1-e57651d662c7",
+        "name": "Cliente Ficticio QA 03",
+        "generator": "Gerador ficticio QA 03",
+        "machineParts": 2
+      },
+      {
+        "id": "4d3e541b-157a-49c5-8999-cbd9f0dca0a6",
+        "name": "Cliente Ficticio QA 04",
+        "generator": "Gerador ficticio QA 04",
+        "machineParts": 2
+      },
+      {
+        "id": "46852a95-565b-4444-a0ca-27858066f360",
+        "name": "Cliente Ficticio QA 05",
+        "generator": "Gerador ficticio QA 05",
+        "machineParts": 2
+      },
+      {
+        "id": "9fc5c48b-1f7f-49f3-9b1e-f845185490f0",
+        "name": "Cliente Ficticio QA 06",
+        "generator": "Gerador ficticio QA 06",
+        "machineParts": 2
+      },
+      {
+        "id": "1d732fcb-638d-46f3-9f11-856672e757e2",
+        "name": "Cliente Ficticio QA 07",
+        "generator": "Gerador ficticio QA 07",
+        "machineParts": 2
+      },
+      {
+        "id": "422945b7-6b28-4680-8502-8370652d4471",
+        "name": "Cliente Ficticio QA 08",
+        "generator": "Gerador ficticio QA 08",
+        "machineParts": 2
+      },
+      {
+        "id": "10604919-453f-4466-a7d3-7480f22b2c43",
+        "name": "Cliente Ficticio QA 09",
+        "generator": "Gerador ficticio QA 09",
+        "machineParts": 2
+      },
+      {
+        "id": "09d8b331-58c0-467d-8e8d-6a3583e5a11f",
+        "name": "Cliente Ficticio QA 10",
+        "generator": "Gerador ficticio QA 10",
+        "machineParts": 2
+      },
+      {
+        "id": "dbdeebcb-f132-4a81-bec9-1672e261de4d",
+        "name": "Cliente Ficticio QA 11",
+        "generator": "Gerador ficticio QA 11",
+        "machineParts": 2
+      },
+      {
+        "id": "530539c5-45ff-4750-999f-dd3617050f82",
+        "name": "Cliente Ficticio QA 12",
+        "generator": "Gerador ficticio QA 12",
+        "machineParts": 2
+      }
+    ],
+    "service": {
+      "id": "c64fa674-30d8-478c-a899-2ad868160ce0",
+      "name": "Servico Preventivo Mensal Demo",
+      "price": 6800
+    },
+    "avulsa": {
+      "id": "00022812-6832-4f53-a6d4-dc3a537b0254",
+      "name": "Capacete Classe B Demo",
+      "price": 95
+    },
+    "hourlyRates": [
+      {
+        "hourType": "ONE_OFF",
+        "technicianType": "ASSISTANT",
+        "unitPrice": 100
+      },
+      {
+        "hourType": "ONE_OFF",
+        "technicianType": "JUNIOR_TECHNICIAN",
+        "unitPrice": 150
+      }
+    ],
+    "activePaymentProfiles": [
+      {
+        "id": "167dd1b6-8794-4dc4-aeb2-75f1baff5fd0",
+        "purpose": "PARTS",
+        "method": "PIX"
+      },
+      {
+        "id": "b5308256-0c5d-4ea1-9ab8-691ef038d9ca",
+        "purpose": "SERVICES",
+        "method": "PIX"
+      }
+    ]
+  },
+  "results": [
+    {
+      "case": "QA-FLOW-01-peca-maquina",
+      "clientId": "62d2bd40-71c5-4fb5-88cb-442bce0d05ed",
+      "client": "Cliente Ficticio QA 01",
+      "generatorId": "30849986-da39-4c84-b84f-b2552c47e61f",
+      "type": "PARTS",
+      "steps": [
+        "oportunidade",
+        "atividade-e-prazo",
+        "proposta",
+        "diretoria",
+        "aprovacao-diretoria",
+        "aprovacao-cliente",
+        "reserva-peca",
+        "separacao-peca",
+        "entrega",
+        "faturamento-pedido"
+      ],
+      "opportunityId": "1c4f14f2-ada7-42d6-b07b-a1bc5f3791d4",
+      "proposalId": "5242c71e-f1ad-41b5-b90f-6b33e88ee8a5",
+      "salesOrderId": "aa1044f5-e468-4c42-99ac-101fca3be306",
+      "receivableIds": [
+        "8c9d9cc8-d7aa-437b-9acc-9adebab288b4"
+      ],
+      "total": 179,
+      "status": "PASS"
+    },
+    {
+      "case": "QA-FLOW-02-peca-avulsa",
+      "clientId": "664aa364-9c08-4230-9ee3-9ddefd136406",
+      "client": "Cliente Ficticio QA 02",
+      "generatorId": "fa1a06ea-0dd5-4228-8e4d-8f242959502f",
+      "type": "PARTS",
+      "steps": [
+        "oportunidade",
+        "atividade-e-prazo",
+        "proposta",
+        "diretoria",
+        "aprovacao-diretoria",
+        "aprovacao-cliente",
+        "reserva-peca",
+        "separacao-peca",
+        "entrega",
+        "faturamento-pedido"
+      ],
+      "opportunityId": "75a9f2dc-41ad-46c0-9449-54bc17c42cf5",
+      "proposalId": "d6d78967-ea46-464b-a6af-873f35fc7ed4",
+      "salesOrderId": "ae14d596-ff09-41ba-a65e-3142804ba70e",
+      "receivableIds": [
+        "9d0674ff-4f23-4284-a9cb-a63c01905577"
+      ],
+      "total": 95,
+      "status": "PASS"
+    },
+    {
+      "case": "QA-FLOW-03-servico-catalogo",
+      "clientId": "3176e0de-878c-4b30-b5b1-e57651d662c7",
+      "client": "Cliente Ficticio QA 03",
+      "generatorId": "c0b971d0-17b5-427e-b587-e0b42cafb43c",
+      "type": "SERVICES",
+      "steps": [
+        "oportunidade",
+        "atividade-e-prazo",
+        "proposta",
+        "diretoria",
+        "aprovacao-diretoria",
+        "aprovacao-cliente",
+        "ordem-servico",
+        "execucao",
+        "faturamento-os-idempotente",
+        "baixa-financeira"
+      ],
+      "opportunityId": "692ba5bf-80b0-49e3-a93c-0f9ed6bdd430",
+      "proposalId": "59128481-80e0-4362-a7f4-d6eb9cfc2058",
+      "orderId": "38365b66-0c79-462d-a508-2f852f9acb91",
+      "receivableIds": [
+        "d9b941e2-4e1b-43dc-abf1-cbf6affc5f4c"
+      ],
+      "total": 6800,
+      "status": "PASS"
+    },
+    {
+      "case": "QA-FLOW-04-hora-junior",
+      "clientId": "4d3e541b-157a-49c5-8999-cbd9f0dca0a6",
+      "client": "Cliente Ficticio QA 04",
+      "generatorId": "0bfa7a10-4a01-46f4-81ea-71ed7d099a7b",
+      "type": "SERVICES",
+      "steps": [
+        "oportunidade",
+        "atividade-e-prazo",
+        "proposta",
+        "diretoria",
+        "aprovacao-diretoria",
+        "aprovacao-cliente",
+        "ordem-servico",
+        "execucao",
+        "faturamento-os-idempotente",
+        "baixa-financeira"
+      ],
+      "opportunityId": "db4113ca-fd1a-4ae9-86ae-122917457616",
+      "proposalId": "19ccb6ac-6888-48d8-bd6a-096798ad2431",
+      "orderId": "d56b6d8e-3ad4-4293-abfe-b937a9abde01",
+      "receivableIds": [
+        "60fe2908-30a5-4c04-b3ca-9d84071a7b75"
+      ],
+      "total": 375,
+      "status": "PASS"
+    },
+    {
+      "case": "QA-FLOW-05-misto-maquina-hora",
+      "clientId": "46852a95-565b-4444-a0ca-27858066f360",
+      "client": "Cliente Ficticio QA 05",
+      "generatorId": "b02b0fc8-70f7-4a56-b2f7-e16d09b9b5cb",
+      "type": "PARTS_AND_SERVICES",
+      "steps": [
+        "oportunidade",
+        "atividade-e-prazo",
+        "proposta",
+        "diretoria",
+        "aprovacao-diretoria",
+        "aprovacao-portal-cliente",
+        "ordem-servico",
+        "estoque-reserva",
+        "execucao",
+        "faturamento-os-idempotente",
+        "baixa-financeira"
+      ],
+      "opportunityId": "d666188b-60fd-4849-a71b-f0ebb2373003",
+      "proposalId": "0803951d-ecc7-4d46-80b4-03b1d7e74b26",
+      "orderId": "09aac3c8-25b4-4432-9e16-8ed99415d04b",
+      "receivableIds": [
+        "5826d22e-a558-4c53-b713-f1319be1de84",
+        "923791c3-2b65-4ea7-90f7-592c2f2412a4"
+      ],
+      "total": 539.5,
+      "status": "PASS"
+    },
+    {
+      "case": "QA-FLOW-06-contrato",
+      "clientId": "9fc5c48b-1f7f-49f3-9b1e-f845185490f0",
+      "client": "Cliente Ficticio QA 06",
+      "generatorId": "d2861556-dee8-4f01-8b53-3e33de42e34b",
+      "type": "CONTRACT",
+      "steps": [
+        "oportunidade",
+        "atividade-e-prazo",
+        "proposta",
+        "diretoria",
+        "aprovacao-diretoria",
+        "aprovacao-cliente",
+        "contrato",
+        "ordens-preventivas",
+        "execucao-preventiva"
+      ],
+      "opportunityId": "ce0f3973-86cd-4eb2-bbb7-7c77a93e1eab",
+      "proposalId": "7c35a313-bfe1-4e84-90e7-0f03895d66b7",
+      "contractId": "d18e30f1-67b7-459c-be9f-44784d7b8fc1",
+      "receivableIds": [
+        "18030ed7-1790-4b13-b8f5-a6a0a7517a6e",
+        "a5b7a278-af3a-4dcf-b3ee-35097e717616",
+        "5edc87bc-91a7-4177-ad1d-fb8b008d2bde",
+        "88b995fb-ab61-4b04-a9bd-428bb3b5f9ec",
+        "62763b5b-20ec-4e18-9571-fb129604170f",
+        "faa15227-5029-4c66-99b5-96e7d46ad6d0",
+        "fc694c28-4f9e-4468-9541-4c1b430be0f0",
+        "4bf12100-5f40-41a8-bde1-61dd05d052d5",
+        "77dd2cce-33b2-47e6-a66e-2b8731d2b7c6",
+        "51ee635d-a999-46b1-84f6-0753fb8e2d2c",
+        "576fd2b3-7f33-4dbc-877b-d2d7fc92f326",
+        "e869f26e-4bdf-4d34-a5b4-8b5d96a23d89",
+        "1f4cbb75-0b42-4258-bf31-7f9215bc3969"
+      ],
+      "generatedOrders": 13,
+      "total": 6800,
+      "status": "PASS"
+    },
+    {
+      "case": "QA-FLOW-07-peca-maquina-desconto",
+      "clientId": "1d732fcb-638d-46f3-9f11-856672e757e2",
+      "client": "Cliente Ficticio QA 07",
+      "generatorId": "628ed5cc-ee91-4769-82c8-0e1237685dbb",
+      "type": "PARTS",
+      "steps": [
+        "oportunidade",
+        "atividade-e-prazo",
+        "proposta",
+        "diretoria",
+        "aprovacao-diretoria",
+        "aprovacao-cliente",
+        "reserva-peca",
+        "separacao-peca",
+        "entrega",
+        "faturamento-pedido"
+      ],
+      "opportunityId": "1104b4ee-0608-4750-be0b-60c3053652ea",
+      "proposalId": "a737aa2e-a2ba-440a-ae0f-e7a06b2b3f2a",
+      "salesOrderId": "71418663-8766-4c74-a605-83f61f7faa60",
+      "receivableIds": [
+        "9a7d611d-9cde-4b4b-92bd-315faaf80da4"
+      ],
+      "total": 912,
+      "status": "PASS"
+    },
+    {
+      "case": "QA-FLOW-08-peca-avulsa-quantidade",
+      "clientId": "422945b7-6b28-4680-8502-8370652d4471",
+      "client": "Cliente Ficticio QA 08",
+      "generatorId": "de8787a3-03e9-42b1-a626-696380c33753",
+      "type": "PARTS",
+      "steps": [
+        "oportunidade",
+        "atividade-e-prazo",
+        "proposta",
+        "diretoria",
+        "aprovacao-diretoria",
+        "aprovacao-cliente",
+        "reserva-peca",
+        "separacao-peca",
+        "entrega",
+        "faturamento-pedido"
+      ],
+      "opportunityId": "51517302-7e29-4e5f-8978-27a6e9aea7b5",
+      "proposalId": "2de048eb-9570-4451-8528-2f300044143c",
+      "salesOrderId": "600e1667-576e-412b-a795-27dbfe6a21fb",
+      "receivableIds": [
+        "71aabad2-f1fa-4628-979a-7f65d82be23d"
+      ],
+      "total": 380,
+      "status": "PASS"
+    },
+    {
+      "case": "QA-FLOW-09-servico-mais-hora",
+      "clientId": "10604919-453f-4466-a7d3-7480f22b2c43",
+      "client": "Cliente Ficticio QA 09",
+      "generatorId": "ad099a3c-3bdc-488f-94b5-49df42039f2b",
+      "type": "SERVICES",
+      "steps": [
+        "oportunidade",
+        "atividade-e-prazo",
+        "proposta",
+        "diretoria",
+        "aprovacao-diretoria",
+        "aprovacao-cliente",
+        "ordem-servico",
+        "execucao",
+        "faturamento-os-idempotente",
+        "baixa-financeira"
+      ],
+      "opportunityId": "37885b38-c562-40a1-b7d4-4bd73eca9f93",
+      "proposalId": "a821201f-fb5d-4c6c-b059-970efcf33836",
+      "orderId": "4bfb2b96-2eeb-4bb4-9a9c-37eea6e9314a",
+      "receivableIds": [
+        "74257dbd-ac4e-4134-a964-abc04a7422b3"
+      ],
+      "total": 13750,
+      "status": "PASS"
+    },
+    {
+      "case": "QA-FLOW-10-hora-assistente",
+      "clientId": "09d8b331-58c0-467d-8e8d-6a3583e5a11f",
+      "client": "Cliente Ficticio QA 10",
+      "generatorId": "fda882f1-2f30-4e8f-912f-f6c63cc3748e",
+      "type": "SERVICES",
+      "steps": [
+        "oportunidade",
+        "atividade-e-prazo",
+        "proposta",
+        "diretoria",
+        "aprovacao-diretoria",
+        "aprovacao-cliente",
+        "ordem-servico",
+        "execucao",
+        "faturamento-os-idempotente",
+        "baixa-financeira"
+      ],
+      "opportunityId": "1ad69400-a51e-45d8-a738-611663d31e15",
+      "proposalId": "ecad3484-4f0a-4a2d-a7e2-39947efbfac5",
+      "orderId": "0f84ee52-12c0-4afe-a34c-626f10a8163a",
+      "receivableIds": [
+        "4b337290-7037-445e-a2eb-f9c5f294117d"
+      ],
+      "total": 400,
+      "status": "PASS"
+    },
+    {
+      "case": "QA-FLOW-11-misto-avulsa-servico",
+      "clientId": "dbdeebcb-f132-4a81-bec9-1672e261de4d",
+      "client": "Cliente Ficticio QA 11",
+      "generatorId": "bad3a1a2-f6a4-47f1-b65d-6b66f7464355",
+      "type": "PARTS_AND_SERVICES",
+      "steps": [
+        "oportunidade",
+        "atividade-e-prazo",
+        "proposta",
+        "diretoria",
+        "aprovacao-diretoria",
+        "aprovacao-cliente",
+        "ordem-servico",
+        "estoque-reserva",
+        "execucao",
+        "faturamento-os-idempotente",
+        "baixa-financeira"
+      ],
+      "opportunityId": "8471bd08-db18-40d0-86f9-35122d44f81a",
+      "proposalId": "f9742ad7-baea-48cf-9b49-132d0ffe77a2",
+      "orderId": "0e0f7c7b-a9ec-4129-8aa3-aa05bc1ea97f",
+      "receivableIds": [
+        "247df2aa-6071-4919-8305-0886688fc3be",
+        "e40757ad-371a-413d-a936-b75e1b468196"
+      ],
+      "total": 6895,
+      "status": "PASS"
+    },
+    {
+      "case": "QA-FLOW-12-pecas-multiplas-maquina",
+      "clientId": "530539c5-45ff-4750-999f-dd3617050f82",
+      "client": "Cliente Ficticio QA 12",
+      "generatorId": "930c1a01-e43b-401b-9fa7-2b2305bbc8ca",
+      "type": "PARTS",
+      "steps": [
+        "oportunidade",
+        "atividade-e-prazo",
+        "proposta",
+        "diretoria",
+        "aprovacao-diretoria",
+        "aprovacao-cliente",
+        "reserva-peca",
+        "separacao-peca",
+        "reserva-peca",
+        "separacao-peca",
+        "entrega",
+        "faturamento-pedido"
+      ],
+      "opportunityId": "7bc0e17b-f3ae-4d1a-a98d-60c732614938",
+      "proposalId": "f269807c-413a-456c-bf60-bf146dac2a62",
+      "salesOrderId": "0fe94ba8-0169-43cc-824d-f4e08632915e",
+      "receivableIds": [
+        "bd02bec8-df69-472f-a248-354c1b239990"
+      ],
+      "total": 819,
+      "status": "PASS"
+    }
+  ],
+  "additionalChecks": [
+    {
+      "name": "contrato-baixa-e-fatura",
+      "status": "PASS",
+      "receivableId": "18030ed7-1790-4b13-b8f5-a6a0a7517a6e"
+    },
+    {
+      "name": "fiscal-nfse-rascunho",
+      "status": "PASS",
+      "draftId": "ff4cd3a3-7402-4c80-8bfc-35f70086c0cb",
+      "checklist": [
+        "CPF/CNPJ do cliente",
+        "enquadramento tributário validado pela contabilidade",
+        "integração fiscal e credenciais de homologação"
+      ]
+    },
+    {
+      "name": "fiscal-nfe-rascunho-pecas",
+      "status": "PASS",
+      "draftId": "feb20f49-1254-4268-bdca-ed11e157a60b",
+      "receivableId": "8c9d9cc8-d7aa-437b-9acc-9adebab288b4",
+      "checklist": [
+        "CPF/CNPJ do cliente",
+        "enquadramento tributário validado pela contabilidade",
+        "integração fiscal e credenciais de homologação"
+      ],
+      "salesOrderId": "aa1044f5-e468-4c42-99ac-101fca3be306"
+    },
+    {
+      "name": "santander-remessa-homologacao",
+      "status": "PASS",
+      "batchId": "9dc6c346-5dd0-4408-9e9b-2803f6d9eab3",
+      "records": 6,
+      "homologated": false
+    },
+    {
+      "name": "validacao-cliente-gerador",
+      "status": "PASS"
+    },
+    {
+      "name": "aceite-link-assinado-servico",
+      "status": "PASS",
+      "proposalId": "adb54b7d-f530-4f4c-80de-5c17364256dd",
+      "orderId": "dd889178-8e69-417a-b569-fe1b07059b84"
+    },
+    {
+      "name": "revisao-financeira-sem-vencimento",
+      "status": "PASS",
+      "proposalId": "41ec2bca-0d92-4e94-a30b-8608007aa2af",
+      "orderId": "0fd231fe-0e0e-4b58-8ad4-512128920f37",
+      "receivableIds": [
+        "e8d13b5a-3aeb-472d-86a8-6352b396c903"
+      ]
+    },
+    {
+      "name": "permissao-comercial-sem-baixa-financeira",
+      "status": "PASS",
+      "receivableId": "8c9d9cc8-d7aa-437b-9acc-9adebab288b4"
+    }
+  ],
+  "failures": []
+}

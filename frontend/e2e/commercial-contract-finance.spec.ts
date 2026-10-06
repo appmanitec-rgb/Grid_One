@@ -23,7 +23,10 @@ type GeneratorDetail = {
 type CatalogItem = {
   id: string;
   name?: string;
+  type?: string;
 };
+
+type PaymentProfile = { id: string; purpose: string; isActive: boolean };
 
 type Opportunity = {
   id: string;
@@ -393,8 +396,8 @@ function requireUserId(user: unknown) {
 
 async function firstCatalogItem(token: string) {
   const catalog = await apiRequest<CatalogItem[]>(token, "/catalogs");
-  const item = catalog.find((entry) => entry.id);
-  if (!item) throw new Error("Catalogo E2E sem item disponivel.");
+  const item = catalog.find((entry) => entry.id && entry.type === "SERVICE");
+  if (!item) throw new Error("Catalogo E2E sem servico disponivel.");
   return item;
 }
 
@@ -453,6 +456,17 @@ async function createDraftProposal(input: {
   });
   expect(opportunity.id).toBeTruthy();
 
+  const profiles = await apiRequest<PaymentProfile[]>(
+    input.token,
+    "/proposals/payment-profiles",
+  );
+  const serviceProfile = profiles.find(
+    (profile) => profile.purpose === "SERVICES" && profile.isActive,
+  );
+  if (!serviceProfile) {
+    throw new Error("Perfil E2E de pagamento de servicos nao encontrado.");
+  }
+
   const proposal = await apiRequest<Proposal>(input.token, "/proposals", {
     method: "POST",
     body: {
@@ -465,6 +479,7 @@ async function createDraftProposal(input: {
       freight: "Incluso",
       validUntil: validUntil.toISOString(),
       paymentTerm: "Mensal",
+      servicesPaymentProfileId: serviceProfile.id,
       paymentDetails: "Primeiro vencimento definido pelo E2E.",
       installmentCount: 12,
       installmentIntervalDays: 30,
