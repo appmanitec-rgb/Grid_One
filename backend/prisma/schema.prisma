@@ -564,6 +564,7 @@ enum InventoryMovementType {
   PURCHASE_RECEIPT
   OS_CONSUMPTION
   SALES_DELIVERY
+  SALES_RETURN
 }
 
 enum SalesOrderStatus {
@@ -2401,6 +2402,7 @@ model SalesOrder {
 
   items         SalesOrderItem[]
   deliveries    SalesDelivery[]
+  returns       SalesReturn[]
   receivables   AccountsReceivable[]
 
   @@index([clientId, status, createdAt])
@@ -2466,10 +2468,29 @@ model SalesDeliveryItem {
   warehouseId      String
   warehouse        Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   quantity         Int
+  returnedQty      Int            @default(0)
+  returns          SalesReturn[]
 
   @@unique([salesDeliveryId, salesOrderItemId, warehouseId])
   @@index([salesOrderItemId])
   @@map("sales_delivery_items")
+}
+
+model SalesReturn {
+  id                  String            @id @default(uuid())
+  requestId           String            @unique
+  salesOrderId        String
+  salesOrder          SalesOrder        @relation(fields: [salesOrderId], references: [id], onDelete: Restrict)
+  salesDeliveryItemId String
+  salesDeliveryItem   SalesDeliveryItem @relation(fields: [salesDeliveryItemId], references: [id], onDelete: Restrict)
+  quantity            Int
+  reason              String
+  receivedByUserId    String?
+  createdAt           DateTime          @default(now())
+
+  @@index([salesOrderId, createdAt])
+  @@index([salesDeliveryItemId])
+  @@map("sales_returns")
 }
 
 model ProposalScopeTemplate {

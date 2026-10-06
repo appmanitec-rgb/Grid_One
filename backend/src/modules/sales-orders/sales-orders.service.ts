@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  AccountsReceivableStatus,
   InventoryMovementType,
   ItemType,
   Prisma,
@@ -16,7 +17,11 @@ import {
 import { randomBytes } from 'crypto';
 import { DatabaseService } from '../../database/database.service';
 import { createApprovedProposalOrder } from '../proposals/proposal-work-order';
-import { SalesDeliveryDto, SalesOrderStockDto } from './dto/sales-order.dto';
+import {
+  SalesDeliveryDto,
+  SalesOrderStockDto,
+  SalesReturnDto,
+} from './dto/sales-order.dto';
 
 type Actor = {
   sub?: string;
@@ -30,7 +35,7 @@ type Actor = {
       reserve?: boolean;
       consume?: boolean;
     };
-    finance?: { view?: boolean };
+    finance?: { view?: boolean; update?: boolean };
   };
 };
 
@@ -169,6 +174,9 @@ export class SalesOrdersService {
             },
           },
           orderBy: { deliveredAt: 'desc' },
+        },
+        returns: {
+          orderBy: { createdAt: 'desc' },
         },
         receivables: {
           select: {
@@ -549,6 +557,267 @@ export class SalesOrdersService {
     });
   }
 
+  async receiveReturn(
+    orderId: string,
+    input: SalesReturnDto,
+    actorValue: unknown,
+  ) {
+    const actor = this.actor(actorValue);
+    this.requirePermission(actor, 'return');
+    const reason = input.reason?.trim();
+    if (!reason)
+      throw new BadRequestException('Informe o motivo da devolucao.');
+    if (input.restockApproved !== true)
+      throw new BadRequestException(
+        'Confirme que a peca foi conferida e esta apta a voltar ao estoque.',
+      );
+    return this.runWrite(async (tx) => {
+      const previous = await tx.salesReturn.findUnique({
+        where: { requestId: input.requestId },
+      });
+      if (previous) {
+        if (
+          previous.salesOrderId !== orderId ||
+          previous.salesDeliveryItemId !== input.salesDeliveryItemId ||
+          previous.quantity !== input.quantity ||
+          previous.reason !== reason
+        )
+          throw new ConflictException(
+            'A identificacao desta devolucao ja foi usada em outra operacao.',
+          );
+        return { id: previous.id, quantity: previous.quantity, repeated: true };
+      }
+      const order = await tx.salesOrder.findUnique({
+        where: { id: orderId },
+        include: {
+          items: {
+            select: {
+              id: true,
+              quantity: true,
+              deliveredQty: true,
+              totalPrice: true,
+            },
+          },
+          receivables: {
+            where: { status: { not: AccountsReceivableStatus.CANCELED } },
+            include: {
+              payments: { select: { id: true } },
+              bankMovements: { select: { id: true } },
+              collectionTitle: { select: { id: true } },
+              fiscalDocuments: { select: { id: true } },
+            },
+          },
+        },
+      });
+      if (!order)
+        throw new NotFoundException('Pedido de venda nao encontrado.');
+      if (order.status === SalesOrderStatus.CANCELED)
+        throw new ConflictException(
+          'Pedido cancelado nao possui entrega para devolver.',
+        );
+      const delivered = await tx.salesDeliveryItem.findFirst({
+        where: {
+          id: input.salesDeliveryItemId,
+          salesDelivery: { salesOrderId: orderId },
+        },
+        include: { salesOrderItem: true },
+      });
+      if (!delivered)
+        throw new NotFoundException(
+          'Linha de entrega nao encontrada neste pedido.',
+        );
+      if (input.quantity > delivered.quantity - delivered.returnedQty)
+        throw new ConflictException(
+          'Quantidade excede o saldo entregue ainda nao devolvido.',
+        );
+      const item = delivered.salesOrderItem;
+      if (!item.catalogItemId || item.deliveredQty < input.quantity)
+        throw new ConflictException(
+          'Peca entregue sem saldo ou vinculo de catalogo.',
+        );
+      if (order.receivables.length > 1)
+        throw new ConflictException(
+          'Pedido com mais de um titulo exige revisao financeira antes da devolucao.',
+        );
+      const receivable = order.receivables[0];
+      if (
+        receivable &&
+        (receivable.status !== AccountsReceivableStatus.OPEN ||
+          receivable.paidAmount > 0 ||
+          receivable.commissionReleased ||
+          receivable.payments.length > 0 ||
+          receivable.bankMovements.length > 0 ||
+          receivable.collectionTitle ||
+          receivable.fiscalDocuments.length > 0 ||
+          receivable.discountAmount !== 0 ||
+          receivable.interestAmount !== 0 ||
+          receivable.penaltyAmount !== 0)
+      ) {
+        throw new ConflictException(
+          'Ha pagamento, boleto, nota ou ajuste financeiro vinculado. O financeiro deve regularizar o titulo antes de receber a devolucao.',
+        );
+      }
+      if (receivable) {
+        const orderedBase = order.items.reduce(
+          (sum, line) => sum + Number(line.totalPrice),
+          0,
+        );
+        const deliveredBase = order.items.reduce(
+          (sum, line) =>
+            sum + (Number(line.totalPrice) * line.deliveredQty) / line.quantity,
+          0,
+        );
+        const expected =
+          orderedBase > 0
+            ? Math.round(
+                ((Number(order.totalValue) * deliveredBase) / orderedBase) *
+                  100,
+              ) / 100
+            : 0;
+        if (
+          Math.round(receivable.grossAmount * 100) !==
+            Math.round(expected * 100) ||
+          Math.round(receivable.netAmount * 100) !== Math.round(expected * 100)
+        )
+          throw new ConflictException(
+            'O titulo foi alterado. Revise os valores no financeiro antes da devolucao.',
+          );
+      }
+      const warehouse = await tx.warehouse.findUnique({
+        where: { id: delivered.warehouseId },
+      });
+      if (!warehouse?.isActive)
+        throw new ConflictException(
+          'O almoxarifado da entrega nao esta ativo para receber a peca.',
+        );
+      const balance = await tx.inventoryBalance.findUnique({
+        where: {
+          warehouseId_catalogItemId: {
+            warehouseId: delivered.warehouseId,
+            catalogItemId: item.catalogItemId,
+          },
+        },
+      });
+      if (!balance)
+        throw new ConflictException('Saldo do almoxarifado nao encontrado.');
+      const salesReturn = await tx.salesReturn.create({
+        data: {
+          requestId: input.requestId,
+          salesOrderId: orderId,
+          salesDeliveryItemId: delivered.id,
+          quantity: input.quantity,
+          reason,
+          receivedByUserId: actor.sub || null,
+        },
+      });
+      await tx.salesDeliveryItem.update({
+        where: { id: delivered.id },
+        data: { returnedQty: { increment: input.quantity } },
+      });
+      await tx.salesOrderItem.update({
+        where: { id: item.id },
+        data: { deliveredQty: { decrement: input.quantity } },
+      });
+      await tx.inventoryBalance.update({
+        where: { id: balance.id },
+        data: { physicalQty: { increment: input.quantity } },
+      });
+      await tx.inventoryMovement.create({
+        data: {
+          movementType: InventoryMovementType.SALES_RETURN,
+          warehouseId: delivered.warehouseId,
+          catalogItemId: item.catalogItemId,
+          quantity: input.quantity,
+          referenceType: 'SALES_RETURN',
+          referenceId: salesReturn.id,
+          note: `Devolucao da entrega ${delivered.salesDeliveryId}: ${reason}`,
+        },
+      });
+      const aggregate = await tx.inventoryBalance.aggregate({
+        where: { catalogItemId: item.catalogItemId },
+        _sum: { physicalQty: true },
+      });
+      await tx.catalogItem.update({
+        where: { id: item.catalogItemId },
+        data: { stockCurrent: aggregate._sum.physicalQty ?? 0 },
+      });
+      const remaining = order.items.map((line) => ({
+        ...line,
+        deliveredQty:
+          line.id === item.id
+            ? line.deliveredQty - input.quantity
+            : line.deliveredQty,
+      }));
+      if (order.status !== SalesOrderStatus.CLOSED) {
+        await tx.salesOrder.update({
+          where: { id: orderId },
+          data: {
+            status: remaining.every(
+              (line) => line.deliveredQty === line.quantity,
+            )
+              ? SalesOrderStatus.DELIVERED
+              : remaining.some((line) => line.deliveredQty > 0)
+                ? SalesOrderStatus.PARTIALLY_DELIVERED
+                : SalesOrderStatus.OPEN,
+          },
+        });
+      }
+      if (receivable) {
+        const orderedBase = order.items.reduce(
+          (sum, line) => sum + Number(line.totalPrice),
+          0,
+        );
+        const deliveredBase = remaining.reduce(
+          (sum, line) =>
+            sum + (Number(line.totalPrice) * line.deliveredQty) / line.quantity,
+          0,
+        );
+        if (orderedBase <= 0)
+          throw new ConflictException('Base financeira do pedido invalida.');
+        const amount =
+          Math.round(
+            ((Number(order.totalValue) * deliveredBase) / orderedBase) * 100,
+          ) / 100;
+        await tx.accountsReceivable.update({
+          where: { id: receivable.id },
+          data:
+            amount > 0
+              ? { grossAmount: amount, netAmount: amount }
+              : {
+                  grossAmount: 0,
+                  netAmount: 0,
+                  status: AccountsReceivableStatus.CANCELED,
+                  canceledAt: new Date(),
+                  cancelReason: `Devolucao integral da entrega ${delivered.salesDeliveryId}`,
+                },
+        });
+      }
+      await tx.financialAuditLog.create({
+        data: {
+          module: 'SALES',
+          entityType: 'SALES_RETURN',
+          entityId: salesReturn.id,
+          action: 'RECEIVE',
+          actorUserId: actor.sub || null,
+          reason,
+          payload: {
+            salesOrderId: orderId,
+            salesDeliveryItemId: delivered.id,
+            warehouseId: delivered.warehouseId,
+            quantity: input.quantity,
+            restockApproved: true,
+            receivableId: receivable?.id ?? null,
+          },
+        },
+      });
+      return {
+        id: salesReturn.id,
+        quantity: input.quantity,
+        receivableId: receivable?.id ?? null,
+      };
+    });
+  }
+
   async close(orderId: string, reasonValue: string, actorValue: unknown) {
     this.requirePermission(this.actor(actorValue), 'manage');
     const reason = reasonValue.trim();
@@ -648,7 +917,7 @@ export class SalesOrdersService {
 
   private requirePermission(
     actor: Actor,
-    action: 'view' | 'reserve' | 'deliver' | 'manage',
+    action: 'view' | 'reserve' | 'deliver' | 'manage' | 'return',
   ) {
     if (actor.isSystemMaster || actor.role === 'ADMIN') return;
     const access = actor.accessPolicy;
@@ -657,11 +926,13 @@ export class SalesOrdersService {
         ? access?.proposals?.view ||
           access?.inventory?.view ||
           access?.finance?.view
-        : action === 'reserve'
-          ? access?.inventory?.reserve
-          : action === 'deliver'
-            ? access?.inventory?.consume
-            : access?.inventory?.update || access?.proposals?.approve;
+        : action === 'return'
+          ? access?.inventory?.consume && access?.finance?.update
+          : action === 'reserve'
+            ? access?.inventory?.reserve
+            : action === 'deliver'
+              ? access?.inventory?.consume
+              : access?.inventory?.update || access?.proposals?.approve;
     if (!allowed)
       throw new ForbiddenException(
         'Seu perfil nao possui permissao para esta etapa do pedido.',

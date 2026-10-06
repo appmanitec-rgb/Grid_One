@@ -9,6 +9,8 @@ import {
   MaxLength,
   Min,
   ValidateNested,
+  IsUUID,
+  IsBoolean,
 } from 'class-validator';
 
 export class SalesOrderStockDto {
@@ -34,4 +36,12 @@ export class SalesDeliveryDto {
 
 export class CloseSalesOrderDto {
   @IsString() @IsNotEmpty() @MaxLength(500) reason!: string;
+}
+
+export class SalesReturnDto {
+  @IsUUID() requestId!: string;
+  @IsString() @IsNotEmpty() salesDeliveryItemId!: string;
+  @IsInt() @Min(1) quantity!: number;
+  @IsString() @IsNotEmpty() @MaxLength(500) reason!: string;
+  @IsBoolean() restockApproved!: boolean;
 }

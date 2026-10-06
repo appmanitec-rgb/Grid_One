@@ -16,6 +16,7 @@ import {
   SalesDeliveryDto,
   SalesOrderCatalogLinkDto,
   SalesOrderStockDto,
+  SalesReturnDto,
 } from './dto/sales-order.dto';
 import { SalesOrdersService } from './sales-orders.service';
 
@@ -108,5 +109,14 @@ export class SalesOrdersController {
     @Body() body: CloseSalesOrderDto,
   ) {
     return this.service.close(id, body.reason, req['user']);
+  }
+
+  @Post(':id/returns')
+  receiveReturn(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() body: SalesReturnDto,
+  ) {
+    return this.service.receiveReturn(id, body, req['user']);
   }
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getAccessFromToken } from "@/lib/access";
 import { apiFetch } from "@/lib/api";
 
@@ -46,13 +46,14 @@ type Delivery = {
   receivedByName: string;
   shippingReference?: string | null;
   notes?: string | null;
-  items: Array<{ id: string; quantity: number; salesOrderItem: { description: string }; warehouse: { name: string } }>;
+  items: Array<{ id: string; quantity: number; returnedQty: number; salesOrderItem: { description: string }; warehouse: { name: string } }>;
 };
 type OrderDetail = Omit<OrderSummary, "orderedQty" | "reservedQty" | "pickedQty" | "deliveredQty" | "deliveryCount" | "receivableCount"> & {
   paymentTerm?: string | null;
   closedReason?: string | null;
   items: OrderItem[];
   deliveries: Delivery[];
+  returns: Array<{ id: string; salesDeliveryItemId: string; quantity: number; reason: string; createdAt: string }>;
   receivables: Array<{ id: string; status: string }>;
 };
 type Warehouse = { id: string; name: string; code: string };
@@ -91,6 +92,10 @@ export default function SalesOrdersPage() {
   const [pickQty, setPickQty] = useState<Record<string, string>>({});
   const [releaseQty, setReleaseQty] = useState<Record<string, string>>({});
   const [deliveryQty, setDeliveryQty] = useState<Record<string, string>>({});
+  const [returnQty, setReturnQty] = useState<Record<string, string>>({});
+  const [returnReason, setReturnReason] = useState<Record<string, string>>({});
+  const [restockApproved, setRestockApproved] = useState<Record<string, boolean>>({});
+  const returnRequests = useRef<Record<string, string>>({});
   const [recipient, setRecipient] = useState("");
   const [shippingReference, setShippingReference] = useState("");
   const [deliveryNotes, setDeliveryNotes] = useState("");
@@ -103,7 +108,7 @@ export default function SalesOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [permissions, setPermissions] = useState({ canReserve: false, canDeliver: false, canManage: false, canSeeStock: false, canSearchCatalog: false, canCreateFinance: false });
+  const [permissions, setPermissions] = useState({ canReserve: false, canDeliver: false, canReturn: false, canManage: false, canSeeStock: false, canSearchCatalog: false, canCreateFinance: false });
 
   const loadList = useCallback(async () => {
     const params = new URLSearchParams();
@@ -136,6 +141,7 @@ export default function SalesOrdersPage() {
     setPermissions({
       canReserve: access.inventory.reserve,
       canDeliver: access.inventory.consume,
+      canReturn: access.inventory.consume && access.finance.update,
       canManage: access.inventory.update || access.proposals.approve,
       canSeeStock: access.inventory.view,
       canSearchCatalog: access.catalog.view,
@@ -192,6 +198,23 @@ export default function SalesOrdersPage() {
     if (saved) { setDeliveryQty({}); setRecipient(""); setShippingReference(""); setDeliveryNotes(""); }
   }
 
+  async function submitReturn(salesDeliveryItemId: string) {
+    if (!detail) return;
+    const quantity = Number(returnQty[salesDeliveryItemId]);
+    const reason = returnReason[salesDeliveryItemId]?.trim() || "";
+    const signature = `${detail.id}:${salesDeliveryItemId}:${quantity}:${reason}`;
+    const previous = returnRequests.current[salesDeliveryItemId];
+    const requestId = previous?.startsWith(`${signature}|`) ? previous.slice(signature.length + 1) : crypto.randomUUID();
+    returnRequests.current[salesDeliveryItemId] = `${signature}|${requestId}`;
+    const saved = await run(`/sales-orders/${detail.id}/returns`, { requestId, salesDeliveryItemId, quantity, reason, restockApproved: restockApproved[salesDeliveryItemId] === true });
+    if (saved) {
+      delete returnRequests.current[salesDeliveryItemId];
+      setReturnQty((current) => ({ ...current, [salesDeliveryItemId]: "" }));
+      setReturnReason((current) => ({ ...current, [salesDeliveryItemId]: "" }));
+      setRestockApproved((current) => ({ ...current, [salesDeliveryItemId]: false }));
+    }
+  }
+
   const active = detail && (detail.status === "OPEN" || detail.status === "PARTIALLY_DELIVERED");
   const canDeliverNow = detail?.items.some((item) => item.allocations.some((allocation) => allocation.pickedQty > 0));
   const hasActiveReceivable = detail?.receivables.some((receivable) => receivable.status !== "CANCELED") ?? false;
@@ -243,7 +266,7 @@ export default function SalesOrdersPage() {
               <div className="rounded-xl bg-slate-50 p-3"><span className="block text-xs text-slate-500">Cobrança vinculada</span><strong>{detail.receivables.length ? `${detail.receivables.length} título(s)` : "Nenhum título"}</strong></div>
             </div>
             {detail.closedReason ? <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">Motivo do encerramento: {detail.closedReason}</p> : null}
-            {permissions.canCreateFinance && (detail.status === "DELIVERED" || detail.status === "CLOSED") && !hasActiveReceivable ? <div className="mt-4 flex flex-wrap items-end gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3"><label className="text-xs font-semibold text-emerald-900">Vencimento do título<input type="date" value={billingDueDate} onChange={(event) => setBillingDueDate(event.target.value)} className="mt-1 block rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm" /></label><button type="button" disabled={busy || !billingDueDate} onClick={() => void run(`/finance/receivables/sync/sales-orders/${detail.id}`, { dueDate: `${billingDueDate}T12:00:00.000Z` })} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Gerar título do pedido</button><p className="w-full text-xs text-emerald-800">O valor é calculado pelas peças entregues; o vencimento é informado pelo financeiro.</p></div> : null}
+            {permissions.canCreateFinance && (detail.status === "DELIVERED" || detail.status === "CLOSED") && !hasActiveReceivable && detail.items.some((item) => item.deliveredQty > 0) ? <div className="mt-4 flex flex-wrap items-end gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3"><label className="text-xs font-semibold text-emerald-900">Vencimento do título<input type="date" value={billingDueDate} onChange={(event) => setBillingDueDate(event.target.value)} className="mt-1 block rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm" /></label><button type="button" disabled={busy || !billingDueDate} onClick={() => void run(`/finance/receivables/sync/sales-orders/${detail.id}`, { dueDate: `${billingDueDate}T12:00:00.000Z` })} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Gerar título do pedido</button><p className="w-full text-xs text-emerald-800">O valor é calculado pelas peças entregues; o vencimento é informado pelo financeiro.</p></div> : null}
             {detail.receivables.length > 0 ? <Link href="/dashboard/finance/accounts-receivable" className="mt-3 inline-block text-sm font-semibold text-blue-700 hover:underline">Ver cobrança no financeiro →</Link> : null}
           </section>
 
@@ -273,6 +296,21 @@ export default function SalesOrdersPage() {
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h3 className="text-lg font-bold text-slate-950">Histórico de entregas</h3>{detail.deliveries.length === 0 ? <p className="mt-3 text-sm text-slate-500">Nenhuma entrega registrada.</p> : <div className="mt-3 space-y-3">{detail.deliveries.map((delivery) => <article key={delivery.id} className="rounded-xl border border-slate-200 p-3"><div className="flex flex-wrap justify-between gap-2 text-sm"><strong>{delivery.code}</strong><span className="text-slate-500">{date(delivery.deliveredAt)}</span></div><p className="mt-1 text-xs text-slate-600">Recebido por {delivery.receivedByName}{delivery.shippingReference ? ` · Referência ${delivery.shippingReference}` : ""}</p><ul className="mt-2 space-y-1 text-xs text-slate-700">{delivery.items.map((line) => <li key={line.id}>{line.quantity} × {line.salesOrderItem.description} · {line.warehouse.name}</li>)}</ul>{delivery.notes ? <p className="mt-2 text-xs text-slate-500">{delivery.notes}</p> : null}</article>)}</div>}</section>
 
           {active && permissions.canManage ? <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h3 className="text-sm font-bold text-slate-900">Encerrar saldo pendente</h3><p className="mt-1 text-xs text-slate-500">Libera reservas restantes. As quantidades já entregues permanecem registradas.</p><div className="mt-3 flex flex-col gap-2 sm:flex-row"><input aria-label="Motivo do encerramento" value={closeReason} onChange={(event) => setCloseReason(event.target.value)} placeholder="Motivo obrigatório" className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" /><button type="button" disabled={busy || !closeReason.trim()} onClick={() => void run(`/sales-orders/${detail.id}/close`, { reason: closeReason }).then((saved) => { if (saved) setCloseReason(""); })} className="rounded-lg border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 disabled:opacity-50">Encerrar pedido</button></div></section> : null}
+          {detail.deliveries.length > 0 ? <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
+            <h3 className="text-lg font-bold text-slate-950">Devoluções de peças</h3>
+            <p className="mt-1 text-sm text-slate-600">Registre apenas peças conferidas e aptas a voltar ao estoque. Se já houver boleto, pagamento ou nota, regularize primeiro com o financeiro.</p>
+            <div className="mt-3 space-y-3">{detail.deliveries.flatMap((delivery) => delivery.items.map((line) => <div key={line.id} className="rounded-xl border border-slate-200 p-3 text-sm">
+              <p className="font-semibold text-slate-900">{delivery.code} · {line.salesOrderItem.description}</p>
+              <p className="mt-1 text-xs text-slate-600">{line.quantity} entregue(s) · {line.returnedQty} devolvida(s) · {line.warehouse.name}</p>
+              {permissions.canReturn && line.returnedQty < line.quantity ? <div className="mt-3 flex flex-wrap gap-2">
+                <input aria-label={`Quantidade devolvida de ${line.salesOrderItem.description}`} type="number" min="1" max={line.quantity - line.returnedQty} value={returnQty[line.id] || ""} onChange={(event) => setReturnQty((current) => ({ ...current, [line.id]: event.target.value }))} placeholder="Qtd" className="w-20 rounded-lg border border-slate-300 px-2 py-1" />
+                <input aria-label={`Motivo da devolução de ${line.salesOrderItem.description}`} value={returnReason[line.id] || ""} onChange={(event) => setReturnReason((current) => ({ ...current, [line.id]: event.target.value }))} placeholder="Motivo da devolução" className="min-w-44 flex-1 rounded-lg border border-slate-300 px-2 py-1" />
+                <label className="flex items-center gap-2 text-xs text-slate-700"><input type="checkbox" checked={restockApproved[line.id] || false} onChange={(event) => setRestockApproved((current) => ({ ...current, [line.id]: event.target.checked }))} />Peça conferida e apta ao estoque</label>
+                <button type="button" disabled={busy || !restockApproved[line.id] || !returnReason[line.id]?.trim() || Number(returnQty[line.id]) < 1 || Number(returnQty[line.id]) > line.quantity - line.returnedQty} onClick={() => void submitReturn(line.id)} className="rounded-lg bg-amber-700 px-3 py-1 font-bold text-white disabled:opacity-50">Receber devolução</button>
+              </div> : null}
+            </div>))}</div>
+            {detail.returns?.length ? <ul className="mt-4 space-y-1 text-xs text-slate-600">{detail.returns.map((entry) => <li key={entry.id}>{date(entry.createdAt)} · {entry.quantity} peça(s) · {entry.reason}</li>)}</ul> : null}
+          </section> : null}
         </>}
       </main>
     </div>
