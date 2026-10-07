@@ -14,6 +14,7 @@ import {
 const NAV_ITEMS = [
   { href: "/portal/dashboard", label: "Resumo" },
   { href: "/portal/equipamentos", label: "Equipamentos" },
+  { href: "/portal/contratos", label: "Contratos" },
   { href: "/portal/propostas", label: "Propostas" },
   { href: "/portal/chamados", label: "Chamados" },
   { href: "/portal/solicitacoes", label: "Solicitações" },
@@ -43,7 +44,7 @@ export default function PortalLayout({
 
       if (!hasSession || !token) {
         clearAuthSession();
-        router.replace("/");
+        router.replace("/cliente/entrar");
         return;
       }
 
@@ -66,7 +67,7 @@ export default function PortalLayout({
 
   function handleLogout() {
     clearAuthSession();
-    router.replace("/");
+    router.replace("/cliente/entrar");
   }
 
   if (!ready) {

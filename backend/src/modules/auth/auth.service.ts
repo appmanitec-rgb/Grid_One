@@ -41,6 +41,7 @@ export class AuthService {
     pass: string,
     mfaCode?: string,
     device?: DeviceContext,
+    audience: 'INTERNAL' | 'CLIENT' = 'INTERNAL',
   ) {
     const normalizedEmail = email.trim().toLowerCase();
     const user = await this.database.user.findFirst({
@@ -57,6 +58,14 @@ export class AuthService {
 
     const isPasswordValid = await bcrypt.compare(pass, user.passwordHash);
     if (!isPasswordValid) {
+      throw new UnauthorizedException('E-mail ou palavra-passe incorretos.');
+    }
+
+    if (
+      (audience === 'CLIENT' &&
+        (user.role !== UserRole.CLIENT || !user.linkedClientId)) ||
+      (audience === 'INTERNAL' && user.role === UserRole.CLIENT)
+    ) {
       throw new UnauthorizedException('E-mail ou palavra-passe incorretos.');
     }
 
@@ -136,6 +145,63 @@ export class AuthService {
       },
       device,
     );
+  }
+
+  async activateClientPortal(token: string, password: string) {
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    const activation = await this.database.clientPortalActivation.findUnique({
+      where: { tokenHash },
+      include: { user: true },
+    });
+    const now = new Date();
+    if (
+      !activation ||
+      activation.usedAt ||
+      activation.expiresAt <= now ||
+      activation.user.role !== UserRole.CLIENT ||
+      !activation.user.linkedClientId
+    ) {
+      throw new UnauthorizedException('Link de ativacao invalido ou expirado.');
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    await this.database.$transaction(async (tx) => {
+      const claimed = await tx.clientPortalActivation.updateMany({
+        where: {
+          id: activation.id,
+          usedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+        data: { usedAt: new Date() },
+      });
+      if (claimed.count !== 1) {
+        throw new UnauthorizedException(
+          'Link de ativacao invalido ou expirado.',
+        );
+      }
+      await tx.user.update({
+        where: { id: activation.userId },
+        data: { passwordHash, isActive: true },
+      });
+      await tx.authSession.updateMany({
+        where: { userId: activation.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await tx.clientPortalActivation.updateMany({
+        where: { userId: activation.userId, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+      await tx.systemAuditLog.create({
+        data: {
+          domain: 'USERS',
+          entityType: 'USER',
+          entityId: activation.userId,
+          action: 'CLIENT_PORTAL_ACTIVATED',
+          actorUserId: activation.userId,
+        },
+      });
+    });
+    return { message: 'Acesso ativado. Entre pelo Portal do Cliente.' };
   }
 
   async verifyMfaChallenge(

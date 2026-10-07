@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { FormEvent, useState } from "react";
 
 type MfaSetupData = {
@@ -128,6 +129,15 @@ export function LoginExperience({
                 </button>
               </form>
             )}
+
+            {flow === "LOGIN" ? (
+              <div className="mt-7 border-t border-[#dce6f2] pt-6 text-center">
+                <p className="text-sm text-[#536981]">Seu acesso é como cliente?</p>
+                <Link href="/cliente/entrar" className="mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-[#9bc4e8] bg-[#edf6ff] px-4 text-sm font-bold text-[#12538e] transition hover:bg-[#dceeff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1267c4]">
+                  Sou cliente · acessar meu portal
+                </Link>
+              </div>
+            ) : null}
 
             {flow === "MFA_CHALLENGE" && (
               <form onSubmit={handleVerifyChallenge} className="space-y-5">

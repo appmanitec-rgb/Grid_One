@@ -72,6 +72,16 @@ describe('CustomerPortalService', () => {
     );
   });
 
+  it('lists only contracts linked to the authenticated client', async () => {
+    db.serviceContract.findMany.mockResolvedValue([]);
+
+    await service.listContracts('user-a');
+
+    expect(db.serviceContract.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { clientId: 'client-a' } }),
+    );
+  });
+
   it('blocks client A from reading client B proposal', async () => {
     db.proposal.findFirst.mockResolvedValue(null);
 
@@ -328,7 +338,7 @@ function createDbMock(): CustomerPortalDbMock {
       create: jest.fn(),
       update: jest.fn(),
     },
-    serviceContract: { count: jest.fn() },
+    serviceContract: { count: jest.fn(), findMany: jest.fn() },
     maintenanceOrder: {
       count: jest.fn(),
       findMany: jest.fn(),
@@ -365,7 +375,7 @@ type CustomerPortalDbMock = {
     create: jest.Mock;
     update: jest.Mock;
   };
-  serviceContract: { count: jest.Mock };
+  serviceContract: { count: jest.Mock; findMany: jest.Mock };
   maintenanceOrder: {
     count: jest.Mock;
     findMany: jest.Mock;

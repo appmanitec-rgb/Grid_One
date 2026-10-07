@@ -54,6 +54,11 @@ export default function PortalDashboardPage() {
       href: "/portal/equipamentos",
     },
     {
+      label: "Contratos ativos",
+      value: data.stats.activeContracts,
+      href: "/portal/contratos",
+    },
+    {
       label: "Propostas pendentes",
       value: data.stats.awaitingProposals,
       href: "/portal/propostas",
@@ -95,7 +100,12 @@ export default function PortalDashboardPage() {
         </p>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="flex flex-wrap gap-3">
+        <Link href="/portal/propostas" className="rounded-xl bg-blue-700 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-blue-800">Avaliar minhas propostas</Link>
+        <Link href="/portal/solicitacoes" className="rounded-xl border border-blue-200 bg-white px-5 py-3 text-sm font-bold text-blue-800 hover:bg-blue-50">Solicitar peças ou serviços</Link>
+      </div>
+
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         {stats.map((stat) => (
           <Link
             key={stat.label}

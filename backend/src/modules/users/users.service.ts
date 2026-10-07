@@ -15,7 +15,7 @@ import {
   UserRole,
 } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
-import { createHash } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { DatabaseService } from '../../database/database.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import {
@@ -137,7 +137,12 @@ export class UsersService {
     );
 
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(createUserDto.password, salt);
+    const hashedPassword = await bcrypt.hash(
+      createUserDto.role === UserRole.CLIENT
+        ? randomBytes(32).toString('hex')
+        : (createUserDto.password ?? ''),
+      salt,
+    );
 
     const { accessPolicy, role, managerId, kpiTargetJson } = createUserDto;
     const userData = { ...createUserDto } as Partial<CreateUserDto>;
@@ -164,6 +169,7 @@ export class UsersService {
       kpiTargetJson: kpiTargetJson as Prisma.InputJsonValue | undefined,
       accessPolicy: effectiveAccessPolicy(role, accessPolicy) as any,
       passwordHash: hashedPassword,
+      isActive: role === UserRole.CLIENT ? false : createUserDto.isActive,
     };
 
     const created = await this.prisma.$transaction(async (tx) => {
@@ -197,6 +203,56 @@ export class UsersService {
     });
 
     return this.withManager(created);
+  }
+
+  async issueClientPortalActivation(userId: string, actorUserId?: string) {
+    await this.assertCanManageSecurity(actorUserId);
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true, linkedClientId: true },
+    });
+    if (!user || user.role !== UserRole.CLIENT || !user.linkedClientId) {
+      throw new BadRequestException(
+        'Selecione uma conta de cliente vinculada.',
+      );
+    }
+
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { isActive: false },
+      });
+      await tx.authSession.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await tx.clientPortalActivation.updateMany({
+        where: { userId, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+      await tx.clientPortalActivation.create({
+        data: {
+          userId,
+          tokenHash: createHash('sha256').update(token).digest('hex'),
+          expiresAt,
+          issuedByUserId: actorUserId,
+        },
+      });
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.USERS,
+          entityType: 'USER',
+          entityId: userId,
+          action: 'CLIENT_PORTAL_LINK_ISSUED',
+          actorUserId,
+          afterPayload: { expiresAt: expiresAt.toISOString() },
+        },
+        tx,
+      );
+    });
+    return { token, expiresAt };
   }
 
   async findAll() {
@@ -244,6 +300,7 @@ export class UsersService {
         id: true,
         email: true,
         role: true,
+        isActive: true,
         accessPolicy: true,
         isSystemMaster: true,
         linkedClientId: true,
@@ -258,6 +315,21 @@ export class UsersService {
     }
 
     const targetRole = role ?? currentUser.role;
+    if (targetRole === UserRole.CLIENT && password) {
+      throw new BadRequestException(
+        'Use o link de ativacao para definir a senha do cliente.',
+      );
+    }
+    if (
+      currentUser.role === UserRole.CLIENT &&
+      targetRole === UserRole.CLIENT &&
+      !currentUser.isActive &&
+      updateData.isActive === true
+    ) {
+      throw new BadRequestException(
+        'O cliente precisa ativar a conta pelo link de uso unico.',
+      );
+    }
     const currentPolicy = effectiveAccessPolicy(
       currentUser.role,
       currentUser.accessPolicy,
@@ -313,6 +385,17 @@ export class UsersService {
     if (password) {
       const salt = await bcrypt.genSalt(10);
       dataToUpdate.passwordHash = await bcrypt.hash(password, salt);
+    }
+
+    if (
+      targetRole === UserRole.CLIENT &&
+      currentUser.role !== UserRole.CLIENT
+    ) {
+      dataToUpdate.isActive = false;
+      dataToUpdate.passwordHash = await bcrypt.hash(
+        randomBytes(32).toString('hex'),
+        12,
+      );
     }
 
     if (role) {

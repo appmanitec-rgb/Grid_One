@@ -12,6 +12,7 @@ import { Throttle } from '@nestjs/throttler';
 import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { ClientActivateDto } from './dto/client-activate.dto';
 import {
   MfaDisableDto,
   RefreshSessionDto,
@@ -31,6 +32,29 @@ export class AuthController {
       deviceId: dto.deviceId,
       deviceName: dto.deviceName,
     });
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 8, ttl: 60_000 } })
+  @Post('client-login')
+  clientLogin(@Body() dto: LoginDto) {
+    return this.authService.login(
+      dto.email,
+      dto.password,
+      dto.mfaCode,
+      {
+        deviceId: dto.deviceId,
+        deviceName: dto.deviceName,
+      },
+      'CLIENT',
+    );
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('client-activate')
+  clientActivate(@Body() dto: ClientActivateDto) {
+    return this.authService.activateClientPortal(dto.token, dto.password);
   }
 
   @HttpCode(HttpStatus.OK)

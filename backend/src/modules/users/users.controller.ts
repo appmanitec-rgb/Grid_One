@@ -35,6 +35,15 @@ export class UsersController {
     return this.usersService.create(createUserDto, actorUserId);
   }
 
+  @RequireAccessPolicy('users.manage')
+  @Post(':id/client-activation')
+  issueClientPortalActivation(@Req() req: Request, @Param('id') id: string) {
+    return this.usersService.issueClientPortalActivation(
+      id,
+      this.extractUserId(req),
+    );
+  }
+
   @RequireAccessPolicy('pages.dashboard')
   @Get('me/access')
   getMyAccess(@Req() req: Request) {

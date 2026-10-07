@@ -18,6 +18,7 @@ describe('UsersService', () => {
       findUnique: jest.Mock;
       create: jest.Mock;
     };
+    client: { findUnique: jest.Mock };
     $transaction: jest.Mock;
   };
   let auditLogsService: { record: jest.Mock };
@@ -35,6 +36,7 @@ describe('UsersService', () => {
         findUnique: jest.fn(),
         create: jest.fn(),
       },
+      client: { findUnique: jest.fn() },
       $transaction: jest.fn(),
     };
     prisma.$transaction.mockImplementation(
@@ -114,6 +116,36 @@ describe('UsersService', () => {
       prisma,
     );
     expect(result).toEqual(expect.objectContaining(createdUser));
+  });
+
+  it('provisions a client account inactive without an administrator-defined password', async () => {
+    prisma.user.findFirst.mockResolvedValue(null);
+    prisma.client.findUnique.mockResolvedValue({ id: 'client-1' });
+    prisma.user.create.mockResolvedValue({
+      id: 'client-user',
+      role: UserRole.CLIENT,
+      linkedClientId: 'client-1',
+      isActive: false,
+    });
+
+    await service.create({
+      name: 'Cliente Externo',
+      email: 'cliente@example.com',
+      role: UserRole.CLIENT,
+      linkedClientId: 'client-1',
+      isActive: true,
+    });
+
+    expect(prisma.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          role: UserRole.CLIENT,
+          linkedClientId: 'client-1',
+          isActive: false,
+          passwordHash: expect.any(String),
+        }),
+      }),
+    );
   });
 
   it('does not create an incomplete technician user', async () => {

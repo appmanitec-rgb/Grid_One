@@ -63,6 +63,19 @@ export type PortalEquipment = {
   }>;
 };
 
+export type PortalContract = {
+  id: string;
+  code: string;
+  title?: string | null;
+  status: string;
+  startDate: string;
+  endDate: string;
+  preventiveRecurrence: string;
+  responseTimeHours?: number | null;
+  partsCoverage: string;
+  equipments: Array<{ generator: { id: string; name: string; serialNumber?: string | null } }>;
+};
+
 export type PortalProposal = {
   id: string;
   code: string;

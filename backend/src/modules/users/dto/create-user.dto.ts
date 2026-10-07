@@ -11,6 +11,7 @@ import {
   IsUrl,
   IsUUID,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -38,9 +39,10 @@ export class CreateUserDto {
   @IsEmail({}, { message: 'Forneca um email valido' })
   email: string;
 
+  @ValidateIf((dto: CreateUserDto) => dto.role !== UserRole.CLIENT)
   @IsString()
   @MinLength(6, { message: 'A senha deve ter no minimo 6 caracteres' })
-  password: string;
+  password?: string;
 
   @IsEnum(UserRole, {
     message: 'O cargo deve ser um UserRole valido.',

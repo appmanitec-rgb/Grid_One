@@ -897,6 +897,7 @@ model User {
   hrAssetAssignments             HrAssetAssignment[]
   fleetAllocations               FleetAllocation[]
   authSessions                   AuthSession[]
+  clientPortalActivations        ClientPortalActivation[]
   requestedAutomationRuns        AutomationRun[]             @relation("AutomationRunRequestedBy")
   createdDocumentShareTokens     DocumentShareToken[]        @relation("DocumentShareCreatedBy")
   createdDocumentDeliveries      DocumentDelivery[]          @relation("DocumentDeliveryCreatedBy")
@@ -1034,6 +1035,20 @@ model AuthSession {
   @@unique([userId, deviceId])
   @@index([expiresAt, revokedAt])
   @@map("auth_sessions")
+}
+
+model ClientPortalActivation {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash      String    @unique
+  expiresAt      DateTime
+  usedAt         DateTime?
+  createdAt      DateTime  @default(now())
+  issuedByUserId String?
+
+  @@index([userId, usedAt, expiresAt])
+  @@map("client_portal_activations")
 }
 
 model AutomationRun {

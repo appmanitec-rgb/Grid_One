@@ -779,6 +779,12 @@ export function UserManagementWorkspace({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [clientActivationLink, setClientActivationLink] = useState("");
+  const [activationBusy, setActivationBusy] = useState(false);
+
+  useEffect(() => {
+    setClientActivationLink("");
+  }, [selectedUserId]);
 
   useEffect(() => {
     if (area !== "permissions") return;
@@ -1054,13 +1060,13 @@ export function UserManagementWorkspace({
     if (
       !newUser.name.trim() ||
       !newUser.email.trim() ||
-      !newUser.password.trim()
+      (newUser.role !== "CLIENT" && !newUser.password.trim())
     ) {
       setError("Preencha nome, email e senha para provisionar o usuario.");
       return;
     }
 
-    if (newUser.password.trim().length < 6) {
+    if (newUser.role !== "CLIENT" && newUser.password.trim().length < 6) {
       setError("A senha inicial precisa ter ao menos 6 caracteres.");
       return;
     }
@@ -1088,7 +1094,7 @@ export function UserManagementWorkspace({
       const payload = {
         name: newUser.name.trim(),
         email: newUser.email.trim(),
-        password: newUser.password.trim(),
+        password: newUser.role === "CLIENT" ? undefined : newUser.password.trim(),
         role: newUser.role,
         isActive: newUser.isActive,
         linkedClientId:
@@ -1139,9 +1145,11 @@ export function UserManagementWorkspace({
       setNewUser(EMPTY_NEW_USER);
       setSelectedUserId(created.id);
       setSuccess(
-        newUser.role === "TECHNICIAN"
-          ? "Usuario e perfil tecnico provisionados com sucesso."
-          : "Usuario provisionado com sucesso.",
+        newUser.role === "CLIENT"
+          ? "Conta de cliente criada sem senha. Abra Controle para gerar o link de ativação."
+          : newUser.role === "TECHNICIAN"
+            ? "Usuario e perfil tecnico provisionados com sucesso."
+            : "Usuario provisionado com sucesso.",
       );
       await loadUsers();
       setSelectedUserId(created.id);
@@ -1153,6 +1161,27 @@ export function UserManagementWorkspace({
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function generateClientActivationLink() {
+    if (!selectedUser || selectedUser.role !== "CLIENT") return;
+    setActivationBusy(true);
+    setClientActivationLink("");
+    setError("");
+    try {
+      const response = await apiFetch(`/users/${selectedUser.id}/client-activation`, { method: "POST" });
+      if (await handleUnauthorized(response)) return;
+      if (!response.ok) throw new Error(await readApiError(response, "Não foi possível gerar o link de ativação."));
+      const payload = (await response.json()) as { token: string; expiresAt: string };
+      const portalBaseUrl = (process.env.NEXT_PUBLIC_PORTAL_BASE_URL || window.location.origin).replace(/\/$/, "");
+      setClientActivationLink(`${portalBaseUrl}/cliente/ativar#token=${payload.token}`);
+      setSuccess(`Link de uso único gerado para ${selectedUser.name}. Validade: 48 horas.`);
+      await loadUsers();
+    } catch (activationError) {
+      setError(activationError instanceof Error ? activationError.message : "Não foi possível gerar o link de ativação.");
+    } finally {
+      setActivationBusy(false);
     }
   }
 
@@ -1680,12 +1709,32 @@ export function UserManagementWorkspace({
       ) : null}
 
       {area === "control" ? (
-        <ManagementSection
-          {...managementSectionProps}
-          eyebrow="Controle"
-          title="Controle de usuarios"
-          description="Triagem operacional de contas, status, senha, vinculos e edicoes em lote."
-        />
+        <>
+          <ManagementSection
+            {...managementSectionProps}
+            eyebrow="Controle"
+            title="Controle de usuarios"
+            description="Triagem operacional de contas, status, senha, vinculos e edicoes em lote."
+          />
+          {selectedUser?.role === "CLIENT" ? (
+            <SectionCard eyebrow="Portal do cliente" title="Ativar acesso externo" description="Gere um link individual para o cliente definir a própria senha. Um novo link cancela o anterior e pausa o acesso até a ativação.">
+              <div className="flex flex-wrap items-center gap-3">
+                <button type="button" className={PRIMARY_BUTTON} disabled={activationBusy || saving || !canManageSecurity} onClick={() => void generateClientActivationLink()}>{activationBusy ? "Gerando..." : "Gerar link de ativação"}</button>
+                <span className="text-sm text-slate-600">Conta: {selectedUser.email}</span>
+              </div>
+              {clientActivationLink ? (
+                <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+                  <label htmlFor="client-activation-link" className="block text-sm font-bold text-blue-950">Link válido por 48 horas</label>
+                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                    <input id="client-activation-link" readOnly value={clientActivationLink} onFocus={(event) => event.target.select()} className="min-w-0 flex-1 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm text-slate-900" />
+                    <button type="button" className={SECONDARY_BUTTON} onClick={() => void navigator.clipboard.writeText(clientActivationLink).catch(() => setError("Selecione o link no campo para copiá-lo manualmente."))}>Copiar link</button>
+                  </div>
+                  <p className="mt-2 text-xs text-blue-900">Confirme o contato e o endereço HTTPS antes de compartilhar. O link aparece somente nesta emissão.</p>
+                </div>
+              ) : null}
+            </SectionCard>
+          ) : null}
+        </>
       ) : null}
 
       {area === "documents" ? (
@@ -2156,17 +2205,17 @@ function ProvisioningCard({
               placeholder="Ex.: Ana Paula Rodrigues"
             />
           </FormField>
-          <FormField label="Email corporativo">
+          <FormField label={newUser.role === "CLIENT" ? "E-mail do representante do cliente" : "Email corporativo"}>
             <TextInput
               type="email"
               value={newUser.email}
               onChange={(event) =>
                 onChange((prev) => ({ ...prev, email: event.target.value }))
               }
-              placeholder="nome@manitec.com.br"
+              placeholder={newUser.role === "CLIENT" ? "contato@cliente.com.br" : "nome@manitec.com.br"}
             />
           </FormField>
-          <FormField label="Senha inicial" hint="Minimo 6 caracteres">
+          {newUser.role !== "CLIENT" ? <FormField label="Senha inicial" hint="Minimo 6 caracteres">
             <TextInput
               type="password"
               autoComplete="new-password"
@@ -2176,7 +2225,7 @@ function ProvisioningCard({
               }
               placeholder="Defina uma senha temporaria"
             />
-          </FormField>
+          </FormField> : null}
           <FormField label="Cargo">
             <SelectInput
               value={newUser.role}
@@ -2353,7 +2402,7 @@ function ProvisioningCard({
           ) : null}
         </div>
 
-        <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-700">
+        {newUser.role === "CLIENT" ? <InlineMessage>O acesso do cliente começa inativo. Depois de criar a conta, abra Controle e gere o link para ele definir a própria senha.</InlineMessage> : <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-700">
           <input
             type="checkbox"
             className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-200"
@@ -2363,7 +2412,7 @@ function ProvisioningCard({
             }
           />
           Conta ja nasce ativa para uso imediato
-        </label>
+        </label>}
 
         <InlineMessage>
           O perfil recebe as permissoes padrao do cargo escolhido e pode ser
@@ -3679,7 +3728,7 @@ function UserEditorCard({
                 onChange={(event) =>
                   onUpdateSelectedUser({ isActive: event.target.checked })
                 }
-                disabled={isSelectedMaster}
+                disabled={isSelectedMaster || (selectedUser.role === "CLIENT" && !selectedUser.isActive)}
               />
               Conta habilitada para uso
             </label>
@@ -3896,14 +3945,15 @@ function UserEditorCard({
           <FieldBox className="space-y-4">
             <div>
               <p className="text-sm font-semibold text-slate-900">
-                Acesso e senha
+                {selectedUser.role === "CLIENT" ? "Acesso do cliente" : "Acesso e senha"}
               </p>
               <p className="mt-1 text-xs leading-5 text-slate-500">
-                A senha atual nao fica visivel no sistema. Para alterar, defina
-                uma nova senha e salve o cadastro.
+                {selectedUser.role === "CLIENT"
+                  ? "O cliente define a senha por um link individual gerado na seção Ativar acesso externo."
+                  : "A senha atual nao fica visivel no sistema. Para alterar, defina uma nova senha e salve o cadastro."}
               </p>
             </div>
-            <FormField label="Nova senha" hint="Opcional; minimo 6 caracteres">
+            {selectedUser.role !== "CLIENT" ? <FormField label="Nova senha" hint="Opcional; minimo 6 caracteres">
               <TextInput
                 type="password"
                 autoComplete="new-password"
@@ -3914,8 +3964,8 @@ function UserEditorCard({
                 placeholder="Digite para redefinir a senha"
                 disabled={isSelectedMaster}
               />
-            </FormField>
-            {selectedPassword ? (
+            </FormField> : null}
+            {selectedUser.role !== "CLIENT" && selectedPassword ? (
               <InlineMessage>
                 A nova senha sera aplicada quando clicar em Salvar alteracoes.
               </InlineMessage>

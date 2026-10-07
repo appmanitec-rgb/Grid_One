@@ -63,6 +63,11 @@ export class CustomerPortalController {
     return this.customerPortalService.listEquipment(this.extractUserId(req));
   }
 
+  @Get('contracts')
+  contracts(@Req() req: AuthenticatedRequest) {
+    return this.customerPortalService.listContracts(this.extractUserId(req));
+  }
+
   @Get('equipment/:id')
   equipmentDetail(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.customerPortalService.getEquipment(this.extractUserId(req), id);

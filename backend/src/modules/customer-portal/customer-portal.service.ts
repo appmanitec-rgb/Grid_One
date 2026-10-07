@@ -257,6 +257,30 @@ export class CustomerPortalService {
     }));
   }
 
+  async listContracts(userId: string | undefined) {
+    const scope = await this.requireCustomerScope(userId);
+    return this.prisma.serviceContract.findMany({
+      where: { clientId: scope.clientId },
+      orderBy: { endDate: 'desc' },
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        status: true,
+        startDate: true,
+        endDate: true,
+        preventiveRecurrence: true,
+        responseTimeHours: true,
+        partsCoverage: true,
+        equipments: {
+          select: {
+            generator: { select: { id: true, name: true, serialNumber: true } },
+          },
+        },
+      },
+    });
+  }
+
   async getEquipment(userId: string | undefined, equipmentId: string) {
     const scope = await this.requireCustomerScope(userId);
     const equipment = await this.prisma.generator.findFirst({
