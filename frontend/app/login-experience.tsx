@@ -29,9 +29,9 @@ type LoginExperienceProps = {
 };
 
 const fieldClass =
-  "h-12 w-full rounded-xl border border-[#cbd7e5] bg-white px-4 text-sm text-[#182b45] shadow-sm outline-none transition placeholder:text-[#91a0b2] focus:border-[#2375d8] focus:ring-4 focus:ring-[#2375d8]/10";
+  "h-[52px] w-full rounded-xl border border-[#c5d3e3] bg-white px-4 text-[15px] text-[#182b45] shadow-sm outline-none transition placeholder:text-[#72849a] focus:border-[#2375d8] focus:ring-4 focus:ring-[#2375d8]/10";
 const primaryButtonClass =
-  "flex h-12 w-full items-center justify-center gap-3 rounded-xl bg-[#1267c4] px-4 text-sm font-bold text-white shadow-[0_12px_24px_rgba(18,103,196,0.2)] transition hover:bg-[#0d55a4] focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#1267c4] disabled:cursor-not-allowed disabled:opacity-60";
+  "flex h-[52px] w-full items-center justify-center gap-3 rounded-xl bg-[#1267c4] px-4 text-[15px] font-bold text-white shadow-[0_12px_24px_rgba(18,103,196,0.2)] transition hover:bg-[#0d55a4] focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#1267c4] disabled:cursor-not-allowed disabled:opacity-60";
 const secondaryButtonClass =
   "w-full rounded-xl border border-[#cbd7e5] bg-white px-4 py-3 text-sm font-semibold text-[#31516f] transition hover:bg-[#eef4fb] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1267c4]";
 
@@ -56,61 +56,55 @@ export function LoginExperience({
   const [showPassword, setShowPassword] = useState(false);
 
   return (
-    <main className="min-h-screen bg-[#071326] p-0 font-sans lg:p-4 xl:p-5">
+    <main className="login-experience min-h-screen bg-[#071326] p-0 lg:p-4 xl:p-5">
       <div className="mx-auto grid min-h-screen w-full overflow-hidden bg-[#f7f9fc] shadow-[0_28px_80px_rgba(0,0,0,0.25)] lg:min-h-[calc(100vh-2rem)] lg:grid-cols-[minmax(0,1fr)_minmax(450px,520px)] lg:rounded-[26px] xl:min-h-[calc(100vh-2.5rem)]">
         <section
-          className="relative isolate flex min-h-[240px] flex-col justify-between overflow-hidden bg-[#0a1d36] p-6 text-white sm:min-h-[300px] sm:p-9 lg:min-h-0 lg:p-12 xl:p-16"
+          className="relative isolate flex min-h-[265px] flex-col justify-between overflow-hidden bg-[#0a1d36] px-6 py-7 text-white sm:min-h-[320px] sm:p-9 lg:min-h-0 lg:p-12 xl:p-16"
           aria-label="Manitec Grupos Geradores"
         >
           <Image
             src="/brand/login-generator-hero.png"
-            alt="Grupo gerador industrial em instalação externa"
+            alt="Grupo gerador industrial da Manitec"
             fill
             priority
             sizes="(min-width: 1024px) 60vw, 100vw"
             className="object-cover object-[58%_50%]"
           />
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(4,16,34,0.88),rgba(4,16,34,0.3)_70%),linear-gradient(0deg,rgba(4,16,34,0.95),transparent_55%)]" />
-          <div className="relative flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-lg font-black text-[#f9b23d] backdrop-blur-sm" aria-hidden="true">M</span>
-            <div className="leading-tight">
-              <p className="text-sm font-extrabold tracking-[0.17em]">MANITEC</p>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/65">GridOne · Operação integrada</p>
-            </div>
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(4,16,34,0.91),rgba(4,16,34,0.28)_74%),linear-gradient(0deg,rgba(4,16,34,0.94),transparent_65%)]" />
+          <div className="relative flex justify-center lg:justify-start">
+            <Image src="/brand/manitec-gridone-lockup.svg" alt="Manitec Grupos Geradores · GridOne" width={370} height={86} priority className="h-auto w-[250px] sm:w-[300px] lg:w-[320px]" />
           </div>
-          <div className="relative max-w-xl pt-12 lg:pb-5">
+          <div className="relative max-w-xl pt-8 lg:pb-5">
             <div className="mb-5 hidden h-px w-14 bg-[#f6a72e] lg:block" />
-            <p className="hidden text-[11px] font-bold uppercase tracking-[0.27em] text-[#ffc572] lg:block">Inteligência para quem move energia</p>
-            <h2 className="mt-3 max-w-[520px] text-[clamp(1.75rem,3.4vw,3.6rem)] font-bold leading-[1.1] tracking-tight">
-              Energia em movimento.<br />
-              <span className="text-[#ffc572]">Operação em controle.</span>
+            <p className="hidden text-xs font-bold uppercase tracking-[0.2em] text-[#ffc572] lg:block">Gestão para quem move energia</p>
+            <h2 className="login-display max-w-[590px] text-[clamp(1.8rem,3.4vw,3.5rem)] font-bold leading-[1.1] tracking-[-0.045em] lg:mt-4">
+              Energia em operação.<br />
+              <span className="text-[#ffc572]">Toda a gestão em sintonia.</span>
             </h2>
-            <p className="mt-4 hidden max-w-md text-sm leading-7 text-white/76 lg:block xl:text-base">
-              Do primeiro contato à execução, todas as áreas da Manitec conectadas em uma única plataforma.
+            <p className="mt-4 hidden max-w-md text-[15px] leading-7 text-white/85 lg:block">
+              Do primeiro contato à entrega, conecte equipes, informações e decisões em um só lugar.
             </p>
-            <div className="mt-8 hidden flex-wrap gap-2 lg:flex">
-              {["Comercial", "Operação", "Financeiro"].map((area) => (
-                <span key={area} className="rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/85 backdrop-blur-sm">{area}</span>
-              ))}
+            <div className="mt-8 hidden flex-wrap items-center gap-3 text-xs font-semibold text-white/80 lg:flex">
+              <span>Comercial</span><span className="size-1 rounded-full bg-[#ffc572]" /><span>Operação</span><span className="size-1 rounded-full bg-[#ffc572]" /><span>Financeiro</span>
             </div>
           </div>
         </section>
 
         <section className="flex min-w-0 flex-col justify-between bg-[#f9fbfe] px-6 py-8 sm:px-10 lg:px-12 lg:py-10 xl:px-16" aria-label="Acesso ao GridOne">
           <div className="flex justify-end">
-            <span className="rounded-full border border-[#dce6f2] bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#526a85]">Sistema interno</span>
+            <span className="rounded-full border border-[#dce6f2] bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[#526a85]">Acesso seguro</span>
           </div>
 
-          <div className="mx-auto w-full max-w-[390px] py-7 lg:py-12">
-            <div className="mb-8">
-              <Image src="/brand/manitec-logo-transparent.png" alt="Manitec Grupos Geradores" width={230} height={55} className="h-auto w-[205px] object-contain" priority />
-              <div className="mt-7 h-1 w-12 rounded-full bg-[#e9a228]" />
-              <p className="mt-7 text-[11px] font-bold uppercase tracking-[0.2em] text-[#42617e]">Plataforma GridOne</p>
-              <h1 className="mt-2 text-[2rem] font-bold tracking-[-0.035em] text-[#12243d] sm:text-[2.25rem]">
-                {flow === "LOGIN" ? "Bem-vindo de volta" : flow === "MFA_CHALLENGE" ? "Confirme seu acesso" : "Proteja sua conta"}
+          <div className="mx-auto w-full max-w-[390px] py-7 lg:py-10">
+            <div className="mb-8 text-center">
+              <Image src="/brand/manitec-logo-transparent.png" alt="Manitec Grupos Geradores" width={290} height={68} className="mx-auto h-auto w-[240px] object-contain sm:w-[270px]" priority />
+              <div className="mx-auto mt-6 h-1 w-12 rounded-full bg-[#e9a228]" />
+              <p className="mt-6 text-xs font-bold uppercase tracking-[0.16em] text-[#42617e]">Manitec GridOne</p>
+              <h1 className="login-display mt-2 text-[2rem] font-bold tracking-[-0.04em] text-[#12243d] sm:text-[2.3rem]">
+                {flow === "LOGIN" ? "Bem-vindo ao GridOne" : flow === "MFA_CHALLENGE" ? "Confirme seu acesso" : "Proteja sua conta"}
               </h1>
-              <p className="mt-2 text-sm leading-6 text-[#65778e]">
-                {flow === "LOGIN" ? "Entre com suas credenciais para continuar seu trabalho." : flow === "MFA_CHALLENGE" ? "Digite o código do seu aplicativo autenticador." : "Configure a verificação em duas etapas para continuar."}
+              <p className="mx-auto mt-2 max-w-[340px] text-sm leading-6 text-[#536981]">
+                {flow === "LOGIN" ? "Entre para acompanhar propostas, equipes e operações da Manitec." : flow === "MFA_CHALLENGE" ? "Digite o código gerado pelo seu aplicativo autenticador." : "Ative a verificação em duas etapas para proteger seu acesso."}
               </p>
             </div>
 
@@ -130,7 +124,7 @@ export function LoginExperience({
                   </div>
                 </div>
                 <button type="submit" disabled={isLoading} className={primaryButtonClass}>
-                  {isLoading ? "Autenticando..." : "Entrar no GridOne"}<span aria-hidden="true">→</span>
+                  {isLoading ? "Entrando..." : "Acessar o GridOne"}<span aria-hidden="true">→</span>
                 </button>
               </form>
             )}
