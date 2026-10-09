@@ -23,6 +23,7 @@ import {
   UserRole,
 } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
+import { publishOrderCompleted } from '../team/team-automation';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { billCompletedExecution } from '../finance/execution-billing';
@@ -135,6 +136,7 @@ export class MaintenanceOrdersService {
 
     if ((dto.status ?? OrderStatus.OPEN) === OrderStatus.COMPLETED) {
       await this.finalizeCompletedOrder(tx, order.id, actorUserId);
+      await publishOrderCompleted(tx, order.id);
     }
 
     const fullOrder = await tx.maintenanceOrder.findUnique({
@@ -389,6 +391,7 @@ export class MaintenanceOrdersService {
         current.status !== OrderStatus.COMPLETED
       ) {
         await this.finalizeCompletedOrder(tx, id, actorUserId);
+        await publishOrderCompleted(tx, id);
       }
 
       const fullOrder = await tx.maintenanceOrder.findUnique({

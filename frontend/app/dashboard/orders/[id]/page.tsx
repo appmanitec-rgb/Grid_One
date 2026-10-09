@@ -505,8 +505,8 @@ export default function OrderDetailPage() {
                 ]
               : []),
             {
-              label: `Documento da O.S.`,
-              description: "Versao documental pronta para impressao.",
+              label: "Arquivos e envio da O.S.",
+              description: "Consultar resumo, baixar DOCX e compartilhar com o cliente.",
               href: `/dashboard/documents/orders/${order.id}`,
               badge: "Documento",
               tone: "slate" as const,

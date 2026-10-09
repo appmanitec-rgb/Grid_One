@@ -330,6 +330,11 @@ export default function ClientProfilePage() {
               permission: "clients.update",
             },
             {
+              label: "Gerenciar central do cliente",
+              href: `/dashboard/clients/${client.id}/portal`,
+              permission: "clients.update",
+            },
+            {
               label: "Nova oportunidade",
               href: `/dashboard/opportunities?clientId=${client.id}`,
               tone: "blue",

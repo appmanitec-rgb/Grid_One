@@ -32,11 +32,11 @@ test.describe("modelos de geradores", () => {
     });
     await expectLoaded(page, /Modelos de Geradores/i);
 
-    await page.getByLabel(/Fabricante/i).fill("STEMAC");
+    await page.getByRole("combobox", { name: /^Fabricante$/i }).fill("STEMAC");
     await page.getByLabel(/^Modelo$/i).fill(modelName);
     await page.getByLabel(/Potencia kVA/i).fill("180");
-    await page.getByLabel(/Tensao/i).fill("380/220 V");
-    await page.getByLabel(/Frequencia/i).fill("60");
+    await page.getByRole("textbox", { name: /^Tensao$/i }).fill("380/220 V");
+    await page.getByRole("textbox", { name: /^Frequencia$/i }).fill("60");
     await page.getByRole("button", { name: /^Adicionar item$/i }).click();
     await page.getByLabel("Nome do item de manutencao 1").fill("Troca de oleo");
     await page.getByLabel("Intervalo por tempo 1").fill("6");
@@ -54,7 +54,7 @@ test.describe("modelos de geradores", () => {
 
     await page
       .locator("tr", { hasText: modelName })
-      .getByRole("button", { name: /Editar/i })
+      .getByRole("button", { name: new RegExp(modelName) })
       .click();
     const editor = page.getByRole("dialog", { name: "Editar modelo" });
     await expect(editor).toBeVisible();

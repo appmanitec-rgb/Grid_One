@@ -16,8 +16,10 @@ describe('DeliveriesService', () => {
     documentDelivery: { update: jest.Mock };
     proposal: {
       findFirst: jest.Mock;
+      findUnique: jest.Mock;
       update: jest.Mock;
     };
+    teamPost: { upsert: jest.Mock };
     proposalMovement: { create: jest.Mock };
     salesOpportunity: { update: jest.Mock };
     generator: { findUnique: jest.Mock };
@@ -51,8 +53,16 @@ describe('DeliveriesService', () => {
       documentDelivery: { update: jest.fn() },
       proposal: {
         findFirst: jest.fn(),
+        findUnique: jest.fn().mockResolvedValue({
+          code: 'PROP-001',
+          status: ProposalStatus.WON,
+          type: 'SERVICES',
+          client: { companyName: 'Cliente A' },
+          user: { name: 'Vendedor' },
+        }),
         update: jest.fn(),
       },
+      teamPost: { upsert: jest.fn() },
       proposalMovement: { create: jest.fn() },
       salesOpportunity: { update: jest.fn() },
       generator: { findUnique: jest.fn() },

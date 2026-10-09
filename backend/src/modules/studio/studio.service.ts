@@ -233,7 +233,7 @@ function controlOptionDefinition(
 async function validatePaymentProfileIssuer(
   tx: Prisma.TransactionClient,
   profile: Record<string, unknown>,
-) {
+): Promise<{ cnpj: string; companyName: string } | null> {
   const issuerCompanyId = studioString(profile.issuerCompanyId).trim();
   if (!issuerCompanyId) {
     if (profile.isActive === true) {
@@ -241,12 +241,12 @@ async function validatePaymentProfileIssuer(
         'Selecione o CNPJ emitente antes de ativar a conta de pagamento.',
       );
     }
-    return;
+    return null;
   }
 
   const issuer = await tx.companySettings.findUnique({
     where: { id: issuerCompanyId },
-    select: { cnpj: true },
+    select: { cnpj: true, companyName: true },
   });
   if (!issuer) {
     throw new BadRequestException('CNPJ emitente nao encontrado.');
@@ -257,12 +257,9 @@ async function validatePaymentProfileIssuer(
     /\D/g,
     '',
   );
-  if (
-    profile.isActive === true &&
-    (issuerCnpj.length !== 14 || beneficiaryCnpj.length !== 14)
-  ) {
+  if (profile.isActive === true && issuerCnpj.length !== 14) {
     throw new BadRequestException(
-      'Informe o CNPJ do emitente e o CNPJ do favorecido antes de ativar a conta.',
+      'Cadastre o CNPJ da empresa emitente antes de ativar a conta.',
     );
   }
   if (beneficiaryCnpj && issuerCnpj && beneficiaryCnpj !== issuerCnpj) {
@@ -270,6 +267,7 @@ async function validatePaymentProfileIssuer(
       'O CNPJ do favorecido deve ser igual ao CNPJ emitente selecionado.',
     );
   }
+  return { cnpj: issuerCnpj, companyName: issuer.companyName ?? '' };
 }
 
 const DEFINITIONS: Record<string, StudioResourceDefinition> = {
@@ -758,20 +756,10 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
     validate: (data, creating) => {
       if (
         creating &&
-        (!data.name || !data.purpose || !data.method || !data.beneficiary)
+        (!data.name || !data.purpose || !data.method)
       ) {
         throw new BadRequestException(
-          'Informe nome, destino, meio e favorecido.',
-        );
-      }
-      if (
-        creating &&
-        data.isActive === true &&
-        data.method === ProposalPaymentMethod.PIX &&
-        (!data.pixKey || !data.pixCopyPaste)
-      ) {
-        throw new BadRequestException(
-          'PIX ativo exige chave e codigo copia e cola para gerar o QR Code.',
+          'Informe nome, destino e meio.',
         );
       }
       if (
@@ -786,20 +774,29 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
       }
     },
     create: async (tx, data) => {
-      await validatePaymentProfileIssuer(tx, data);
+      const issuer = await validatePaymentProfileIssuer(tx, data);
+      const beneficiary = studioString(data.beneficiary).trim() || issuer?.companyName || '';
+      if (!beneficiary) {
+        throw new BadRequestException('Informe o favorecido da conta.');
+      }
+      const pixKey = studioString(data.pixKey).trim() ||
+        (data.method === ProposalPaymentMethod.PIX ? issuer?.cnpj : '') || '';
+      if (data.isActive === true && data.method === ProposalPaymentMethod.PIX && !pixKey) {
+        throw new BadRequestException('Cadastre o CNPJ emitente para usar como chave PIX.');
+      }
       return tx.proposalPaymentProfile.create({
         data: {
           issuerCompanyId: studioString(data.issuerCompanyId).trim() || null,
           name: studioString(data.name).trim(),
           purpose: data.purpose as ProposalPaymentPurpose,
           method: data.method as ProposalPaymentMethod,
-          beneficiary: studioString(data.beneficiary).trim(),
+          beneficiary,
           beneficiaryDocument:
-            studioString(data.beneficiaryDocument).trim() || null,
+            studioString(data.beneficiaryDocument).trim() || issuer?.cnpj || null,
           bankName: studioString(data.bankName).trim() || null,
           agency: studioString(data.agency).trim() || null,
           accountNumber: studioString(data.accountNumber).trim() || null,
-          pixKey: studioString(data.pixKey).trim() || null,
+          pixKey: pixKey || null,
           pixCopyPaste: studioString(data.pixCopyPaste).trim() || null,
           boletoInstructions:
             studioString(data.boletoInstructions).trim() || null,
@@ -818,20 +815,20 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
       if (!current)
         throw new NotFoundException('Perfil de pagamento nao encontrado.');
       const merged = { ...current, ...data };
-      if (
-        !studioString(merged.name).trim() ||
-        !studioString(merged.beneficiary).trim()
-      ) {
+      const issuer = await validatePaymentProfileIssuer(tx, merged);
+      const beneficiary = studioString(merged.beneficiary).trim() || issuer?.companyName || '';
+      if (!studioString(merged.name).trim() || !beneficiary) {
         throw new BadRequestException('Nome e favorecido sao obrigatorios.');
       }
+      const pixKey = studioString(merged.pixKey).trim() ||
+        (merged.method === ProposalPaymentMethod.PIX ? issuer?.cnpj : '') || '';
       if (
         merged.isActive &&
         merged.method === ProposalPaymentMethod.PIX &&
-        (!studioString(merged.pixKey).trim() ||
-          !studioString(merged.pixCopyPaste).trim())
+        !pixKey
       ) {
         throw new BadRequestException(
-          'PIX ativo exige chave e codigo copia e cola para gerar o QR Code.',
+          'Cadastre o CNPJ emitente para usar como chave PIX.',
         );
       }
       if (
@@ -843,10 +840,14 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
           'Boleto ativo exige instrucoes de cobranca.',
         );
       }
-      await validatePaymentProfileIssuer(tx, merged);
       return tx.proposalPaymentProfile.update({
         where: { id },
-        data,
+        data: {
+          ...data,
+          beneficiary,
+          beneficiaryDocument: studioString(merged.beneficiaryDocument).trim() || issuer?.cnpj || null,
+          pixKey: pixKey || null,
+        },
         include: { issuerCompany: { select: { id: true, companyName: true } } },
       });
     },

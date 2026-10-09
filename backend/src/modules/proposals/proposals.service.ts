@@ -34,6 +34,7 @@ import {
   SalesOpportunityStage,
   UserRole,
 } from '@prisma/client';
+import { publishProposalWon } from '../team/team-automation';
 import { toDataURL } from 'qrcode';
 import { DatabaseService } from '../../database/database.service';
 import { ApprovalsService } from '../approvals/approvals.service';
@@ -1712,6 +1713,8 @@ export class ProposalsService {
     } as Prisma.ProposalUncheckedUpdateInput;
     delete (header as { items?: unknown }).items;
     delete (header as { operationalExpenses?: unknown }).operationalExpenses;
+    delete (header as { partsPaymentProfileId?: unknown }).partsPaymentProfileId;
+    delete (header as { servicesPaymentProfileId?: unknown }).servicesPaymentProfileId;
 
     return this.prisma.$transaction(async (tx) => {
       const before = await tx.proposal.findUnique({
@@ -1795,10 +1798,109 @@ export class ProposalsService {
         }
       }
 
-      const updated = await tx.proposal.update({
-        where: { id },
-        data: header,
-      });
+      let updated;
+      if (updateProposalDto.items !== undefined) {
+        const editDto = {
+          ...updateProposalDto,
+          clientId: updateProposalDto.clientId ?? current.clientId,
+          type: updateProposalDto.type ?? current.type,
+          origin: updateProposalDto.origin ?? current.origin,
+          items: updateProposalDto.items,
+        } as CreateProposalDto;
+        const sellerUserId = editDto.userId ?? current.userId;
+        if (!sellerUserId) {
+          throw new BadRequestException('Informe um vendedor comercial para a proposta.');
+        }
+        await this.assertProposalSeller(tx, sellerUserId);
+        const normalizedItems = await this.prepareProposalItems(tx, editDto.items);
+        const usesManagedPayment =
+          editDto.origin === ProposalOrigin.MANITEC &&
+          (editDto.type === ProposalType.PARTS_AND_SERVICES ||
+            editDto.type === ProposalType.CONTRACT);
+        if (usesManagedPayment) {
+          await this.requireAvailablePaymentProfiles(tx, normalizedItems, editDto);
+        }
+        const paymentSelection = await this.preparePaymentSelections(tx, editDto);
+        const paymentDetails = paymentSelection?.details ??
+          (usesManagedPayment ? null : (editDto.paymentDetails ?? current.paymentDetails));
+        const operationalExpenses = await this.prepareOperationalExpenses(
+          tx,
+          editDto.operationalExpenses ?? [],
+        );
+        const itemsSubtotal = this.roundCurrency(this.calculateTotal(normalizedItems));
+        const subtotal = this.roundCurrency(itemsSubtotal + operationalExpenses.total);
+        const allowOperationalExpenseDiscount = Boolean(editDto.allowOperationalExpenseDiscount);
+        const discountValue = this.roundCurrency(Number(editDto.discount ?? current.discount ?? 0));
+        const discountableSubtotal = allowOperationalExpenseDiscount ? subtotal : itemsSubtotal;
+        if (!Number.isFinite(discountValue) || discountValue < 0 || discountValue > discountableSubtotal) {
+          throw new BadRequestException('O desconto nao pode superar o subtotal elegivel da proposta.');
+        }
+        const calculatedTotal = this.roundCurrency(subtotal - discountValue);
+        this.validateCommercialTerms(editDto, calculatedTotal);
+        const commercialGenerator = current.commercialGeneratorId
+          ? await tx.commercialGenerator.findUnique({ where: { id: current.commercialGeneratorId } })
+          : null;
+
+        await tx.proposalItem.deleteMany({ where: { proposalId: id } });
+        updated = await tx.proposal.update({
+          where: { id },
+          data: {
+            clientId: editDto.clientId,
+            generatorId: editDto.generatorId ?? null,
+            userId: sellerUserId,
+            type: editDto.type,
+            totalValue: calculatedTotal,
+            operationalExpenses: operationalExpenses.items as unknown as Prisma.InputJsonValue,
+            operationalExpensesTotal: operationalExpenses.total,
+            allowOperationalExpenseDiscount,
+            commercialSnapshot: this.buildCommercialSnapshot({
+              origin: editDto.origin ?? current.origin,
+              dto: { ...editDto, paymentDetails: paymentDetails ?? undefined },
+              generator: commercialGenerator,
+              items: normalizedItems,
+              operationalExpenses: operationalExpenses.items,
+              itemsSubtotal,
+              subtotal,
+              discountValue,
+              calculatedTotal,
+            }),
+            validUntil: editDto.validUntil ? new Date(editDto.validUntil) : null,
+            scope: editDto.scope ?? null,
+            freight: editDto.freight ?? null,
+            paymentTerm: editDto.paymentTerm ?? null,
+            deliveryLeadTimeDays: editDto.deliveryLeadTimeDays ?? null,
+            paymentDetails,
+            paymentSelections: paymentSelection?.snapshots as unknown as Prisma.InputJsonValue ?? Prisma.JsonNull,
+            hasDownPayment: Boolean(editDto.hasDownPayment),
+            downPaymentAmount: editDto.hasDownPayment ? editDto.downPaymentAmount : null,
+            installmentCount: editDto.installmentCount ?? 1,
+            installmentIntervalDays: editDto.installmentIntervalDays ?? 30,
+            firstDueDate: editDto.firstDueDate ? new Date(editDto.firstDueDate) : null,
+            internalNotes: editDto.internalNotes ?? null,
+            externalNotes: editDto.externalNotes ?? null,
+            discount: discountValue,
+            items: {
+              create: normalizedItems.map((item) => ({
+                kind: item.kind,
+                description: item.description,
+                catalogItemId: item.catalogItemId,
+                quantity: item.quantity,
+                hours: item.hours,
+                unitPrice: item.unitPrice,
+                discountPercent: item.discountPercent,
+                hourType: item.hourType,
+                technicianType: item.technicianType,
+                totalPrice: item.totalPrice,
+              })),
+            },
+          },
+        });
+      } else {
+        updated = await tx.proposal.update({
+          where: { id },
+          data: header,
+        });
+      }
 
       if (
         updateProposalDto.status &&
@@ -1821,6 +1923,9 @@ export class ProposalsService {
           current.salesOpportunityId,
           updateProposalDto.status,
         );
+        if (updateProposalDto.status === ProposalStatus.WON) {
+          await publishProposalWon(tx, id);
+        }
       }
 
       await this.auditLogsService.record(
@@ -1917,6 +2022,12 @@ export class ProposalsService {
         proposal.salesOpportunityId,
         toStatus,
       );
+      if (
+        toStatus === ProposalStatus.WON &&
+        proposal.status !== ProposalStatus.WON
+      ) {
+        await publishProposalWon(tx, id);
+      }
 
       await this.auditLogsService.record(
         {
@@ -2180,10 +2291,10 @@ export class ProposalsService {
         }
         if (
           profile.method === ProposalPaymentMethod.PIX &&
-          (!profile.pixKey || !profile.pixCopyPaste)
+          !profile.pixKey
         ) {
           throw new BadRequestException(
-            'O perfil PIX precisa de chave e codigo para QR Code.',
+            'O perfil PIX precisa de uma chave cadastrada.',
           );
         }
         if (

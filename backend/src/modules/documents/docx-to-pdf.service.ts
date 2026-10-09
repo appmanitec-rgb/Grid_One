@@ -54,7 +54,7 @@ export class DocxToPdfService {
     const docxPath = join(tempDir, `${baseName}.docx`);
     const pdfPath = join(tempDir, `${baseName}.pdf`);
     const timeoutMs = Number(
-      this.configService.get<string>('LIBREOFFICE_TIMEOUT_MS') || 60_000,
+      this.configService.get<string>('LIBREOFFICE_TIMEOUT_MS') || 15_000,
     );
 
     try {
@@ -75,7 +75,7 @@ export class DocxToPdfService {
           docxPath,
         ],
         {
-          timeout: Number.isFinite(timeoutMs) ? timeoutMs : 60_000,
+          timeout: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 15_000,
           windowsHide: true,
           maxBuffer: 1024 * 1024,
         },
@@ -94,7 +94,25 @@ export class DocxToPdfService {
         `Falha ao converter DOCX para PDF via LibreOffice: ${message}`,
       );
     } finally {
-      await rm(tempDir, { recursive: true, force: true });
+      try {
+        await rm(tempDir, {
+          recursive: true,
+          force: true,
+          maxRetries: 8,
+          retryDelay: 250,
+        });
+      } catch {
+        // O LibreOffice pode manter o DOCX aberto após o timeout no Windows.
+        // A limpeza tardia não deve substituir o erro de conversão.
+        setTimeout(() => {
+          void rm(tempDir, {
+            recursive: true,
+            force: true,
+            maxRetries: 20,
+            retryDelay: 500,
+          }).catch(() => undefined);
+        }, 10_000).unref();
+      }
     }
   }
 

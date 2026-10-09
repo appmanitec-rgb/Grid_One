@@ -26,6 +26,7 @@ describe('CustomerPortalService', () => {
     role: UserRole.CLIENT,
     isActive: true,
     linkedClientId: 'client-a',
+    portalPermissions: ['EQUIPMENT', 'CONTRACTS', 'PROPOSALS', 'TICKETS', 'REQUESTS', 'REPORTS', 'DOCUMENTS', 'FINANCIAL', 'FEEDBACK'],
     linkedClient: {
       id: 'client-a',
       companyName: 'Cliente A Ltda',
@@ -36,6 +37,8 @@ describe('CustomerPortalService', () => {
       city: 'Sao Paulo',
       state: 'SP',
       isDelinquent: false,
+      portalEnabled: true,
+      portalLogoDataUrl: null,
     },
   };
 
@@ -46,6 +49,13 @@ describe('CustomerPortalService', () => {
       (cb: (tx: CustomerPortalDbMock) => unknown) => cb(db),
     );
     db.user.findUnique.mockResolvedValue(clientUser);
+    db.proposal.findUnique.mockResolvedValue({
+      code: 'PROP-001',
+      status: ProposalStatus.WON,
+      type: 'SERVICES',
+      client: { companyName: 'Cliente A' },
+      user: { name: 'Vendedor' },
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -328,8 +338,10 @@ function createDbMock(): CustomerPortalDbMock {
       count: jest.fn(),
       findMany: jest.fn(),
       findFirst: jest.fn(),
+      findUnique: jest.fn(),
       update: jest.fn(),
     },
+    teamPost: { upsert: jest.fn() },
     proposalMovement: { create: jest.fn() },
     proposalItem: { findMany: jest.fn() },
     salesOpportunity: {
@@ -365,8 +377,10 @@ type CustomerPortalDbMock = {
     count: jest.Mock;
     findMany: jest.Mock;
     findFirst: jest.Mock;
+    findUnique: jest.Mock;
     update: jest.Mock;
   };
+  teamPost: { upsert: jest.Mock };
   proposalMovement: { create: jest.Mock };
   proposalItem: { findMany: jest.Mock };
   salesOpportunity: {

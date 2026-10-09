@@ -17,6 +17,7 @@ import {
 import { DatabaseService } from '../../database/database.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { effectiveAccessPolicy } from '../users/access-policy';
+import { publishOrderCompleted } from '../team/team-automation';
 
 type CreateApprovalInput = {
   type: ApprovalType;
@@ -390,13 +391,18 @@ export class ApprovalsService {
       if (!order) return;
 
       if (status === ApprovalStatus.APPROVED) {
-        await this.prisma.maintenanceOrder.update({
-          where: { id: order.id },
-          data: {
-            status: OrderStatus.COMPLETED,
-            finishedAt: order.finishedAt ?? new Date(),
-            closedAt: order.closedAt ?? new Date(),
-          },
+        await this.prisma.$transaction(async (tx) => {
+          await tx.maintenanceOrder.update({
+            where: { id: order.id },
+            data: {
+              status: OrderStatus.COMPLETED,
+              finishedAt: order.finishedAt ?? new Date(),
+              closedAt: order.closedAt ?? new Date(),
+            },
+          });
+          if (order.status !== OrderStatus.COMPLETED) {
+            await publishOrderCompleted(tx, order.id);
+          }
         });
       } else if (order.status === OrderStatus.COMPLETED) {
         await this.prisma.maintenanceOrder.update({

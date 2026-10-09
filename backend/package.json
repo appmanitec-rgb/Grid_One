@@ -28,6 +28,7 @@
     "seed:simulation": "npm run prisma:ensure:local && ts-node prisma/seed-simulation.ts",
     "env:check": "node scripts/env-check.js",
     "db:preflight": "npm run prisma:ensure:local && node scripts/db-preflight.js",
+    "db:prepare:e2e": "node scripts/prepare-e2e-schema.js",
     "db:status": "prisma migrate status",
     "db:migrate": "npm run prisma:ensure:local && prisma migrate deploy && npm run db:preflight",
     "db:migrate:dev": "npm run prisma:ensure:local && prisma migrate dev && npm run db:preflight",

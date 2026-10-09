@@ -62,7 +62,7 @@ export function getStoredAccessToken() {
   return localStorage.getItem(TOKEN_KEY);
 }
 
-function getStoredRefreshToken() {
+export function getStoredRefreshToken() {
   if (!isBrowser()) return null;
   return localStorage.getItem(REFRESH_TOKEN_KEY);
 }
@@ -181,6 +181,10 @@ async function runRefreshRequest() {
 
     if (!response.ok) {
       if (response.status >= 400 && response.status < 500) {
+        await new Promise((resolve) => window.setTimeout(resolve, 2_000));
+        if (getStoredRefreshToken() !== refreshToken) {
+          return Boolean(getStoredAccessToken());
+        }
         clearAuthSession();
       }
       return false;
@@ -188,10 +192,12 @@ async function runRefreshRequest() {
 
     const payload = (await response.json()) as PersistedAuthSession | null;
     if (!payload?.access_token || !payload?.refresh_token) {
-      clearAuthSession();
       return false;
     }
 
+    if (getStoredRefreshToken() !== refreshToken) {
+      return Boolean(getStoredAccessToken());
+    }
     persistAuthenticatedSession(payload);
     return true;
   } catch {
@@ -208,7 +214,24 @@ export async function refreshAccessSession() {
     return refreshPromise;
   }
 
-  refreshPromise = runRefreshRequest().finally(() => {
+  const initialRefreshToken = getStoredRefreshToken();
+  const refresh = async () => {
+    if (initialRefreshToken && getStoredRefreshToken() !== initialRefreshToken) {
+      return Boolean(getStoredAccessToken());
+    }
+    return runRefreshRequest();
+  };
+  const synchronizedRefresh = async (): Promise<boolean> => {
+    if (navigator.locks) {
+      try {
+        return await navigator.locks.request("manitec-auth-refresh", refresh);
+      } catch {
+        // Browsers can expose the API while denying locks in this context.
+      }
+    }
+    return await refresh();
+  };
+  refreshPromise = synchronizedRefresh().catch(() => false).finally(() => {
     refreshPromise = null;
   });
 
@@ -233,5 +256,6 @@ export async function ensureValidSession() {
     return false;
   }
 
-  return refreshAccessSession();
+  const refreshed = await refreshAccessSession();
+  return refreshed || Boolean(getStoredAccessToken() && getStoredRefreshToken());
 }

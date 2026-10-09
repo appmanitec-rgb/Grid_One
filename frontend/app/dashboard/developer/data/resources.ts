@@ -1464,7 +1464,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
     label: "Conta para Proposta",
     pluralLabel: "Contas para Propostas",
     category: "Financeiro",
-    description: "Cadastre separadamente as contas de pecas e servicos. O vendedor escolhe um perfil ativo de PIX ou boleto.",
+    description: "Cadastre as contas de pecas e servicos por empresa. No PIX, o CNPJ da empresa sera a chave automaticamente.",
     endpoint: "/studio/data/proposalPaymentProfiles",
     entityType: "ProposalPaymentProfile",
     editable: true,
@@ -1476,7 +1476,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
     importMode: "DISABLED",
     fields: [
       { key: "issuerCompany.companyName", label: "Empresa emitente", searchable: true, sortable: true, readOnly: true },
-      { key: "issuerCompanyId", label: "CNPJ emitente", type: "select", editable: true, hiddenByDefault: true },
+      { key: "issuerCompanyId", label: "Empresa emitente (CNPJ)", type: "select", editable: true, hiddenByDefault: true },
       { key: "name", label: "Nome do perfil", editable: true, required: true, searchable: true },
       { key: "purpose", label: "Destino", type: "select", editable: true, required: true, options: [
         { value: "PARTS", label: "Pecas" }, { value: "SERVICES", label: "Servicos" },
@@ -1484,13 +1484,13 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       { key: "method", label: "Meio", type: "select", editable: true, required: true, options: [
         { value: "PIX", label: "PIX" }, { value: "BOLETO", label: "Boleto" },
       ] },
-      { key: "beneficiary", label: "Favorecido", editable: true, required: true },
+      { key: "beneficiary", label: "Nome do favorecido", editable: true, required: true },
       { key: "beneficiaryDocument", label: "CPF/CNPJ do favorecido", editable: true, hiddenByDefault: true },
       { key: "bankName", label: "Banco", editable: true },
       { key: "agency", label: "Agencia", editable: true },
       { key: "accountNumber", label: "Conta", editable: true },
       { key: "pixKey", label: "Chave PIX", editable: true },
-      { key: "pixCopyPaste", label: "PIX copia e cola (gera QR Code)", type: "textarea", editable: true, hiddenByDefault: true },
+      { key: "pixCopyPaste", label: "PIX copia e cola (opcional, para QR Code)", type: "textarea", editable: true, hiddenByDefault: true },
       { key: "boletoInstructions", label: "Instrucoes de boleto", type: "textarea", editable: true, hiddenByDefault: true },
       { key: "isActive", label: "Ativo", type: "boolean", editable: true, defaultValue: false },
       { key: "sortOrder", label: "Ordem", type: "number", editable: true, defaultValue: 0 },

@@ -22,7 +22,9 @@ import {
   CreateCustomerQuoteRequestDto,
   CustomerProposalDecisionDto,
 } from './dto/customer-portal.dto';
+import { CreatePortalFeedbackDto } from './dto/portal-feedback.dto';
 import { createApprovedProposalOrder } from '../proposals/proposal-work-order';
+import { publishProposalWon } from '../team/team-automation';
 
 const CUSTOMER_PORTAL_SOURCE = 'CUSTOMER_PORTAL';
 
@@ -39,6 +41,7 @@ type CustomerScope = {
     name: string;
     email: string;
     role: UserRole;
+    portalPermissions: string[];
   };
   client: {
     id: string;
@@ -50,6 +53,7 @@ type CustomerScope = {
     city: string;
     state: string;
     isDelinquent: boolean;
+    portalLogoDataUrl: string | null;
   };
 };
 
@@ -66,6 +70,26 @@ export class CustomerPortalService {
       user: scope.user,
       client: scope.client,
     };
+  }
+
+  async listFeedback(userId: string | undefined) {
+    const scope = await this.requireCustomerScope(userId);
+    return this.prisma.clientPortalFeedback.findMany({
+      where: { clientId: scope.clientId },
+      select: { id: true, kind: true, message: true, createdAt: true, user: { select: { name: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+  }
+
+  async createFeedback(userId: string | undefined, dto: CreatePortalFeedbackDto) {
+    const scope = await this.requireCustomerScope(userId);
+    const message = dto.message.trim();
+    if (!message) throw new BadRequestException('Escreva sua observacao ou feedback.');
+    return this.prisma.clientPortalFeedback.create({
+      data: { clientId: scope.clientId, userId: scope.userId, kind: dto.kind, message },
+      select: { id: true, kind: true, message: true, createdAt: true },
+    });
   }
 
   async dashboard(userId: string | undefined) {
@@ -191,23 +215,25 @@ export class CustomerPortalService {
       }),
     ]);
 
+    const can = (permission: string) => scope.user.portalPermissions.includes(permission);
     return {
       client: scope.client,
+      permissions: scope.user.portalPermissions,
       stats: {
-        equipmentCount,
-        awaitingProposals,
-        openOrders,
-        openQuoteRequests,
-        activeContracts,
-        openTickets,
-        waitingCustomerTickets,
-        convertedTickets,
-        recentDocuments: recentDocuments.length,
+        equipmentCount: can("EQUIPMENT") ? equipmentCount : 0,
+        awaitingProposals: can("PROPOSALS") ? awaitingProposals : 0,
+        openOrders: can("EQUIPMENT") ? openOrders : 0,
+        openQuoteRequests: can("REQUESTS") ? openQuoteRequests : 0,
+        activeContracts: can("CONTRACTS") ? activeContracts : 0,
+        openTickets: can("TICKETS") ? openTickets : 0,
+        waitingCustomerTickets: can("TICKETS") ? waitingCustomerTickets : 0,
+        convertedTickets: can("TICKETS") ? convertedTickets : 0,
+        recentDocuments: can("DOCUMENTS") ? recentDocuments.length : 0,
       },
-      recentOrders,
-      recentProposals,
-      recentDocuments,
-      upcomingPreventives,
+      recentOrders: can("EQUIPMENT") ? recentOrders : [],
+      recentProposals: can("PROPOSALS") ? recentProposals : [],
+      recentDocuments: can("DOCUMENTS") ? recentDocuments : [],
+      upcomingPreventives: can("EQUIPMENT") ? upcomingPreventives : [],
     };
   }
 
@@ -681,6 +707,7 @@ export class CustomerPortalService {
 
       if (nextStatus === ProposalStatus.WON) {
         await createApprovedProposalOrder(tx, proposal);
+        await publishProposalWon(tx, proposal.id);
       }
 
       await this.auditLogsService.record(
@@ -736,6 +763,7 @@ export class CustomerPortalService {
         role: true,
         isActive: true,
         linkedClientId: true,
+        portalPermissions: true,
         linkedClient: {
           select: {
             id: true,
@@ -747,6 +775,8 @@ export class CustomerPortalService {
             city: true,
             state: true,
             isDelinquent: true,
+            portalEnabled: true,
+            portalLogoDataUrl: true,
           },
         },
       },
@@ -762,7 +792,7 @@ export class CustomerPortalService {
       );
     }
 
-    if (!user.linkedClientId || !user.linkedClient) {
+    if (!user.linkedClientId || !user.linkedClient || !user.linkedClient.portalEnabled) {
       throw new ForbiddenException(
         'Conta de cliente sem empresa vinculada ao portal.',
       );
@@ -776,6 +806,7 @@ export class CustomerPortalService {
         name: user.name,
         email: user.email,
         role: user.role,
+        portalPermissions: user.portalPermissions,
       },
       client: user.linkedClient,
     };

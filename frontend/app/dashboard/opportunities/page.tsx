@@ -382,8 +382,8 @@ export default function OpportunitiesPage() {
       setTemperature("WARM");
       setEstimatedValue("");
       setExpectedCloseDate("");
-      setMessage("Oportunidade criada com sucesso.");
       await loadAll();
+      setMessage("Oportunidade criada com sucesso.");
     } catch (createError: unknown) {
       setError(
         createError instanceof Error
@@ -537,8 +537,8 @@ export default function OpportunitiesPage() {
         throw new Error(await readApiErrorMessage(res, "Falha ao atualizar fase."));
       }
 
-      setMessage("Fase da oportunidade atualizada.");
       await loadAll();
+      setMessage("Fase da oportunidade atualizada.");
     } catch (updateError: unknown) {
       setError(
         updateError instanceof Error

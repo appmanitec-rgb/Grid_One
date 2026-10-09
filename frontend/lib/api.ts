@@ -3,6 +3,7 @@ import {
   clearAuthSession,
   ensureValidSession,
   getStoredAccessToken,
+  getStoredRefreshToken,
   refreshAccessSession,
 } from "./auth-session";
 
@@ -48,8 +49,10 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
         ...init,
         headers: withAuthHeaders(init.headers, { overrideAuthorization: true }),
       });
-    } else {
+    } else if (!getStoredAccessToken() || !getStoredRefreshToken()) {
       clearAuthSession();
+    } else {
+      throw new Error("Não foi possível renovar a sessão agora. Tente novamente em instantes.");
     }
   }
 

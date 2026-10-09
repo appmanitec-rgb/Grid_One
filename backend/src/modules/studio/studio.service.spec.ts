@@ -190,4 +190,23 @@ describe('StudioService payment profile issuer', () => {
     expect(tx.proposalPaymentProfile.create).toHaveBeenCalled();
     expect(tx.systemAuditLog.create).toHaveBeenCalled();
   });
+
+  it('uses the issuer CNPJ as the beneficiary document and PIX key without requiring QR Code data', async () => {
+    const { tx, service, profile } = createContext();
+    tx.companySettings.findUnique.mockResolvedValue({
+      companyName: 'Manitec Energia Equipamentos Ltda',
+      cnpj: '39.315.244/0001-07',
+    });
+
+    const created = await service.createRecord(
+      'proposalPaymentProfiles',
+      { ...profile, beneficiary: '', beneficiaryDocument: '', pixKey: '', pixCopyPaste: '' },
+      actor,
+    );
+
+    expect(created.beneficiary).toBe('Manitec Energia Equipamentos Ltda');
+    expect(created.beneficiaryDocument).toBe('39315244000107');
+    expect(created.pixKey).toBe('39315244000107');
+    expect(created.pixCopyPaste).toBeNull();
+  });
 });

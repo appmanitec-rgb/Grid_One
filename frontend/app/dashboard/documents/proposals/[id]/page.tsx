@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { clearAuthSession } from "@/lib/auth-session";
+import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
 import {
   downloadDashboardDocumentBlob,
   fetchProposalDocument,
@@ -29,6 +30,7 @@ export default function ProposalDocumentPage() {
   const [error, setError] = useState("");
   const [documentBusy, setDocumentBusy] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfPreview, setPdfPreview] = useState<{ url: string; blob: Blob } | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -60,6 +62,12 @@ export default function ProposalDocumentPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    return () => {
+      if (pdfPreview) URL.revokeObjectURL(pdfPreview.url);
+    };
+  }, [pdfPreview]);
+
   async function handleDownloadDocument() {
     if (!id || !data) return;
     setDocumentBusy(true);
@@ -67,7 +75,7 @@ export default function ProposalDocumentPage() {
 
     try {
       const blob = await fetchProposalDocumentDocx(id);
-      downloadDashboardDocumentBlob(blob, `proposta-${data.document.code}.docx`);
+      downloadDashboardDocumentBlob(blob, `proposta-${data.document.code.replace(/[^a-zA-Z0-9._-]/g, "-")}.docx`);
     } catch (downloadError: unknown) {
       const apiError = downloadError as DashboardDocumentsApiError;
       if (apiError?.status === 401) {
@@ -85,14 +93,68 @@ export default function ProposalDocumentPage() {
     }
   }
 
+  async function handleDownloadOriginal() {
+    if (!id || !data?.document.externalDocumentFileName) return;
+    setDocumentBusy(true);
+    setError("");
+
+    try {
+      const response = await apiFetch(apiUrl("/proposals/" + id + "/external-document"), {
+        cache: "no-store",
+      });
+      if (response.status === 401) {
+        clearAuthSession();
+        router.replace("/");
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(await readApiErrorMessage(response, "Erro ao baixar o arquivo original."));
+      }
+      const fileName = data.document.externalDocumentFileName.replace(/[^a-zA-Z0-9._-]/g, "-");
+      downloadDashboardDocumentBlob(await response.blob(), fileName);
+    } catch (downloadError: unknown) {
+      setError(
+        downloadError instanceof Error
+          ? downloadError.message
+          : "Erro ao baixar o arquivo original.",
+      );
+    } finally {
+      setDocumentBusy(false);
+    }
+  }
+  async function handlePreviewPdf() {
+    if (!id) return;
+    setPdfBusy(true);
+    setError("");
+
+    try {
+      const blob = await fetchProposalDocumentInstitutionalPdf(id);
+      setPdfPreview({ url: URL.createObjectURL(blob), blob });
+    } catch (previewError: unknown) {
+      const apiError = previewError as DashboardDocumentsApiError;
+      if (apiError?.status === 401) {
+        clearAuthSession();
+        router.replace("/");
+        return;
+      }
+      setError(
+        previewError instanceof Error
+          ? previewError.message
+          : "Erro ao visualizar o PDF da proposta.",
+      );
+    } finally {
+      setPdfBusy(false);
+    }
+  }
+
   async function handleDownloadPdf() {
     if (!id || !data) return;
     setPdfBusy(true);
     setError("");
 
     try {
-      const blob = await fetchProposalDocumentInstitutionalPdf(id);
-      downloadDashboardDocumentBlob(blob, `proposta-${data.document.code}.pdf`);
+      const blob = pdfPreview?.blob || await fetchProposalDocumentInstitutionalPdf(id);
+      downloadDashboardDocumentBlob(blob, `proposta-${data.document.code.replace(/[^a-zA-Z0-9._-]/g, "-")}.pdf`);
     } catch (downloadError: unknown) {
       const apiError = downloadError as DashboardDocumentsApiError;
       if (apiError?.status === 401) {
@@ -124,36 +186,74 @@ export default function ProposalDocumentPage() {
 
   return (
     <div className="space-y-5">
+      {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
+      {data.document.origin === "EXTERNAL" && !data.document.externalDocumentFileName ? <StatusBanner tone="amber">O arquivo original ainda não está disponível nesta proposta.</StatusBanner> : null}
+      {pdfPreview ? (
+        <div role="dialog" aria-modal="true" aria-label={"PDF da proposta " + data.document.code} className="fixed inset-0 z-[100] flex flex-col bg-slate-950/80 p-3 sm:p-6">
+          <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 rounded-t-2xl bg-white px-4 py-3">
+            <strong className="text-sm text-slate-900">PDF da proposta {data.document.code}</strong>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => void handleDownloadPdf()} className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Baixar PDF</button>
+              <button type="button" onClick={() => setPdfPreview(null)} className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Fechar</button>
+            </div>
+          </div>
+          <iframe title={"Visualizacao do PDF da proposta " + data.document.code} src={pdfPreview.url} className="mx-auto min-h-0 w-full max-w-6xl flex-1 rounded-b-2xl bg-white" />
+        </div>
+      ) : null}
       <PrintDocumentShell
         company={data.company}
         title={`Proposta ${data.document.code}`}
-        subtitle="Versao pronta para compartilhar condicoes comerciais, escopo e itens."
+        subtitle={data.document.origin === "EXTERNAL" ? "Arquivo recebido do cliente. Baixe o original ou compartilhe um link seguro." : "Resumo de consulta. Visualize o PDF institucional, baixe arquivos ou compartilhe com o cliente."}
         code={data.document.code}
         sourceHref={data.sourceHref}
         sourceLabel="Abrir proposta"
         showPrintAction={false}
         actions={
           <div className="flex flex-wrap justify-end gap-2">
-            <button
-              type="button"
-              disabled={pdfBusy}
-              onClick={() => void handleDownloadPdf()}
-              className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {pdfBusy ? "Gerando PDF..." : "Baixar PDF"}
-            </button>
-            <button
-              type="button"
-              disabled={documentBusy}
-              onClick={() => void handleDownloadDocument()}
-              className="inline-flex items-center justify-center rounded-2xl border border-slate-900 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {documentBusy
-                ? "Gerando documento..."
-                : data.latestDocument
-                  ? "Baixar DOCX"
-                  : "Gerar DOCX"}
-            </button>
+            {data.document.origin === "EXTERNAL" ? (
+              data.document.externalDocumentFileName ? (
+                <button
+                  type="button"
+                  disabled={documentBusy}
+                  onClick={() => void handleDownloadOriginal()}
+                  className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {documentBusy ? "Baixando arquivo..." : "Baixar arquivo original"}
+                </button>
+              ) : null
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled={pdfBusy}
+                  onClick={() => void handlePreviewPdf()}
+                  className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {pdfBusy ? "Abrindo PDF..." : "Visualizar PDF"}
+                </button>
+                <button
+                  type="button"
+                  disabled={pdfBusy}
+                  onClick={() => void handleDownloadPdf()}
+                  className="inline-flex items-center justify-center rounded-2xl border border-slate-900 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Baixar PDF
+                </button>
+                <button
+                  type="button"
+                  disabled={documentBusy}
+                  onClick={() => void handleDownloadDocument()}
+                  className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {documentBusy ? "Gerando DOCX..." : "Baixar DOCX"}
+                </button>
+              </>
+            )}
+            {data.viewerRole !== "CLIENT" ? (
+              <a href="#compartilhar-documento" className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+                Compartilhar com cliente
+              </a>
+            ) : null}
           </div>
         }
       >

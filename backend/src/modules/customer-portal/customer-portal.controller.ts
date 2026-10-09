@@ -27,6 +27,8 @@ import {
   TicketActionNoteDto,
 } from '../tickets/dto/ticket.dto';
 import { CustomerPortalService } from './customer-portal.service';
+import { PortalPermissionGuard } from './portal-permission.guard';
+import { CreatePortalFeedbackDto } from './dto/portal-feedback.dto';
 import {
   CreateCustomerQuoteRequestDto,
   CustomerProposalDecisionDto,
@@ -39,7 +41,7 @@ type AuthenticatedRequest = Request & {
 };
 
 @Controller('customer-portal')
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, PortalPermissionGuard)
 export class CustomerPortalController {
   constructor(
     private readonly customerPortalService: CustomerPortalService,
@@ -344,6 +346,16 @@ export class CustomerPortalController {
   @Get('documents')
   documents(@Req() req: AuthenticatedRequest) {
     return this.customerPortalService.listDocuments(this.extractUserId(req));
+  }
+
+  @Get('feedback')
+  feedback(@Req() req: AuthenticatedRequest) {
+    return this.customerPortalService.listFeedback(this.extractUserId(req));
+  }
+
+  @Post('feedback')
+  createFeedback(@Req() req: AuthenticatedRequest, @Body() dto: CreatePortalFeedbackDto) {
+    return this.customerPortalService.createFeedback(this.extractUserId(req), dto);
   }
 
   @Get('financial')

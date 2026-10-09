@@ -83,6 +83,9 @@ export async function runDatabaseSafetyChecks() {
   loadEnvFile();
   const databaseUrl = assertDatabaseUrl();
   validateExpectedDatabase(databaseUrl);
+  const isIsolatedE2eSchema =
+    process.env.E2E_SCHEMA_PUSHED_DB === '1' &&
+    new URL(databaseUrl).pathname === '/gridone_e2e';
 
   const prisma = new PrismaClient();
 
@@ -98,7 +101,7 @@ export async function runDatabaseSafetyChecks() {
       `,
     );
 
-    if (!migrationsTable?.[0]?.exists) {
+    if (!migrationsTable?.[0]?.exists && !isIsolatedE2eSchema) {
       throw new Error('Table "_prisma_migrations" not found.');
     }
 

@@ -1,7 +1,9 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import {
   DeliveryDocumentType,
   DocumentAccessChannel,
   DocumentAccessType,
+  ProposalStatus,
   UserRole,
 } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
@@ -134,6 +136,17 @@ describe('DocumentsService', () => {
     });
   });
 
+  it('blocks document access while the proposal is still a draft', async () => {
+    prisma.proposal.findUnique.mockResolvedValue({
+      ...makeProposal(),
+      status: ProposalStatus.DRAFT,
+    });
+
+    await expect(
+      service.getProposalDocument('proposal-1', 'user-1'),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(prisma.documentDelivery.findFirst).not.toHaveBeenCalled();
+  });
   it('stores generated proposal PDF with template metadata and audit trail', async () => {
     const file = await service.downloadProposalPdf('proposal-1', 'user-1');
 
@@ -168,6 +181,59 @@ describe('DocumentsService', () => {
         channel: DocumentAccessChannel.INTERNAL,
       }),
     });
+  });
+
+  it('generates the standard proposal PDF when DOCX conversion is unavailable', async () => {
+    Object.assign(service, {
+      visualDocuments: {
+        getPublished: jest.fn().mockResolvedValue({ version: { format: 'WORD' } }),
+      },
+    });
+    documentGenerationService.generatePdfFromDocx.mockRejectedValueOnce(
+      new ServiceUnavailableException('Conversor indisponivel.'),
+    );
+
+    const file = await service.downloadProposalInstitutionalPdf(
+      'proposal-1',
+      'user-1',
+    );
+
+    expect(file.buffer.subarray(0, 4).toString()).toBe('%PDF');
+    expect(proposalPdfService.generate).toHaveBeenCalledTimes(1);
+    expect(documentGenerationService.generatePdfFromDocx).toHaveBeenCalledTimes(1);
+    expect(fileStorage.saveDocumentPdf).toHaveBeenCalledWith(
+      'proposal-pdfs',
+      'proposta-PROP-1.pdf',
+      expect.any(Buffer),
+    );
+  });
+
+  it('generates a proposal PDF when a published Word template cannot convert', async () => {
+    Object.assign(service, {
+      visualDocuments: {
+        getPublished: jest.fn().mockResolvedValue({ version: { format: 'WORD' } }),
+      },
+    });
+    documentGenerationService.generatePdfFromDocx.mockRejectedValueOnce(
+      new ServiceUnavailableException('Conversor indisponivel.'),
+    );
+
+    const file = await service.downloadProposalPdf('proposal-1', 'user-1');
+
+    expect(file.buffer.subarray(0, 4).toString()).toBe('%PDF');
+    expect(proposalPdfService.generate).toHaveBeenCalledTimes(1);
+    expect(documentGenerationService.generatePdfFromDocx).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves unexpected PDF generation errors', async () => {
+    documentGenerationService.generatePdfFromDocx.mockRejectedValueOnce(
+      new Error('Erro ao carregar dados da proposta.'),
+    );
+
+    await expect(
+      service.downloadProposalInstitutionalPdf('proposal-1', 'user-1'),
+    ).rejects.toThrow('Erro ao carregar dados da proposta.');
+    expect(proposalPdfService.generate).not.toHaveBeenCalled();
   });
 
   it('stores generated proposal DOCX with institutional template metadata', async () => {

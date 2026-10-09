@@ -286,7 +286,7 @@ export default function DocumentSharePanel({
   }
 
   return (
-    <section className="document-print-toolbar space-y-4 rounded-[28px] border border-slate-200 bg-white/92 p-5 shadow-[0_22px_48px_-38px_rgba(15,23,42,0.24)]">
+    <section id="compartilhar-documento" className="document-print-toolbar space-y-4 rounded-[28px] border border-slate-200 bg-white/92 p-5 shadow-[0_22px_48px_-38px_rgba(15,23,42,0.24)]">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">

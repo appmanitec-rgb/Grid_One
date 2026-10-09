@@ -15,6 +15,7 @@ import { AuthGuard } from '../auth/auth.guard';
 import {
   TeamChannelDto,
   TeamCommentDto,
+  TeamDirectDto,
   TeamMessageDto,
   TeamPostDto,
 } from './dto/team.dto';
@@ -34,13 +35,18 @@ export class TeamController {
     @Req() req: Request,
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
+    @Query('category') category?: string,
   ) {
-    return this.teamService.feed(this.userId(req), cursor, limit);
+    return this.teamService.feed(this.userId(req), cursor, limit, category);
   }
 
   @Post('feed')
   createPost(@Req() req: Request, @Body() dto: TeamPostDto) {
-    return this.teamService.createPost(this.userId(req), dto.body);
+    return this.teamService.createPost(
+      this.userId(req),
+      dto.body,
+      dto.category,
+    );
   }
 
   @Patch('feed/:id')
@@ -96,12 +102,23 @@ export class TeamController {
     return this.teamService.channels(this.userId(req));
   }
 
+  @Get('people')
+  people(@Req() req: Request) {
+    return this.teamService.people(this.userId(req));
+  }
+
+  @Post('direct')
+  direct(@Req() req: Request, @Body() dto: TeamDirectDto) {
+    return this.teamService.direct(this.userId(req), dto.userId);
+  }
+
   @Post('channels')
   createChannel(@Req() req: Request, @Body() dto: TeamChannelDto) {
     return this.teamService.createChannel(
       this.userId(req),
       dto.name,
       dto.description,
+      dto.memberIds,
     );
   }
 

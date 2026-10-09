@@ -129,7 +129,7 @@ export default function DocumentsPage() {
       <PageHero
         eyebrow="Documentos"
         title="Central documental"
-        description="Versoes prontas para imprimir, salvar em PDF e compartilhar com clareza."
+        description="Consulte os arquivos de propostas, contratos e ordens e compartilhe com o cliente."
         stats={[
           {
             label: "Total",
@@ -170,7 +170,7 @@ export default function DocumentsPage() {
       <SectionCard
         eyebrow="Fila documental"
         title="Buscar e abrir versoes"
-        description="Cada card entrega uma copia preparada para impressao e o atalho para o cadastro original."
+        description="Propostas entram após aprovação da diretoria. Aqui você pode visualizar, baixar e compartilhar; edição e aprovação ficam no registro original."
         actions={
           <div className="flex w-full flex-col gap-3 xl:w-auto xl:min-w-[640px] xl:flex-row xl:items-center xl:justify-end">
             <TextInput
@@ -251,10 +251,10 @@ function DocumentCard({ item }: { item: DashboardDocumentHubItem }) {
 
       <div className="mt-4 flex flex-wrap gap-3">
         <Link href={item.href} className={PRIMARY_BUTTON}>
-          Abrir copia
+          Visualizar e enviar
         </Link>
         <Link href={item.sourceHref} className={SECONDARY_BUTTON}>
-          Abrir cadastro
+          Abrir registro
         </Link>
       </div>
     </article>

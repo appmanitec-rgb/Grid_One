@@ -80,7 +80,7 @@ export function PrintDocumentShell({
 
               <div className="space-y-1">
                 <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-500">
-                  Documento operacional
+                  Resumo para consulta
                 </p>
                 <h1 className="text-3xl font-bold tracking-tight text-slate-950">
                   {title}

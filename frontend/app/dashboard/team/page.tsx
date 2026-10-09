@@ -20,6 +20,8 @@ type Comment = {
 type Post = {
   id: string;
   body: string;
+  category: string;
+  automated: boolean;
   author: Author;
   createdAt: string;
   editedAt?: string | null;
@@ -42,6 +44,9 @@ type Channel = {
   slug: string;
   name: string;
   description?: string | null;
+  isPrivate?: boolean;
+  directKey?: string | null;
+  members?: Author[];
   unreadCount: number;
   lastMessage?: { body: string; createdAt: string; author: Author } | null;
 };
@@ -134,11 +139,18 @@ const secondaryButton =
   "rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
 const primaryButton =
   "rounded-xl bg-[#d42d3b] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#b92230] disabled:cursor-not-allowed disabled:opacity-50";
+const feeds = [
+  { id: "GENERAL", label: "Geral" },
+  { id: "COMMERCIAL", label: "Comercial" },
+  { id: "WORKS", label: "Obras" },
+  { id: "SERVICES", label: "Serviços" },
+] as const;
 
 export default function TeamPage() {
   const [tab, setTab] = useState<"feed" | "chat">("feed");
   const [meId, setMeId] = useState("");
   const [posts, setPosts] = useState<Post[]>([]);
+  const [feedCategory, setFeedCategory] = useState<string>("GENERAL");
   const [feedCursor, setFeedCursor] = useState<string | null>(null);
   const [feedLoading, setFeedLoading] = useState(true);
   const [canModerate, setCanModerate] = useState(false);
@@ -161,6 +173,9 @@ export default function TeamPage() {
   const [showNewChannel, setShowNewChannel] = useState(false);
   const [channelName, setChannelName] = useState("");
   const [channelDescription, setChannelDescription] = useState("");
+  const [memberIds, setMemberIds] = useState<string[]>([]);
+  const [people, setPeople] = useState<Author[]>([]);
+  const [directPersonId, setDirectPersonId] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -180,7 +195,7 @@ export default function TeamPage() {
     if (!cursor) setFeedLoading(true);
     try {
       const page = await request<FeedPage>(
-        `/team/feed?limit=15${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+        `/team/feed?category=${feedCategory}&limit=15${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
       );
       setPosts((current) =>
         cursor
@@ -204,7 +219,7 @@ export default function TeamPage() {
     } finally {
       setFeedLoading(false);
     }
-  }, []);
+  }, [feedCategory]);
 
   const loadChannels = useCallback(async () => {
     try {
@@ -293,6 +308,7 @@ export default function TeamPage() {
     setMeId(payload?.sub || "");
     void loadFeed();
     void loadChannels();
+    void request<Author[]>("/team/people").then(setPeople).catch(() => {});
   }, [loadFeed, loadChannels]);
 
   useEffect(() => {
@@ -339,7 +355,7 @@ export default function TeamPage() {
   async function submitPost() {
     if (!postDraft.trim()) return;
     await perform(async () => {
-      await request("/team/feed", "POST", { body: postDraft.trim() });
+      await request("/team/feed", "POST", { body: postDraft.trim(), category: feedCategory });
       setPostDraft("");
       await loadFeed();
     });
@@ -400,10 +416,22 @@ export default function TeamPage() {
       const channel = await request<Channel>("/team/channels", "POST", {
         name: channelName.trim(),
         description: channelDescription.trim(),
+        memberIds,
       });
       setChannelName("");
       setChannelDescription("");
+      setMemberIds([]);
       setShowNewChannel(false);
+      await loadChannels();
+      setActiveChannelId(channel.id);
+      setTab("chat");
+    });
+  }
+
+  async function startDirect() {
+    if (!directPersonId) return;
+    await perform(async () => {
+      const channel = await request<Channel>("/team/direct", "POST", { userId: directPersonId });
       await loadChannels();
       setActiveChannelId(channel.id);
       setTab("chat");
@@ -537,6 +565,19 @@ export default function TeamPage() {
       {tab === "feed" ? (
         <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_260px]">
           <div className="min-w-0 space-y-4">
+            <nav aria-label="Feeds da equipe" className="flex flex-wrap gap-2">
+              {feeds.map((feed) => (
+                <button
+                  key={feed.id}
+                  type="button"
+                  onClick={() => { setPosts([]); setFeedCursor(null); setFeedCategory(feed.id); }}
+                  aria-current={feedCategory === feed.id ? "page" : undefined}
+                  className={`rounded-xl px-4 py-2 text-sm font-semibold ${feedCategory === feed.id ? "bg-[#17324c] text-white" : "border border-slate-200 bg-white text-slate-700"}`}
+                >
+                  {feed.label}
+                </button>
+              ))}
+            </nav>
             <section
               className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-5"
               aria-label="Nova publicação"
@@ -551,7 +592,7 @@ export default function TeamPage() {
                   </p>
                 </div>
                 <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800">
-                  Feed interno
+                  Feed {feeds.find((feed) => feed.id === feedCategory)?.label.toLowerCase()}
                 </span>
               </div>
               <textarea
@@ -611,6 +652,7 @@ export default function TeamPage() {
                       <p className="font-bold text-slate-950">
                         {post.author.name}
                       </p>
+                      {post.automated ? <span className="text-xs text-sky-700">Aviso automático</span> : null}
                       <p className="text-xs text-slate-600">
                         {timeLabel(post.createdAt)}
                         {post.editedAt ? " · editado" : ""}
@@ -871,17 +913,30 @@ export default function TeamPage() {
                 <h2 className="font-bold text-slate-950">Canais</h2>
                 <p className="text-xs text-slate-600">Converse com a equipe</p>
               </div>
-              {canModerate ? (
-                <button
-                  type="button"
-                  title="Criar canal"
-                  aria-label="Criar canal"
-                  onClick={() => setShowNewChannel((value) => !value)}
-                  className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-lg font-bold text-slate-700"
-                >
-                  +
-                </button>
-              ) : null}
+              <button
+                type="button"
+                title="Criar canal"
+                aria-label="Criar canal"
+                onClick={() => setShowNewChannel((value) => !value)}
+                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-lg font-bold text-slate-700"
+              >
+                +
+              </button>
+            </div>
+            <div className="space-y-2 border-y border-slate-200 bg-white p-3">
+              <label htmlFor="direct-person" className="block text-xs font-bold text-slate-700">Conversar com uma pessoa</label>
+              <select
+                id="direct-person"
+                value={directPersonId}
+                onChange={(event) => setDirectPersonId(event.target.value)}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              >
+                <option value="">Escolha um colaborador</option>
+                {people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
+              </select>
+              <button type="button" onClick={() => void startDirect()} disabled={busy || !directPersonId} className={`${secondaryButton} w-full`}>
+                Abrir conversa
+              </button>
             </div>
             {showNewChannel ? (
               <div className="space-y-2 border-y border-slate-200 bg-white p-3">
@@ -904,10 +959,24 @@ export default function TeamPage() {
                   aria-label="Descrição do canal"
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 />
+                <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2">
+                  <p className="text-xs font-semibold text-slate-700">Participantes específicos (opcional)</p>
+                  {people.map((person) => (
+                    <label key={person.id} className="flex items-center gap-2 text-xs text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={memberIds.includes(person.id)}
+                        onChange={(event) => setMemberIds((current) => event.target.checked ? [...current, person.id] : current.filter((id) => id !== person.id))}
+                      />
+                      {person.name}
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-500">Ao selecionar participantes, somente eles e você terão acesso. {canModerate ? "" : "Escolha ao menos uma pessoa."}</p>
                 <button
                   type="button"
                   onClick={() => void createChannel()}
-                  disabled={busy || !channelName.trim()}
+                  disabled={busy || !channelName.trim() || (!canModerate && memberIds.length === 0)}
                   className={`${primaryButton} w-full`}
                 >
                   Criar canal
@@ -924,7 +993,7 @@ export default function TeamPage() {
                 >
                   <span className="flex items-center justify-between gap-2">
                     <strong className="truncate text-sm">
-                      # {channel.name}
+                      {channel.directKey ? "@" : "#"} {channel.directKey ? channel.members?.find((member) => member.id !== meId)?.name || channel.name : channel.name}
                     </strong>
                     {channel.unreadCount > 0 ? (
                       <span
@@ -955,11 +1024,11 @@ export default function TeamPage() {
               <div className="min-w-0">
                 <h2 className="truncate font-bold text-slate-950">
                   {activeChannel
-                    ? `# ${activeChannel.name}`
+                    ? `${activeChannel.directKey ? "@" : "#"} ${activeChannel.directKey ? activeChannel.members?.find((member) => member.id !== meId)?.name || activeChannel.name : activeChannel.name}`
                     : "Selecione um canal"}
                 </h2>
                 <p className="truncate text-xs text-slate-600">
-                  {activeChannel?.description || "Conversa interna da equipe"}
+                  {activeChannel?.isPrivate ? `Conversa privada · ${activeChannel.members?.map((member) => member.name).join(", ") || "participantes"}` : activeChannel?.description || "Conversa interna da equipe"}
                 </p>
               </div>
               <span className="hidden rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 sm:inline-flex">

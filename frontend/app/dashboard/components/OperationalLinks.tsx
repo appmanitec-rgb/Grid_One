@@ -175,7 +175,7 @@ export function RelatedEntityCard({
   );
 
   if (!item.href || !allowed) return content;
-  return <Link href={item.href}>{content}</Link>;
+  return <Link href={item.href} aria-label={item.label}>{content}</Link>;
 }
 
 export function RelatedEntityGrid({

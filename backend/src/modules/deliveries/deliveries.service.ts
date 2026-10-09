@@ -23,6 +23,7 @@ import { ApproveSharedProposalDto } from './dto/approve-shared-proposal.dto';
 import { CreateDocumentDeliveryDto } from './dto/create-document-delivery.dto';
 import { CreateDocumentEmailDeliveryDto } from './dto/create-document-email-delivery.dto';
 import { createApprovedProposalOrder } from '../proposals/proposal-work-order';
+import { publishProposalWon } from '../team/team-automation';
 
 type ActorScope = {
   id: string;
@@ -716,6 +717,7 @@ export class DeliveriesService {
       }
 
       await createApprovedProposalOrder(tx, proposal);
+      await publishProposalWon(tx, proposal.id);
 
       await tx.documentShareToken.update({
         where: { id: shareToken.id },

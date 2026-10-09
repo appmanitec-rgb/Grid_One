@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -32,7 +32,7 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/dashboard/contracts": { title: "Gestão de Contratos", subtitle: "Vigência, SLA, faturamento e preventiva automática." },
   "/dashboard/reports": { title: "Relatórios Gerenciais", subtitle: "Indicadores consolidados de performance e operação." },
   "/dashboard/monitoring": { title: "Monitoramento Operacional", subtitle: "Telemetria, alertas, automações e resposta de campo." },
-  "/dashboard/dispatch": { title: "Painel de Despacho", subtitle: "Agenda diária/semanal com roteirização e prioridade operacional." },
+  "/dashboard/dispatch": { title: "Programação e Despacho", subtitle: "Agenda, distribuição de ordens e prioridades da equipe." },
   "/dashboard/technicians": { title: "Equipe de Técnicos", subtitle: "Capacidade operacional, skills e certificações da equipe." },
   "/dashboard/sites": { title: "Locais e Obras", subtitle: "Mapa de instalações e ativos por local." },
   "/dashboard/inventory": { title: "Controle de Estoque", subtitle: "Inventário, rupturas e valorização." },

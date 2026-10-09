@@ -47,6 +47,7 @@ export default function PortalDashboardPage() {
     );
   if (!data) return <PortalState title="Sem dados para exibir" />;
 
+  const can = (permission: string) => data.permissions.includes(permission);
   const stats = [
     {
       label: "Equipamentos",
@@ -83,7 +84,7 @@ export default function PortalDashboardPage() {
       value: data.stats.waitingCustomerTickets || 0,
       href: "/portal/chamados",
     },
-  ];
+  ].filter((stat) => can(({ "/portal/equipamentos": "EQUIPMENT", "/portal/contratos": "CONTRACTS", "/portal/propostas": "PROPOSALS", "/portal/chamados": "TICKETS", "/portal/solicitacoes": "REQUESTS" } as Record<string, string>)[stat.href] || ""));
 
   return (
     <div className="space-y-6">
@@ -101,8 +102,8 @@ export default function PortalDashboardPage() {
       </section>
 
       <div className="flex flex-wrap gap-3">
-        <Link href="/portal/propostas" className="rounded-xl bg-blue-700 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-blue-800">Avaliar minhas propostas</Link>
-        <Link href="/portal/solicitacoes" className="rounded-xl border border-blue-200 bg-white px-5 py-3 text-sm font-bold text-blue-800 hover:bg-blue-50">Solicitar peças ou serviços</Link>
+        {can("PROPOSALS") && <Link href="/portal/propostas" className="rounded-xl bg-blue-700 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-blue-800">Avaliar minhas propostas</Link>}
+        {can("REQUESTS") && <Link href="/portal/solicitacoes" className="rounded-xl border border-blue-200 bg-white px-5 py-3 text-sm font-bold text-blue-800 hover:bg-blue-50">Solicitar peças ou serviços</Link>}
       </div>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
@@ -123,7 +124,7 @@ export default function PortalDashboardPage() {
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Propostas recentes" href="/portal/propostas">
+        {can("PROPOSALS") && <Panel title="Propostas recentes" href="/portal/propostas">
           {data.recentProposals.length ? (
             data.recentProposals.map((proposal) => (
               <Row key={proposal.id} href={`/portal/propostas/${proposal.id}`}>
@@ -139,9 +140,9 @@ export default function PortalDashboardPage() {
           ) : (
             <EmptyText text="Nenhuma proposta liberada para acompanhamento." />
           )}
-        </Panel>
+        </Panel>}
 
-        <Panel title="Ordens recentes" href="/portal/equipamentos">
+        {can("EQUIPMENT") && <Panel title="Ordens recentes" href="/portal/equipamentos">
           {data.recentOrders.length ? (
             data.recentOrders.map((order) => (
               <Row
@@ -160,11 +161,11 @@ export default function PortalDashboardPage() {
           ) : (
             <EmptyText text="Nenhuma ordem recente para exibir." />
           )}
-        </Panel>
+        </Panel>}
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Próximas preventivas" href="/portal/equipamentos">
+        {can("EQUIPMENT") && <Panel title="Próximas preventivas" href="/portal/equipamentos">
           {data.upcomingPreventives.length ? (
             data.upcomingPreventives.map((item) => (
               <Row
@@ -185,9 +186,9 @@ export default function PortalDashboardPage() {
           ) : (
             <EmptyText text="Nenhuma preventiva futura programada." />
           )}
-        </Panel>
+        </Panel>}
 
-        <Panel title="Documentos recentes" href="/portal/documentos">
+        {can("DOCUMENTS") && <Panel title="Documentos recentes" href="/portal/documentos">
           {data.recentDocuments.length ? (
             data.recentDocuments.map((document) => (
               <Row key={document.id} href="/portal/documentos">
@@ -207,7 +208,7 @@ export default function PortalDashboardPage() {
           ) : (
             <EmptyText text="Nenhum documento liberado ainda." />
           )}
-        </Panel>
+        </Panel>}
       </section>
     </div>
   );

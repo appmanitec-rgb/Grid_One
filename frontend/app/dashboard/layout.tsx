@@ -27,7 +27,6 @@ import {
   decodeJwtPayload,
   ensureValidSession,
   getStoredAccessToken,
-  refreshAccessSession,
 } from "@/lib/auth-session";
 
 type VisiblePages = SidebarAccess;
@@ -79,6 +78,10 @@ export default function DashboardLayout({
 
       try {
         const payload = decodeJwtPayload<{ role?: string }>(token);
+        if (payload?.role === "CLIENT") {
+          window.location.replace("/portal");
+          return;
+        }
         setCurrentRole(payload?.role || "NORMAL");
         const access = getAccessFromToken();
         setVisiblePages({
@@ -113,9 +116,9 @@ export default function DashboardLayout({
   useEffect(() => {
     if (!accessReady || currentRole !== "CLIENT") return;
     if (pathname.startsWith("/dashboard")) {
-      router.replace("/portal");
+      window.location.replace("/portal");
     }
-  }, [accessReady, currentRole, pathname, router]);
+  }, [accessReady, currentRole, pathname]);
 
   useEffect(() => {
     if (!accessReady || currentRole === "CLIENT") return;
@@ -129,10 +132,8 @@ export default function DashboardLayout({
 
     let cancelled = false;
 
-    async function syncSession(forceRefresh = false) {
-      const hasSession =
-        (forceRefresh && (await refreshAccessSession())) ||
-        (await ensureValidSession());
+    async function syncSession() {
+      const hasSession = await ensureValidSession();
       const token = getStoredAccessToken();
       if (cancelled) return;
 
@@ -144,6 +145,10 @@ export default function DashboardLayout({
 
       try {
         const payload = decodeJwtPayload<{ role?: string }>(token);
+        if (payload?.role === "CLIENT") {
+          window.location.replace("/portal");
+          return;
+        }
         setCurrentRole(payload?.role || "NORMAL");
         const access = getAccessFromToken();
         setVisiblePages({
@@ -158,14 +163,14 @@ export default function DashboardLayout({
     }
 
     const intervalId = window.setInterval(() => {
-      void syncSession(true);
+      void syncSession();
     }, 300_000);
     const handleFocus = () => {
-      void syncSession(true);
+      void syncSession();
     };
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        void syncSession(true);
+        void syncSession();
       }
     };
 
@@ -364,7 +369,7 @@ export default function DashboardLayout({
     saveStoredDashboardTheme(nextTheme);
   }
 
-  if (!accessReady) {
+  if (!accessReady || currentRole === "CLIENT" || !canAccessDashboardPath(pathname, visiblePages)) {
     return (
       <div
         className="flex min-h-screen items-center justify-center px-6 text-sm font-semibold text-zinc-500"

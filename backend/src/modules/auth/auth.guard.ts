@@ -62,12 +62,17 @@ export class AuthGuard implements CanActivate {
         isSystemMaster: true,
         accessPolicy: true,
         linkedClientId: true,
+        linkedClient: { select: { portalEnabled: true } },
       },
     });
     if (!user?.isActive) {
       throw new UnauthorizedException(
         'Usuario indisponivel para autenticacao.',
       );
+    }
+
+    if (user.role === 'CLIENT' && !user.linkedClient?.portalEnabled) {
+      throw new UnauthorizedException('Central do cliente desabilitada.');
     }
 
     request['user'] = {

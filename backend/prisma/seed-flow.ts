@@ -189,6 +189,7 @@ async function upsertUser(input: {
       ...mfaData,
     },
     create: {
+      code: `E2E-${input.email.split('@')[0].toUpperCase().replace(/[^A-Z0-9]/g, '-')}`,
       name: input.name,
       email: input.email,
       role: input.role,
@@ -412,8 +413,10 @@ async function main() {
       withholdsInss: true,
       withholdsIss: false,
       isDelinquent: false,
+      portalEnabled: true,
     },
     create: {
+      code: 'E2E-CLIENTE-A',
       companyName: 'Cliente Demo Energia S.A.',
       tradeName: 'Hospital Central Demo',
       cnpj: '12.345.678/0001-90',
@@ -432,6 +435,7 @@ async function main() {
       withholdsInss: true,
       withholdsIss: false,
       isDelinquent: false,
+      portalEnabled: true,
     },
   });
   await prisma.clientAddress.deleteMany({ where: { clientId: client.id } });
@@ -505,8 +509,10 @@ async function main() {
       withholdsInss: false,
       withholdsIss: false,
       isDelinquent: false,
+      portalEnabled: true,
     },
     create: {
+      code: 'E2E-CLIENTE-B',
       companyName: 'Cliente Demo Backup Ltda.',
       tradeName: 'Industria Backup Demo',
       cnpj: '22.222.222/0001-22',
@@ -525,6 +531,7 @@ async function main() {
       withholdsInss: false,
       withholdsIss: false,
       isDelinquent: false,
+      portalEnabled: true,
     },
   });
 
@@ -809,6 +816,7 @@ async function main() {
       hasMaintenanceContract: true,
     },
     create: {
+      code: 'E2E-GERADOR-A',
       name: 'Gerador Hospital Principal',
       brand: 'Cummins',
       serialNumber: 'DEMO-GMG-0001',
@@ -890,6 +898,7 @@ async function main() {
       hasMaintenanceContract: false,
     },
     create: {
+      code: 'E2E-GERADOR-B',
       name: 'Gerador Industrial Backup',
       brand: 'Stemac',
       serialNumber: 'DEMO-GMG-B-0001',

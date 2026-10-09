@@ -69,6 +69,11 @@ export class AuthService {
       throw new UnauthorizedException('E-mail ou palavra-passe incorretos.');
     }
 
+    if (user.role === UserRole.CLIENT) {
+      const client = await this.database.client.findUnique({ where: { id: user.linkedClientId || '' }, select: { portalEnabled: true } });
+      if (!client?.portalEnabled) throw new UnauthorizedException('Central do cliente desabilitada.');
+    }
+
     if (!user.isActive) {
       throw new UnauthorizedException('Esta conta esta desativada.');
     }
@@ -164,6 +169,8 @@ export class AuthService {
       throw new UnauthorizedException('Link de ativacao invalido ou expirado.');
     }
 
+    const client = await this.database.client.findUnique({ where: { id: activation.user.linkedClientId }, select: { portalEnabled: true } });
+    if (!client?.portalEnabled) throw new UnauthorizedException('Central do cliente desabilitada.');
     const passwordHash = await bcrypt.hash(password, 12);
     await this.database.$transaction(async (tx) => {
       const claimed = await tx.clientPortalActivation.updateMany({
@@ -316,6 +323,10 @@ export class AuthService {
       );
     }
 
+    if (session.user.role === UserRole.CLIENT) {
+      const client = await this.database.client.findUnique({ where: { id: session.user.linkedClientId || '' }, select: { portalEnabled: true } });
+      if (!client?.portalEnabled) throw new UnauthorizedException('Central do cliente desabilitada.');
+    }
     const accessPolicy = this.resolveAccessPolicy(session.user);
     const accessToken = await this.issueAccessToken({
       id: session.user.id,
@@ -329,8 +340,13 @@ export class AuthService {
     });
 
     const nextRefreshToken = this.generateRefreshToken();
-    await this.database.authSession.update({
-      where: { id: session.id },
+    const rotated = await this.database.authSession.updateMany({
+      where: {
+        id: session.id,
+        refreshTokenHash: this.hashRefreshToken(normalizedToken),
+        revokedAt: null,
+        expiresAt: { gt: now },
+      },
       data: {
         refreshTokenHash: this.hashRefreshToken(nextRefreshToken),
         deviceName:
@@ -338,6 +354,11 @@ export class AuthService {
         lastUsedAt: now,
       },
     });
+    if (rotated.count !== 1) {
+      throw new UnauthorizedException(
+        'Sessao atualizada em outra aba. Tente novamente.',
+      );
+    }
 
     return {
       access_token: accessToken,

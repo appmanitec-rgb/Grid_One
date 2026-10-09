@@ -93,6 +93,11 @@ export class CreateUserDto {
   @IsOptional()
   linkedClientId?: string;
 
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  portalPermissions?: string[];
+
   @IsEnum(UserAvailabilityStatus)
   @IsOptional()
   availabilityStatus?: UserAvailabilityStatus;

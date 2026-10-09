@@ -67,7 +67,7 @@ test.describe("ciclo 20d ux operacional", () => {
       timeout: 45_000,
     });
     await expectLoaded(page, /Equipamentos/i);
-    await expect(page.locator("body")).toContainText(/Cadastro mestre tecnico/i);
+    await expect(page.locator("body")).toContainText(/Geradores por cliente/i);
     await expect(page.getByRole("link", { name: /Abrir ficha/i }).first()).toBeVisible();
 
     await page.goto(`/dashboard/equipments/${data.clientAEquipmentId}`, {
@@ -79,9 +79,7 @@ test.describe("ciclo 20d ux operacional", () => {
     await expect(page.locator("body")).toContainText(/Motor/i);
     await expect(page.locator("body")).toContainText(/Alternador/i);
     await expect(page.locator("body")).toContainText(/QTA/i);
-    await expect(
-      page.getByRole("link", { name: "Cliente", exact: true }),
-    ).toBeVisible();
+    await expect(page.getByRole("link", { name: /Abrir cliente/i })).toBeVisible();
     await page.getByRole("button", { name: /Historico e links|Histórico e links/i }).click();
     await expect(page.locator("body")).toContainText(/Ordens de servico recentes|Ordens de serviço recentes/i);
     await expect(page.locator("body")).toContainText(/Laudos tecnicos|Laudos técnicos/i);
@@ -100,7 +98,7 @@ test.describe("ciclo 20d ux operacional", () => {
       timeout: 45_000,
     });
     await expectLoaded(page, /Fisico x Reservado x Disponivel|Físico x Reservado x Disponível/i);
-    await expect(page.getByRole("link", { name: /^Abrir$/i }).first()).toBeVisible();
+    await expect(page.locator('table a[href^="/dashboard/catalog/"]').first()).toBeVisible();
 
     const catalogItems = await apiRequest<CatalogItem[]>(adminToken, "/catalogs");
     let stockItem: CatalogItem | undefined;
@@ -138,9 +136,16 @@ test.describe("ciclo 20d ux operacional", () => {
     await page.getByRole("button", { name: /^Estoque$/i }).click();
     await expect(page.locator("body")).toContainText(/Alterado apenas por movimento/i);
     await expect(page.getByLabel(/Estoque atual/i)).toHaveCount(0);
-    await page.locator('input[name="storageLocation"]').fill("A1-E2E");
-    await page.locator('input[name="reorderPoint"]').fill("7");
-    await page.getByRole("button", { name: /Salvar alteracoes/i }).click();
+    const storageLocation = page.locator('input[list="storage-location-options"]');
+    await expect(storageLocation).toBeVisible();
+    await storageLocation.fill("A1-E2E");
+    const reorderPoint = page.locator('input[name="reorderPoint"]');
+    await expect(reorderPoint).toBeVisible();
+    await reorderPoint.fill("7");
+    await Promise.all([
+      page.waitForURL(/\/dashboard\/catalog(?:\?|$)/, { timeout: 45_000 }),
+      page.getByRole("button", { name: /Salvar alteracoes/i }).click(),
+    ]);
     await page.goto(`/dashboard/catalog/${stockItem!.id}`, {
       waitUntil: "domcontentloaded",
       timeout: 45_000,

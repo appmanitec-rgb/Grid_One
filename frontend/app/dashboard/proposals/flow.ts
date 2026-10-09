@@ -7,6 +7,7 @@ export const KANBAN_COLUMNS: Array<{ key: string; label: string; tone: string }>
   { key: "LOST", label: "Perdido", tone: "from-rose-100 to-rose-200" },
   { key: "REJECTED", label: "Reprovadas", tone: "from-rose-100 to-red-200" },
   { key: "REVISED", label: "Revisadas", tone: "from-slate-100 to-slate-200" },
+  { key: "OTHER", label: "Outros status", tone: "from-slate-100 to-slate-200" },
 ];
 
 export const FLOW_STEPS = [
@@ -31,6 +32,7 @@ const STATUS_LABELS: Record<string, string> = {
   BOARD_REVIEW: "Analise da Diretoria",
   REVISION_REQUIRED: "Ajustes solicitados pela Diretoria",
   REVISED: "Revisada",
+  DISCOUNT_REVIEW: "Revisão de desconto",
   CLIENT_REVIEW: "Analise do Cliente",
   WON: "Aprovado pelo Cliente (Ganho)",
   LOST: "Reprovado pelo Cliente (Perdido)",
@@ -39,6 +41,9 @@ const STATUS_LABELS: Record<string, string> = {
   SENT: "Enviado",
 };
 
+export function canOpenProposalDocuments(status: string) {
+  return ["CLIENT_REVIEW", "WON", "LOST", "SENT", "APPROVED"].includes(status);
+}
 export function canMoveForward(currentStatus: string, nextStatus: string) {
   return (COMMON_USER_TRANSITIONS[currentStatus] || []).includes(nextStatus);
 }
@@ -48,6 +53,7 @@ export function statusLabel(status: string) {
 }
 
 export function statusToFlowStep(status: string) {
-  return status;
+  if (status === "DISCOUNT_REVIEW") return "BOARD_REVIEW";
+  if (KANBAN_COLUMNS.some((column) => column.key === status)) return status;
+  return "OTHER";
 }
-

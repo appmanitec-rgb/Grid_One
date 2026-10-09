@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
   FLOW_STEPS,
+  canOpenProposalDocuments,
   statusLabel,
   statusToFlowStep,
 } from "../flow";
@@ -308,37 +309,6 @@ export default function ProposalDetailPage() {
     if (succeeded) closeReasonedAction();
   }
 
-  async function downloadExternalDocument() {
-    if (!proposal) return;
-    setError("");
-    try {
-      const response = await apiFetch(
-        `/proposals/${proposal.id}/external-document`,
-      );
-      if (!response.ok)
-        throw new Error(
-          await readApiErrorMessage(
-            response,
-            "Falha ao baixar documento externo.",
-          ),
-        );
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download =
-        proposal.externalDocumentFileName || `proposta-${proposal.code}`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-    } catch (downloadError: unknown) {
-      setError(
-        downloadError instanceof Error
-          ? downloadError.message
-          : "Falha ao baixar documento externo.",
-      );
-    }
-  }
-
   async function convertToPostSale() {
     if (!proposal || !postSaleName.trim()) {
       setError("Informe o nome que identificara o equipamento no pos-venda.");
@@ -414,7 +384,6 @@ export default function ProposalDetailPage() {
     !isClient &&
     (!proposal.revisions || proposal.revisions.length === 0) &&
     [
-      "DRAFT",
       "REVISION_REQUIRED",
       "CLIENT_REVIEW",
       "LOST",
@@ -574,15 +543,6 @@ export default function ProposalDetailPage() {
         ]}
         actions={
           <>
-            {proposal.origin === "EXTERNAL" &&
-            proposal.externalDocumentFileName ? (
-              <ActionButton
-                busy={isBusy}
-                onClick={() => void downloadExternalDocument()}
-              >
-                Baixar documento externo
-              </ActionButton>
-            ) : null}
             {proposal.status === "WON" &&
             proposal.type === "GENERATOR_SALE" &&
             !proposal.postSaleGeneratorId &&
@@ -783,14 +743,18 @@ export default function ProposalDetailPage() {
                   },
                 ]
               : []),
-            {
-              label: `Documento ${proposal.code}`,
-              description: "Visualizacao documental da proposta.",
-              href: `/dashboard/documents/proposals/${proposal.id}`,
-              badge: "Documento",
-              tone: "slate" as const,
-              permission: "proposals.view",
-            },
+            ...(canOpenProposalDocuments(proposal.status)
+              ? [
+                  {
+                    label: "Arquivos e envio",
+                    description: proposal.origin === "EXTERNAL" ? "Baixar o arquivo recebido e compartilhar com o cliente." : "Visualizar PDF, baixar arquivos e compartilhar com o cliente.",
+                    href: `/dashboard/documents/proposals/${proposal.id}`,
+                    badge: "Documento",
+                    tone: "slate" as const,
+                    permission: "proposals.view",
+                  },
+                ]
+              : []),
           ]}
         />
       </SectionCard>
@@ -873,6 +837,11 @@ export default function ProposalDetailPage() {
         </div>
 
         <div className="mt-5 flex flex-wrap gap-3">
+          {proposal.status === "DRAFT" && proposal.origin !== "EXTERNAL" && ["PARTS_AND_SERVICES", "CONTRACT"].includes(proposal.type) && !isClient ? (
+            <Link href={`/dashboard/proposals/new?editId=${proposal.id}`} className={PRIMARY_BUTTON}>
+              Editar rascunho
+            </Link>
+          ) : null}
           {flowActions.length > 0 ? (
             flowActions.map((action) => (
               <StatusActionButton
@@ -899,6 +868,11 @@ export default function ProposalDetailPage() {
           )}
         </div>
 
+        {!canOpenProposalDocuments(proposal.status) && !isClient ? (
+          <p className="mt-4 text-sm text-slate-500">
+            Arquivos e envio ficam disponíveis após a aprovação da diretoria.
+          </p>
+        ) : null}
         {showDiscountForm ? (
           <div className="mt-5 rounded-[24px] border border-amber-200 bg-amber-50/90 p-4">
             <div className="grid gap-4 md:grid-cols-[180px_minmax(0,1fr)_auto]">

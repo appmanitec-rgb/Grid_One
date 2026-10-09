@@ -141,6 +141,48 @@ type PaymentProfile = {
   qrCodeDataUrl?: string | null;
 };
 
+type EditableProposal = {
+  id: string;
+  code: string;
+  status: string;
+  type: "PARTS_AND_SERVICES" | "CONTRACT";
+  clientId: string;
+  client?: Client | null;
+  generatorId?: string | null;
+  generator?: Generator | null;
+  userId?: string | null;
+  user?: SellerOption | null;
+  salesOpportunityId?: string | null;
+  scope?: string | null;
+  freight?: string | null;
+  validUntil?: string | null;
+  paymentTerm?: string | null;
+  deliveryLeadTimeDays?: number | null;
+  paymentSelections?: Array<{ id?: string; purpose: "PARTS" | "SERVICES" }> | null;
+  hasDownPayment?: boolean;
+  downPaymentAmount?: number | null;
+  installmentCount?: number | null;
+  installmentIntervalDays?: number | null;
+  firstDueDate?: string | null;
+  internalNotes?: string | null;
+  externalNotes?: string | null;
+  discount?: number | null;
+  allowOperationalExpenseDiscount?: boolean;
+  operationalExpenses?: OperationalExpenseSelection[] | null;
+  items: Array<{
+    kind: "PART_MATERIAL" | "CATALOG_SERVICE" | "HOURLY_SERVICE" | "OTHER";
+    catalogItemId?: string | null;
+    catalogItem?: CatalogItem | null;
+    description?: string | null;
+    quantity: number;
+    hours?: number | null;
+    unitPrice: number;
+    discountPercent?: number | null;
+    hourType?: string | null;
+    technicianType?: string | null;
+  }>;
+};
+
 type OtherItem = {
   description: string;
   quantity: string;
@@ -446,6 +488,9 @@ function PaymentProfileSelector({ label, purpose, profiles, value, onChange }: {
 export default function NewProposalPage() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingProposalId, setEditingProposalId] = useState("");
+  const [editingProposalCode, setEditingProposalCode] = useState("");
+  const [draftLoaded, setDraftLoaded] = useState(false);
   const [proposalFormType, setProposalFormType] = useState<
     "PARTS_AND_SERVICES" | "CONTRACT"
   >("PARTS_AND_SERVICES");
@@ -466,6 +511,8 @@ export default function NewProposalPage() {
   const [generators, setGenerators] = useState<Generator[]>([]);
   const [sellers, setSellers] = useState<SellerOption[]>([]);
   const [scopeTemplates, setScopeTemplates] = useState<ScopeTemplate[]>([]);
+  const [scopeTemplatesLoading, setScopeTemplatesLoading] = useState(true);
+  const [scopeTemplatesError, setScopeTemplatesError] = useState("");
   const [hourTypes, setHourTypes] = useState<PricingOption[]>([]);
   const [technicianTypes, setTechnicianTypes] = useState<PricingOption[]>([]);
   const [hourlyRates, setHourlyRates] = useState<HourlyRateOption[]>([]);
@@ -573,6 +620,94 @@ export default function NewProposalPage() {
   }, [loadAccessoryRules]);
 
   useEffect(() => {
+    const editId = new URLSearchParams(window.location.search).get("editId");
+    if (!editId) return;
+    let cancelled = false;
+    setEditingProposalId(editId);
+    void apiFetch(`/proposals/${editId}`, { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(await readApiErrorMessage(response, "Não foi possível carregar o rascunho."));
+        }
+        return (await response.json()) as EditableProposal;
+      })
+      .then(async (draft) => {
+        if (cancelled) return;
+        if (draft.status !== "DRAFT" || !["PARTS_AND_SERVICES", "CONTRACT"].includes(draft.type)) {
+          throw new Error("Esta proposta não pode ser editada neste formulário.");
+        }
+        setEditingProposalCode(draft.code);
+        setProposalFormType(draft.type);
+        setSelectedClientId(draft.clientId);
+        setClientSearch(draft.client?.companyName || draft.client?.tradeName || "");
+        if (draft.client) setClients((current) => [draft.client!, ...current.filter((item) => item.id !== draft.clientId)]);
+        setSelectedEquipmentId(draft.generatorId || "");
+        setEquipmentSearch(draft.generator?.name || "");
+        if (draft.generator) setGenerators((current) => [draft.generator!, ...current.filter((item) => item.id !== draft.generatorId)]);
+        setSelectedSellerId(draft.userId || "");
+        setSellerSearch(draft.user?.name || "");
+        if (draft.user) setSellers((current) => [draft.user!, ...current.filter((item) => item.id !== draft.userId)]);
+        setScope(draft.scope || "");
+        setFreight(draft.freight || "FOB");
+        setValidUntil(draft.validUntil?.slice(0, 10) || "");
+        setPaymentTerm(draft.paymentTerm || "");
+        setDeliveryLeadTimeDays(draft.deliveryLeadTimeDays?.toString() || "");
+        setPartsPaymentProfileId(draft.paymentSelections?.find((item) => item.purpose === "PARTS")?.id || "");
+        setServicesPaymentProfileId(draft.paymentSelections?.find((item) => item.purpose === "SERVICES")?.id || "");
+        setHasDownPayment(Boolean(draft.hasDownPayment));
+        setDownPaymentAmount(draft.downPaymentAmount?.toString() || "");
+        setInstallmentCount(draft.installmentCount?.toString() || "1");
+        setInstallmentIntervalDays(draft.installmentIntervalDays?.toString() || "30");
+        setFirstDueDate(draft.firstDueDate?.slice(0, 10) || "");
+        setInternalNotes(draft.internalNotes || "");
+        setExternalNotes(draft.externalNotes || "");
+        setDiscountType("VALUE");
+        setDiscountInput(draft.discount?.toString() || "");
+        setAllowOperationalExpenseDiscount(Boolean(draft.allowOperationalExpenseDiscount));
+        setOperationalExpenses(draft.operationalExpenses || []);
+        const rows = draft.items || [];
+        setParts(rows.filter((item) => item.kind === "PART_MATERIAL").map((item) => ({ catalogItemId: item.catalogItemId || "", quantity: String(item.quantity), unitPrice: String(item.unitPrice) })));
+        setLabor(rows.filter((item) => item.kind === "CATALOG_SERVICE").map((item) => ({ catalogItemId: item.catalogItemId || "", quantity: String(item.quantity), unitPrice: String(item.unitPrice) })));
+        setHourlyServices(rows.filter((item) => item.kind === "HOURLY_SERVICE").map((item) => ({ description: item.description || "", hourType: item.hourType || "ONE_OFF", technicianType: item.technicianType || "", hours: String(item.hours || item.quantity), discountPercent: String(item.discountPercent || 0) })));
+        setOtherItems(rows.filter((item) => item.kind === "OTHER").map((item) => ({ description: item.description || "", quantity: String(item.quantity), unitPrice: String(item.unitPrice) })));
+        const catalogItems = rows.flatMap((item) => item.catalogItem ? [item.catalogItem] : []);
+        setPartOptions((current) => Array.from(new Map([...current, ...catalogItems.filter((item) => item.type === "PART")].map((item) => [item.id, item])).values()));
+        setServiceOptions((current) => Array.from(new Map([...current, ...catalogItems.filter((item) => item.type === "SERVICE")].map((item) => [item.id, item])).values()));
+        setDraftLoaded(true);
+        if (draft.salesOpportunityId) {
+          const response = await apiFetch(`/crm/opportunities/${draft.salesOpportunityId}`, { cache: "no-store" });
+          if (response.ok && !cancelled) setLinkedOpportunity((await response.json()) as LinkedOpportunity);
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setFeedback({ kind: "error", text: error instanceof Error ? error.message : "Erro ao carregar rascunho." });
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const loadScopeTemplates = useCallback(async () => {
+    setScopeTemplatesLoading(true);
+    setScopeTemplatesError("");
+    try {
+      const response = await apiFetch(apiUrl("/proposals/scope-templates"), {
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw new Error(await readApiErrorMessage(response, "Falha ao carregar os escopos."));
+      }
+      setScopeTemplates((await response.json()) as ScopeTemplate[]);
+    } catch (error: unknown) {
+      setScopeTemplatesError(error instanceof Error ? error.message : "Falha ao carregar os escopos.");
+    } finally {
+      setScopeTemplatesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadScopeTemplates();
+  }, [loadScopeTemplates]);
+
+  useEffect(() => {
     async function fetchData() {
       try {
         const [
@@ -580,7 +715,6 @@ export default function NewProposalPage() {
           partsRes,
           servicesRes,
           pricingRes,
-          scopesRes,
           paymentProfilesRes,
           controlOptions,
         ] = await Promise.all([
@@ -592,16 +726,19 @@ export default function NewProposalPage() {
             cache: "no-store",
           }),
           apiFetch(apiUrl("/proposals/pricing-options"), { cache: "no-store" }),
-          apiFetch(apiUrl("/proposals/scope-templates"), { cache: "no-store" }),
           apiFetch(apiUrl("/proposals/payment-profiles"), { cache: "no-store" }),
           loadControlOptions(["PAYMENT_TERM"]),
         ]);
 
         if (clientsRes.ok) setClients((await clientsRes.json()) as Client[]);
-        if (partsRes.ok)
-          setPartOptions((await partsRes.json()) as CatalogItem[]);
-        if (servicesRes.ok)
-          setServiceOptions((await servicesRes.json()) as CatalogItem[]);
+        if (partsRes.ok) {
+          const options = (await partsRes.json()) as CatalogItem[];
+          setPartOptions((current) => Array.from(new Map([...options, ...current].map((item) => [item.id, item])).values()));
+        }
+        if (servicesRes.ok) {
+          const options = (await servicesRes.json()) as CatalogItem[];
+          setServiceOptions((current) => Array.from(new Map([...options, ...current].map((item) => [item.id, item])).values()));
+        }
         if (pricingRes.ok) {
           const pricing = (await pricingRes.json()) as {
             hourTypes?: PricingOption[];
@@ -612,8 +749,6 @@ export default function NewProposalPage() {
           setTechnicianTypes(pricing.technicianTypes || []);
           setHourlyRates(pricing.rates || []);
         }
-        if (scopesRes.ok)
-          setScopeTemplates((await scopesRes.json()) as ScopeTemplate[]);
         if (paymentProfilesRes.ok)
           setPaymentProfiles((await paymentProfilesRes.json()) as PaymentProfile[]);
         setPaymentTermOptions(controlOptions.PAYMENT_TERM || []);
@@ -1229,6 +1364,8 @@ export default function NewProposalPage() {
       }
       const imported = (await response.json()) as ScopeTemplate;
       setScopeTemplates((current) => [...current, imported]);
+      setScopeTemplatesError("");
+      setScopeSearch("");
       setSelectedScopeTemplateIds((current) => [...current, imported.id]);
       setFeedback({ kind: "success", text: `Escopo “${imported.name}” importado. Selecione Adicionar ao escopo para usar.` });
     } catch (cause: unknown) {
@@ -1688,8 +1825,8 @@ export default function NewProposalPage() {
     };
 
     try {
-      const res = await apiFetch(apiUrl("/proposals"), {
-        method: "POST",
+      const res = await apiFetch(apiUrl(editingProposalId ? `/proposals/${editingProposalId}` : "/proposals"), {
+        method: editingProposalId ? "PATCH" : "POST",
         headers: {
           "Content-Type": "application/json",
         },
@@ -1709,11 +1846,11 @@ export default function NewProposalPage() {
       } | null;
       setFeedback({
         kind: "success",
-        text: "Proposta gerada com sucesso. Redirecionando...",
+        text: editingProposalId ? "Rascunho salvo. Redirecionando..." : "Proposta gerada com sucesso. Redirecionando...",
       });
       router.push(
-        createdProposal?.id
-          ? `/dashboard/proposals/${createdProposal.id}`
+        (createdProposal?.id || editingProposalId)
+          ? `/dashboard/proposals/${createdProposal?.id || editingProposalId}`
           : "/dashboard/proposals",
       );
       router.refresh();
@@ -1731,7 +1868,9 @@ export default function NewProposalPage() {
       <div className="mb-8">
         <div>
           <h1 className="text-3xl font-bold text-zinc-800">
-            {proposalFormType === "CONTRACT"
+            {editingProposalId
+              ? `Editar rascunho ${editingProposalCode || ""}`
+              : proposalFormType === "CONTRACT"
               ? "Nova Proposta de Contrato"
               : "Nova Proposta de Pecas e Servicos"}
           </h1>
@@ -2807,7 +2946,7 @@ export default function NewProposalPage() {
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <label className="cursor-pointer rounded border border-sky-200 bg-white px-3 py-1.5 text-xs font-semibold text-sky-800">
-                      {scopeUploadBusy ? "Importando..." : "Importar arquivo TXT"}
+                      {scopeUploadBusy ? "Importando..." : "Selecionar TXT do computador"}
                       <input
                         type="file"
                         accept=".txt,text/plain"
@@ -2829,6 +2968,9 @@ export default function NewProposalPage() {
                     </button>
                   </div>
                 </div>
+                <p className="mb-2 text-xs leading-5 text-zinc-600">
+                  A pesquisa mostra apenas escopos já importados. Selecione um arquivo .txt do seu computador para salvá-lo nesta biblioteca.
+                </p>
                 <input
                   type="search"
                   value={scopeSearch}
@@ -2868,8 +3010,21 @@ export default function NewProposalPage() {
                     </label>
                   ))}
                 </div>
-                {scopeTemplates.length === 0 ? (
-                  <p className="mt-2 text-sm text-zinc-500">Nenhum escopo cadastrado. Importe um arquivo TXT para começar.</p>
+                {scopeTemplatesLoading ? (
+                  <p className="mt-2 text-sm text-zinc-500">Carregando escopos...</p>
+                ) : scopeTemplatesError ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-red-700">
+                    <span>{scopeTemplatesError}</span>
+                    <button type="button" onClick={() => void loadScopeTemplates()} className="underline">Tentar novamente</button>
+                  </div>
+                ) : scopeTemplates.length === 0 ? (
+                  <p className="mt-2 text-sm text-zinc-500">Ainda não há TXT importado. Use “Selecionar TXT do computador” para adicionar o primeiro.</p>
+                ) : !scopeTemplates.some((template) =>
+                    `${template.name} ${template.category || ""} ${template.sourceFileName || ""}`
+                      .toLocaleLowerCase("pt-BR")
+                      .includes(scopeSearch.trim().toLocaleLowerCase("pt-BR")),
+                  ) ? (
+                  <p className="mt-2 text-sm text-zinc-500">Nenhum escopo corresponde à pesquisa.</p>
                 ) : null}
                 {combinedScopeText ? (
                   <pre className="mt-3 max-h-52 overflow-y-auto whitespace-pre-wrap rounded border border-zinc-200 bg-white p-3 text-xs leading-5 text-zinc-700">
@@ -3250,12 +3405,13 @@ export default function NewProposalPage() {
                 type="submit"
                 disabled={
                   isSubmitting ||
+                  (Boolean(editingProposalId) && !draftLoaded) ||
                   !selectedClientId ||
                   Boolean(selectedClient?.proposalCreationBlocked)
                 }
                 className="mt-5 w-full rounded-xl bg-emerald-700 px-6 py-3 font-bold text-white shadow-lg transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isSubmitting ? "Gerando..." : "Salvar proposta"}
+                {isSubmitting ? "Salvando..." : editingProposalId ? "Salvar alterações" : "Salvar proposta"}
               </button>
             </div>
           </div>

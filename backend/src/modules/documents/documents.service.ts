@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
   Optional,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import {
   ContractInvoiceStatus,
@@ -41,6 +42,14 @@ type DocumentKind = 'proposal' | 'contract' | 'order';
 type DocumentAudience = 'shared' | 'client' | 'internal';
 type InstitutionalKind = 'proposal' | 'contract' | 'work-order';
 
+const DOCUMENT_READY_PROPOSAL_STATUSES: ProposalStatus[] = [
+  ProposalStatus.CLIENT_REVIEW,
+  ProposalStatus.WON,
+  ProposalStatus.LOST,
+  ProposalStatus.SENT,
+  ProposalStatus.APPROVED,
+];
+
 const DOCX_MIME =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document' as const;
 
@@ -48,6 +57,7 @@ type ActorScope = {
   id: string;
   role: UserRole;
   linkedClientId: string | null;
+  portalPermissions: string[];
   access: ReturnType<typeof effectiveAccessPolicy>;
 };
 
@@ -87,13 +97,13 @@ export class DocumentsService {
     const company = await this.getCompanyProfile();
 
     const [proposals, contracts, orders] = await Promise.all([
-      actor.role === UserRole.CLIENT || actor.access.pages.proposals
+      (actor.role === UserRole.CLIENT ? actor.portalPermissions.includes('PROPOSALS') : actor.access.pages.proposals)
         ? this.loadProposalHubItems(actor)
         : Promise.resolve([]),
-      actor.role === UserRole.CLIENT || actor.access.pages.contracts
+      (actor.role === UserRole.CLIENT ? actor.portalPermissions.includes('CONTRACTS') : actor.access.pages.contracts)
         ? this.loadContractHubItems(actor)
         : Promise.resolve([]),
-      actor.role === UserRole.CLIENT || actor.access.pages.orders
+      (actor.role === UserRole.CLIENT ? actor.portalPermissions.includes('EQUIPMENT') : actor.access.pages.orders)
         ? this.loadOrderHubItems(actor)
         : Promise.resolve([]),
     ]);
@@ -275,6 +285,9 @@ export class DocumentsService {
     }
 
     this.assertProposalAccess(actor, proposal.clientId);
+    if (!DOCUMENT_READY_PROPOSAL_STATUSES.includes(proposal.status)) {
+      throw new ForbiddenException('A proposta precisa ser aprovada pela diretoria antes de entrar em Documentos.');
+    }
     const latestDocument = await this.getLatestInstitutionalDelivery(
       DeliveryDocumentType.PROPOSAL,
       proposal.id,
@@ -290,6 +303,8 @@ export class DocumentsService {
         id: proposal.id,
         code: proposal.code,
         status: proposal.status,
+        origin: proposal.origin,
+        externalDocumentFileName: proposal.externalDocumentFileName,
         statusLabel: this.labelProposalStatus(proposal.status),
         type: proposal.type,
         totalValue: proposal.totalValue,
@@ -358,9 +373,17 @@ export class DocumentsService {
   }
 
   async downloadProposalInstitutionalPdf(id: string, userId: string) {
-    return this.generateAndStoreInstitutionalPdf('proposal', id, userId, {
-      channel: DocumentAccessChannel.INTERNAL,
-    });
+    try {
+      return await this.generateAndStoreInstitutionalPdf('proposal', id, userId, {
+        channel: DocumentAccessChannel.INTERNAL,
+      });
+    } catch (error) {
+      if (!(error instanceof ServiceUnavailableException)) throw error;
+      return this.generateAndStoreProposalPdf(id, userId, {
+        channel: DocumentAccessChannel.INTERNAL,
+        skipWordConversion: true,
+      });
+    }
   }
 
   async downloadCustomerProposalInstitutionalPdf(
@@ -368,10 +391,19 @@ export class DocumentsService {
     userId: string,
     metadata?: RequestMetadata,
   ) {
-    return this.generateAndStoreInstitutionalPdf('proposal', id, userId, {
-      channel: DocumentAccessChannel.CUSTOMER_PORTAL,
-      metadata,
-    });
+    try {
+      return await this.generateAndStoreInstitutionalPdf('proposal', id, userId, {
+        channel: DocumentAccessChannel.CUSTOMER_PORTAL,
+        metadata,
+      });
+    } catch (error) {
+      if (!(error instanceof ServiceUnavailableException)) throw error;
+      return this.generateAndStoreProposalPdf(id, userId, {
+        channel: DocumentAccessChannel.CUSTOMER_PORTAL,
+        metadata,
+        skipWordConversion: true,
+      });
+    }
   }
 
   async generateProposalDocument(id: string, userId: string) {
@@ -850,28 +882,14 @@ export class DocumentsService {
 
   private async loadProposalHubItems(actor: ActorScope) {
     const proposals = await this.prisma.proposal.findMany({
-      where:
-        actor.role === UserRole.CLIENT
-          ? {
-              clientId: this.requireLinkedClientId(actor),
-              status: {
-                in: [
-                  ProposalStatus.CLIENT_REVIEW,
-                  ProposalStatus.REVISION_REQUIRED,
-                  ProposalStatus.WON,
-                  ProposalStatus.LOST,
-                ],
-              },
-            }
+      where: {
+        status: { in: DOCUMENT_READY_PROPOSAL_STATUSES },
+        ...(actor.role === UserRole.CLIENT
+          ? { clientId: this.requireLinkedClientId(actor) }
           : actor.role === UserRole.ADMIN
-            ? {
-                status: {
-                  not: ProposalStatus.DRAFT,
-                },
-              }
-            : {
-                userId: actor.id,
-              },
+            ? {}
+            : { userId: actor.id }),
+      },
       include: {
         client: {
           select: {
@@ -886,46 +904,14 @@ export class DocumentsService {
         },
       },
       orderBy: { updatedAt: 'desc' },
-      take: 8,
     });
 
     return proposals.map((proposal) => {
       const issues: string[] = [];
-      let documentState: DocumentState = 'ready';
-
-      if (
-        proposal._count.items === 0 ||
-        proposal.status === ProposalStatus.DRAFT
-      ) {
-        documentState = 'pending';
-      }
-
-      if (
-        (
-          [
-            ProposalStatus.BOARD_REVIEW,
-            ProposalStatus.DISCOUNT_REVIEW,
-            ProposalStatus.REVISION_REQUIRED,
-          ] as ProposalStatus[]
-        ).includes(proposal.status)
-      ) {
-        documentState = 'attention';
-      }
-
+      const documentState: DocumentState =
+        proposal._count.items === 0 ? 'pending' : 'ready';
       if (proposal._count.items === 0) {
         issues.push('Sem itens comerciais vinculados.');
-      }
-      if (proposal.status === ProposalStatus.DRAFT) {
-        issues.push('Documento ainda em rascunho.');
-      }
-      if (proposal.status === ProposalStatus.REVISION_REQUIRED) {
-        issues.push('Versao pede ajustes antes do envio final.');
-      }
-      if (proposal.status === ProposalStatus.BOARD_REVIEW) {
-        issues.push('Aguardando decisao da diretoria.');
-      }
-      if (proposal.status === ProposalStatus.DISCOUNT_REVIEW) {
-        issues.push('Desconto acima do limite em avaliacao.');
       }
 
       return {
@@ -974,7 +960,6 @@ export class DocumentsService {
         },
       },
       orderBy: { updatedAt: 'desc' },
-      take: 8,
     });
 
     return contracts.map((contract) => {
@@ -1063,7 +1048,6 @@ export class DocumentsService {
         },
       },
       orderBy: { updatedAt: 'desc' },
-      take: 8,
     });
 
     return orders.map((order) => {
@@ -1551,6 +1535,7 @@ export class DocumentsService {
     options: {
       channel: DocumentAccessChannel;
       metadata?: RequestMetadata;
+      skipWordConversion?: boolean;
     },
   ): Promise<LoadedFile & { documentDeliveryId: string; templateKey: string }> {
     const actor = await this.getActorScope(userId);
@@ -1565,13 +1550,17 @@ export class DocumentsService {
             VisualDocumentKind.PROPOSAL,
             payload as unknown as Record<string, unknown>,
           );
-    const wordPdf =
-      published?.version.format === 'WORD'
-        ? await this.documentGenerationService.generatePdfFromDocx(
-            'proposal',
-            payload as unknown as Record<string, unknown>,
-          )
-        : null;
+    let wordPdf: GeneratedInstitutionalPdf | null = null;
+    if (published?.version.format === 'WORD' && !options.skipWordConversion) {
+      try {
+        wordPdf = await this.documentGenerationService.generatePdfFromDocx(
+          'proposal',
+          payload as unknown as Record<string, unknown>,
+        );
+      } catch (error) {
+        if (!(error instanceof ServiceUnavailableException)) throw error;
+      }
+    }
     const generated: GeneratedProposalPdf = wordPdf
       ? {
           buffer: wordPdf.buffer,
@@ -1702,6 +1691,7 @@ export class DocumentsService {
         isSystemMaster: true,
         accessPolicy: true,
         linkedClientId: true,
+        portalPermissions: true,
       },
     });
 
@@ -1713,6 +1703,7 @@ export class DocumentsService {
       id: actor.id,
       role: actor.role,
       linkedClientId: actor.linkedClientId,
+      portalPermissions: actor.portalPermissions,
       access: actor.isSystemMaster
         ? allAccessPolicy
         : effectiveAccessPolicy(actor.role, actor.accessPolicy),
@@ -1721,6 +1712,7 @@ export class DocumentsService {
 
   private assertProposalAccess(actor: ActorScope, clientId: string) {
     if (actor.role === UserRole.CLIENT) {
+      if (!actor.portalPermissions.includes('PROPOSALS')) throw new ForbiddenException('Seu usuario nao possui acesso a este documento.');
       if (this.requireLinkedClientId(actor) !== clientId) {
         throw new ForbiddenException(
           'Documento de proposta fora do escopo deste cliente.',
@@ -1739,6 +1731,7 @@ export class DocumentsService {
 
   private assertContractAccess(actor: ActorScope, clientId: string) {
     if (actor.role === UserRole.CLIENT) {
+      if (!actor.portalPermissions.includes('CONTRACTS')) throw new ForbiddenException('Seu usuario nao possui acesso a este documento.');
       if (this.requireLinkedClientId(actor) !== clientId) {
         throw new ForbiddenException(
           'Documento de contrato fora do escopo deste cliente.',
@@ -1757,6 +1750,7 @@ export class DocumentsService {
 
   private assertOrderAccess(actor: ActorScope, clientId: string) {
     if (actor.role === UserRole.CLIENT) {
+      if (!actor.portalPermissions.includes('EQUIPMENT')) throw new ForbiddenException('Seu usuario nao possui acesso a este documento.');
       if (this.requireLinkedClientId(actor) !== clientId) {
         throw new ForbiddenException(
           'Documento de O.S. fora do escopo deste cliente.',

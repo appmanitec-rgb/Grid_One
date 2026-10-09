@@ -837,6 +837,7 @@ model User {
   profilePhotoUrl       String?
   managerId             String?
   linkedClientId        String?
+  portalPermissions     String[]               @default(["EQUIPMENT", "CONTRACTS", "PROPOSALS", "TICKETS", "REQUESTS", "REPORTS", "DOCUMENTS", "FINANCIAL", "FEEDBACK"])
   availabilityStatus    UserAvailabilityStatus @default(AVAILABLE)
   availabilityUpdatedAt DateTime?
   skillLevel            SkillLevel             @default(JUNIOR)
@@ -898,6 +899,7 @@ model User {
   fleetAllocations               FleetAllocation[]
   authSessions                   AuthSession[]
   clientPortalActivations        ClientPortalActivation[]
+  portalFeedbacks                ClientPortalFeedback[]
   requestedAutomationRuns        AutomationRun[]             @relation("AutomationRunRequestedBy")
   createdDocumentShareTokens     DocumentShareToken[]        @relation("DocumentShareCreatedBy")
   createdDocumentDeliveries      DocumentDelivery[]          @relation("DocumentDeliveryCreatedBy")
@@ -925,6 +927,7 @@ model User {
   createdTeamChannels            TeamChannel[]               @relation("TeamChannelCreator")
   teamMessages                   TeamMessage[]               @relation("TeamMessageAuthor")
   teamChannelReads               TeamChannelRead[]
+  teamChannelMemberships         TeamChannelMember[]
 
   @@index([linkedClientId])
   @@map("users")
@@ -932,6 +935,8 @@ model User {
 
 model TeamPost {
   id         String             @id @default(uuid())
+  category   String             @default("GENERAL")
+  eventKey   String?            @unique
   authorId   String?
   author     User?              @relation("TeamPostAuthor", fields: [authorId], references: [id], onDelete: SetNull)
   authorName String
@@ -946,6 +951,7 @@ model TeamPost {
 
   @@index([pinnedAt, createdAt])
   @@index([createdAt])
+  @@index([category, createdAt])
   @@map("team_posts")
 }
 
@@ -982,13 +988,27 @@ model TeamChannel {
   createdByUserId String?
   createdByUser   User?             @relation("TeamChannelCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   isArchived      Boolean           @default(false)
+  isPrivate       Boolean           @default(false)
+  directKey       String?           @unique
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   messages        TeamMessage[]
   reads           TeamChannelRead[]
+  members         TeamChannelMember[]
 
   @@index([isArchived, name])
   @@map("team_channels")
+}
+
+model TeamChannelMember {
+  channelId String
+  channel   TeamChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([channelId, userId])
+  @@index([userId])
+  @@map("team_channel_members")
 }
 
 model TeamMessage {
@@ -1337,10 +1357,13 @@ model Client {
   withholdsInss           Boolean          @default(false)
   withholdsIss            Boolean          @default(false)
   isActive                Boolean          @default(true)
+  portalEnabled           Boolean          @default(false)
+  portalLogoDataUrl       String?          @db.Text
   salesOwnerId            String?
 
   salesOwner  User?  @relation("ClientSalesOwner", fields: [salesOwnerId], references: [id], onDelete: SetNull)
   portalUsers User[] @relation("ClientPortalUsers")
+  portalFeedbacks ClientPortalFeedback[]
 
   addresses             ClientAddress[]
   contacts              ClientContact[]
@@ -1367,6 +1390,21 @@ model Client {
   updatedAt DateTime @updatedAt
 
   @@map("clients")
+}
+
+model ClientPortalFeedback {
+  id        String   @id @default(uuid())
+  clientId  String
+  userId    String
+  kind      String
+  message   String   @db.Text
+  createdAt DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, createdAt])
+  @@map("client_portal_feedbacks")
 }
 
 model ClientAddress {

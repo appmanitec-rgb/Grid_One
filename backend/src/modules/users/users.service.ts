@@ -23,6 +23,7 @@ import {
   effectiveAccessPolicy,
 } from './access-policy';
 import { CreateUserCertificationDto } from './dto/create-user-certification.dto';
+import { normalizePortalPermissions } from '../customer-portal/portal-permissions';
 import { CreateUserDto } from './dto/create-user.dto';
 import { CreateUserSpecialtyDto } from './dto/create-user-specialty.dto';
 import { UpdateUserCertificationDto } from './dto/update-user-certification.dto';
@@ -48,6 +49,7 @@ const userPublicSelect = {
   profilePhotoUrl: true,
   managerId: true,
   linkedClientId: true,
+  portalPermissions: true,
   availabilityStatus: true,
   availabilityUpdatedAt: true,
   skillLevel: true,
@@ -136,6 +138,12 @@ export class UsersService {
       createUserDto.linkedClientId,
     );
 
+    if (createUserDto.portalPermissions && createUserDto.role !== UserRole.CLIENT) {
+      throw new BadRequestException('Permissoes da central sao exclusivas de usuarios clientes.');
+    }
+    if (createUserDto.portalPermissions) {
+      await this.assertCanManageSecurity(actorUserId);
+    }
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(
       createUserDto.role === UserRole.CLIENT
@@ -152,6 +160,7 @@ export class UsersService {
     delete userData.managerId;
     delete userData.kpiTargetJson;
     delete userData.linkedClientId;
+    delete userData.portalPermissions;
     delete userData.technicianProfile;
 
     const createData: Prisma.UserUncheckedCreateInput = {
@@ -163,6 +172,7 @@ export class UsersService {
       role,
       managerId: managerId ?? null,
       linkedClientId,
+      portalPermissions: createUserDto.role === UserRole.CLIENT ? normalizePortalPermissions(createUserDto.portalPermissions) : [],
       availabilityStatus:
         createUserDto.availabilityStatus ?? UserAvailabilityStatus.AVAILABLE,
       regionTags: createUserDto.regionTags || [],
@@ -293,7 +303,7 @@ export class UsersService {
   }
 
   async update(id: string, updateUserDto: UpdateUserDto, actorUserId?: string) {
-    const { password, accessPolicy, role, ...updateData } = updateUserDto;
+    const { password, accessPolicy, role, portalPermissions, ...updateData } = updateUserDto;
     const currentUser = await this.prisma.user.findUnique({
       where: { id },
       select: {
@@ -304,6 +314,7 @@ export class UsersService {
         accessPolicy: true,
         isSystemMaster: true,
         linkedClientId: true,
+        portalPermissions: true,
         managerId: true,
       },
     });
@@ -377,9 +388,16 @@ export class UsersService {
         : currentUser.linkedClientId,
     );
 
+    if (portalPermissions !== undefined) {
+      if (targetRole !== UserRole.CLIENT) {
+        throw new BadRequestException('Permissoes da central sao exclusivas de usuarios clientes.');
+      }
+      await this.assertCanManageSecurity(actorUserId);
+    }
     const dataToUpdate: Prisma.UserUncheckedUpdateInput = {
       ...(updateData as Prisma.UserUncheckedUpdateInput),
       linkedClientId: targetLinkedClientId,
+      ...(portalPermissions !== undefined ? { portalPermissions: normalizePortalPermissions(portalPermissions) } : {}),
     };
 
     if (password) {

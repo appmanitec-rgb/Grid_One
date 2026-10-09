@@ -176,6 +176,7 @@ export default function ContractDocumentPage() {
 
   return (
     <div className="space-y-5">
+      {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
       {data.viewerRole !== "CLIENT" && generationOptions ? (
         <SectionCard
           eyebrow="Emissão contratual"

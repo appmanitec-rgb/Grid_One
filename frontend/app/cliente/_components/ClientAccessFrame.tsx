@@ -7,8 +7,8 @@ export function ClientAccessFrame({ children }: { children: ReactNode }) {
     <main className="login-experience min-h-screen bg-[#eaf2f9] px-4 py-5 text-[#142a44] sm:px-6 lg:flex lg:items-center lg:py-8">
       <div className="mx-auto grid w-full max-w-[1250px] overflow-hidden rounded-[28px] bg-white shadow-[0_30px_80px_-35px_rgba(15,48,83,0.35)] lg:min-h-[690px] lg:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)]">
         <section className="relative isolate flex min-h-[260px] flex-col justify-between overflow-hidden bg-[#0c3155] px-7 py-8 text-white sm:min-h-[310px] sm:px-10 lg:min-h-full lg:p-14">
-          <Image src="/brand/login-generator-hero.png" alt="Grupo gerador em operação" fill priority sizes="(min-width: 1024px) 55vw, 100vw" className="object-cover object-[58%_50%]" />
-          <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(5,31,56,0.91),rgba(4,28,53,0.38)),linear-gradient(0deg,rgba(5,31,56,0.92),transparent_65%)]" />
+          <Image src="/brand/login-generator-hero-v2.png" alt="Grupo gerador em operação" fill priority sizes="(min-width: 1024px) 55vw, 100vw" quality={90} className="object-cover object-[58%_50%]" />
+          <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(5,31,56,0.78),rgba(4,28,53,0.26)),linear-gradient(0deg,rgba(5,31,56,0.86),transparent_65%)]" />
           <Image src="/brand/manitec-gridone-lockup.svg" alt="Manitec GridOne" width={370} height={86} className="relative h-auto w-[230px] sm:w-[275px]" />
           <div className="relative mt-12 max-w-[540px]">
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#ffcb79]">Portal do cliente</p>

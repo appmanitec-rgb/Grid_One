@@ -88,8 +88,12 @@ export default function DataExplorer({
   const [executingImport, setExecutingImport] = useState(false);
   const [importError, setImportError] = useState("");
   const [access, setAccess] = useState(() => getAccessFromToken());
-  const [paymentIssuerOptions, setPaymentIssuerOptions] = useState<Array<{ value: string; label: string }>>([]);
+  const [paymentIssuers, setPaymentIssuers] = useState<Array<{ id: string; companyName: string; cnpj: string }>>([]);
   const [paymentIssuerLoadError, setPaymentIssuerLoadError] = useState("");
+  const paymentIssuerOptions = useMemo(() => paymentIssuers.map((issuer) => ({
+    value: issuer.id,
+    label: `${issuer.companyName} · ${issuer.cnpj}`,
+  })), [paymentIssuers]);
 
   const editableFields = useMemo(
     () =>
@@ -148,10 +152,9 @@ export default function DataExplorer({
         if (!response.ok) throw new Error("Nao foi possivel carregar as empresas emitentes.");
         const issuers = await response.json() as Array<{ id: string; companyName: string | null; cnpj: string | null }>;
         if (!cancelled) {
-          setPaymentIssuerOptions(issuers.map((issuer) => ({
-            value: issuer.id,
-            label: `${issuer.companyName || "Empresa sem nome"}${issuer.cnpj ? ` · ${issuer.cnpj}` : " · CNPJ pendente"}`,
-          })));
+          setPaymentIssuers(issuers.filter((issuer) =>
+            Boolean(issuer.companyName?.trim()) && (issuer.cnpj || "").replace(/\D/g, "").length === 14,
+          ).map((issuer) => ({ id: issuer.id, companyName: issuer.companyName!.trim(), cnpj: issuer.cnpj! })));
           setPaymentIssuerLoadError("");
         }
       } catch {
@@ -206,6 +209,7 @@ export default function DataExplorer({
   }, [query, sort.key, sort.direction, resource.key]);
 
   function openRecord(row: StudioRecord) {
+    setError("");
     setIsCreating(false);
     setSelected(row);
     const nextDraft: Record<string, string | boolean> = {};
@@ -223,6 +227,7 @@ export default function DataExplorer({
   }
 
   function openNewRecord() {
+    setError("");
     const nextDraft: Record<string, string | boolean> = {};
     for (const field of editableFields) {
       if (typeof field.defaultValue === "boolean") {
@@ -238,6 +243,23 @@ export default function DataExplorer({
     setAuditEntries([]);
     setAuditError("");
     setIsCreating(true);
+  }
+
+  function changeDraftField(key: string, value: string | boolean) {
+    setError("");
+    setDraft((current) => {
+      const next = { ...current, [key]: value };
+      if (resource.key !== "proposalPaymentProfiles") return next;
+      const issuer = paymentIssuers.find((item) => item.id === String(next.issuerCompanyId || ""));
+      if (key === "issuerCompanyId") {
+        next.beneficiary = issuer?.companyName || "";
+        next.beneficiaryDocument = issuer?.cnpj.replace(/\D/g, "") || "";
+      }
+      if (key === "issuerCompanyId" || key === "method") {
+        next.pixKey = next.method === "PIX" ? (issuer?.cnpj.replace(/\D/g, "") || "") : "";
+      }
+      return next;
+    });
   }
 
   async function loadAudit(id: string) {
@@ -273,6 +295,16 @@ export default function DataExplorer({
       const body: Record<string, unknown> = {};
       for (const field of editableFields) {
         body[field.key] = normalizeEditableValue(draft[field.key] ?? "", field);
+      }
+      if (resource.key === "proposalPaymentProfiles") {
+        const issuer = paymentIssuers.find((item) => item.id === body.issuerCompanyId);
+        if (!issuer) throw new Error("Selecione uma empresa emitente com CNPJ cadastrado.");
+        if (!String(body.name || "").trim() || !body.purpose || !body.method) {
+          throw new Error("Informe o nome do perfil, o destino e o meio de pagamento.");
+        }
+        body.beneficiary = String(body.beneficiary || "").trim() || issuer.companyName;
+        body.beneficiaryDocument = issuer.cnpj.replace(/\D/g, "");
+        if (body.method === "PIX") body.pixKey = issuer.cnpj.replace(/\D/g, "");
       }
       const response = await apiFetch(
         isCreating
@@ -1040,22 +1072,35 @@ export default function DataExplorer({
 
               {resource.editable && canEditData && editableFields.length > 0 ? (
                 <div className="grid gap-3">
-                  {editableFields.map((field) => (
+                  {editableFields.filter((field) => {
+                    if (resource.key !== "proposalPaymentProfiles") return true;
+                    if (["beneficiaryDocument", "pixKey"].includes(field.key)) return false;
+                    if (["bankName", "agency", "accountNumber", "boletoInstructions"].includes(field.key)) return draft.method === "BOLETO";
+                    if (field.key === "pixCopyPaste") return draft.method === "PIX";
+                    return true;
+                  }).map((field) => (
                     <EditField
                       key={field.key}
                       field={field.key === "issuerCompanyId" ? { ...field, options: paymentIssuerOptions } : field}
                       value={draft[field.key]}
-                      onChange={(value) =>
-                        setDraft((current) => ({
-                          ...current,
-                          [field.key]: value,
-                        }))
-                      }
+                      onChange={(value) => changeDraftField(field.key, value)}
                     />
                   ))}
+                  {resource.key === "proposalPaymentProfiles" && draft.issuerCompanyId ? (
+                    <p className="rounded-xl bg-sky-50 p-3 text-sm text-sky-900">
+                      O CNPJ da empresa selecionada será usado como documento do favorecido{draft.method === "PIX" ? " e chave PIX" : ""}.
+                      {draft.method === "PIX" ? " O código PIX copia e cola é opcional e só é necessário para mostrar um QR Code." : ""}
+                    </p>
+                  ) : null}
+                  {resource.key === "proposalPaymentProfiles" && !paymentIssuerLoadError && paymentIssuers.length === 0 ? (
+                    <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
+                      Cadastre uma empresa com nome e CNPJ em <Link className="font-bold underline" href="/dashboard/company-settings">Empresa</Link> antes de criar a conta.
+                    </p>
+                  ) : null}
                   {resource.key === "proposalPaymentProfiles" && paymentIssuerLoadError ? (
                     <p role="alert" className="text-sm text-red-700">{paymentIssuerLoadError}</p>
                   ) : null}
+                  {error ? <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
                   <button
                     type="button"
                     onClick={() => void saveRecord()}

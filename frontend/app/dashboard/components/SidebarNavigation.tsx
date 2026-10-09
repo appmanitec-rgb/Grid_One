@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Image from "next/image";
 import Link from "next/link";
@@ -209,7 +209,7 @@ const MAIN_SECTIONS: NavSection[] = [
       },
       {
         key: "ops_dispatch",
-        label: "Despacho",
+        label: "Programação",
         href: "/dashboard/dispatch",
         enabled: true,
       },

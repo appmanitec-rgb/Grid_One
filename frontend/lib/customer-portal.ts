@@ -13,6 +13,7 @@ export type PortalClient = {
 };
 
 export type PortalDashboard = {
+  permissions: string[];
   client: PortalClient;
   stats: {
     equipmentCount: number;

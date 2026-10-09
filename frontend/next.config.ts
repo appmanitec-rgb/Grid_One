@@ -6,7 +6,9 @@ const internalApiUrl = (process.env.INTERNAL_API_URL || "http://localhost:3000")
 );
 
 const nextConfig: NextConfig = {
+  distDir: process.env.E2E_DIST_DIR === "1" ? ".next-e2e" : ".next",
   poweredByHeader: false,
+  images: { qualities: [75, 90] },
   allowedDevOrigins: ["192.168.0.25"],
   async headers() {
     return [

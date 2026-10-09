@@ -83,6 +83,8 @@ export type ProposalDocumentPayload = {
     id: string;
     code: string;
     status: string;
+    origin: string;
+    externalDocumentFileName?: string | null;
     statusLabel: string;
     type: string;
     totalValue: number;

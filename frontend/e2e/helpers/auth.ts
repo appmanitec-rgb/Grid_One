@@ -204,7 +204,7 @@ async function requestApiLogin(account: E2eAccount) {
   if (account.internal) {
     payload.mfaCode = generateTotp();
   }
-  return apiRequest<LoginResponse>(undefined, "/auth/login", {
+  return apiRequest<LoginResponse>(undefined, account.internal ? "/auth/login" : "/auth/client-login", {
     method: "POST",
     body: payload,
     timeoutMs: 60_000,
@@ -232,18 +232,22 @@ export async function apiLogin(account: E2eAccount) {
 }
 
 export async function loginByUi(page: Page, account: E2eAccount) {
-  await gotoWithRetry(page, "/");
+  await gotoWithRetry(page, account.internal ? "/" : "/cliente/entrar");
+  await page.waitForLoadState("networkidle", { timeout: 45_000 });
   const emailInput = page.locator('input[type="email"]');
   const passwordInput = page.locator('input[type="password"]');
   await expect(emailInput).toBeVisible();
   await expect(passwordInput).toBeVisible();
   await fillLoginFields(emailInput, passwordInput, account);
-  await page.getByRole("button", { name: /entrar no sistema/i }).click();
+  await page.getByRole("button", { name: account.internal ? /acessar o GridOne/i : /entrar no portal/i }).click();
 
   if (account.internal) {
-    await expect(page.getByText(/MFA habilitado/i)).toBeVisible();
-    await page.locator('input[type="text"]').first().fill(generateTotp());
-    await page.getByRole("button", { name: /validar MFA/i }).click();
+    const challenge = page.locator("#mfa-challenge-code");
+    await expect.poll(async () => (await challenge.isVisible()) || new RegExp(account.expectedStartPath).test(page.url())).toBeTruthy();
+    if (await challenge.isVisible()) {
+      await challenge.fill(generateTotp());
+      await page.getByRole("button", { name: /validar c[oó]digo/i }).click();
+    }
   }
 
   await expect(page).toHaveURL(new RegExp(account.expectedStartPath));
