@@ -260,7 +260,7 @@ export default function ContractRenewalPanel({
       {renewals.length > 1 || (renewals.length === 1 && !activeRenewal) ? (
         <div className="mt-6 border-t border-slate-200 pt-5">
           <p className="text-sm font-semibold text-slate-900">Historico de renovacoes</p>
-          <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
+          <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
             <table className="w-full min-w-[720px] text-sm">
               <thead className="bg-slate-50 text-left text-slate-500"><tr><th className="px-4 py-3">Ciclo</th><th className="px-4 py-3">Vigencia proposta</th><th className="px-4 py-3">Valor</th><th className="px-4 py-3">Pecas</th><th className="px-4 py-3">Status</th></tr></thead>
               <tbody>{renewals.filter((item) => item.id !== activeRenewal?.id).map((item) => <tr key={item.id} className="border-t border-slate-100"><td className="px-4 py-3">Renovacao {item.sequence}</td><td className="px-4 py-3">{formatDate(item.proposedStartDate)} a {formatDate(item.proposedEndDate)}</td><td className="px-4 py-3">{formatCurrency(item.proposedRecurringAmount)}</td><td className="px-4 py-3">{item.proposedPartsCoverage === "INCLUDED" ? "Inclusas" : "Separadas"}</td><td className="px-4 py-3"><DataPill tone={statusTone(item.status)}>{statusLabel(item.status)}</DataPill></td></tr>)}</tbody>

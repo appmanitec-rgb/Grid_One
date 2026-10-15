@@ -1,3 +1,4 @@
+import { WorkspaceState } from "./WorkspaceState";
 import type {
   InputHTMLAttributes,
   ReactNode,
@@ -17,12 +18,15 @@ type HeroStat = {
 type PageHeroProps = {
   eyebrow?: string;
   title: string;
-  description: string;
+  description: ReactNode;
   stats?: HeroStat[];
   actions?: ReactNode;
   aside?: ReactNode;
   asideLayout?: "side" | "stacked";
   compact?: boolean;
+  contextLabel?: string;
+  contextExpanded?: boolean;
+  loading?: boolean;
 };
 
 type SectionCardProps = {
@@ -30,6 +34,7 @@ type SectionCardProps = {
   description?: string;
   eyebrow?: string;
   actions?: ReactNode;
+  actionsLayout?: "inline" | "below";
   children: ReactNode;
   className?: string;
 };
@@ -55,6 +60,32 @@ function cx(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
 }
 
+export function PageHeader({
+  eyebrow,
+  title,
+  description,
+  actions,
+  meta,
+}: {
+  eyebrow?: ReactNode;
+  title: ReactNode;
+  description?: ReactNode;
+  actions?: ReactNode;
+  meta?: ReactNode;
+}) {
+  return (
+    <header className="dashboard-page-header">
+      <div className="dashboard-page-header-copy">
+        {eyebrow ? <p className="dashboard-page-eyebrow">{eyebrow}</p> : null}
+        <h1 className="dashboard-page-title">{title}</h1>
+        {description ? <p className="dashboard-page-description">{description}</p> : null}
+        {meta ? <div className="dashboard-page-meta">{meta}</div> : null}
+      </div>
+      {actions ? <div className="dashboard-page-actions">{actions}</div> : null}
+    </header>
+  );
+}
+
 export function PageHero({
   eyebrow,
   title,
@@ -62,109 +93,39 @@ export function PageHero({
   stats = [],
   actions,
   aside,
-  asideLayout = "stacked",
-  compact = false,
+  contextLabel = "Contexto e informações adicionais",
+  contextExpanded = false,
+  loading = false,
 }: PageHeroProps) {
-  const stackedAside = asideLayout === "stacked";
-
   return (
-    <section
-      className={cx(
-        "relative overflow-hidden rounded-[28px] border border-slate-200/85 bg-[linear-gradient(180deg,#fbfcfd_0%,#f3f6f9_100%)] p-3 shadow-[0_30px_70px_-50px_rgba(15,23,42,0.34)] md:p-4",
-        compact ? "rounded-[24px]" : "md:p-5",
-      )}
-    >
-      <div className="absolute inset-x-12 top-0 h-px bg-gradient-to-r from-transparent via-slate-900/20 to-transparent" />
-      <div
-        className={cx(
-          "relative rounded-[24px] border border-white/8 px-5 shadow-[0_28px_70px_-46px_rgba(6,10,18,0.92)] md:px-6",
-          compact ? "py-4 md:py-5" : "py-6 md:py-7",
-        )}
-        style={{ background: "var(--dashboard-hero-background)" }}
-      >
-        <div
-          className="absolute inset-y-0 left-0 w-1.5 rounded-l-[24px]"
-          style={{ background: "var(--dashboard-hero-ribbon)" }}
-        />
-        <div
-          className="absolute -right-14 top-0 h-40 w-40 rounded-full blur-3xl"
-          style={{ backgroundColor: "var(--dashboard-hero-glow-primary)" }}
-        />
-        <div
-          className="absolute right-16 top-10 h-28 w-28 rounded-full blur-3xl"
-          style={{ backgroundColor: "var(--dashboard-hero-glow-secondary)" }}
-        />
-
-        <div className="relative">
-          <div
-            className={cx(
-              "grid items-start",
-              stackedAside
-                ? "grid-cols-1"
-                : "[grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr))]",
-              compact ? "gap-4" : "gap-6",
-            )}
-          >
-            <div className="max-w-3xl">
-              {eyebrow ? (
-                <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-200">
-                  {eyebrow}
-                </p>
-              ) : null}
-              <h1
-                className={cx(
-                  "mt-2 font-bold leading-tight text-white",
-                  compact ? "text-2xl md:text-3xl" : "text-3xl md:text-4xl",
-                )}
-              >
-                {title}
-              </h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200 md:text-[15px]">
-                {description}
-              </p>
-            </div>
-
-            {aside ? (
-              <div
-                className={cx(
-                  "dashboard-hero-aside min-w-0 max-w-full break-words rounded-[24px] border border-white/10 bg-white/8 p-1.5 backdrop-blur-sm",
-                  stackedAside
-                    ? "dashboard-hero-aside-stacked w-full"
-                    : "dashboard-hero-aside-side xl:justify-self-end xl:max-w-[360px]",
-                )}
-              >
-                {aside}
-              </div>
-            ) : null}
-          </div>
+    <div className="dashboard-page dashboard-page-intro space-y-4">
+      <PageHeader eyebrow={eyebrow} title={title} description={description} actions={actions} />
+      {stats.length > 0 ? (
+        <div className="dashboard-metrics-grid">
+          {stats.map((stat) => (
+            <MetricCard
+              key={stat.label}
+              loading={loading}
+              label={stat.label}
+              value={stat.value}
+              helper={stat.helper}
+              tone={stat.tone}
+            />
+          ))}
         </div>
-      </div>
-
-      <div className={cx("relative space-y-4", compact ? "mt-4" : "mt-5 md:space-y-5")}>
-        {actions ? (
-          <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/90 bg-white/90 px-4 py-3 shadow-[0_14px_34px_-28px_rgba(15,31,50,0.35)] sm:flex-row sm:items-center">
-            <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
-              Ações da página
-            </span>
-            <div className="flex min-w-0 flex-wrap gap-2">{actions}</div>
-          </div>
-        ) : null}
-
-        {stats.length > 0 ? (
-          <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr))]">
-            {stats.map((stat) => (
-              <MetricCard
-                key={`${stat.label}-${stat.value}`}
-                label={stat.label}
-                value={stat.value}
-                helper={stat.helper}
-                tone={stat.tone}
-              />
-            ))}
-          </div>
-        ) : null}
-      </div>
-    </section>
+      ) : null}
+      {aside ? (
+        <details className="dashboard-page-context" open={contextExpanded || undefined}>
+          <summary>
+            <span>{contextLabel}</span>
+            <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="h-4 w-4 shrink-0">
+              <path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </summary>
+          <div className="dashboard-page-context-body">{aside}</div>
+        </details>
+      ) : null}
+    </div>
   );
 }
 
@@ -173,22 +134,24 @@ export function MetricCard({
   value,
   helper,
   tone = "slate",
+  loading = false,
 }: {
   label: string;
   value: string;
   helper?: string;
   tone?: Tone;
+  loading?: boolean;
 }) {
   return (
-    <article className="overflow-hidden rounded-[24px] border border-slate-200 bg-white/96 shadow-[0_22px_44px_-34px_rgba(15,23,42,0.32)]">
-      <div className={cx("h-1.5 w-full bg-gradient-to-r", HERO_STAT_TONES[tone])} />
-      <div className="px-4 py-4">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-          {label}
-        </p>
-        <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
-        {helper ? <p className="mt-2 text-xs leading-5 text-slate-600">{helper}</p> : null}
-      </div>
+    <article className="dashboard-metric-card" aria-busy={loading}>
+      <p className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+        <span aria-hidden="true" className={cx("h-2 w-2 shrink-0 rounded-full bg-gradient-to-r", HERO_STAT_TONES[tone])} />
+        {label}
+      </p>
+      <p className="mt-2 break-words text-[1.4rem] font-bold leading-tight tabular-nums text-slate-950">
+        {loading ? <span className="dashboard-metric-placeholder" aria-label="Carregando indicador">—</span> : value}
+      </p>
+      {helper ? <p className="mt-1.5 text-xs leading-5 text-slate-500">{helper}</p> : null}
     </article>
   );
 }
@@ -198,34 +161,34 @@ export function SectionCard({
   description,
   eyebrow,
   actions,
+  actionsLayout = "inline",
   children,
   className,
 }: SectionCardProps) {
   return (
     <section
       className={cx(
-        "relative overflow-hidden rounded-[28px] border border-slate-200/85 bg-white/92 p-5 shadow-[0_24px_54px_-40px_rgba(15,23,42,0.24)] backdrop-blur",
+        "dashboard-section-card min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_2px_8px_rgba(15,23,42,0.03)]",
         className,
       )}
     >
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-[radial-gradient(circle_at_top_left,rgba(15,23,42,0.04),transparent_48%)]" />
-      <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-slate-900/18 to-transparent" />
-      <div className="relative z-10 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div>
+      <div className={cx("dashboard-section-header flex min-w-0 flex-col gap-3 border-b border-slate-100 pb-4", actionsLayout === "inline" && "xl:flex-row xl:items-start xl:justify-between")}>
+        <div className="min-w-0">
           {eyebrow ? (
-            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-slate-500">
+            <p className="text-xs font-semibold text-sky-700">
               {eyebrow}
             </p>
           ) : null}
-          <h2 className="mt-1 text-xl font-bold text-slate-950">{title}</h2>
+          <h2 className="dashboard-section-title mt-1 text-lg font-bold leading-snug text-slate-950">
+            {title}
+          </h2>
           {description ? (
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{description}</p>
+            <p className="dashboard-section-description mt-2 max-w-3xl text-sm leading-6 text-slate-600">{description}</p>
           ) : null}
         </div>
-        {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
+        {actions ? <div className={cx("dashboard-section-actions flex min-w-0 max-w-full flex-wrap gap-2", actionsLayout === "below" ? "w-full" : "xl:justify-end")}>{actions}</div> : null}
       </div>
-
-      <div className="relative mt-5">{children}</div>
+      <div className="min-w-0 pt-5">{children}</div>
     </section>
   );
 }
@@ -280,7 +243,7 @@ export function FormField({ label, hint, className, children }: FormFieldProps) 
   return (
     <div className={cx("space-y-2", className)}>
       <div className="flex items-center justify-between gap-3">
-        <label className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+        <label className="text-sm font-semibold text-slate-700">
           {label}
         </label>
         {hint ? <span className="text-xs text-slate-400">{hint}</span> : null}
@@ -298,7 +261,7 @@ export function TextInput({
     <input
       {...props}
       className={cx(
-        "w-full rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-3 text-sm text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] transition placeholder:text-slate-400 focus:border-sky-400 focus:bg-white focus:ring-4 focus:ring-sky-100",
+        "w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 transition placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-100",
         className,
       )}
     />
@@ -313,7 +276,7 @@ export function SelectInput({
     <select
       {...props}
       className={cx(
-        "w-full rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-3 text-sm text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] transition focus:border-sky-400 focus:bg-white focus:ring-4 focus:ring-sky-100",
+        "w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100",
         className,
       )}
     />
@@ -328,7 +291,7 @@ export function TextAreaInput({
     <textarea
       {...props}
       className={cx(
-        "min-h-28 w-full rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-3 text-sm text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] transition placeholder:text-slate-400 focus:border-sky-400 focus:bg-white focus:ring-4 focus:ring-sky-100",
+        "min-h-28 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 transition placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-100",
         className,
       )}
     />
@@ -345,7 +308,7 @@ export function FieldBox({
   return (
     <div
       className={cx(
-        "rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f7fafc_100%)] px-4 py-3 text-sm text-slate-700 shadow-[0_12px_30px_-28px_rgba(15,23,42,0.35)]",
+        "rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700",
         className,
       )}
     >
@@ -362,10 +325,10 @@ export function DataPill({
   tone?: Tone;
 }) {
   const toneClasses: Record<Tone, string> = {
-    blue: "border-slate-200 bg-slate-100 text-slate-700",
-    emerald: "border-slate-200 bg-slate-100 text-slate-700",
-    amber: "border-stone-200 bg-stone-100 text-stone-700",
-    rose: "border-zinc-200 bg-zinc-100 text-zinc-700",
+    blue: "border-sky-200 bg-sky-50 text-sky-800",
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    amber: "border-amber-200 bg-amber-50 text-amber-900",
+    rose: "border-rose-200 bg-rose-50 text-rose-800",
     slate: "border-slate-200 bg-slate-100 text-slate-700",
   };
 
@@ -381,17 +344,6 @@ export function DataPill({
   );
 }
 
-export function EmptyState({
-  title,
-  description,
-}: {
-  title: string;
-  description?: string;
-}) {
-  return (
-    <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/85 px-5 py-8 text-center">
-      <p className="text-sm font-semibold text-slate-700">{title}</p>
-      {description ? <p className="mt-2 text-sm leading-6 text-slate-500">{description}</p> : null}
-    </div>
-  );
+export function EmptyState({ title, description, actions }: { title: string; description?: string; actions?: ReactNode }) {
+  return <WorkspaceState title={title} description={description} actions={actions} />;
 }

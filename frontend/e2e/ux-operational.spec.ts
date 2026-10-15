@@ -67,7 +67,7 @@ test.describe("ciclo 20d ux operacional", () => {
       timeout: 45_000,
     });
     await expectLoaded(page, /Equipamentos/i);
-    await expect(page.locator("body")).toContainText(/Geradores por cliente/i);
+    await expect(page.locator(`a[href="/dashboard/equipments/${data.clientAEquipmentId}"]`).first()).toBeVisible();
     await expect(page.getByRole("link", { name: /Abrir ficha/i }).first()).toBeVisible();
 
     await page.goto(`/dashboard/equipments/${data.clientAEquipmentId}`, {
@@ -176,7 +176,7 @@ test.describe("ciclo 20d ux operacional", () => {
     ).toBeVisible();
 
     const proposals = await apiRequest<Proposal[]>(adminToken, "/proposals");
-    const proposal = proposals.find((item) => item.id);
+    const proposal = proposals.find((item) => item.id && ["CLIENT_REVIEW", "WON", "LOST"].includes((item as Proposal & { status?: string }).status || ""));
     expect(proposal?.id).toBeTruthy();
 
     const documentResponse = await apiRequestRaw(

@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "../components/DashboardPageKit";
+
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, apiUrl } from "@/lib/api";
@@ -107,13 +109,17 @@ export default function SitesPage() {
   const totalEquipments = useMemo(() => rows.reduce((acc, row) => acc + row.equipmentCount, 0), [rows]);
 
   return (
-    <div className="space-y-6 p-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-3xl font-bold text-zinc-900">Locais e Obras</h1>
-        <Link href="/dashboard/clients/new" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500">
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Ativos"
+        title="Locais e Obras"
+        description="Gerencie locais de instalação, obras e equipamentos associados."
+        actions={<>
+<Link href="/dashboard/clients/new" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500">
           Novo cliente com obra
         </Link>
-      </div>
+</>}
+      />
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Metric title="Locais" value={String(rows.length)} />
@@ -134,7 +140,7 @@ export default function SitesPage() {
         {filtered.length === 0 ? (
           <p className="text-sm text-zinc-500">Nenhum local encontrado.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">

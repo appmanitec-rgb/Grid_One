@@ -1,4 +1,11 @@
-import { IsArray, IsBoolean, IsEmail, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsEmail,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 export class UpdateClientPortalDto {
   @IsOptional() @IsBoolean() enabled?: boolean;

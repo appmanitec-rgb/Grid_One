@@ -7,6 +7,10 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/unused_unit_test_database
+      JWT_SECRET: ci_unit_test_key_only_01234567890123456789
     defaults:
       run:
         working-directory: backend
@@ -23,6 +27,12 @@ jobs:
 
       - name: Install
         run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Production dependency audit
+        run: npm run security:check
 
       - name: Lint
         run: npm run lint
@@ -55,8 +65,106 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Production dependency audit
+        run: npm run security:check
+
       - name: Lint
         run: npm run lint
 
       - name: Build
         run: npm run build
+
+  browser-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [backend, frontend]
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: gridone
+          POSTGRES_PASSWORD: e2e_isolated_only
+          POSTGRES_DB: gridone_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gridone -d gridone_e2e"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://gridone:e2e_isolated_only@127.0.0.1:5432/gridone_e2e?schema=public
+      DB_NAME: gridone_e2e
+      EXPECTED_DB_NAME: gridone_e2e
+      E2E_SCHEMA_PUSHED_DB: "1"
+      JWT_SECRET: ci_isolated_test_key_only_01234567890123456789
+      SEED_DEMO_PASSWORD: Demo@123456
+      E2E_DEMO_PASSWORD: Demo@123456
+      E2E_SKIP_WEBSERVER: "1"
+      E2E_API_URL: http://127.0.0.1:3000
+      E2E_BASE_URL: http://127.0.0.1:3001
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:3000
+      APP_BASE_URL: http://127.0.0.1:3001
+      FRONTEND_BASE_URL: http://127.0.0.1:3001
+      FRONTEND_URL: http://127.0.0.1:3001
+      CORS_ORIGINS: http://127.0.0.1:3001
+      THROTTLE_LIMIT: "10000"
+      FILE_STORAGE_DRIVER: local
+      FILE_STORAGE_LOCAL_PATH: ${{ runner.temp }}/gridone-e2e-storage
+      EXTERNAL_DELIVERIES_DISABLED: "true"
+      AUTOMATION_ENABLED: "false"
+      MFA_AUTH_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - name: Install PDF converter
+        run: sudo apt-get update && sudo apt-get install -y libreoffice-writer
+      - name: Install packages
+        run: |
+          npm ci --prefix backend
+          npm ci --prefix frontend
+          cd frontend && npx playwright install --with-deps chromium
+      - name: Prepare isolated test database
+        working-directory: backend
+        run: |
+          npx prisma generate
+          npx prisma db push --skip-generate
+          npm run db:prepare:e2e
+          npm run seed:flow
+      - name: Build both applications
+        run: |
+          npm run build --prefix backend
+          npm run build --prefix frontend
+      - name: Start API
+        working-directory: backend
+        run: node dist/src/main.js > "$RUNNER_TEMP/gridone-api.log" 2>&1 &
+      - name: Start frontend
+        working-directory: frontend
+        run: npm run start > "$RUNNER_TEMP/gridone-frontend.log" 2>&1 &
+      - name: Wait for applications
+        run: |
+          node -e 'const wait=async(url)=>{for(let i=0;i<60;i++){try{if((await fetch(url)).ok)return;}catch{}await new Promise(r=>setTimeout(r,1000));}throw Error("Application did not become ready: "+url);};Promise.all([wait("http://127.0.0.1:3000/health"),wait("http://127.0.0.1:3001")]).catch(e=>{console.error(e.message);process.exit(1);});'
+      - name: Verify every menu
+        working-directory: frontend
+        run: npm run e2e:menus
+      - name: Verify operational workflows
+        working-directory: frontend
+        run: npm run e2e:flows
+      - name: Preserve browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-e2e
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+            ${{ runner.temp }}/gridone-api.log
+            ${{ runner.temp }}/gridone-frontend.log
+          retention-days: 7

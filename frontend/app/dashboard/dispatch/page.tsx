@@ -621,8 +621,9 @@ export default function DispatchPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
+        loading={loading}
         eyebrow="Despacho e agenda"
         title="Programação e despacho"
         description="Organize visitas, distribua ordens de serviço e acompanhe a equipe em uma única fila."
@@ -686,6 +687,7 @@ export default function DispatchPage() {
 
       <div id="fila-programacao">
       <SectionCard
+        actionsLayout="below"
         eyebrow="Fila operacional"
         title="Agenda de serviços"
         description="Veja o que precisa de atendimento, ajuste horários e distribua ordens entre os técnicos."
@@ -1330,7 +1332,7 @@ function TechnicianRadarCard({
         </DataPill>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+      <div className="mt-4 grid gap-3">
         <InfoTile
           label="Urgencias"
           value={String(urgentAssignments)}
@@ -1371,7 +1373,7 @@ function InfoTile({
 }) {
   return (
     <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col items-start gap-2">
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
           {label}
         </p>

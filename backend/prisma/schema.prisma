@@ -2205,6 +2205,9 @@ model Proposal {
   paymentSelections               Json?
   hasDownPayment                  Boolean    @default(false)
   downPaymentAmount               Float?
+  paymentPlan                     Json?
+  downPaymentConfirmedAt          DateTime?
+  downPaymentConfirmedById        String?
   installmentCount                Int?
   installmentIntervalDays         Int?       @default(30)
   firstDueDate                    DateTime?
@@ -2252,6 +2255,7 @@ model Proposal {
   generatedContract ServiceContract?   @relation("SourceProposalContract")
   salesOrder        SalesOrder?
   executionOrder    MaintenanceOrder? @relation("ExecutionProposalOrder")
+  receivables       AccountsReceivable[] @relation("ProposalReceivables")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3573,6 +3577,10 @@ model AccountsReceivable {
   maintenanceOrder   MaintenanceOrder?           @relation(fields: [maintenanceOrderId], references: [id], onDelete: SetNull)
   salesOrderId       String?
   salesOrder         SalesOrder?                 @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
+  sourceProposalId   String?
+  sourceProposal     Proposal?                   @relation("ProposalReceivables", fields: [sourceProposalId], references: [id], onDelete: Restrict)
+  proposalPaymentStage String?
+  proposalPaymentKey String?                     @unique
   executionBillingKey      String?                   @unique
   executionBillingCategory ExecutionBillingCategory?
   installmentNumber       Int?
@@ -3604,6 +3612,7 @@ model AccountsReceivable {
   @@index([clientId, status, dueDate])
   @@index([contractId, competenceDate])
   @@index([salesOrderId])
+  @@index([sourceProposalId, proposalPaymentStage, status], map: "receivable_proposal_stage_status_idx")
   @@map("accounts_receivable")
 }
 

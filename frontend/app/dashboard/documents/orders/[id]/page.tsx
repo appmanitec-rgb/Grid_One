@@ -1,4 +1,5 @@
 "use client";
+import { commercialLabel } from "@/lib/commercial-labels";
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -131,7 +132,7 @@ export default function OrderDocumentPage() {
       >
         <div className="flex flex-wrap gap-2">
           <ToolbarPill>{data.document.statusLabel}</ToolbarPill>
-          <ToolbarPill>{data.document.type}</ToolbarPill>
+          <ToolbarPill>{commercialLabel(data.document.type)}</ToolbarPill>
           <ToolbarPill>{data.document.priority || "NORMAL"}</ToolbarPill>
         </div>
 

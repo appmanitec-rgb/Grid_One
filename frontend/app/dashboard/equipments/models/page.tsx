@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "../../components/DashboardPageKit";
+
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
@@ -522,21 +524,12 @@ export default function EquipmentModelsPage() {
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <div>
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
-            Cadastro mestre tecnico
-          </p>
-          <h1 className="mt-2 text-3xl font-bold text-slate-950">
-            Modelos de Geradores
-          </h1>
-          <p className="mt-1 max-w-3xl text-sm text-slate-500">
-            Configure dados padrao do modelo e recomendacoes de manutencao para
-            apoiar contratos, preventivas e OS futuras.
-          </p>
-        </div>
-      </div>
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Ativos"
+        title="Modelos de geradores"
+        description="Defina dados técnicos e recomendações de manutenção por modelo."
+      />
 
       {error && !editingId ? (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -825,7 +818,7 @@ export default function EquipmentModelsPage() {
         ) : models.length === 0 ? (
           <p className="text-sm text-slate-500">Nenhum modelo cadastrado.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
                 <tr>

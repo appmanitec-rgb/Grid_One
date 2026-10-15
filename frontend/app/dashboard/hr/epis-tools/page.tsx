@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "../../components/DashboardPageKit";
+
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
 
@@ -608,24 +610,21 @@ export default function EpisToolsPage() {
   }
 
   return (
-    <div className="space-y-6 p-8">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold text-zinc-900">
-            Controle de EPIs e Ferramentas
-          </h1>
-          <p className="text-sm text-zinc-600">
-            Ficha por tecnico, rastreio de posse, devolucao, vencimento e calibracao.
-          </p>
-        </div>
-        <button
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Pessoas"
+        title="Controle de EPIs e Ferramentas"
+        description="Ficha por tecnico, rastreio de posse, devolucao, vencimento e calibracao."
+        actions={<>
+<button
           type="button"
           onClick={() => setShowFilters((current) => !current)}
           className="h-10 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
         >
           {showFilters ? "Fechar filtros" : "Abrir filtros"}
         </button>
-      </header>
+</>}
+      />
 
       {message ? (
         <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
@@ -766,7 +765,7 @@ export default function EpisToolsPage() {
             />
           </div>
 
-          <div className="mt-4 overflow-x-auto">
+          <div className="mt-4 overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">
@@ -822,7 +821,7 @@ export default function EpisToolsPage() {
             </p>
           </div>
 
-          <div className="mt-4 overflow-x-auto">
+          <div className="mt-4 overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">
@@ -998,7 +997,7 @@ export default function EpisToolsPage() {
             </span>
           ) : null}
         </div>
-        <div className="mt-4 overflow-x-auto">
+        <div className="mt-4 overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">

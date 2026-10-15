@@ -1,5 +1,7 @@
 "use client";
 
+import { commercialLabel } from "@/lib/commercial-labels";
+
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
@@ -234,7 +236,7 @@ export default function ContractDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <OperationalBreadcrumb
         items={[
           { label: "Dashboard", href: "/dashboard" },
@@ -393,7 +395,7 @@ export default function ContractDetailPage() {
             ...(contract.sourceProposal
               ? [{
                   label: contract.sourceProposal.code,
-                  description: `Proposta ${contract.sourceProposal.status}.`,
+                  description: `Proposta ${commercialLabel(contract.sourceProposal.status)}.`,
                   href: `/dashboard/proposals/${contract.sourceProposal.id}`,
                   badge: "Proposta",
                   tone: "amber" as const,
@@ -502,9 +504,9 @@ export default function ContractDetailPage() {
           <SectionCard
             eyebrow="Financeiro recorrente"
             title="Faturas e adimplencia"
-            description="Agora o detalhe permite tratar o fluxo financeiro direto desta tela, incluindo baixa manual de faturas pendentes."
+            description="Consulte faturas, vencimentos e pagamentos deste contrato."
           >
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
               <table className="w-full min-w-[680px] text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-slate-500">
@@ -577,7 +579,7 @@ export default function ContractDetailPage() {
           <SectionCard
             eyebrow="Preventivas"
             title="Cronograma e ordens geradas"
-            description="A trilha preventiva agora mostra melhor o que ainda esta pendente e o que ja virou ordem de servico."
+            description="Acompanhe as preventivas previstas e as ordens de serviço associadas."
             actions={
               <button
                 type="button"

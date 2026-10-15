@@ -73,10 +73,15 @@ test.describe("propostas operacionais", () => {
     await page.getByPlaceholder("Pesquisar vendedor comercial").fill("Comercial");
     await page.getByRole("button", { name: /Comercial Demo/i }).first().click();
 
+    await page.getByLabel("Pagamento de serviços", { exact: true }).selectOption(profile.id);
+    await page.getByRole("button", { name: "Continuar" }).click();
+    await expect(page.getByRole("heading", { name: "Peças e materiais", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Continuar" }).click();
+
     await page.getByRole("button", { name: /\+ adicionar servico/i }).click();
     await page.getByPlaceholder("Nome ou codigo").fill("Servico Preventivo Mensal Demo");
     await page.locator("li", { hasText: "Servico Preventivo Mensal Demo" }).click();
-    await page.getByText(/Pagamento de servi.os/i).first().locator("..").locator("select").selectOption(profile.id);
+    await page.getByRole("button", { name: "Continuar" }).click();
 
     await page.getByRole("button", { name: /salvar proposta/i }).click();
     await expect(page).toHaveURL(/\/dashboard\/proposals\/[a-f0-9-]+/, {
@@ -101,8 +106,10 @@ test.describe("propostas operacionais", () => {
     await page.getByRole("link", { name: "Editar rascunho" }).click();
     await expect(page).toHaveURL(new RegExp(`/dashboard/proposals/new\\?editId=${proposalId}`));
     await expect(page.getByRole("heading", { name: /Editar rascunho/ })).toBeVisible();
+    await page.getByRole("button", { name: /03 Serviços/ }).click();
     await expect(page.getByPlaceholder("Nome ou codigo")).toHaveValue(/Servico Preventivo Mensal Demo/);
     await page.getByText("Qtd", { exact: true }).first().locator("..").getByRole("spinbutton").fill("2");
+    await page.getByRole("button", { name: "Continuar" }).click();
     await page.getByRole("button", { name: "Salvar alterações" }).click();
     await expect(page).toHaveURL(new RegExp(`/dashboard/proposals/${proposalId}$`), { timeout: 30_000 });
     const afterEdit = await apiRequest<{ totalValue: number; items: Array<{ quantity: number }> }>(sales.access_token, `/proposals/${proposalId}`);

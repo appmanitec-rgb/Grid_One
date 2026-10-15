@@ -143,11 +143,12 @@ export default function DeliveriesPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
-        eyebrow="Envios"
-        title="Historico de compartilhamentos"
-        description="Tudo o que ja saiu por e-mail, WhatsApp, webhook e link seguro."
+        loading={loading}
+        eyebrow="Painel"
+        title="Histórico de envios"
+        description="Consulte os documentos compartilhados por e-mail, WhatsApp e link."
         stats={[
           {
             label: "Total",

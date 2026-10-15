@@ -1,4 +1,5 @@
 "use client";
+import { paymentMethodLabel } from "@/lib/commercial-labels";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -502,11 +503,11 @@ export default function BankAccountsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
-        eyebrow="Tesouraria e conciliacao"
-        title="Contas bancarias e caixas com saldo, uso real e governanca operacional."
-        description="A central agora mostra quais contas sustentam o caixa, quanto cada uma recebeu e pagou e quais devem sair da operacao nova sem perder o historico financeiro."
+        eyebrow="Financeiro"
+        title="Contas bancárias e caixas"
+        description="Gerencie contas, saldos e a disponibilidade para pagamentos e recebimentos."
         stats={[
           {
             label: "Contas ativas",
@@ -555,14 +556,15 @@ export default function BankAccountsPage() {
               </div>
             </FieldBox>
 
-            <StatusBanner tone={spotlightAccount ? "blue" : "slate"}>
+
+          </div>
+        }
+      />
+<StatusBanner tone={spotlightAccount ? "blue" : "slate"}>
               {spotlightAccount
                 ? `${spotlightAccount.name} e a conta com maior saldo ativo hoje, em ${formatCurrency(Number(spotlightAccount.currentBalance || 0))}.`
                 : "Nenhuma conta ativa encontrada para compor o radar de tesouraria."}
             </StatusBanner>
-          </div>
-        }
-      />
 
       {error && !editingId ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
       {successMessage ? <StatusBanner tone="emerald">{successMessage}</StatusBanner> : null}
@@ -954,7 +956,7 @@ export default function BankAccountsPage() {
                       <DataPill tone={movementTone(movement)}>
                         {movement.direction === "in" ? "Entrada" : "Saida"}
                       </DataPill>
-                      <DataPill tone="slate">{movement.method}</DataPill>
+                      <DataPill tone="slate">{paymentMethodLabel(movement.method)}</DataPill>
                     </div>
                     <p className="mt-3 text-sm font-semibold text-slate-900">
                       {movement.counterparty}

@@ -26,7 +26,17 @@ describe('CustomerPortalService', () => {
     role: UserRole.CLIENT,
     isActive: true,
     linkedClientId: 'client-a',
-    portalPermissions: ['EQUIPMENT', 'CONTRACTS', 'PROPOSALS', 'TICKETS', 'REQUESTS', 'REPORTS', 'DOCUMENTS', 'FINANCIAL', 'FEEDBACK'],
+    portalPermissions: [
+      'EQUIPMENT',
+      'CONTRACTS',
+      'PROPOSALS',
+      'TICKETS',
+      'REQUESTS',
+      'REPORTS',
+      'DOCUMENTS',
+      'FINANCIAL',
+      'FEEDBACK',
+    ],
     linkedClient: {
       id: 'client-a',
       companyName: 'Cliente A Ltda',

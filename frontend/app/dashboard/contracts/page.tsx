@@ -86,6 +86,11 @@ export default function ContractsPage() {
   }, [handleUnauthorized]);
 
   useEffect(() => {
+    const clientSearch = new URLSearchParams(window.location.search).get("q");
+    if (clientSearch) setQuery(clientSearch);
+  }, []);
+
+  useEffect(() => {
     void load();
   }, [load]);
 
@@ -217,11 +222,12 @@ export default function ContractsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
-        eyebrow="Modulo contratual"
-        title="Contratos com leitura de risco, receita e automacao."
-        description="Esta carteira agora mostra melhor a ponte entre proposta, faturamento recorrente, preventivas e saude do cliente. Alem do visual, o fluxo recebeu tratamento consistente de sessao, erros e automacoes."
+        loading={loading}
+        eyebrow="Comercial"
+        title="Contratos"
+        description="Acompanhe vigência, renovações, faturamento e manutenções preventivas."
         stats={[
           {
             label: "Contratos ativos",
@@ -286,14 +292,14 @@ export default function ContractsPage() {
                 Pulso da carteira
               </p>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                A tela agora destaca os contratos originados por proposta e onde a
-                operacao pode travar por renovacao, inadimplencia ou preventivas.
+                Acompanhe os contratos vinculados a propostas e as pendências de
+                renovação, pagamento e manutenção preventiva.
               </p>
             </div>
             <MiniPulse
               label="Origem comercial"
               value={`${stats.proposalBased} vinculados a propostas`}
-              helper="Ajuda a conferir se o fluxo ganhou-proposta-virou-contrato esta batendo."
+              helper="Contratos gerados a partir de propostas aprovadas."
               tone="blue"
             />
             <MiniPulse
@@ -316,9 +322,10 @@ export default function ContractsPage() {
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
 
       <SectionCard
+        actionsLayout="below"
         eyebrow="Carteira operacional"
         title="Contratos em acompanhamento"
-        description="Pesquisa, filtra e aciona a automacao diretamente na carteira sem perder o contexto de origem e risco."
+        description="Pesquise contratos, confira pendências e acompanhe a vigência."
         actions={
           <div className="flex w-full flex-col gap-3 xl:w-auto xl:min-w-[640px] xl:flex-row xl:items-center xl:justify-end">
             <TextInput

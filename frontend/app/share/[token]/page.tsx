@@ -1,4 +1,5 @@
 "use client";
+import { commercialLabel } from "@/lib/commercial-labels";
 
 import { useParams } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
@@ -256,7 +257,7 @@ function renderSharedDocument(
     >
       <div className="flex flex-wrap gap-2">
         <ToolbarPill>{data.document.statusLabel}</ToolbarPill>
-        <ToolbarPill>{data.document.type}</ToolbarPill>
+        <ToolbarPill>{commercialLabel(data.document.type)}</ToolbarPill>
         <ToolbarPill>{data.document.priority || "NORMAL"}</ToolbarPill>
       </div>
       <PrintSection title="Resumo" columns={3}>

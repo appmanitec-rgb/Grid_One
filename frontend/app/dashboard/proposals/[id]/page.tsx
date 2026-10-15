@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { commercialLabel } from "@/lib/commercial-labels";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
@@ -69,6 +70,8 @@ type Proposal = {
     qrCodeDataUrl?: string | null;
   }> | null;
   hasDownPayment?: boolean | null;
+  downPaymentConfirmedAt?: string | null;
+  paymentPlan?: { preset: string } | null;
   downPaymentAmount?: number | null;
   installmentCount?: number | null;
   installmentIntervalDays?: number | null;
@@ -129,9 +132,9 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-10 items-center justify-center rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-50";
 const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-sky-300 hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-50";
 type Tone = "blue" | "emerald" | "amber" | "rose" | "slate";
 
 const OPERATIONAL_PROPOSAL_TYPES = new Set(["SERVICES", "PARTS_AND_SERVICES"]);
@@ -367,6 +370,7 @@ export default function ProposalDetailPage() {
   const proposalItems = proposal.items ?? [];
   const proposalCurrency = proposal.externalCurrency || "BRL";
   const downPayment = Number(proposal.downPaymentAmount || 0);
+  const financialPending = proposal.status === "WON" && Boolean(proposal.hasDownPayment) && downPayment > 0 && !proposal.downPaymentConfirmedAt;
   const installments = Math.max(1, Number(proposal.installmentCount || 1));
   const remaining = Math.max(0, Number(proposal.totalValue || 0) - downPayment);
   const installmentValue = remaining / installments;
@@ -475,7 +479,7 @@ export default function ProposalDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       {reasonedAction ? (
         <ReasonedActionDialog
           action={reasonedAction}
@@ -502,6 +506,7 @@ export default function ProposalDetailPage() {
       />
 
       <PageHero
+        asideLayout="side"
         compact
         eyebrow="Proposta comercial"
         title={`Proposta ${proposal.code}`}
@@ -530,8 +535,8 @@ export default function ProposalDetailPage() {
           },
           {
             label: "Parcelamento",
-            value: `${installments}x`,
-            helper: `${formatCurrency(installmentValue, proposalCurrency)} por parcela.`,
+            value: remaining > 0 ? `${installments}x` : "Antecipado",
+            helper: remaining > 0 ? `${formatCurrency(installmentValue, proposalCurrency)} por parcela.` : "Pagamento integral antes da operação.",
             tone: "blue",
           },
           {
@@ -543,7 +548,7 @@ export default function ProposalDetailPage() {
         ]}
         actions={
           <>
-            {proposal.status === "WON" &&
+            {proposal.status === "WON" && !financialPending &&
             proposal.type === "GENERATOR_SALE" &&
             !proposal.postSaleGeneratorId &&
             !isClient ? (
@@ -555,7 +560,7 @@ export default function ProposalDetailPage() {
               </ActionButton>
             ) : null}
             {proposal.status === "WON" &&
-            proposal.type === "CONTRACT" &&
+            proposal.type === "CONTRACT" && !financialPending &&
             !proposal.generatedContract &&
             canCreateContract ? (
               <ActionButton
@@ -574,7 +579,7 @@ export default function ProposalDetailPage() {
                 Converter em contrato
               </ActionButton>
             ) : null}
-            {canOpenDispatchFromProposal ? (
+            {canOpenDispatchFromProposal && !financialPending ? (
               <PermissionAwareLink
                 href={buildProposalDispatchHref(proposal)}
                 permission="orders.create"
@@ -583,7 +588,7 @@ export default function ProposalDetailPage() {
                 Abrir O.S. no despacho
               </PermissionAwareLink>
             ) : null}
-            {proposal.status === "WON" && proposal.type === "PARTS" && !isClient ? (
+            {proposal.status === "WON" && !financialPending && proposal.type === "PARTS" && !isClient ? (
               <Link href={`/dashboard/sales-orders?proposalId=${proposal.id}`} className={PRIMARY_BUTTON}>
                 Acompanhar pedido de peças
               </Link>
@@ -599,7 +604,7 @@ export default function ProposalDetailPage() {
           </>
         }
         aside={
-          <FieldBox className="space-y-4 rounded-[28px] border-white/60 bg-white/80 p-5 shadow-[0_22px_60px_-40px_rgba(15,31,50,0.45)]">
+          <FieldBox className="space-y-3 rounded-2xl border border-white/80 bg-white/95 p-4 shadow-sm">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
                 Contexto da proposta
@@ -608,7 +613,7 @@ export default function ProposalDetailPage() {
                 <DataPill tone={statusTone(proposal.status)}>
                   {statusLabel(proposal.status)}
                 </DataPill>
-                <DataPill tone="slate">{proposal.type}</DataPill>
+                <DataPill tone="slate">{proposalTypeLabel(proposal.type)}</DataPill>
                 {proposal.generatedContract ? (
                   <DataPill tone="emerald">Contrato gerado</DataPill>
                 ) : null}
@@ -633,9 +638,10 @@ export default function ProposalDetailPage() {
         }
       />
       {notice ? <StatusBanner tone="emerald">{notice}</StatusBanner> : null}
+      {financialPending ? <StatusBanner tone="amber"><strong>Aguardando confirmação da entrada pelo financeiro.</strong><p className="mt-1">Entrada prevista: {formatCurrency(downPayment, proposalCurrency)}. A operação será liberada após o recebimento integral.</p>{!isClient ? <PermissionAwareLink permission="finance.view" href="/dashboard/finance/accounts-receivable" className="mt-2 inline-flex font-semibold text-blue-700">Acompanhar no financeiro →</PermissionAwareLink> : null}</StatusBanner> : proposal.status === "WON" && proposal.downPaymentConfirmedAt ? <StatusBanner tone="emerald">Entrada confirmada pelo financeiro. Operação liberada.</StatusBanner> : null}
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
 
-      {proposal.status === "WON" &&
+      {proposal.status === "WON" && !financialPending &&
       proposal.type === "CONTRACT" &&
       !proposal.generatedContract &&
       !isClient ? (
@@ -994,7 +1000,7 @@ export default function ProposalDetailPage() {
           />
           <Info
             label="Condição de pagamento"
-            value={proposal.paymentTerm || "-"}
+            value={commercialLabel(proposal.paymentTerm, "—")}
           />
           <Info
             label="Prazo de entrega (dias)"
@@ -1007,20 +1013,20 @@ export default function ProposalDetailPage() {
           <Info
             label="Primeiro vencimento"
             value={
-              proposal.firstDueDate ? formatDate(proposal.firstDueDate) : "-"
+              proposal.paymentPlan ? "Definido pelo financeiro" : proposal.firstDueDate ? formatDate(proposal.firstDueDate) : "-"
             }
           />
           <Info
-            label="Intervalo parcelas (dias)"
+            label={proposal.paymentPlan ? "Vencimentos" : "Intervalo entre parcelas (dias)"}
             value={
-              proposal.installmentIntervalDays != null
+              proposal.paymentPlan ? "Definidos no financeiro" : proposal.installmentIntervalDays != null
                 ? String(proposal.installmentIntervalDays)
                 : "-"
             }
           />
           <Info
             label="Parcelamento"
-            value={`${installments}x de ${formatCurrency(installmentValue, proposalCurrency)}`}
+            value={remaining > 0 ? `${installments}x de ${formatCurrency(installmentValue, proposalCurrency)}` : "Sem saldo a parcelar"}
           />
           <Info
             label="Entrada"
@@ -1066,7 +1072,7 @@ export default function ProposalDetailPage() {
         title="Itens comerciais"
         description="Resumo dos itens, quantidades e valores unitários que compõem a proposta."
       >
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
           <table className="w-full min-w-[560px] text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-left text-slate-500">
@@ -1085,8 +1091,8 @@ export default function ProposalDetailPage() {
                     </p>
                     {item.kind === "HOURLY_SERVICE" ? (
                       <p className="mt-1 text-xs text-slate-500">
-                        {item.hourType || "Hora"} |{" "}
-                        {item.technicianType || "Tecnico"}
+                        {commercialLabel(item.hourType, "Hora")} |{" "}
+                        {commercialLabel(item.technicianType, "Técnico")}
                         {item.discountPercent
                           ? ` | desconto ${item.discountPercent}%`
                           : ""}
@@ -1135,7 +1141,7 @@ export default function ProposalDetailPage() {
               : "Despesas foram protegidas de desconto."
           } O cliente recebe apenas o total e os tipos marcados.`}
         >
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
             <table className="w-full min-w-[620px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-slate-500">
@@ -1234,7 +1240,7 @@ export default function ProposalDetailPage() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-slate-900">
-                      {m.action} - {statusLabel(m.toStatus)}
+                      {commercialLabel(m.action)} · {statusLabel(m.toStatus)}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
                       {m.actorUser?.name || "Sistema"} em{" "}
@@ -1510,7 +1516,7 @@ function proposalTypeLabel(type: string) {
     PARTS_AND_SERVICES: "Peças e serviços",
     CONTRACT: "Contrato",
   };
-  return labels[type] || type;
+  return labels[type] || commercialLabel(type);
 }
 
 function statusTone(status: string): Tone {

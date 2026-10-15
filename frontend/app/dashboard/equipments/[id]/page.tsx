@@ -1,5 +1,7 @@
 "use client";
 
+import { MetricCard as SummaryMetric, PageHeader } from "../../components/DashboardPageKit";
+
 import { useParams } from "next/navigation";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -422,7 +424,7 @@ export default function EquipmentDetailPage() {
   const canEdit = access.equipments.update;
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="dashboard-page space-y-5">
       <OperationalBreadcrumb
         items={[
           { label: "Dashboard", href: "/dashboard" },
@@ -431,23 +433,9 @@ export default function EquipmentDetailPage() {
         ]}
       />
 
-      <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
-              Prontuario tecnico operacional
-            </p>
-            <h1 className="mt-2 break-words text-3xl font-black text-slate-950">
-              {equipment.name}
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              <span className="font-mono font-semibold text-slate-700">{equipment.code}</span>
-              {" | "}{equipment.assetTag || "Sem tag"} | Serie{" "}
-              {equipment.serialNumber || "nao informada"} |{" "}
-              {equipment.power} kVA
-            </p>
-          </div>
-          {equipment.client?.id ? (
+      <PageHeader eyebrow="Prontuário técnico operacional" title={equipment.name} description={<><span className="tabular-nums font-semibold text-slate-700">{equipment.code}</span>{" | "}{equipment.assetTag || "Sem tag"}| Serie{" "}{equipment.serialNumber || "nao informada"}|{" "}{equipment.power}kVA
+            </>} actions={<>
+{equipment.client?.id ? (
             <PermissionAwareLink
               href={`/dashboard/clients/${equipment.client.id}`}
               permission="clients.view"
@@ -456,9 +444,8 @@ export default function EquipmentDetailPage() {
               Abrir cliente
             </PermissionAwareLink>
           ) : null}
-        </div>
-
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+</>} />
+<div className="dashboard-metrics-grid">
           <Metric label="Status" value={statusLabel(equipment.operationalStatus)} />
           <Metric label="Criticidade" value={equipment.criticality || "-"} />
           <Metric
@@ -470,7 +457,6 @@ export default function EquipmentDetailPage() {
             value={formatDate(nextPreventive?.scheduledDate)}
           />
         </div>
-      </header>
 
       {notice ? <State text={notice} tone="success" /> : null}
       {error ? <State text={error} tone="error" /> : null}
@@ -1020,12 +1006,7 @@ function Info({
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-      <p className="text-[11px] font-bold uppercase text-slate-400">{label}</p>
-      <p className="mt-1 break-words text-sm font-black text-slate-900">{value}</p>
-    </div>
-  );
+  return <SummaryMetric label={label} value={String(value)} tone={"slate"} />;
 }
 
 function LinkCard({

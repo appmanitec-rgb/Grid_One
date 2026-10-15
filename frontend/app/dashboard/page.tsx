@@ -17,7 +17,7 @@ import {
   decodeJwtPayload,
   getStoredAccessToken,
 } from "@/lib/auth-session";
-import {
+import { MetricCard as SummaryMetric, PageHeader,
   DataPill,
   EmptyState,
   SectionCard,
@@ -652,17 +652,16 @@ export default function DashboardPage() {
   ].filter((item) => item.count > 0);
 
   return (
-    <div className="dashboard-home space-y-5 pb-10">
+    <div className="dashboard-page dashboard-home pb-10 space-y-5">
       {apiWarning ? (
         <StatusBanner tone="amber">{apiWarning}</StatusBanner>
       ) : null}
-      <header className="flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-5 shadow-sm">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">Painel geral</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">Visão geral</h1>
-          <p className="mt-1 text-sm text-slate-600">Propostas, execução e decisões que precisam de atenção.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+      <PageHeader
+        eyebrow="Painel geral"
+        title="Visão geral"
+        description="Propostas, execução e decisões que precisam de atenção."
+        actions={<>
+<div className="flex flex-wrap items-center gap-2">
           {lastUpdatedAt ? (
             <span className="text-xs text-slate-600">
               Atualizado às {lastUpdatedAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
@@ -680,7 +679,8 @@ export default function DashboardPage() {
             <Link href="/dashboard/proposals/new" className={PRIMARY_BUTTON}>Nova proposta</Link>
           ) : null}
         </div>
-      </header>
+</>}
+      />
 
       <div className="dashboard-home-metrics grid gap-3">
         <OverviewStat label="Propostas" value={dashboardLoading ? "—" : String(stats.total)} helper="na carteira" />
@@ -914,13 +914,7 @@ export default function DashboardPage() {
 }
 
 function OverviewStat({ label, value, helper }: { label: string; value: string; helper: string }) {
-  return (
-    <article className="min-w-0 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
-      <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-600">{label}</p>
-      <p className="mt-2 truncate text-2xl font-bold text-slate-950" title={value}>{value}</p>
-      <p className="mt-1 text-sm text-slate-600">{helper}</p>
-    </article>
-  );
+  return <SummaryMetric label={label} value={String(value)} helper={helper} tone={"slate"} />;
 }
 
 function PriorityRow({ title, count, href, tone }: { title: string; count: number; href: string; tone: Tone }) {

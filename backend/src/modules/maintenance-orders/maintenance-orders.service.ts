@@ -27,6 +27,7 @@ import { publishOrderCompleted } from '../team/team-automation';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { billCompletedExecution } from '../finance/execution-billing';
+import { assertProposalFinancialRelease } from '../proposals/proposal-financial-release';
 import { CreateMaintenanceOrderDto } from './dto/create-maintenance-order.dto';
 import { ListMaintenanceOrdersQueryDto } from './dto/list-maintenance-orders-query.dto';
 import { UpdateMaintenanceOrderDto } from './dto/update-maintenance-order.dto';
@@ -263,6 +264,7 @@ export class MaintenanceOrdersService {
         type: true,
         technicianId: true,
         checklistData: true,
+        sourceProposalId: true,
       },
     });
 
@@ -281,6 +283,8 @@ export class MaintenanceOrdersService {
 
     return this.prisma.$transaction(async (tx) => {
       const targetGeneratorId = dto.generatorId ?? current.generatorId;
+      if (current.sourceProposalId && dto.status !== OrderStatus.CANCELED)
+        await assertProposalFinancialRelease(tx, current.sourceProposalId);
       const generator = await this.ensureGeneratorAndSite(
         tx,
         targetGeneratorId,
@@ -434,10 +438,15 @@ export class MaintenanceOrdersService {
     await this.assertInternalActor(actorUserId);
     const current = await this.prisma.maintenanceOrder.findUnique({
       where: { id },
-      select: { id: true, status: true },
+      select: { id: true, status: true, sourceProposalId: true },
     });
     if (!current) throw new NotFoundException('OS nao encontrada.');
 
+    if (current.sourceProposalId)
+      await assertProposalFinancialRelease(
+        this.prisma,
+        current.sourceProposalId,
+      );
     const updated = await this.prisma.maintenanceOrder.update({
       where: { id },
       data: {

@@ -122,6 +122,11 @@ export default function InternalTicketsPage() {
   }, []);
 
   useEffect(() => {
+    const clientSearch = new URLSearchParams(window.location.search).get("q");
+    if (clientSearch) setQuery(clientSearch);
+  }, []);
+
+  useEffect(() => {
     void load();
   }, [load]);
 
@@ -199,11 +204,12 @@ export default function InternalTicketsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
-        eyebrow="Atendimento / SLA"
-        title="Chamados conectados ao cliente, equipamento e operacao."
-        description="A fila mostra prioridade, SLA, origem e conversao para OS sem expor informacoes internas no portal do cliente."
+        loading={loading}
+        eyebrow="Operação"
+        title="Chamados e atendimento"
+        description="Acompanhe prioridades, prazos de atendimento e a conversão de chamados em ordens de serviço."
         stats={[
           {
             label: "Chamados ativos",

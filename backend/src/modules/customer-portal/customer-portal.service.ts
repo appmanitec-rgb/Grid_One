@@ -76,18 +76,33 @@ export class CustomerPortalService {
     const scope = await this.requireCustomerScope(userId);
     return this.prisma.clientPortalFeedback.findMany({
       where: { clientId: scope.clientId },
-      select: { id: true, kind: true, message: true, createdAt: true, user: { select: { name: true } } },
+      select: {
+        id: true,
+        kind: true,
+        message: true,
+        createdAt: true,
+        user: { select: { name: true } },
+      },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
   }
 
-  async createFeedback(userId: string | undefined, dto: CreatePortalFeedbackDto) {
+  async createFeedback(
+    userId: string | undefined,
+    dto: CreatePortalFeedbackDto,
+  ) {
     const scope = await this.requireCustomerScope(userId);
     const message = dto.message.trim();
-    if (!message) throw new BadRequestException('Escreva sua observacao ou feedback.');
+    if (!message)
+      throw new BadRequestException('Escreva sua observacao ou feedback.');
     return this.prisma.clientPortalFeedback.create({
-      data: { clientId: scope.clientId, userId: scope.userId, kind: dto.kind, message },
+      data: {
+        clientId: scope.clientId,
+        userId: scope.userId,
+        kind: dto.kind,
+        message,
+      },
       select: { id: true, kind: true, message: true, createdAt: true },
     });
   }
@@ -215,25 +230,26 @@ export class CustomerPortalService {
       }),
     ]);
 
-    const can = (permission: string) => scope.user.portalPermissions.includes(permission);
+    const can = (permission: string) =>
+      scope.user.portalPermissions.includes(permission);
     return {
       client: scope.client,
       permissions: scope.user.portalPermissions,
       stats: {
-        equipmentCount: can("EQUIPMENT") ? equipmentCount : 0,
-        awaitingProposals: can("PROPOSALS") ? awaitingProposals : 0,
-        openOrders: can("EQUIPMENT") ? openOrders : 0,
-        openQuoteRequests: can("REQUESTS") ? openQuoteRequests : 0,
-        activeContracts: can("CONTRACTS") ? activeContracts : 0,
-        openTickets: can("TICKETS") ? openTickets : 0,
-        waitingCustomerTickets: can("TICKETS") ? waitingCustomerTickets : 0,
-        convertedTickets: can("TICKETS") ? convertedTickets : 0,
-        recentDocuments: can("DOCUMENTS") ? recentDocuments.length : 0,
+        equipmentCount: can('EQUIPMENT') ? equipmentCount : 0,
+        awaitingProposals: can('PROPOSALS') ? awaitingProposals : 0,
+        openOrders: can('EQUIPMENT') ? openOrders : 0,
+        openQuoteRequests: can('REQUESTS') ? openQuoteRequests : 0,
+        activeContracts: can('CONTRACTS') ? activeContracts : 0,
+        openTickets: can('TICKETS') ? openTickets : 0,
+        waitingCustomerTickets: can('TICKETS') ? waitingCustomerTickets : 0,
+        convertedTickets: can('TICKETS') ? convertedTickets : 0,
+        recentDocuments: can('DOCUMENTS') ? recentDocuments.length : 0,
       },
-      recentOrders: can("EQUIPMENT") ? recentOrders : [],
-      recentProposals: can("PROPOSALS") ? recentProposals : [],
-      recentDocuments: can("DOCUMENTS") ? recentDocuments : [],
-      upcomingPreventives: can("EQUIPMENT") ? upcomingPreventives : [],
+      recentOrders: can('EQUIPMENT') ? recentOrders : [],
+      recentProposals: can('PROPOSALS') ? recentProposals : [],
+      recentDocuments: can('DOCUMENTS') ? recentDocuments : [],
+      upcomingPreventives: can('EQUIPMENT') ? upcomingPreventives : [],
     };
   }
 
@@ -792,7 +808,11 @@ export class CustomerPortalService {
       );
     }
 
-    if (!user.linkedClientId || !user.linkedClient || !user.linkedClient.portalEnabled) {
+    if (
+      !user.linkedClientId ||
+      !user.linkedClient ||
+      !user.linkedClient.portalEnabled
+    ) {
       throw new ForbiddenException(
         'Conta de cliente sem empresa vinculada ao portal.',
       );

@@ -17,6 +17,7 @@ import {
 import { randomBytes } from 'crypto';
 import { DatabaseService } from '../../database/database.service';
 import { createApprovedProposalOrder } from '../proposals/proposal-work-order';
+import { assertProposalFinancialRelease } from '../proposals/proposal-financial-release';
 import {
   SalesDeliveryDto,
   SalesOrderStockDto,
@@ -878,6 +879,7 @@ export class SalesOrdersService {
   private async requireOpenOrder(tx: Prisma.TransactionClient, id: string) {
     const order = await tx.salesOrder.findUnique({ where: { id } });
     if (!order) throw new NotFoundException('Pedido de venda nao encontrado.');
+    await assertProposalFinancialRelease(tx, order.proposalId);
     if (
       order.status !== SalesOrderStatus.OPEN &&
       order.status !== SalesOrderStatus.PARTIALLY_DELIVERED

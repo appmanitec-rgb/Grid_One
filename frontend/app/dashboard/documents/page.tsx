@@ -125,11 +125,12 @@ export default function DocumentsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
-        eyebrow="Documentos"
-        title="Central documental"
-        description="Consulte os arquivos de propostas, contratos e ordens e compartilhe com o cliente."
+        loading={loading}
+        eyebrow="Painel"
+        title="Central de documentos"
+        description="Consulte propostas aprovadas, contratos e ordens de serviço e compartilhe os arquivos."
         stats={[
           {
             label: "Total",

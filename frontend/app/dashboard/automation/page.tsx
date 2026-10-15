@@ -1,5 +1,7 @@
 "use client";
 
+import { MetricCard as SummaryMetric, PageHeader } from "../components/DashboardPageKit";
+
 import { useEffect, useState } from "react";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
 
@@ -247,22 +249,9 @@ export default function AutomationPage() {
   }
 
   return (
-    <div className="space-y-6 p-6 md:p-8">
-      <section className="rounded-[30px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.16),_transparent_34%),radial-gradient(circle_at_85%_18%,_rgba(14,116,144,0.16),_transparent_32%),linear-gradient(135deg,#f8fafc_0%,#eef8f7_55%,#ffffff_100%)] p-6 shadow-[0_24px_70px_-45px_rgba(15,23,42,0.45)]">
-        <div className="grid items-end gap-5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr))]">
-          <div className="max-w-3xl">
-            <span className="inline-flex rounded-full border border-emerald-200 bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-800">
-              Fase 2
-            </span>
-            <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-950 md:text-4xl">
-              Central de Automacoes
-            </h1>
-            <p className="mt-2 text-sm text-slate-600 md:text-base">
-              Historico, saude e disparo manual das rotinas que sustentam contratos, faturamento e inadimplencia.
-            </p>
-          </div>
-
-          <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,10.5rem),1fr))]">
+    <div className="dashboard-page space-y-5">
+      <PageHeader eyebrow="Painel" title="Central de automações" description="Acompanhe as rotinas automáticas, consulte o histórico e execute tarefas." />
+<div className="dashboard-metrics-grid">
             <MetricCard
               label="Status atual"
               value={status?.isRunning ? "Em execucao" : "Disponivel"}
@@ -284,8 +273,6 @@ export default function AutomationPage() {
               hint="Exigem revisao"
             />
           </div>
-        </div>
-      </section>
 
       {notice ? (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
@@ -386,7 +373,7 @@ export default function AutomationPage() {
             Nenhuma execucao registrada ainda.
           </div>
         ) : (
-          <div className="mt-4 overflow-x-auto">
+          <div className="mt-4 overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-[0.14em] text-slate-500">
@@ -463,15 +450,7 @@ function MetricCard({
   value: string;
   hint: string;
 }) {
-  return (
-    <div className="rounded-[22px] border border-slate-200 bg-white/85 px-4 py-4">
-      <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-black text-slate-950">{value}</p>
-      <p className="mt-1 text-xs text-slate-500">{hint}</p>
-    </div>
-  );
+  return <SummaryMetric label={label} value={String(value)} helper={hint} tone={"blue"} />;
 }
 
 function ActionCard({

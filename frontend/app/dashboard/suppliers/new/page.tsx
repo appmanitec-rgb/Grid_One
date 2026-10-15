@@ -277,11 +277,11 @@ export default function SupplierFormPage() {
   }
 
   return (
-    <div className="space-y-6 pb-10">
+    <div className="dashboard-page pb-10 space-y-5">
       <PageHero
-        eyebrow="Rede de suprimentos"
+        eyebrow="Suprimentos"
         title={isEditing ? "Editar fornecedor" : "Novo fornecedor"}
-        description="Cadastro comercial e operacional do parceiro, com dados fiscais, avaliacao e itens vinculados em uma tela mais organizada e com menos ruido visual."
+        description="Preencha os dados cadastrais, contatos e itens negociados com o fornecedor."
         stats={[
           {
             label: "Modo",

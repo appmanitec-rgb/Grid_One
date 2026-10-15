@@ -1,4 +1,5 @@
 "use client";
+import { commercialLabel } from "@/lib/commercial-labels";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -269,11 +270,11 @@ export default function CashFlowPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
-        eyebrow="Financeiro executivo"
-        title="Fluxo de caixa com horizonte real de entradas, saidas e saldo por conta."
-        description="A projeção agora conversa com contas a receber, contas a pagar e saldos bancarios, para a leitura do caixa sair do campo teorico e virar instrumento de decisao operacional."
+        eyebrow="Financeiro"
+        title="Fluxo de caixa"
+        description="Consulte entradas, saídas e a projeção de saldo para planejar o caixa."
         stats={[
           {
             label: "Saldo atual",
@@ -334,14 +335,15 @@ export default function CashFlowPage() {
               </div>
             </FieldBox>
 
-            <StatusBanner tone={firstNegativeProjection ? "rose" : "blue"}>
+
+          </div>
+        }
+      />
+<StatusBanner tone={firstNegativeProjection ? "rose" : "blue"}>
               {firstNegativeProjection
                 ? `Atencao: o caixa projeta saldo negativo em ${firstNegativeProjection.horizonDays} dias se nada mudar no ritmo atual.`
                 : "A carteira atual nao aponta saldo negativo nos horizontes analisados."}
             </StatusBanner>
-          </div>
-        }
-      />
 
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
 
@@ -352,7 +354,7 @@ export default function CashFlowPage() {
             title="Pulso da projeção"
             description="Compare as janelas de 30, 60 e 90 dias e veja onde o caixa estica ou perde folego."
           >
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="workspace-projection-grid grid gap-3">
               {loading ? (
                 Array.from({ length: 3 }).map((_, index) => (
                   <div
@@ -364,7 +366,7 @@ export default function CashFlowPage() {
                   </div>
                 ))
               ) : projectionsByHorizon.length === 0 ? (
-                <div className="md:col-span-3">
+                <div className="col-span-full">
                   <EmptyState
                     title="Sem projeções carregadas"
                     description="O endpoint de projeção nao retornou horizontes para analise."
@@ -426,7 +428,7 @@ export default function CashFlowPage() {
           <SectionCard
             eyebrow="Agenda financeira"
             title="Entradas e saidas mais proximas"
-            description="A leitura de caixa fica melhor quando a projeção conversa com o que vence agora."
+            description="Consulte os vencimentos que compõem a projeção do caixa."
           >
             <div className="grid gap-4 xl:grid-cols-2">
               <div className="space-y-3">
@@ -657,7 +659,7 @@ export default function CashFlowPage() {
                           </p>
                           <p className="mt-1 text-sm text-slate-500">
                             {account.bankName || "Banco nao informado"}
-                            {account.type ? ` / ${account.type}` : ""}
+                            {account.type ? ` / ${commercialLabel(account.type)}` : ""}
                           </p>
                         </div>
                         <DataPill

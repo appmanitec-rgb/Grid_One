@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHeader } from "../../components/DashboardPageKit";
+import { commercialLabel } from "@/lib/commercial-labels";
+
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -66,17 +69,18 @@ export default function SupplierDetailPage() {
   if (!supplier) return <div className="p-8 text-zinc-500">Carregando...</div>;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-zinc-800">Perfil do Fornecedor</h1>
-          <p className="mt-1 text-zinc-500">Dados cadastrais, avaliacao e itens negociados.</p>
-        </div>
-        <div className="flex gap-3">
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Suprimentos"
+        title="Perfil do Fornecedor"
+        description="Dados cadastrais, avaliacao e itens negociados."
+        actions={<>
+<div className="flex gap-3">
           <Link href="/dashboard/suppliers" className="rounded-lg border border-zinc-300 px-4 py-2 text-zinc-700">Voltar</Link>
           <Link href={`/dashboard/suppliers/new?editSupplierId=${supplier.id}`} className="rounded-lg bg-blue-600 px-4 py-2 text-white">Editar</Link>
         </div>
-      </div>
+</>}
+      />
 
       <section className="grid grid-cols-1 gap-4 rounded-xl border border-zinc-200 bg-white p-6 md:grid-cols-3">
         <Info label="Razao Social" value={supplier.companyName} />
@@ -84,7 +88,7 @@ export default function SupplierDetailPage() {
         <Info label="CNPJ" value={supplier.cnpj || "-"} />
         <Info label="E-mail" value={supplier.email || "-"} />
         <Info label="Telefone" value={supplier.phone || "-"} />
-        <Info label="Pagamento" value={supplier.paymentTerm || "-"} />
+        <Info label="Pagamento" value={commercialLabel(supplier.paymentTerm,"—")} />
         <Info label="Cidade/UF" value={`${supplier.city || "-"}${supplier.state ? `/${supplier.state}` : ""}`} />
         <Info label="IE" value={supplier.stateRegistration || "-"} />
         <Info label="IM" value={supplier.municipalRegistration || "-"} />
@@ -104,7 +108,7 @@ export default function SupplierDetailPage() {
         <div className="border-b border-zinc-200 p-4">
           <h2 className="text-lg font-bold text-zinc-800">Itens Vinculados</h2>
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
           <table className="w-full border-collapse text-left">
             <thead>
               <tr className="bg-zinc-50 text-sm text-zinc-500">

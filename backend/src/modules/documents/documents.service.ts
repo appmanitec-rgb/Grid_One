@@ -97,13 +97,25 @@ export class DocumentsService {
     const company = await this.getCompanyProfile();
 
     const [proposals, contracts, orders] = await Promise.all([
-      (actor.role === UserRole.CLIENT ? actor.portalPermissions.includes('PROPOSALS') : actor.access.pages.proposals)
+      (
+        actor.role === UserRole.CLIENT
+          ? actor.portalPermissions.includes('PROPOSALS')
+          : actor.access.pages.proposals
+      )
         ? this.loadProposalHubItems(actor)
         : Promise.resolve([]),
-      (actor.role === UserRole.CLIENT ? actor.portalPermissions.includes('CONTRACTS') : actor.access.pages.contracts)
+      (
+        actor.role === UserRole.CLIENT
+          ? actor.portalPermissions.includes('CONTRACTS')
+          : actor.access.pages.contracts
+      )
         ? this.loadContractHubItems(actor)
         : Promise.resolve([]),
-      (actor.role === UserRole.CLIENT ? actor.portalPermissions.includes('EQUIPMENT') : actor.access.pages.orders)
+      (
+        actor.role === UserRole.CLIENT
+          ? actor.portalPermissions.includes('EQUIPMENT')
+          : actor.access.pages.orders
+      )
         ? this.loadOrderHubItems(actor)
         : Promise.resolve([]),
     ]);
@@ -286,7 +298,9 @@ export class DocumentsService {
 
     this.assertProposalAccess(actor, proposal.clientId);
     if (!DOCUMENT_READY_PROPOSAL_STATUSES.includes(proposal.status)) {
-      throw new ForbiddenException('A proposta precisa ser aprovada pela diretoria antes de entrar em Documentos.');
+      throw new ForbiddenException(
+        'A proposta precisa ser aprovada pela diretoria antes de entrar em Documentos.',
+      );
     }
     const latestDocument = await this.getLatestInstitutionalDelivery(
       DeliveryDocumentType.PROPOSAL,
@@ -374,9 +388,14 @@ export class DocumentsService {
 
   async downloadProposalInstitutionalPdf(id: string, userId: string) {
     try {
-      return await this.generateAndStoreInstitutionalPdf('proposal', id, userId, {
-        channel: DocumentAccessChannel.INTERNAL,
-      });
+      return await this.generateAndStoreInstitutionalPdf(
+        'proposal',
+        id,
+        userId,
+        {
+          channel: DocumentAccessChannel.INTERNAL,
+        },
+      );
     } catch (error) {
       if (!(error instanceof ServiceUnavailableException)) throw error;
       return this.generateAndStoreProposalPdf(id, userId, {
@@ -392,10 +411,15 @@ export class DocumentsService {
     metadata?: RequestMetadata,
   ) {
     try {
-      return await this.generateAndStoreInstitutionalPdf('proposal', id, userId, {
-        channel: DocumentAccessChannel.CUSTOMER_PORTAL,
-        metadata,
-      });
+      return await this.generateAndStoreInstitutionalPdf(
+        'proposal',
+        id,
+        userId,
+        {
+          channel: DocumentAccessChannel.CUSTOMER_PORTAL,
+          metadata,
+        },
+      );
     } catch (error) {
       if (!(error instanceof ServiceUnavailableException)) throw error;
       return this.generateAndStoreProposalPdf(id, userId, {
@@ -1712,7 +1736,10 @@ export class DocumentsService {
 
   private assertProposalAccess(actor: ActorScope, clientId: string) {
     if (actor.role === UserRole.CLIENT) {
-      if (!actor.portalPermissions.includes('PROPOSALS')) throw new ForbiddenException('Seu usuario nao possui acesso a este documento.');
+      if (!actor.portalPermissions.includes('PROPOSALS'))
+        throw new ForbiddenException(
+          'Seu usuario nao possui acesso a este documento.',
+        );
       if (this.requireLinkedClientId(actor) !== clientId) {
         throw new ForbiddenException(
           'Documento de proposta fora do escopo deste cliente.',
@@ -1731,7 +1758,10 @@ export class DocumentsService {
 
   private assertContractAccess(actor: ActorScope, clientId: string) {
     if (actor.role === UserRole.CLIENT) {
-      if (!actor.portalPermissions.includes('CONTRACTS')) throw new ForbiddenException('Seu usuario nao possui acesso a este documento.');
+      if (!actor.portalPermissions.includes('CONTRACTS'))
+        throw new ForbiddenException(
+          'Seu usuario nao possui acesso a este documento.',
+        );
       if (this.requireLinkedClientId(actor) !== clientId) {
         throw new ForbiddenException(
           'Documento de contrato fora do escopo deste cliente.',
@@ -1750,7 +1780,10 @@ export class DocumentsService {
 
   private assertOrderAccess(actor: ActorScope, clientId: string) {
     if (actor.role === UserRole.CLIENT) {
-      if (!actor.portalPermissions.includes('EQUIPMENT')) throw new ForbiddenException('Seu usuario nao possui acesso a este documento.');
+      if (!actor.portalPermissions.includes('EQUIPMENT'))
+        throw new ForbiddenException(
+          'Seu usuario nao possui acesso a este documento.',
+        );
       if (this.requireLinkedClientId(actor) !== clientId) {
         throw new ForbiddenException(
           'Documento de O.S. fora do escopo deste cliente.',

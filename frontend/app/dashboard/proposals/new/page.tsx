@@ -1,6 +1,12 @@
 "use client";
 
+import { PageHeader } from "../../components/DashboardPageKit";
+import { ProposalSteps, ProposalFinancialDock, ProposalFormSection, focusProposalStep } from "../../components/ProposalFormFlow";
+import { commercialLabel, freightLabel } from "@/lib/commercial-labels";
+
 import Link from "next/link";
+import PaymentPlanEditor from "../PaymentPlanEditor";
+import { paymentComposition, planFromLegacy, type ProposalPaymentPlan } from "@/lib/proposal-payment-plan";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -157,6 +163,7 @@ type EditableProposal = {
   freight?: string | null;
   validUntil?: string | null;
   paymentTerm?: string | null;
+  paymentPlan?: ProposalPaymentPlan | null;
   deliveryLeadTimeDays?: number | null;
   paymentSelections?: Array<{ id?: string; purpose: "PARTS" | "SERVICES" }> | null;
   hasDownPayment?: boolean;
@@ -211,15 +218,6 @@ type PricingOption = {
   value: string;
   label: string;
   defaultDiscountPercent?: number;
-};
-
-const OPPORTUNITY_STAGE_LABEL: Record<string, string> = {
-  PROSPECTION: "Prospeccao",
-  SITE_SURVEY_SCHEDULED: "Vistoria Agendada",
-  PROPOSAL_SENT: "Proposta Enviada",
-  NEGOTIATION: "Em Negociacao",
-  WON: "Ganha",
-  LOST: "Perdida",
 };
 
 const INSPECTION_STATUS_LABEL: Record<string, string> = {
@@ -301,7 +299,7 @@ function onlyDigits(value: string) {
 }
 
 function normalizeCommercialTerm(value?: string | null) {
-  return (value ?? "")
+  return commercialLabel(value, "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .trim()
@@ -413,7 +411,7 @@ function SearchableSelect({
                 }}
                 className="cursor-pointer border-b border-zinc-100 p-2 text-sm hover:bg-emerald-50 last:border-0"
               >
-                <span className="mr-2 font-mono text-xs font-bold text-zinc-400">
+                <span className="mr-2 tabular-nums text-xs font-bold text-zinc-400">
                   {item.code || item.sku || "S/COD"}
                 </span>
                 <span className="text-zinc-700">{item.name}</span>
@@ -441,9 +439,10 @@ function PaymentProfileSelector({ label, purpose, profiles, value, onChange }: {
   const selected = choices.find((profile) => profile.id === value);
   return (
     <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-      <label className="block text-sm font-semibold text-zinc-800">{label}</label>
-      <p className="mt-1 text-xs text-zinc-500">Selecione uma conta cadastrada; os dados não podem ser alterados na proposta.</p>
+      <label htmlFor={"proposal-payment-" + purpose} className="block text-sm font-semibold text-zinc-800">{label}</label>
+      <p className="mt-1 text-xs text-zinc-500">A conta define a empresa Manitec emitente e os dados que aparecerão no documento.</p>
       <select
+        id={"proposal-payment-" + purpose}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="mt-3 w-full rounded-lg border border-zinc-300 bg-white p-2.5 text-sm"
@@ -460,8 +459,11 @@ function PaymentProfileSelector({ label, purpose, profiles, value, onChange }: {
       ) : null}
       {selected ? (
         <div className="mt-3 rounded-lg border border-zinc-200 bg-white p-3 text-sm text-zinc-700">
-          {selected.issuerCompany?.companyName ? <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">Empresa emitente: {selected.issuerCompany.companyName}</p> : null}
-          <p className="font-bold text-zinc-900">{selected.beneficiary}</p>
+          <p className="text-xs text-slate-500">Empresa emitente</p>
+          <p className="mt-1 font-semibold text-slate-900">{selected.issuerCompany?.companyName || selected.beneficiary}</p>
+          <details className="mt-2">
+          <summary className="cursor-pointer text-xs font-semibold text-blue-700">Ver dados de recebimento</summary>
+          <p className="mt-3 font-bold text-zinc-900">{selected.beneficiary}</p>
           {selected.beneficiaryDocument ? <p>CPF/CNPJ: {selected.beneficiaryDocument}</p> : null}
           {selected.bankName ? <p>Banco: {selected.bankName}</p> : null}
           {selected.agency ? <p>Agência: {selected.agency}</p> : null}
@@ -479,13 +481,22 @@ function PaymentProfileSelector({ label, purpose, profiles, value, onChange }: {
           ) : selected.boletoInstructions ? (
             <p className="mt-2 whitespace-pre-wrap">{selected.boletoInstructions}</p>
           ) : null}
+          </details>
         </div>
       ) : null}
     </div>
   );
 }
 
+const PROPOSAL_STEPS = [
+  { title: "Dados comerciais", description: "Cliente, Manitec e pagamento" },
+  { title: "Peças", description: "Materiais e complementos" },
+  { title: "Serviços", description: "Mão de obra e despesas" },
+  { title: "Revisão", description: "Escopo, desconto e conferência" },
+];
+
 export default function NewProposalPage() {
+  const [step, setStep] = useState(0);
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingProposalId, setEditingProposalId] = useState("");
@@ -588,6 +599,7 @@ export default function NewProposalPage() {
   const [deliveryLeadTimeDays, setDeliveryLeadTimeDays] = useState("");
   const [partsPaymentProfileId, setPartsPaymentProfileId] = useState("");
   const [servicesPaymentProfileId, setServicesPaymentProfileId] = useState("");
+  const [paymentPlan, setPaymentPlan] = useState<ProposalPaymentPlan | null>(null);
   const [hasDownPayment, setHasDownPayment] = useState(false);
   const [downPaymentAmount, setDownPaymentAmount] = useState("");
   const [installmentCount, setInstallmentCount] = useState("1");
@@ -654,6 +666,7 @@ export default function NewProposalPage() {
         setDeliveryLeadTimeDays(draft.deliveryLeadTimeDays?.toString() || "");
         setPartsPaymentProfileId(draft.paymentSelections?.find((item) => item.purpose === "PARTS")?.id || "");
         setServicesPaymentProfileId(draft.paymentSelections?.find((item) => item.purpose === "SERVICES")?.id || "");
+        setPaymentPlan(planFromLegacy(draft));
         setHasDownPayment(Boolean(draft.hasDownPayment));
         setDownPaymentAmount(draft.downPaymentAmount?.toString() || "");
         setInstallmentCount(draft.installmentCount?.toString() || "1");
@@ -990,6 +1003,7 @@ export default function NewProposalPage() {
     );
     if (defaultOption && !paymentTermBlockReason(defaultOption)) {
       setPaymentTerm(defaultOption.name);
+      setPaymentPlan(current => current || planFromLegacy({paymentTerm:defaultOption.name}));
     }
   }, [paymentTerm, paymentTermBlockReason, paymentTermOptions, selectedClient]);
 
@@ -1668,11 +1682,10 @@ export default function NewProposalPage() {
     discountableSubtotal > 0
       ? (finalDiscount / discountableSubtotal) * 100
       : 0;
-  const entryAmount = hasDownPayment
-    ? Math.min(grandTotal, Math.max(0, Number(downPaymentAmount || 0)))
-    : 0;
-  const remainingAfterEntry = Math.max(0, grandTotal - entryAmount);
-  const installments = Math.max(1, Number(installmentCount || 1));
+  const composedPayment = paymentComposition(grandTotal, paymentPlan);
+  const entryAmount = paymentPlan ? composedPayment.entry : hasDownPayment ? Math.min(grandTotal, Math.max(0,Number(downPaymentAmount || 0))) : 0;
+  const remainingAfterEntry = Math.max(0,grandTotal-entryAmount);
+  const installments = paymentPlan ? Math.max(1,composedPayment.count) : Math.max(1,Number(installmentCount || 1));
   const installmentValue = remainingAfterEntry / installments;
 
   const hitDiscountLimit =
@@ -1681,68 +1694,66 @@ export default function NewProposalPage() {
       (discountType === "VALUE" && Number(discountInput) > maxDiscountAllowed));
   const latestInspection = linkedOpportunity?.inspections?.[0] || null;
 
+  function changeStep(next: number) {
+    setStep(Math.max(0, Math.min(PROPOSAL_STEPS.length - 1, next)));
+    setFeedback(null);
+    focusProposalStep();
+  }
+
+  function showStepError(target: number, text: string) {
+    setStep(target);
+    setFeedback({ kind: "error", text });
+    focusProposalStep();
+  }
+
+  function validateStep(target: number, final = false): string | null {
+    if (target === 0) {
+      if (paymentPlan?.preset === "CUSTOM" && !paymentTerm.trim()) return "Descreva a condição especial de pagamento.";
+      if (paymentPlan && (!Number.isFinite(paymentPlan.entryValue) || paymentPlan.entryValue < 0 || (paymentPlan.entryType === "PERCENTAGE" && paymentPlan.entryValue > 100))) return "Informe uma entrada válida entre 0 e 100%, ou em valor.";
+      if (paymentPlan && final && paymentPlan.entryType === "VALUE" && paymentPlan.entryValue > grandTotal) return "A entrada não pode ser maior que o total da proposta.";
+      if (paymentPlan && (!Number.isInteger(paymentPlan.balanceInstallments) || paymentPlan.balanceInstallments < 0 || paymentPlan.balanceInstallments > 36 || (final && composedPayment.balance > 0 && paymentPlan.balanceInstallments < 1))) return "Informe de 1 a 36 parcelas para o saldo.";
+      if (!selectedClientId) return "Selecione um cliente na lista de resultados.";
+      if (selectedClient?.proposalCreationBlocked) return selectedClient.proposalBlockReason || "Este cliente está bloqueado para novas propostas.";
+      if (!selectedSellerId) return "Selecione um vendedor comercial.";
+      if (final && partsSubtotal > 0 && paymentProfiles.some(p => p.purpose === "PARTS") && !partsPaymentProfileId) return "Selecione a conta Manitec para pagamento de peças.";
+      if (final && servicesSubtotal > 0 && paymentProfiles.some(p => p.purpose === "SERVICES") && !servicesPaymentProfileId) return "Selecione a conta Manitec para pagamento de serviços.";
+      if (!paymentPlan && hasDownPayment && Number(downPaymentAmount) <= 0) return "Informe um valor de entrada maior que zero.";
+      if (!paymentPlan && hasDownPayment && final && Number(downPaymentAmount) > grandTotal) return "A entrada não pode ser maior que o total da proposta.";
+      if (!Number.isInteger(Number(installmentCount)) || Number(installmentCount) < 1) return "Informe uma quantidade de parcelas maior ou igual a 1.";
+      if (!Number.isInteger(Number(installmentIntervalDays)) || Number(installmentIntervalDays) < 1) return "Informe um intervalo entre parcelas maior ou igual a 1 dia.";
+      if (deliveryLeadTimeDays && (!Number.isInteger(Number(deliveryLeadTimeDays)) || Number(deliveryLeadTimeDays) < 0)) return "Informe um prazo de entrega válido em dias inteiros.";
+    }
+    if (target === 1) {
+      if (parts.some(item => !item.catalogItemId)) return "Selecione cada peça na lista de resultados do catálogo.";
+      if (parts.some(item => !Number.isFinite(Number(item.quantity)) || Number(item.quantity) < 1)) return "Informe uma quantidade válida para cada peça.";
+      if (assistanceLoadState !== "ready") return "Carregue a conferência de itens complementares antes de continuar.";
+      if (accessoryWarnings.some(warning => assistanceReviews[warning.rule.id]?.signature !== warning.signature)) return "Revise os itens complementares antes de continuar.";
+    }
+    if (target === 2) {
+      if (parts.length + labor.length + hourlyServices.length + otherItems.length === 0) return "Adicione pelo menos uma peça ou serviço à proposta.";
+      if (labor.some(item => !item.catalogItemId)) return "Selecione cada serviço na lista de resultados do catálogo.";
+      if (labor.some(item => Number(item.unitPrice) <= 0)) return "Há um serviço sem preço cadastrado no catálogo.";
+      if (labor.some(item => !Number.isFinite(Number(item.quantity)) || Number(item.quantity) < 1)) return "Informe uma quantidade válida para cada serviço.";
+      if (hourlyServices.some(item => hourlyRateFor(item) <= 0)) return "Há um serviço por hora sem tarifa ativa no Manitec Studio.";
+      if (hourlyServices.some(item => !Number.isFinite(Number(item.hours)) || Number(item.hours) <= 0)) return "Informe a quantidade de horas de cada serviço.";
+      if (otherItems.some(item => !item.description.trim() || Number(item.quantity) < 1 || !Number.isFinite(Number(item.quantity)) || Number(item.unitPrice) < 0 || !Number.isFinite(Number(item.unitPrice)))) return "Preencha a descrição, a quantidade e o valor dos outros itens.";
+    }
+    return null;
+  }
+
+  function nextStep() {
+    const issue = validateStep(step);
+    if (issue) { showStepError(step, issue); return; }
+    changeStep(step + 1);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedClientId) {
-      setFeedback({ kind: "error", text: "Selecione um cliente." });
-      return;
-    }
-    if (!selectedSellerId) {
-      setFeedback({ kind: "error", text: "Selecione um vendedor comercial." });
-      return;
-    }
-    if (
-      parts.length === 0 &&
-      labor.length === 0 &&
-      hourlyServices.length === 0 &&
-      otherItems.length === 0
-    ) {
-      setFeedback({
-        kind: "error",
-        text: "Adicione pelo menos um item ou servico.",
-      });
-      return;
-    }
-    if (parts.some((item) => !item.catalogItemId) || labor.some((item) => !item.catalogItemId)) {
-      setFeedback({ kind: "error", text: "Selecione cada peça e serviço na lista de resultados do catálogo." });
-      return;
-    }
-    if (labor.some((item) => Number(item.unitPrice) <= 0)) {
-      setFeedback({ kind: "error", text: "Há serviço sem preço cadastrado no catálogo." });
-      return;
-    }
-    if (hourlyServices.some((item) => hourlyRateFor(item) <= 0)) {
-      setFeedback({ kind: "error", text: "Há uma hora sem tarifa ativa no Manitec Studio." });
-      return;
-    }
-    if (partsSubtotal > 0 && paymentProfiles.some((profile) => profile.purpose === "PARTS") && !partsPaymentProfileId) {
-      setFeedback({ kind: "error", text: "Selecione a conta para pagamento de peças." });
-      return;
-    }
-    if (servicesSubtotal > 0 && paymentProfiles.some((profile) => profile.purpose === "SERVICES") && !servicesPaymentProfileId) {
-      setFeedback({ kind: "error", text: "Selecione a conta para pagamento de serviços." });
-      return;
-    }
-    if (hasDownPayment && entryAmount <= 0) {
-      setFeedback({
-        kind: "error",
-        text: "Informe um valor de entrada maior que zero.",
-      });
-      return;
-    }
-
-    if (assistanceLoadState !== "ready") {
-      setFeedback({ kind: "error", text: "Carregue os lembretes de itens complementares antes de salvar a proposta." });
-      document.getElementById("proposal-assistance")?.scrollIntoView({ behavior: "smooth", block: "center" });
-      return;
-    }
-    const unresolvedAccessoryWarnings = accessoryWarnings.filter((warning) =>
-      assistanceReviews[warning.rule.id]?.signature !== warning.signature,
-    );
-    if (unresolvedAccessoryWarnings.length > 0) {
-      setFeedback({ kind: "error", text: "Revise os itens complementares antes de salvar a proposta." });
-      document.getElementById("proposal-assistance")?.scrollIntoView({ behavior: "smooth", block: "center" });
-      return;
+    if (isSubmitting) return;
+    if (step < PROPOSAL_STEPS.length - 1) { nextStep(); return; }
+    for (let index = 0; index < 3; index += 1) {
+      const issue = validateStep(index, true);
+      if (issue) { showStepError(index, issue); return; }
     }
 
     const assistanceAudit = accessoryWarnings.map((warning) =>
@@ -1801,13 +1812,14 @@ export default function NewProposalPage() {
         : undefined,
       partsPaymentProfileId: partsPaymentProfileId || undefined,
       servicesPaymentProfileId: servicesPaymentProfileId || undefined,
-      hasDownPayment,
-      downPaymentAmount: hasDownPayment ? entryAmount : undefined,
+      paymentPlan: paymentPlan || undefined,
+      hasDownPayment: entryAmount > 0,
+      downPaymentAmount: entryAmount > 0 ? entryAmount : undefined,
       installmentCount: installments,
-      installmentIntervalDays: installmentIntervalDays
+      installmentIntervalDays: !paymentPlan && installmentIntervalDays
         ? Number(installmentIntervalDays)
         : undefined,
-      firstDueDate: firstDueDate || undefined,
+      firstDueDate: !paymentPlan && firstDueDate ? firstDueDate : undefined,
       internalNotes: [
         internalNotes.trim(),
         assistanceAudit ? `Conferência de itens complementares (não incluídos):\n${assistanceAudit}` : "",
@@ -1864,22 +1876,16 @@ export default function NewProposalPage() {
     }
   }
   return (
-    <div className="mx-auto max-w-6xl p-8 pb-10">
-      <div className="mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-zinc-800">
-            {editingProposalId
+    <div className="dashboard-page proposal-flow-page space-y-5">
+      <PageHeader
+        eyebrow="Comercial"
+        title={editingProposalId
               ? `Editar rascunho ${editingProposalCode || ""}`
               : proposalFormType === "CONTRACT"
-              ? "Nova Proposta de Contrato"
-              : "Nova Proposta de Pecas e Servicos"}
-          </h1>
-          <p className="mt-1 text-zinc-500">
-            Monte itens, condicoes comerciais e pagamento com simulacao de
-            entrada e parcelas.
-          </p>
-        </div>
-      </div>
+              ? "Nova proposta de contrato"
+              : "Nova proposta de peças e serviços"}
+        description="Prepare a proposta por etapas e acompanhe os valores enquanto edita." actions={<Link href={editingProposalId ? "/dashboard/proposals/" + editingProposalId : "/dashboard/proposals"} className="proposal-context-link">Voltar às propostas</Link>}
+      />
 
       {loadingOpportunity ? (
         <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
@@ -1893,8 +1899,28 @@ export default function NewProposalPage() {
         </div>
       ) : null}
 
-      {feedback ? (
-        <div
+      {linkedOpportunity ? (
+        <section className="proposal-opportunity" aria-label="Oportunidade vinculada">
+          <div className="proposal-opportunity-main">
+            <span className="proposal-opportunity-icon" aria-hidden>↗</span>
+            <div className="min-w-0"><p>Oportunidade vinculada · {commercialLabel(linkedOpportunity.stage)}</p><strong>{linkedOpportunity.title}</strong></div>
+            <Link href={"/dashboard/opportunities?opportunityId=" + linkedOpportunity.id} className="proposal-context-link">Ver oportunidade ↗</Link>
+          </div>
+          <details><summary>Mais informações</summary><dl className="proposal-review-grid">
+            <div><dt>Carteira comercial</dt><dd>{commercialLabel(linkedOpportunity.pipeline)}</dd></div>
+            <div><dt>Tipo de atendimento</dt><dd>{commercialLabel(linkedOpportunity.opportunityType)}</dd></div>
+            <div><dt>Responsável comercial</dt><dd>{linkedOpportunity.assignedSeller?.name || "Não definido"}</dd></div>
+            {linkedOpportunity.proposals?.[0] ? <div><dt>Última proposta</dt><dd><Link className="proposal-context-link" href={"/dashboard/proposals/" + linkedOpportunity.proposals[0].id}>{linkedOpportunity.proposals[0].code}</Link></dd></div> : null}
+          </dl>
+          {latestInspection ? <div className="mt-4 text-sm text-slate-600"><strong>Última vistoria: {latestInspection.code}</strong> · {INSPECTION_STATUS_LABEL[latestInspection.status] || commercialLabel(latestInspection.status)}{latestInspection.technicalNotes ? <p className="mt-2">{latestInspection.technicalNotes}</p> : null}</div> : null}
+          </details>
+        </section>
+      ) : null}
+
+      <form id="proposal-form" onSubmit={handleSubmit} noValidate className="proposal-wizard space-y-5">
+        <ProposalSteps steps={PROPOSAL_STEPS} current={step} onChange={changeStep} />
+              {feedback ? (
+        <div role="alert"
           className={`rounded-xl px-4 py-3 text-sm ${
             feedback.kind === "success"
               ? "border border-emerald-200 bg-emerald-50 text-emerald-800"
@@ -1905,86 +1931,13 @@ export default function NewProposalPage() {
         </div>
       ) : null}
 
-      {linkedOpportunity ? (
-        <section className="rounded-xl border border-sky-200 bg-[linear-gradient(135deg,#f7fbff_0%,#eef7ff_100%)] p-5 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-700">
-                Origem CRM
-              </p>
-              <h2 className="mt-2 text-xl font-bold text-zinc-900">
-                {linkedOpportunity.title}
-              </h2>
-              <p className="mt-1 text-sm text-zinc-600">
-                Cliente: {linkedOpportunity.client.companyName} | Etapa:{" "}
-                {OPPORTUNITY_STAGE_LABEL[linkedOpportunity.stage] ||
-                  linkedOpportunity.stage}
-              </p>
-              <p className="mt-1 text-sm text-zinc-600">
-                Vendedor:{" "}
-                {linkedOpportunity.assignedSeller?.name || "Nao definido"} |
-                Valor estimado: R${" "}
-                {Number(linkedOpportunity.estimatedValue || 0).toLocaleString(
-                  "pt-BR",
-                )}
-              </p>
-              <p className="mt-1 text-sm text-zinc-600">
-                Pipeline: {linkedOpportunity.pipeline || "Nao informado"} |
-                Tipo: {linkedOpportunity.opportunityType || "Nao informado"}
-              </p>
-            </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Link
-                href={`/dashboard/opportunities?opportunityId=${linkedOpportunity.id}`}
-                className="inline-flex rounded-lg border border-sky-300 bg-white px-4 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-50"
-              >
-                Abrir no funil
-              </Link>
-              {linkedOpportunity.proposals?.[0] ? (
-                <Link
-                  href={`/dashboard/proposals/${linkedOpportunity.proposals[0].id}`}
-                  className="inline-flex rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50"
-                >
-                  Ultima proposta: {linkedOpportunity.proposals[0].code}
-                </Link>
-              ) : null}
-            </div>
-          </div>
-
-          {latestInspection ? (
-            <div className="mt-4 rounded-lg border border-sky-100 bg-white/90 p-4">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-zinc-500">
-                Ultima vistoria vinculada
-              </p>
-              <p className="mt-2 text-sm font-semibold text-zinc-800">
-                {latestInspection.code} |{" "}
-                {INSPECTION_STATUS_LABEL[latestInspection.status] ||
-                  latestInspection.status}
-              </p>
-              <p className="mt-1 text-xs text-zinc-500">
-                {latestInspection.finishedAt
-                  ? `Concluida em ${new Date(latestInspection.finishedAt).toLocaleDateString("pt-BR")}`
-                  : latestInspection.scheduledAt
-                    ? `Agendada para ${new Date(latestInspection.scheduledAt).toLocaleDateString("pt-BR")}`
-                    : "Sem data registrada"}
-              </p>
-              {latestInspection.technicalNotes ? (
-                <p className="mt-2 text-sm leading-6 text-zinc-700">
-                  {latestInspection.technicalNotes}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 border-b pb-2 text-lg font-bold text-zinc-800">
-            1. Cliente e Equipamento
+        {step === 0 ? <div className="space-y-5">
+          <div className="proposal-form-section">
+          <h2 className="mb-5 text-base font-bold text-slate-900">
+            Cliente e atendimento
           </h2>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-zinc-700">
                 Cliente
@@ -1995,7 +1948,7 @@ export default function NewProposalPage() {
                     {linkedOpportunity.client.companyName}
                   </p>
                   <p className="mt-1 text-xs text-sky-700">
-                    Cliente travado pela oportunidade vinculada.
+                    Cliente da oportunidade selecionada.
                   </p>
                 </div>
               ) : (
@@ -2014,7 +1967,7 @@ export default function NewProposalPage() {
                       setTimeout(() => setClientDropdownOpen(false), 150)
                     }
                     placeholder="Pesquisar cliente por nome, fantasia ou CNPJ"
-                    className="w-full rounded-lg border border-zinc-300 bg-white p-2.5 text-sm outline-none focus:border-emerald-500"
+                    className="w-full rounded-lg border border-zinc-300 bg-white p-2.5 text-sm outline-none focus:border-emerald-500" aria-label="Cliente"
                   />
                   {clientDropdownOpen ? (
                     <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-xl">
@@ -2097,7 +2050,7 @@ export default function NewProposalPage() {
                   placeholder={
                     selectedClientId ? "Pesquisar maquina" : "Escolha o cliente"
                   }
-                  className="w-full rounded-lg border border-zinc-300 bg-white p-2.5 text-sm outline-none focus:border-emerald-500 disabled:bg-zinc-100"
+                  className="w-full rounded-lg border border-zinc-300 bg-white p-2.5 text-sm outline-none focus:border-emerald-500 disabled:bg-zinc-100" aria-label="Equipamento"
                 />
                 {equipmentDropdownOpen &&
                 selectedClientId &&
@@ -2182,7 +2135,7 @@ export default function NewProposalPage() {
                       setTimeout(() => setSellerDropdownOpen(false), 150)
                     }
                     placeholder="Pesquisar vendedor comercial"
-                    className="w-full rounded-lg border border-zinc-300 bg-white p-2.5 text-sm outline-none focus:border-emerald-500"
+                    className="w-full rounded-lg border border-zinc-300 bg-white p-2.5 text-sm outline-none focus:border-emerald-500" aria-label="Vendedor"
                   />
                   {sellerDropdownOpen && !selectedSellerId ? (
                     <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-xl">
@@ -2230,7 +2183,7 @@ export default function NewProposalPage() {
                 value={serviceType}
                 onChange={(e) => setServiceType(e.target.value)}
                 disabled={!selectedEquipmentId}
-                className="w-full rounded-lg border border-zinc-300 bg-white p-2.5 font-semibold text-emerald-700 disabled:bg-zinc-100"
+                className="w-full rounded-lg border border-zinc-300 bg-white p-2.5 font-semibold text-emerald-700 disabled:bg-zinc-100" aria-label="Tipo de serviço"
               >
                 <option value="">Selecione</option>
                 <option value="TBC">TBC - bateria e carregador</option>
@@ -2520,11 +2473,66 @@ export default function NewProposalPage() {
             </div>
           ) : null}
         </div>
-
-        <div id="proposal-parts-section" className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center justify-between border-b pb-2">
+          <ProposalFormSection title="Manitec e pagamento" description="Escolha a empresa emitente de cada conta e as condições de pagamento."><div className="grid grid-cols-1 gap-5 md:grid-cols-4">
+<div>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">
+                Validade
+              </label>
+              <input
+                type="date"
+                value={validUntil}
+                onChange={(e) => setValidUntil(e.target.value)}
+                className="w-full rounded-lg border border-zinc-300 p-2.5" aria-label="Validade"
+              />
+            </div>
+<div>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">
+                Prazo de entrega (dias)
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={deliveryLeadTimeDays}
+                onChange={(e) => setDeliveryLeadTimeDays(e.target.value)}
+                className="w-full rounded-lg border border-zinc-300 p-2.5" aria-label="Prazo de entrega (dias)"
+              />
+            </div>
+<div className="md:col-span-2">
+              <label className="mb-1 block text-sm font-medium text-zinc-700">
+                Frete
+              </label>
+              <select
+                value={freight}
+                onChange={(e) => setFreight(e.target.value)}
+                className="w-full rounded-lg border border-zinc-300 p-2.5" aria-label="Frete"
+              >
+                <option value="FOB">{freightLabel("FOB")}</option>
+                <option value="CIF">{freightLabel("CIF")}</option>
+                <option value="SEM_FRETE">Sem frete</option>
+              </select>
+            </div>
+<div className="grid gap-4 md:col-span-4 lg:grid-cols-2">
+              <PaymentProfileSelector
+                label="Pagamento de peças"
+                purpose="PARTS"
+                profiles={paymentProfiles}
+                value={partsPaymentProfileId}
+                onChange={setPartsPaymentProfileId}
+              />
+              <PaymentProfileSelector
+                label="Pagamento de serviços"
+                purpose="SERVICES"
+                profiles={paymentProfiles}
+                value={servicesPaymentProfileId}
+                onChange={setServicesPaymentProfileId}
+              />
+            </div>
+<div className="md:col-span-4"><PaymentPlanEditor value={paymentPlan} onChange={setPaymentPlan} paymentTerm={paymentTerm} onTermChange={setPaymentTerm} total={grandTotal} options={paymentTermOptions} blockReason={paymentTermBlockReason} /></div></div></ProposalFormSection>
+        </div> : null}
+        {step === 1 ? <div className="space-y-5"><div id="proposal-parts-section" className="proposal-form-section">
+          <div className="mb-4 flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-bold text-zinc-800">2. Pecas</h2>
+              <h2 className="text-lg font-bold text-zinc-800">Peças e materiais</h2>
               <p className="text-xs text-zinc-500">Itens adicionais usam a base geral do sistema.</p>
             </div>
             <button
@@ -2545,11 +2553,11 @@ export default function NewProposalPage() {
           {parts.map((part, index) => (
             <div
               key={`part-${index}`}
-              className="mb-3 flex flex-wrap items-end gap-3 rounded-lg border border-zinc-100 bg-zinc-50 p-3 md:flex-nowrap"
+              className="proposal-item-row"
             >
-              <div className="min-w-[250px] flex-1">
+              <div className="proposal-item-name">
                 <label className="mb-1 block text-xs font-medium text-zinc-500">
-                  Buscar peca {part.origin === "MACHINE" ? "| origem: maquina" : "| origem: base geral"}
+                  Peça {part.origin === "MACHINE" ? "· sugerida para o equipamento" : ""}
                 </label>
                 <SearchableSelect
                   items={partOptions}
@@ -2584,17 +2592,18 @@ export default function NewProposalPage() {
                   className="w-full rounded-md border border-zinc-200 bg-zinc-100 p-2 text-sm font-medium text-zinc-500"
                 />
               </div>
+              <div className="w-32"><span className="mb-1 block text-xs text-slate-500">Total do item</span><output className="block py-2 text-sm font-semibold tabular-nums text-slate-900">R$ {formatMoney(Number(part.quantity || 0) * Number(part.unitPrice || 0))}</output></div>
               <button
                 type="button"
+                aria-label={"Remover peça " + (index+1)}
                 onClick={() => removePart(index)}
-                className="p-2 text-lg text-red-500 hover:text-red-700"
+                className="p-2 text-lg text-red-500 hover:text-slate-700"
               >
                 X
               </button>
             </div>
           ))}
-        </div>
-        <section id="proposal-assistance" className="rounded-xl border border-amber-200 bg-amber-50/60 p-5 shadow-sm sm:p-6" aria-label="Conferência de itens complementares">
+        </div><section id="proposal-assistance" className="rounded-xl border border-amber-200 bg-amber-50/60 p-5 shadow-sm sm:p-6" aria-label="Conferência de itens complementares">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.15em] text-amber-700">Auxílio à proposta</p>
@@ -2611,7 +2620,7 @@ export default function NewProposalPage() {
           {assistanceLoadState === "loading" ? <p className="mt-4 text-sm text-slate-600">Carregando lembretes...</p> : null}
           {assistanceLoadState === "error" ? (
             <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-red-200 bg-white p-4">
-              <p className="text-sm text-red-700">Não foi possível carregar as regras de conferência.</p>
+              <p className="text-sm text-slate-700">Não foi possível carregar as regras de conferência.</p>
               <button type="button" onClick={() => void loadAccessoryRules()} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white">Tentar novamente</button>
             </div>
           ) : null}
@@ -2668,17 +2677,17 @@ export default function NewProposalPage() {
               );
             })}
           </div>
-        </section>
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center justify-between border-b pb-2">
+        </section></div> : null}
+        {step === 2 ? <div className="space-y-5"><div className="proposal-form-section">
+          <div className="mb-4 flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-bold text-zinc-800">3. Mao de obra / servicos</h2>
+              <h2 className="text-lg font-bold text-zinc-800">Serviços do catálogo</h2>
               <p className="text-xs text-zinc-500">Servicos adicionais usam a base geral do sistema.</p>
             </div>
             <button
               type="button"
               onClick={addLabor}
-              className="rounded-md bg-purple-50 px-3 py-1.5 text-sm font-semibold text-purple-600 hover:bg-purple-100"
+              className="rounded-md bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-600 hover:bg-blue-100"
             >
               + Adicionar servico
             </button>
@@ -2693,11 +2702,11 @@ export default function NewProposalPage() {
           {labor.map((lab, index) => (
             <div
               key={`labor-${index}`}
-              className="mb-3 flex flex-wrap items-end gap-3 rounded-lg border border-zinc-100 bg-zinc-50 p-3 md:flex-nowrap"
+              className="proposal-item-row"
             >
-              <div className="min-w-[250px] flex-1">
+              <div className="proposal-item-name">
                 <label className="mb-1 block text-xs font-medium text-zinc-500">
-                  Buscar servico {lab.origin === "MACHINE" ? "| origem: maquina" : "| origem: base geral"}
+                  Serviço {lab.origin === "MACHINE" ? "· sugerido para o equipamento" : ""}
                 </label>
                 <SearchableSelect
                   items={serviceOptions}
@@ -2722,29 +2731,30 @@ export default function NewProposalPage() {
                 />
               </div>
               <div className="w-32">
-                <label className="mb-1 block text-xs font-medium text-purple-600">
+                <label className="mb-1 block text-xs font-medium text-blue-600">
                   Valor (R$)
                 </label>
                 <output className="block w-full rounded-md border border-zinc-300 bg-white p-2 text-sm font-bold text-purple-700" aria-label="Valor definido no cadastro do servico">
                   {lab.catalogItemId ? `R$ ${formatMoney(Number(lab.unitPrice || 0))}` : "Selecione"}
                 </output>
               </div>
+              <div className="w-32"><span className="mb-1 block text-xs text-slate-500">Total do item</span><output className="block py-2 text-sm font-semibold tabular-nums text-slate-900">R$ {formatMoney(Number(lab.quantity || 0) * Number(lab.unitPrice || 0))}</output></div>
               <button
                 type="button"
+                aria-label={"Remover serviço " + (index+1)}
                 onClick={() => removeLabor(index)}
-                className="p-2 text-lg text-red-500 hover:text-red-700"
+                className="p-2 text-lg text-red-500 hover:text-slate-700"
               >
                 X
               </button>
             </div>
           ))}
         </div>
-
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b pb-2">
+<div className="proposal-form-section">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold text-zinc-800">
-                4. Servico por hora
+                Serviços por hora
               </h2>
               <p className="text-xs text-zinc-500">
                 Tarifa de venda definida no Manitec Studio. O vendedor informa apenas o tipo e as horas.
@@ -2849,7 +2859,7 @@ export default function NewProposalPage() {
                   <button
                     type="button"
                     onClick={() => removeHourlyService(index)}
-                    className="ml-auto p-2 text-lg text-red-500 hover:text-red-700"
+                    className="ml-auto p-2 text-lg text-red-500 hover:text-slate-700"
                   >
                     X
                   </button>
@@ -2858,10 +2868,9 @@ export default function NewProposalPage() {
             );
           })}
         </div>
-
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center justify-between border-b pb-2">
-            <h2 className="text-lg font-bold text-zinc-800">5. Outros itens</h2>
+<div className="proposal-form-section">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-lg font-bold text-zinc-800">Outros itens</h2>
             <button
               type="button"
               onClick={addOtherItem}
@@ -2912,34 +2921,36 @@ export default function NewProposalPage() {
               <button
                 type="button"
                 onClick={() => removeOtherItem(index)}
-                className="p-2 text-lg text-red-500 hover:text-red-700"
+                className="p-2 text-lg text-red-500 hover:text-slate-700"
               >
                 X
               </button>
             </div>
           ))}
         </div>
-
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 border-b pb-2 text-lg font-bold text-zinc-800">
-            6. Despesas operacionais
+<div className="proposal-form-section">
+          <h2 className="mb-5 text-base font-bold text-slate-900">
+            Despesas da operação
           </h2>
           <OperationalExpensesEditor
             value={operationalExpenses}
             onChange={setOperationalExpenses}
           />
-        </div>
-
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 border-b pb-2 text-lg font-bold text-zinc-800">
-            7. Condicoes comerciais e financeiras
-          </h2>
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
-            <div className="md:col-span-4">
+        </div></div> : null}
+        {step === 3 ? <div className="space-y-5">
+          <ProposalFormSection title="Confira os dados comerciais" description="Você pode voltar a qualquer etapa antes de salvar.">
+            <dl className="proposal-review-grid">
+              <div><dt>Cliente</dt><dd>{selectedClient?.companyName || linkedOpportunity?.client.companyName || "Não selecionado"}</dd></div>
+              <div><dt>Equipamento</dt><dd>{equipmentSearch || "Sem equipamento vinculado"}</dd></div>
+              <div><dt>Vendedor</dt><dd>{sellerSearch || "Não selecionado"}</dd></div>
+              <div><dt>Pagamento</dt><dd>{commercialLabel(paymentTerm, "A combinar")} · {installments} parcela(s)</dd></div>
+            </dl>
+          </ProposalFormSection>
+          <ProposalFormSection title="Escopo e observações" description="Defina o que será entregue e as informações que o cliente verá na proposta."><div className="grid grid-cols-1 gap-5 md:grid-cols-4"><div className="md:col-span-4">
               <label className="mb-1 block text-sm font-medium text-zinc-700">
                 Escopo
               </label>
-              <div className="mb-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+              <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <p className="text-xs font-bold uppercase tracking-[0.14em] text-zinc-500">
                     Biblioteca de escopos prontos
@@ -3013,7 +3024,7 @@ export default function NewProposalPage() {
                 {scopeTemplatesLoading ? (
                   <p className="mt-2 text-sm text-zinc-500">Carregando escopos...</p>
                 ) : scopeTemplatesError ? (
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-red-700">
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-700">
                     <span>{scopeTemplatesError}</span>
                     <button type="button" onClick={() => void loadScopeTemplates()} className="underline">Tentar novamente</button>
                   </div>
@@ -3033,209 +3044,36 @@ export default function NewProposalPage() {
                 ) : null}
               </div>
               <textarea
-                rows={14}
+                rows={8}
                 value={scope}
                 onChange={(e) => setScope(e.target.value)}
-                className="w-full rounded-lg border border-zinc-300 p-3 text-sm"
+                className="w-full rounded-lg border border-zinc-300 p-3 text-sm" aria-label="Escopo da proposta"
               />
             </div>
-
-            <div className="md:col-span-2">
+<div className="md:col-span-2">
               <label className="mb-1 block text-sm font-medium text-zinc-700">
-                Frete
-              </label>
-              <select
-                value={freight}
-                onChange={(e) => setFreight(e.target.value)}
-                className="w-full rounded-lg border border-zinc-300 p-2.5"
-              >
-                <option value="FOB">FOB</option>
-                <option value="CIF">CIF</option>
-                <option value="SEM_FRETE">Sem frete</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">
-                Validade
-              </label>
-              <input
-                type="date"
-                value={validUntil}
-                onChange={(e) => setValidUntil(e.target.value)}
-                className="w-full rounded-lg border border-zinc-300 p-2.5"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">
-                Prazo de entrega (dias)
-              </label>
-              <input
-                type="number"
-                min="0"
-                value={deliveryLeadTimeDays}
-                onChange={(e) => setDeliveryLeadTimeDays(e.target.value)}
-                className="w-full rounded-lg border border-zinc-300 p-2.5"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-zinc-700">
-                Condicao de pagamento
-              </label>
-              <select
-                value={paymentTerm}
-                onChange={(e) => setPaymentTerm(e.target.value)}
-                className="w-full rounded-lg border border-zinc-300 p-2.5"
-              >
-                <option value="">Selecione uma condicao</option>
-                {paymentTermOptions.map((option) => {
-                  const blockReason = paymentTermBlockReason(option);
-                  return (
-                    <option
-                      key={option.id}
-                      value={option.name}
-                      disabled={Boolean(blockReason)}
-                    >
-                      {option.name}
-                      {blockReason ? ` - ${blockReason}` : ""}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-
-            <div className="grid gap-4 md:col-span-4 lg:grid-cols-2">
-              <PaymentProfileSelector
-                label="Pagamento de peças"
-                purpose="PARTS"
-                profiles={paymentProfiles}
-                value={partsPaymentProfileId}
-                onChange={setPartsPaymentProfileId}
-              />
-              <PaymentProfileSelector
-                label="Pagamento de serviços"
-                purpose="SERVICES"
-                profiles={paymentProfiles}
-                value={servicesPaymentProfileId}
-                onChange={setServicesPaymentProfileId}
-              />
-            </div>
-
-            <div className="md:col-span-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-                <label className="flex items-center gap-2 text-sm font-semibold text-blue-800 md:col-span-4">
-                  <input
-                    type="checkbox"
-                    checked={hasDownPayment}
-                    onChange={(e) => setHasDownPayment(e.target.checked)}
-                  />
-                  Possui entrada?
-                </label>
-
-                <div>
-                  <label className="mb-1 block text-xs font-bold uppercase text-blue-700">
-                    Valor entrada
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    disabled={!hasDownPayment}
-                    value={downPaymentAmount}
-                    onChange={(e) => setDownPaymentAmount(e.target.value)}
-                    className="w-full rounded-lg border border-blue-300 bg-white p-2 disabled:bg-zinc-100"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs font-bold uppercase text-blue-700">
-                    Parcelas
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={installmentCount}
-                    onChange={(e) => setInstallmentCount(e.target.value)}
-                    className="w-full rounded-lg border border-blue-300 bg-white p-2"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs font-bold uppercase text-blue-700">
-                    Intervalo (dias)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={installmentIntervalDays}
-                    onChange={(e) => setInstallmentIntervalDays(e.target.value)}
-                    className="w-full rounded-lg border border-blue-300 bg-white p-2"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs font-bold uppercase text-blue-700">
-                    Primeiro vencimento
-                  </label>
-                  <input
-                    type="date"
-                    value={firstDueDate}
-                    onChange={(e) => setFirstDueDate(e.target.value)}
-                    className="w-full rounded-lg border border-blue-300 bg-white p-2"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-3 grid grid-cols-1 gap-2 text-sm md:grid-cols-3">
-                <p className="rounded border border-blue-100 bg-white px-3 py-2">
-                  Entrada:{" "}
-                  <span className="font-bold">
-                    R$ {formatMoney(entryAmount)}
-                  </span>
-                </p>
-                <p className="rounded border border-blue-100 bg-white px-3 py-2">
-                  Saldo:{" "}
-                  <span className="font-bold">
-                    R$ {formatMoney(remainingAfterEntry)}
-                  </span>
-                </p>
-                <p className="rounded border border-blue-100 bg-white px-3 py-2">
-                  Parcela ({installments}x):{" "}
-                  <span className="font-bold">
-                    R$ {formatMoney(installmentValue)}
-                  </span>
-                </p>
-              </div>
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-zinc-700">
-                Observacoes internas
-              </label>
-              <textarea
-                rows={2}
-                value={internalNotes}
-                onChange={(e) => setInternalNotes(e.target.value)}
-                className="w-full rounded-lg border border-zinc-300 p-2.5 text-sm"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-zinc-700">
-                Observacoes para cliente
+                Observações para o cliente
               </label>
               <textarea
                 rows={2}
                 value={externalNotes}
                 onChange={(e) => setExternalNotes(e.target.value)}
-                className="w-full rounded-lg border border-zinc-300 p-2.5 text-sm"
+                className="w-full rounded-lg border border-zinc-300 p-2.5 text-sm" aria-label="Observações para o cliente"
               />
             </div>
-
-            <div className="md:col-span-2 grid grid-cols-2 gap-2 rounded-lg border border-red-100 bg-red-50 p-2">
-              <label className="col-span-2 flex cursor-pointer items-start gap-3 rounded-md border border-red-100 bg-white px-3 py-2.5">
+<div className="md:col-span-2">
+              <label className="mb-1 block text-sm font-medium text-zinc-700">
+                Observações internas
+              </label>
+              <textarea
+                rows={2}
+                value={internalNotes}
+                onChange={(e) => setInternalNotes(e.target.value)}
+                className="w-full rounded-lg border border-zinc-300 p-2.5 text-sm" aria-label="Observações internas"
+              />
+            </div></div></ProposalFormSection>
+          <ProposalFormSection title="Desconto comercial" description="Confira o desconto aplicado e a composição do valor final."><div className="grid grid-cols-1 gap-5 md:grid-cols-4"><div className="md:col-span-4 grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2">
+              <label className="col-span-2 flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 bg-white px-3 py-2.5">
                 <input
                   type="checkbox"
                   checked={allowOperationalExpenseDiscount}
@@ -3255,7 +3093,7 @@ export default function NewProposalPage() {
                 </span>
               </label>
               <div>
-                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-red-600">
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-700">
                   Tipo desconto
                 </label>
                 <select
@@ -3264,7 +3102,7 @@ export default function NewProposalPage() {
                     setDiscountType(e.target.value as "PERCENTAGE" | "VALUE");
                     setDiscountInput("");
                   }}
-                  className="w-full rounded-md border border-red-300 bg-white p-2 text-sm font-semibold text-red-700"
+                  className="w-full rounded-md border border-slate-300 bg-white p-2 text-sm font-semibold text-slate-700" aria-label="Tipo de desconto"
                 >
                   <option value="PERCENTAGE">Porcentagem (%)</option>
                   <option value="VALUE">Valor fixo (R$)</option>
@@ -3272,7 +3110,7 @@ export default function NewProposalPage() {
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-red-600">
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-700">
                   Aplicar desconto
                 </label>
                 <input
@@ -3282,12 +3120,12 @@ export default function NewProposalPage() {
                   onChange={(e) => setDiscountInput(e.target.value)}
                   className={`w-full rounded-md border p-2 text-sm font-bold focus:outline-none ${
                     hitDiscountLimit
-                      ? "border-red-500 bg-red-100 text-red-600"
-                      : "border-red-300 bg-white text-red-700"
+                      ? "border-red-500 bg-red-100 text-slate-700"
+                      : "border-slate-300 bg-white text-slate-700"
                   }`}
                   placeholder={
                     discountType === "PERCENTAGE" ? "Ex: 5" : "Ex: 150.00"
-                  }
+                  } aria-label="Aplicar desconto"
                 />
               </div>
 
@@ -3299,11 +3137,8 @@ export default function NewProposalPage() {
                     : `R$ ${formatMoney(maxDiscountAllowed)}`}
                 </p>
               ) : null}
-            </div>
-          </div>
-        </div>
-
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            </div></div></ProposalFormSection>
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white px-5 py-3">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
               Resumo financeiro da proposta
@@ -3401,21 +3236,20 @@ export default function NewProposalPage() {
                   Despesas + peças + serviços − descontos aplicados
                 </p>
               </div>
-              <button
-                type="submit"
-                disabled={
-                  isSubmitting ||
-                  (Boolean(editingProposalId) && !draftLoaded) ||
-                  !selectedClientId ||
-                  Boolean(selectedClient?.proposalCreationBlocked)
-                }
-                className="mt-5 w-full rounded-xl bg-emerald-700 px-6 py-3 font-bold text-white shadow-lg transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isSubmitting ? "Salvando..." : editingProposalId ? "Salvar alterações" : "Salvar proposta"}
-              </button>
+
             </div>
           </div>
         </div>
+        </div> : null}
+        <ProposalFinancialDock
+          lines={[{label: "Peças", value: partsSubtotal}, {label: "Serviços", value: servicesSubtotal}, {label: "Despesas", value: expensesTotal}, {label: "Desconto", value: finalDiscount, negative: true}]}
+          total={grandTotal}
+          payment={entryAmount > 0 ? "Entrada de R$ " + formatMoney(entryAmount) + (remainingAfterEntry > 0 ? " + saldo em " + installments + " parcela(s)" : " · antecipado") : installments + "x de R$ " + formatMoney(installmentValue)}
+          current={step} steps={PROPOSAL_STEPS.length}
+          onBack={() => changeStep(step - 1)} onNext={nextStep}
+          saving={isSubmitting} disabled={(Boolean(editingProposalId) && !draftLoaded) || Boolean(selectedClient?.proposalCreationBlocked)}
+          saveLabel={editingProposalId ? "Salvar alterações" : "Salvar proposta"} formId="proposal-form"
+        />
       </form>
     </div>
   );

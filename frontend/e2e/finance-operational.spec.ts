@@ -221,7 +221,7 @@ test.describe.serial("financeiro operacional, caixa, DRE e comissao", () => {
       timeout: 45_000,
     });
     await expectLoaded(page, /Contas a receber|Financeiro/i);
-    await page.locator("input").first().fill(description);
+    await page.getByRole("textbox", { name: "Pesquisar títulos", exact: true }).fill(description);
     const receivableCard = page
       .locator("article")
       .filter({ hasText: description });
@@ -229,7 +229,7 @@ test.describe.serial("financeiro operacional, caixa, DRE e comissao", () => {
     await receivableCard
       .getByRole("button", { name: /Registrar recebimento/i })
       .click();
-    await receivableCard.locator("select").nth(1).selectOption(bankBefore.id);
+    await receivableCard.getByLabel("Conta destino", { exact: true }).selectOption(bankBefore.id);
     await receivableCard
       .getByRole("button", { name: /Confirmar baixa/i })
       .click();

@@ -1,4 +1,9 @@
-﻿import {
+import { syncProposalEntryConfirmation } from '../proposals/proposal-financial-gate';
+import {
+  scheduleForProposal,
+  scheduleProposalReceivables,
+} from './proposal-payment-scheduling';
+import {
   BadRequestException,
   Injectable,
   NotFoundException,
@@ -148,6 +153,9 @@ export class FinanceService {
       include: {
         client: { select: { id: true, companyName: true } },
         contract: { select: { id: true, code: true } },
+        sourceProposal: {
+          select: { id: true, code: true, downPaymentConfirmedAt: true },
+        },
         maintenanceOrder: { select: { id: true, title: true } },
         salesOrder: { select: { id: true, code: true } },
         costCenter: { select: { id: true, code: true, name: true } },
@@ -162,6 +170,62 @@ export class FinanceService {
       },
       orderBy: { dueDate: 'asc' },
     });
+  }
+
+  async pendingProposalPayments() {
+    const proposals = await this.prisma.proposal.findMany({
+      where: {
+        status: 'WON',
+        OR: [{ hasDownPayment: true }, { paymentPlan: { not: Prisma.DbNull } }],
+      },
+      include: {
+        client: { select: { id: true, companyName: true } },
+        receivables: {
+          select: {
+            id: true,
+            paidAmount: true,
+            status: true,
+            proposalPaymentStage: true,
+          },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+    return proposals
+      .filter(
+        (proposal) =>
+          !proposal.receivables.length ||
+          (proposal.hasDownPayment && !proposal.downPaymentConfirmedAt),
+      )
+      .map((proposal) => ({
+        id: proposal.id,
+        code: proposal.code,
+        client: proposal.client,
+        paymentTerm: proposal.paymentTerm,
+        totalValue: proposal.totalValue,
+        downPaymentAmount: proposal.downPaymentAmount,
+        downPaymentConfirmedAt: proposal.downPaymentConfirmedAt,
+        needsScheduling: !proposal.receivables.length,
+        schedule: scheduleForProposal(proposal),
+        entryReceived: proposal.receivables
+          .filter(
+            (row) =>
+              row.proposalPaymentStage === 'DOWN_PAYMENT' &&
+              row.status !== 'CANCELED',
+          )
+          .reduce((sum, row) => sum + row.paidAmount, 0),
+        receivableIds: proposal.receivables.map((row) => row.id),
+      }));
+  }
+
+  async scheduleProposalPayments(
+    id: string,
+    dueDates: string[],
+    actorUserId?: string,
+  ) {
+    return this.prisma.$transaction((tx) =>
+      scheduleProposalReceivables(tx, id, dueDates, actorUserId),
+    );
   }
 
   async createReceivable(
@@ -286,6 +350,14 @@ export class FinanceService {
               where: { id: order.receivables[0].id },
             });
           }
+          const sourceProposal = await tx.proposal.findUnique({
+            where: { id: order.proposalId },
+            select: { paymentPlan: true },
+          });
+          if (sourceProposal?.paymentPlan)
+            throw new BadRequestException(
+              'Defina os vencimentos em Propostas no financeiro para faturar este plano de pagamento.',
+            );
           const orderedBase = order.items.reduce(
             (total, item) => total + Number(item.totalPrice),
             0,
@@ -351,11 +423,17 @@ export class FinanceService {
     actorUserId?: string,
   ) {
     return this.prisma.$transaction(async (tx) => {
-      const receivable = await tx.accountsReceivable.findUnique({
+      let receivable = await tx.accountsReceivable.findUnique({
         where: { id },
       });
       if (!receivable)
         throw new NotFoundException('Conta a receber nao encontrada.');
+      if (receivable.sourceProposalId) {
+        await tx.$queryRaw`SELECT id FROM proposals WHERE id = ${receivable.sourceProposalId} FOR UPDATE`;
+        receivable = (await tx.accountsReceivable.findUnique({
+          where: { id },
+        }))!;
+      }
       if (receivable.status === AccountsReceivableStatus.CANCELED) {
         throw new BadRequestException(
           'Titulo cancelado nao pode receber pagamento.',
@@ -483,6 +561,7 @@ export class FinanceService {
           select: {
             id: true,
             status: true,
+            amount: true,
           },
         });
 
@@ -490,13 +569,29 @@ export class FinanceService {
           linkedInvoice &&
           linkedInvoice.status !== ContractInvoiceStatus.PAID
         ) {
-          await tx.contractInvoice.update({
-            where: { id: linkedInvoice.id },
-            data: {
-              status: ContractInvoiceStatus.PAID,
-              paidAt: effectivePaidAt,
-            },
-          });
+          const periodReceipts = receivable.sourceProposalId
+            ? await tx.accountsReceivable.aggregate({
+                where: {
+                  contractId: receivable.contractId,
+                  competenceDate: receivable.competenceDate,
+                  status: { not: AccountsReceivableStatus.CANCELED },
+                },
+                _sum: { paidAmount: true },
+              })
+            : null;
+          if (
+            !periodReceipts ||
+            Math.round(Number(periodReceipts._sum.paidAmount || 0) * 100) >=
+              Math.round(linkedInvoice.amount * 100)
+          ) {
+            await tx.contractInvoice.update({
+              where: { id: linkedInvoice.id },
+              data: {
+                status: ContractInvoiceStatus.PAID,
+                paidAt: effectivePaidAt,
+              },
+            });
+          }
         }
       }
 
@@ -531,6 +626,15 @@ export class FinanceService {
         } as unknown as Prisma.InputJsonValue,
       });
 
+      if (
+        receivable.sourceProposalId &&
+        receivable.proposalPaymentStage === 'DOWN_PAYMENT'
+      )
+        await syncProposalEntryConfirmation(
+          tx,
+          receivable.sourceProposalId,
+          actorUserId,
+        );
       return updated;
     });
   }
@@ -542,6 +646,12 @@ export class FinanceService {
     actorUserId?: string,
   ) {
     return this.prisma.$transaction(async (tx) => {
+      const source = await tx.accountsReceivable.findUnique({
+        where: { id: receivableId },
+        select: { sourceProposalId: true },
+      });
+      if (source?.sourceProposalId)
+        await tx.$queryRaw`SELECT id FROM proposals WHERE id = ${source.sourceProposalId} FOR UPDATE`;
       const reason = dto.reason?.trim();
       if (!reason || reason.length < 4) {
         throw new BadRequestException(
@@ -780,6 +890,15 @@ export class FinanceService {
         } as unknown as Prisma.InputJsonValue,
       });
 
+      if (
+        receivable.sourceProposalId &&
+        receivable.proposalPaymentStage === 'DOWN_PAYMENT'
+      )
+        await syncProposalEntryConfirmation(
+          tx,
+          receivable.sourceProposalId,
+          actorUserId,
+        );
       return {
         receivable: updated,
         reversal,
@@ -874,7 +993,14 @@ export class FinanceService {
               code: true,
               costCenterId: true,
               createdByUserId: true,
-              sourceProposal: { select: { userId: true } },
+              startDate: true,
+              sourceProposal: {
+                select: {
+                  userId: true,
+                  paymentPlan: true,
+                  hasDownPayment: true,
+                },
+              },
             },
           },
         },
@@ -891,6 +1017,13 @@ export class FinanceService {
           select: { id: true },
         });
         if (exists) continue;
+        if (
+          (invoice.contract.sourceProposal?.paymentPlan ||
+            invoice.contract.sourceProposal?.hasDownPayment) &&
+          invoice.competenceDate.getTime() ===
+            invoice.contract.startDate.getTime()
+        )
+          continue;
 
         const receivable = await this.createContractReceivableSafely(tx, {
           clientId: invoice.contract.clientId,
@@ -971,8 +1104,12 @@ export class FinanceService {
       if (order.sourceProposalId) {
         const proposal = await tx.proposal.findUnique({
           where: { id: order.sourceProposalId },
-          select: { hasDownPayment: true },
+          select: { hasDownPayment: true, paymentPlan: true },
         });
+        if (proposal?.paymentPlan)
+          throw new BadRequestException(
+            'Use as parcelas do plano de pagamento em Propostas no financeiro.',
+          );
         const canceled = await tx.accountsReceivable.findFirst({
           where: {
             maintenanceOrderId: orderId,

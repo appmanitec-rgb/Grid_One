@@ -89,9 +89,9 @@ type Order = {
 };
 
 const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-10 items-center justify-center rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-50";
 const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-sky-300 hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-50";
 
 export default function OrderDetailPage() {
   const router = useRouter();
@@ -266,7 +266,7 @@ export default function OrderDetailPage() {
   const canViewCosts = access.catalog.viewCosts;
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <OperationalBreadcrumb
         items={[
           { label: "Dashboard", href: "/dashboard" },
@@ -276,9 +276,10 @@ export default function OrderDetailPage() {
       />
 
       <PageHero
+        asideLayout="side"
         eyebrow="Ordem de servico"
         title={order.title}
-        description={`Status ${orderStatusLabel(order.status)}. Esta tela agora concentra contexto de execucao, origem contratual, materiais e envio do relatorio tecnico.`}
+        description={`Status ${orderStatusLabel(order.status)}. Acompanhe o atendimento, os materiais e o relatório técnico.`}
         stats={[
           {
             label: "Status",
@@ -375,7 +376,7 @@ export default function OrderDetailPage() {
           </>
         }
         aside={
-          <FieldBox className="space-y-4 rounded-[28px] border-white/60 bg-white/80 p-5 shadow-[0_22px_60px_-40px_rgba(15,31,50,0.45)]">
+          <FieldBox className="space-y-3 rounded-2xl border border-white/80 bg-white/95 p-4 shadow-sm">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
                 Pulso da execucao
@@ -611,7 +612,7 @@ export default function OrderDetailPage() {
           <SectionCard
             eyebrow="Relatorio tecnico"
             title="Relatorio de visita e aprovacao"
-            description="O backend ja possui esse fluxo; agora ele esta acessivel na tela para fechar a trilha da visita tecnica."
+            description="Registre o relatório do atendimento, confira o documento e envie ao cliente."
             actions={
               access.maintenanceOrders.submitVisitReport ? (
                 <button

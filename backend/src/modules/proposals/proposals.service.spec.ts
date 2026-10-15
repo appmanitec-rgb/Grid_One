@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ForbiddenException } from '@nestjs/common';
 import {
   AccountsReceivableStatus,
   OperationalExpenseType,
@@ -733,6 +734,92 @@ describe('ProposalsService', () => {
     expect(db.proposal.create).not.toHaveBeenCalled();
   });
 
+  describe('payment plan commercial eligibility', () => {
+    const validate = (preset: string, term: string) =>
+      (
+        service as unknown as {
+          assertCommercialEligibility: (
+            tx: unknown,
+            clientId: string,
+            term: string,
+            excludeId: string | undefined,
+            plan: unknown,
+          ) => Promise<void>;
+        }
+      ).assertCommercialEligibility(db, 'client-1', term, undefined, {
+        preset,
+      });
+
+    it.each([
+      ['50_50', '50/50'],
+      ['30_70', '30/70'],
+      ['CASH', 'A_VISTA'],
+      ['PREPAID', '100% antecipado'],
+    ])('accepts built-in %s without a Studio record', async (preset, term) => {
+      await expect(validate(preset, term)).resolves.toBeUndefined();
+    });
+
+    it('accepts explicitly negotiated terms and rejects unknown configured terms', async () => {
+      await expect(
+        validate('CUSTOM', 'Entrada em valor e saldo parcelado'),
+      ).resolves.toBeUndefined();
+      await expect(validate('CONFIGURED', 'Termo inexistente')).rejects.toThrow(
+        'nao esta ativa',
+      );
+      await expect(validate('CUSTOM', '')).rejects.toThrow('Informe');
+    });
+
+    it('preserves disabled Studio restrictions for presets and special terms', async () => {
+      db.controlOption.findMany.mockResolvedValue([
+        {
+          code: '50_50',
+          name: '50/50',
+          isActive: false,
+          isBlockedForNewClients: false,
+        },
+      ]);
+      await expect(validate('50_50', '50/50')).rejects.toThrow('desativada');
+      await expect(validate('CUSTOM', '50/50')).rejects.toThrow('desativada');
+    });
+
+    it('recognizes client blocks stored as a preset code', async () => {
+      db.client.findUnique.mockResolvedValue({
+        id: 'client-1',
+        companyName: 'Cliente teste',
+        proposalCreationBlocked: false,
+        blockedPaymentTerms: ['A_VISTA'],
+      });
+      await expect(validate('CASH', 'À vista')).rejects.toThrow(
+        'esta bloqueada',
+      );
+    });
+
+    it('preserves new-client restrictions on a built-in preset', async () => {
+      db.controlOption.findMany.mockResolvedValue([
+        {
+          code: '30_70',
+          name: '30/70',
+          isActive: true,
+          isBlockedForNewClients: true,
+        },
+      ]);
+      await expect(validate('30_70', '30/70')).rejects.toThrow('sem historico');
+      db.proposal.count.mockResolvedValue(1);
+      await expect(validate('30_70', '30/70')).resolves.toBeUndefined();
+    });
+
+    it('preserves the client commercial block for special conditions', async () => {
+      db.client.findUnique.mockResolvedValue({
+        id: 'client-1',
+        companyName: 'Cliente teste',
+        proposalCreationBlocked: true,
+        proposalBlockReason: 'Credito suspenso',
+      });
+      await expect(validate('CUSTOM', 'Negociada')).rejects.toThrow(
+        'Credito suspenso',
+      );
+    });
+  });
   it('calculates hourly contract service with default 20 percent discount', async () => {
     db.user.findUnique.mockResolvedValue({
       id: 'admin-1',
@@ -1363,4 +1450,14 @@ describe('ProposalsService', () => {
       }),
     );
   });
+  it.each([undefined, UserRole.FINANCE, UserRole.MANAGER])(
+    'returns a permission denial instead of a server failure for board queue role %s',
+    async (role) => {
+      db.user.findUnique.mockResolvedValue(role ? { role } : null);
+      await expect(
+        service.getBoardPending(role ? 'actor-1' : undefined),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(db.proposal.findMany).not.toHaveBeenCalled();
+    },
+  );
 });

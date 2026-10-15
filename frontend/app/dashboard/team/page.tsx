@@ -1,6 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PageHeader } from "../components/DashboardPageKit";
+
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { TEAM_ACTIVE_CHANNEL_EVENT, refreshTeamNotifications } from "@/lib/team-notifications";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
 import { decodeJwtPayload, getStoredAccessToken } from "@/lib/auth-session";
 
@@ -147,7 +151,12 @@ const feeds = [
 ] as const;
 
 export default function TeamPage() {
-  const [tab, setTab] = useState<"feed" | "chat">("feed");
+  return <Suspense fallback={<p role="status" className="p-6 text-sm text-slate-500">Carregando equipe...</p>}><TeamWorkspace /></Suspense>;
+}
+
+function TeamWorkspace() {
+  const requestedChannelId = useSearchParams().get("channel");
+  const [tab, setTab] = useState<"feed" | "chat">(requestedChannelId ? "chat" : "feed");
   const [meId, setMeId] = useState("");
   const [posts, setPosts] = useState<Post[]>([]);
   const [feedCategory, setFeedCategory] = useState<string>("GENERAL");
@@ -165,7 +174,7 @@ export default function TeamPage() {
   const [editingMessage, setEditingMessage] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [channels, setChannels] = useState<Channel[]>([]);
-  const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
+  const [activeChannelId, setActiveChannelId] = useState<string | null>(requestedChannelId);
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageCursor, setMessageCursor] = useState<string | null>(null);
   const [chatLoading, setChatLoading] = useState(false);
@@ -182,6 +191,15 @@ export default function TeamPage() {
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const loadedOlderRef = useRef(false);
   const activeChannelRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (requestedChannelId) { setTab("chat"); setActiveChannelId(requestedChannelId); }
+  }, [requestedChannelId]);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent(TEAM_ACTIVE_CHANNEL_EVENT, { detail: tab === "chat" ? activeChannelId : null }));
+    return () => { window.dispatchEvent(new CustomEvent(TEAM_ACTIVE_CHANNEL_EVENT, { detail: null })); };
+  }, [tab, activeChannelId]);
 
   const activeChannel = channels.find(
     (channel) => channel.id === activeChannelId,
@@ -269,7 +287,7 @@ export default function TeamPage() {
         }
         if (before || !loadedOlderRef.current)
           setMessageCursor(page.nextCursor);
-        if (!before && nearBottom) {
+        if (!before && nearBottom && document.visibilityState === "visible") {
           await request<{ ok: boolean }>(
             `/team/channels/${channelId}/read`,
             "POST",
@@ -281,6 +299,7 @@ export default function TeamPage() {
                 : channel,
             ),
           );
+          refreshTeamNotifications();
           requestAnimationFrame(() => {
             if (chatScrollRef.current)
               chatScrollRef.current.scrollTop =
@@ -480,28 +499,22 @@ export default function TeamPage() {
   }
 
   return (
-    <main className="team-page space-y-5 pb-10">
-      <header className="overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-4 bg-[linear-gradient(115deg,#10253a_0%,#193c56_100%)] px-5 py-6 text-white md:px-7">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-200">
-              Comunicação interna
-            </p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">
-              Equipe Manitec
-            </h1>
-            <p className="mt-2 text-sm text-slate-200">
-              Avisos importantes e conversas organizadas por assunto.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm text-slate-100">
-            <span className="font-bold text-white">Acesso interno</span>
-            <br />
-            Somente colaboradores autenticados
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 md:px-6">
-          <div
+    <main className="dashboard-page team-page pb-10 space-y-5">
+      <PageHeader eyebrow="Comunicação interna" title="Equipe Manitec" description="Avisos, atualizações e conversas com a equipe." actions={<>
+<button
+            type="button"
+            onClick={() => {
+              void loadFeed();
+              void loadChannels();
+              if (activeChannelId && tab === "chat")
+                void loadMessages(activeChannelId);
+            }}
+            className={secondaryButton}
+          >
+            Atualizar
+          </button>
+</>} />
+<div className="flex flex-wrap items-center gap-2"><div
             role="tablist"
             aria-label="Áreas da equipe"
             className="inline-flex rounded-xl bg-slate-100 p-1"
@@ -529,21 +542,7 @@ export default function TeamPage() {
                 </span>
               ) : null}
             </button>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              void loadFeed();
-              void loadChannels();
-              if (activeChannelId && tab === "chat")
-                void loadMessages(activeChannelId);
-            }}
-            className={secondaryButton}
-          >
-            Atualizar
-          </button>
-        </div>
-      </header>
+          </div></div>
 
       {error ? (
         <div

@@ -186,7 +186,9 @@ describe('DocumentsService', () => {
   it('generates the standard proposal PDF when DOCX conversion is unavailable', async () => {
     Object.assign(service, {
       visualDocuments: {
-        getPublished: jest.fn().mockResolvedValue({ version: { format: 'WORD' } }),
+        getPublished: jest
+          .fn()
+          .mockResolvedValue({ version: { format: 'WORD' } }),
       },
     });
     documentGenerationService.generatePdfFromDocx.mockRejectedValueOnce(
@@ -200,7 +202,9 @@ describe('DocumentsService', () => {
 
     expect(file.buffer.subarray(0, 4).toString()).toBe('%PDF');
     expect(proposalPdfService.generate).toHaveBeenCalledTimes(1);
-    expect(documentGenerationService.generatePdfFromDocx).toHaveBeenCalledTimes(1);
+    expect(documentGenerationService.generatePdfFromDocx).toHaveBeenCalledTimes(
+      1,
+    );
     expect(fileStorage.saveDocumentPdf).toHaveBeenCalledWith(
       'proposal-pdfs',
       'proposta-PROP-1.pdf',
@@ -211,7 +215,9 @@ describe('DocumentsService', () => {
   it('generates a proposal PDF when a published Word template cannot convert', async () => {
     Object.assign(service, {
       visualDocuments: {
-        getPublished: jest.fn().mockResolvedValue({ version: { format: 'WORD' } }),
+        getPublished: jest
+          .fn()
+          .mockResolvedValue({ version: { format: 'WORD' } }),
       },
     });
     documentGenerationService.generatePdfFromDocx.mockRejectedValueOnce(
@@ -222,7 +228,9 @@ describe('DocumentsService', () => {
 
     expect(file.buffer.subarray(0, 4).toString()).toBe('%PDF');
     expect(proposalPdfService.generate).toHaveBeenCalledTimes(1);
-    expect(documentGenerationService.generatePdfFromDocx).toHaveBeenCalledTimes(1);
+    expect(documentGenerationService.generatePdfFromDocx).toHaveBeenCalledTimes(
+      1,
+    );
   });
 
   it('preserves unexpected PDF generation errors', async () => {

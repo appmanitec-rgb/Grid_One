@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "../../components/DashboardPageKit";
+
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
@@ -68,23 +70,13 @@ export default function StudioDataPage() {
     .filter((group) => group.resources.length > 0);
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <section className="rounded-[28px] border border-slate-200 bg-white/95 p-5 shadow-[0_24px_54px_-42px_rgba(15,23,42,0.28)]">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
-              Manitec Studio
-            </p>
-            <h1 className="mt-2 text-3xl font-bold text-slate-950">
-              Dados / Tabelas
-            </h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              Gerencie registros operacionais sem expor tabelas fisicas do banco. A edicao segue regras do ERP, com recursos de menor risco liberados primeiro.
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-3 md:grid-cols-3">
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Manitec Studio"
+        title="Dados / Tabelas"
+        description="Gerencie registros operacionais sem expor tabelas fisicas do banco. A edicao segue regras do ERP, com recursos de menor risco liberados primeiro."
+      />
+<div className="mt-5 grid gap-3 md:grid-cols-3">
           <Metric label="Recursos" value={String(visibleResources.length)} />
           <Metric
             label="Editaveis"
@@ -95,11 +87,10 @@ export default function StudioDataPage() {
             value={String(visibleResources.filter((resource) => !resource.editable).length)}
           />
         </div>
-        <Link href="/dashboard/developer/document-editor" className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4 transition hover:border-blue-400 hover:bg-blue-100">
+<Link href="/dashboard/developer/document-editor" className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4 transition hover:border-blue-400 hover:bg-blue-100">
           <span><span className="block text-base font-bold text-blue-950">Editor Inteligente de Documentos</span><span className="mt-1 block text-sm text-blue-800">Monte propostas, contratos e relatórios com texto e campos visuais.</span></span>
           <span className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-bold text-white">Abrir editor</span>
         </Link>
-      </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <label className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">

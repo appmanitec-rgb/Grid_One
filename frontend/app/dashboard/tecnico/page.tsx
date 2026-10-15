@@ -16,7 +16,7 @@ import {
   orderStatusLabel,
   technicianGet,
 } from "@/lib/technician-work";
-import { StatusBanner } from "../components/DashboardPageKit";
+import { MetricCard as SummaryMetric, PageHeader, StatusBanner } from "../components/DashboardPageKit";
 
 const PRIMARY_BUTTON =
   "inline-flex min-h-11 items-center justify-center rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800";
@@ -66,28 +66,17 @@ export default function TechnicianDashboardPage() {
   }, [orders]);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5 pb-8">
-      <header className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
-          Campo técnico
-        </p>
-        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-950">Minha rota</h1>
-            <p className="mt-1 text-sm text-slate-600">
-              OS, chamados e apontamentos de execução atribuídos a você.
-            </p>
-          </div>
-          <button type="button" onClick={load} className={SECONDARY_BUTTON}>
+    <div className="dashboard-page pb-8 space-y-5">
+      <PageHeader eyebrow="Campo técnico" title="Minha rota" description="OS, chamados e apontamentos de execução atribuídos a você." actions={<>
+<button type="button" onClick={load} className={SECONDARY_BUTTON}>
             Atualizar
           </button>
-        </div>
-        <div className="mt-4 grid grid-cols-3 gap-2">
+</>} />
+<div className="dashboard-metrics-grid">
           <Metric label="Hoje" value={stats.today} />
           <Metric label="Em campo" value={stats.openSessions} tone="emerald" />
           <Metric label="Atrasadas" value={stats.delayed} tone="rose" />
         </div>
-      </header>
 
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
 
@@ -134,19 +123,7 @@ function Metric({
   value: number;
   tone?: "slate" | "emerald" | "rose";
 }) {
-  const tones = {
-    slate: "border-slate-200 bg-slate-50 text-slate-950",
-    emerald: "border-emerald-200 bg-emerald-50 text-emerald-900",
-    rose: "border-rose-200 bg-rose-50 text-rose-900",
-  };
-  return (
-    <div className={`rounded-xl border p-3 ${tones[tone]}`}>
-      <p className="text-[11px] font-bold uppercase tracking-[0.12em] opacity-70">
-        {label}
-      </p>
-      <p className="mt-1 text-2xl font-bold">{value}</p>
-    </div>
-  );
+  return <SummaryMetric label={label} value={String(value)} tone={tone} />;
 }
 
 function OrderCard({ order }: { order: TechnicianOrder }) {

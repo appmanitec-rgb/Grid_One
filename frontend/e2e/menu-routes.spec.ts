@@ -7,8 +7,8 @@ import { accounts } from "./helpers/test-data";
 
 function menuRoutes(file: string, prefix: string) {
   const source = readFileSync(resolve(process.cwd(), file), "utf8");
-  const expression = new RegExp(`href:\\s*"(${prefix}[^"\\s]*)"`, "g");
-  return [...new Set([...source.matchAll(expression)].map((match) => match[1]))];
+  const expression = new RegExp(String.raw`href:\s*([\x27\x22])(${prefix}[^\x27\x22\s]*)\1`, "g");
+  return [...new Set([...source.matchAll(expression)].map((match) => match[2]))];
 }
 
 const internalRoutes = menuRoutes(
@@ -16,6 +16,9 @@ const internalRoutes = menuRoutes(
   "/dashboard",
 ).filter((route) => route !== "/dashboard/client-portal");
 const portalRoutes = menuRoutes("app/portal/layout.tsx", "/portal/");
+if (!internalRoutes.length || !portalRoutes.length) {
+  throw new Error("Menu discovery must include internal and client portal routes.");
+}
 
 test.describe("todos os menus internos", () => {
   test.describe.configure({ mode: "parallel" });

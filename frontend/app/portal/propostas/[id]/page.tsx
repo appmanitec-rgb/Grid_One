@@ -1,6 +1,8 @@
 "use client";
-
+import { WorkspaceState } from "@/app/dashboard/components/WorkspaceState";
+import { PageHeader } from "@/app/dashboard/components/DashboardPageKit";
 import Link from "next/link";
+import { commercialLabel } from "@/lib/commercial-labels";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
@@ -113,24 +115,8 @@ export default function PortalProposalDetailPage() {
   const canDecide = proposal.status === "CLIENT_REVIEW";
 
   return (
-    <div className="space-y-5">
-      <header className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <Link href="/portal/propostas" className="text-sm font-bold text-blue-700 hover:text-blue-900">
-          Voltar para propostas
-        </Link>
-        <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <h1 className="text-2xl font-extrabold text-slate-950">Proposta {proposal.code}</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              {proposal.generator?.name || "Sem equipamento"} - Validade {formatPortalDate(proposal.validUntil)}
-            </p>
-          </div>
-          <div className="text-left lg:text-right">
-            <span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-bold text-blue-700">
-              {statusLabel(proposal.status)}
-            </span>
-            <strong className="mt-2 block text-2xl text-slate-950">{formatPortalCurrency(proposal.totalValue)}</strong>
-            <div className="mt-3 flex flex-wrap justify-start gap-2 lg:justify-end">
+    <div className="dashboard-page space-y-5">
+      <PageHeader eyebrow="Proposta comercial" title={`Proposta ${proposal.code}`} description={<>{proposal.generator?.name || "Sem equipamento"} · Validade {formatPortalDate(proposal.validUntil)}</>} meta={<><span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">{statusLabel(proposal.status)}</span><strong className="text-lg text-slate-950">{formatPortalCurrency(proposal.totalValue)}</strong></>} actions={<><Link href="/portal/propostas" className="rounded-lg border border-slate-200 bg-white text-slate-700">Voltar para propostas</Link><div className="mt-3 flex flex-wrap justify-start gap-2 lg:justify-end">
               <button
                 type="button"
                 disabled={downloadingPdf}
@@ -147,10 +133,7 @@ export default function PortalProposalDetailPage() {
               >
                 {downloadingDocument ? "Gerando DOCX..." : "Baixar DOCX"}
               </button>
-            </div>
-          </div>
-        </div>
-      </header>
+            </div></>} />
 
       {error ? <State text={error} tone="error" /> : null}
       {success ? <State text={success} tone="success" /> : null}
@@ -163,7 +146,7 @@ export default function PortalProposalDetailPage() {
               proposal.items.map((item) => (
                 <div
                   key={item.id}
-                  className="grid grid-cols-[1fr_auto_auto] gap-3 border-b border-slate-100 px-3 py-3 last:border-b-0"
+                  className="portal-list-row grid grid-cols-[1fr_auto_auto] gap-3 border-b border-slate-100 px-3 py-3 last:border-b-0"
                 >
                   <div>
                     <p className="font-bold text-slate-900">{item.catalogItem.name}</p>
@@ -192,7 +175,7 @@ export default function PortalProposalDetailPage() {
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="text-lg font-extrabold text-slate-950">Condições</h2>
             <dl className="mt-3 space-y-2 text-sm">
-              <Info label="Pagamento" value={proposal.paymentTerm || "-"} />
+              <Info label="Pagamento" value={commercialLabel(proposal.paymentTerm,"—")} />
               <Info label="Frete" value={proposal.freight || "-"} />
               <Info label="Prazo" value={proposal.deliveryLeadTimeDays ? `${proposal.deliveryLeadTimeDays} dias` : "-"} />
               <Info label="Validade" value={formatPortalDate(proposal.validUntil)} />
@@ -279,12 +262,5 @@ function Info({ label, value }: { label: string; value: string }) {
 }
 
 function State({ text, tone }: { text: string; tone?: "error" | "success" }) {
-  const classes =
-    tone === "error"
-      ? "border-red-200 bg-red-50 text-red-700"
-      : tone === "success"
-        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-        : "border-slate-200 bg-white text-slate-600";
-
-  return <div className={`rounded-lg border p-4 text-sm font-semibold ${classes}`}>{text}</div>;
+  return <WorkspaceState title={text} tone={tone || (/^Carregando/i.test(text) ? "loading" : "empty")} />;
 }

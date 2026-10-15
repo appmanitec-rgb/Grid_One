@@ -1,6 +1,7 @@
 import {
   IsArray,
   IsBoolean,
+  IsByteLength,
   IsEmail,
   IsEnum,
   IsNotEmpty,
@@ -16,6 +17,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { SkillLevel, UserAvailabilityStatus, UserRole } from '@prisma/client';
+import { IsProfilePhoto } from '../profile-photo.validator';
 
 export class CreateUserTechnicianProfileDto {
   @IsString()
@@ -41,7 +43,8 @@ export class CreateUserDto {
 
   @ValidateIf((dto: CreateUserDto) => dto.role !== UserRole.CLIENT)
   @IsString()
-  @MinLength(6, { message: 'A senha deve ter no minimo 6 caracteres' })
+  @MinLength(12, { message: 'A senha deve ter no minimo 12 caracteres' })
+  @IsByteLength(12, 72, { message: 'A senha deve ter no maximo 72 bytes' })
   password?: string;
 
   @IsEnum(UserRole, {
@@ -81,7 +84,7 @@ export class CreateUserDto {
   @IsOptional()
   documentId?: string;
 
-  @IsUrl()
+  @IsProfilePhoto()
   @IsOptional()
   profilePhotoUrl?: string;
 

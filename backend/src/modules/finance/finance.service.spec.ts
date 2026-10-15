@@ -34,6 +34,8 @@ describe('FinanceService', () => {
       maintenanceOrder: {
         findUnique: jest.fn(),
       },
+      proposal: { findUnique: jest.fn() },
+      salesOrder: { findUnique: jest.fn() },
       accountsReceivable: {
         findFirst: jest.fn(),
         findUnique: jest.fn(),
@@ -141,6 +143,66 @@ describe('FinanceService', () => {
     }).compile();
 
     service = module.get(FinanceService);
+  });
+
+  it('does not bill a parts payment plan manually before finance defines dates', async () => {
+    db.salesOrder.findUnique.mockResolvedValue({
+      id: 'sale-1',
+      proposalId: 'proposal-1',
+      status: 'DELIVERED',
+      receivables: [],
+      items: [],
+    });
+    db.proposal.findUnique.mockResolvedValue({
+      paymentPlan: { preset: 'CASH' },
+    });
+    await expect(
+      service.createReceivableFromSalesOrder(
+        'sale-1',
+        '2026-10-15',
+        'finance-1',
+      ),
+    ).rejects.toThrow('Propostas no financeiro');
+    expect(db.accountsReceivable.create).not.toHaveBeenCalled();
+  });
+
+  it('reuses parts titles already scheduled by finance', async () => {
+    db.salesOrder.findUnique.mockResolvedValue({
+      id: 'sale-1',
+      proposalId: 'proposal-1',
+      status: 'DELIVERED',
+      receivables: [{ id: 'scheduled-1' }],
+      items: [],
+    });
+    db.accountsReceivable.findUnique.mockResolvedValue({ id: 'scheduled-1' });
+    await expect(
+      service.createReceivableFromSalesOrder(
+        'sale-1',
+        '2026-10-15',
+        'finance-1',
+      ),
+    ).resolves.toEqual({ id: 'scheduled-1' });
+    expect(db.accountsReceivable.create).not.toHaveBeenCalled();
+  });
+
+  it('does not replace canceled proposal installments with an unrelated manual order charge', async () => {
+    db.maintenanceOrder.findUnique.mockResolvedValue({
+      id: 'os-1',
+      status: 'COMPLETED',
+      sourceProposalId: 'proposal-1',
+    });
+    db.proposal.findUnique.mockResolvedValue({
+      hasDownPayment: true,
+      paymentPlan: { preset: '50_50' },
+    });
+    await expect(
+      service.createReceivableFromOrder(
+        'os-1',
+        { amount: 500, dueDate: '2026-10-15' },
+        'finance-1',
+      ),
+    ).rejects.toThrow('Propostas no financeiro');
+    expect(db.accountsReceivable.create).not.toHaveBeenCalled();
   });
 
   it('creates traceable receivable from maintenance order', async () => {
@@ -1531,6 +1593,8 @@ type FinanceDbMock = {
   maintenanceOrder: {
     findUnique: jest.Mock;
   };
+  proposal: { findUnique: jest.Mock };
+  salesOrder: { findUnique: jest.Mock };
   accountsReceivable: {
     findFirst: jest.Mock;
     findUnique: jest.Mock;

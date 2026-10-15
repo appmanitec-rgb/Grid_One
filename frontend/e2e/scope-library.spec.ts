@@ -5,6 +5,7 @@ import { accounts } from "./helpers/test-data";
 test("importa TXT, pesquisa e adiciona escopo à proposta", async ({ page }) => {
   const session = await loginByApi(page, accounts.sales);
   await page.goto("/dashboard/proposals/new");
+  await page.getByRole("button", { name: /04 Revisão/ }).click();
 
   const fileName = "QA-escopo-" + Date.now() + ".txt";
   const title = fileName.slice(0, -4);
@@ -21,9 +22,10 @@ test("importa TXT, pesquisa e adiciona escopo à proposta", async ({ page }) => 
   await expect(page.getByText(title, { exact: true })).toBeVisible();
   await expect(search).toHaveValue("");
   await page.getByRole("button", { name: "Adicionar ao escopo" }).click();
-  await expect(page.locator("textarea").first()).toHaveValue(scopeText);
+  await expect(page.getByLabel("Escopo da proposta")).toHaveValue(scopeText);
 
   await page.reload();
+  await page.getByRole("button", { name: /04 Revisão/ }).click();
   await search.fill(title);
   await expect(page.getByText(title, { exact: true })).toBeVisible();
   const saved = await apiRequest<Array<{ name: string; scopeText: string }>>(

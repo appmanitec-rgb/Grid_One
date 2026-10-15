@@ -379,11 +379,11 @@ export default function BankMovementsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
         eyebrow="Financeiro"
         title="Extrato financeiro"
-        description="Ledger operacional com movimentos imutaveis, saldo corrente, conciliacao e fechamento mensal basico."
+        description="Consulte movimentos, saldos e conciliações das contas."
         stats={[
           {
             label: "Saldo inicial",
@@ -554,7 +554,7 @@ export default function BankMovementsPage() {
             description="Ajuste os filtros ou registre uma baixa/pagamento."
           />
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
                 <tr>

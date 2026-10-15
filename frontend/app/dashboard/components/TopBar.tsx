@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { fetchDashboardNotificationInbox } from "@/lib/dashboard-notifications";
+import { apiFetch } from "@/lib/api";
+import { PROFILE_UPDATED_EVENT, PROFILE_REVISION_KEY, type CurrentProfile } from "@/lib/profile-events";
+import NotificationCenter from "./NotificationCenter";
 import type { DashboardThemeId } from "@/lib/dashboard-appearance";
 import {
   clearAuthSession,
@@ -174,11 +176,8 @@ export default function TopBar({
   const [userName, setUserName] = useState("Usuário");
   const [userRole, setUserRole] = useState("Operador");
   const [userRoleCode, setUserRoleCode] = useState("NORMAL");
-  const [notificationSummary, setNotificationSummary] = useState({
-    total: 0,
-    actionRequired: 0,
-    highPriority: 0,
-  });
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
+  const [failedPhotoUrl, setFailedPhotoUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const token = getStoredAccessToken();
@@ -210,46 +209,39 @@ export default function TopBar({
 
   useEffect(() => {
     let active = true;
-
-    async function loadNotifications() {
-      try {
-        const payload = await fetchDashboardNotificationInbox(12);
-        if (!active) return;
-
-        setNotificationSummary({
-          total: payload.summary.total,
-          actionRequired: payload.summary.actionRequired,
-          highPriority: payload.summary.highPriority,
-        });
-      } catch (error: unknown) {
-        if ((error as { status?: number })?.status === 401) {
-          clearAuthSession();
-          router.replace("/");
-        }
-      }
+    let revision = 0;
+    function applyProfile(profile: CurrentProfile) {
+      if (!active) return;
+      setUserName(profile.name || "Usuário");
+      setProfilePhotoUrl(profile.profilePhotoUrl || null);
+      setFailedPhotoUrl(null);
     }
-
-    const handleRefresh = () => {
-      if (document.visibilityState === "visible") {
-        void loadNotifications();
-      }
+    async function loadProfile() {
+      const requestRevision = ++revision;
+      try {
+        const response = await apiFetch("/users/me", { cache: "no-store" });
+        if (!response.ok) return;
+        const profile = await response.json() as CurrentProfile;
+        if (requestRevision === revision) applyProfile(profile);
+      } catch { /* Keep the last saved profile during a temporary connection failure. */ }
+    }
+    const onUpdated = (event: Event) => {
+      revision += 1;
+      applyProfile((event as CustomEvent<CurrentProfile>).detail);
     };
-
-    void loadNotifications();
-    const intervalId = window.setInterval(() => {
-      void loadNotifications();
-    }, 60_000);
-
-    window.addEventListener("focus", handleRefresh);
-    document.addEventListener("visibilitychange", handleRefresh);
-
+    const onFocus = () => { if (document.visibilityState === "visible") void loadProfile(); };
+    const onStorage = (event: StorageEvent) => { if (event.key === PROFILE_REVISION_KEY) void loadProfile(); };
+    void loadProfile();
+    window.addEventListener(PROFILE_UPDATED_EVENT, onUpdated);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("storage", onStorage);
     return () => {
       active = false;
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", handleRefresh);
-      document.removeEventListener("visibilitychange", handleRefresh);
+      window.removeEventListener(PROFILE_UPDATED_EVENT, onUpdated);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("storage", onStorage);
     };
-  }, [router]);
+  }, []);
 
   const heading = useMemo(() => {
     const matched = Object.keys(PAGE_TITLES)
@@ -265,7 +257,6 @@ export default function TopBar({
     [pathname, userRoleCode],
   );
   const showBackButton = pathname !== "/dashboard";
-  const isNotificationsPage = pathname.startsWith("/dashboard/notifications");
   const todayLabel = useMemo(
     () =>
       new Intl.DateTimeFormat("pt-BR", {
@@ -288,7 +279,7 @@ export default function TopBar({
 
   return (
     <header className="dashboard-topbar sticky top-0 z-20 border-b border-white/70 bg-white/80 shadow-[0_14px_28px_-24px_rgba(15,31,50,0.28)] backdrop-blur-xl">
-      <div className="dashboard-container flex items-center justify-between gap-3 px-4 py-2.5 md:px-6">
+      <div className="dashboard-container flex h-full min-w-0 items-center justify-between gap-3 px-4 md:px-6">
         <div className="flex min-w-0 items-center gap-3">
           {showBackButton ? (
             <button
@@ -301,18 +292,10 @@ export default function TopBar({
               <span aria-hidden="true">&larr;</span>
             </button>
           ) : null}
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="dashboard-topbar-chip inline-flex rounded-full border border-slate-200 bg-slate-100/90 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-100">
-                {routeFamily}
-              </span>
-            </div>
-            <h2 className="mt-1.5 truncate text-base font-bold leading-tight text-white md:text-lg">
-              {heading.title}
-            </h2>
-            <p className="hidden max-w-2xl truncate text-xs text-slate-200/85 md:block">
-              {heading.subtitle}
-            </p>
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="hidden shrink-0 text-xs font-semibold text-slate-300 lg:block">{routeFamily}</span>
+            <span aria-hidden="true" className="hidden text-slate-500 lg:block">/</span>
+            <h2 className="truncate text-sm font-semibold text-white" title={heading.subtitle}>{heading.title}</h2>
           </div>
         </div>
 
@@ -329,37 +312,6 @@ export default function TopBar({
             onChange={onChangeAppearanceTheme}
           />
 
-          <Link
-            href="/dashboard/notifications"
-            className={`dashboard-topbar-chip hidden items-center gap-2 rounded-xl border px-3 py-1.5 shadow-sm transition hover:border-white/20 lg:inline-flex ${
-              isNotificationsPage ? "dashboard-accent-surface" : ""
-            }`}
-          >
-            <div className="text-left">
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-200/70">
-                Alertas
-              </p>
-              <p className="text-xs font-semibold text-white">
-                {notificationSummary.highPriority > 0
-                  ? "Prioridade alta"
-                  : notificationSummary.actionRequired > 0
-                    ? "Requer ação"
-                    : "Tudo em dia"}
-              </p>
-            </div>
-            <span
-              className={`inline-flex min-w-7 items-center justify-center rounded-full px-2 py-0.5 text-xs font-bold ${
-                isNotificationsPage
-                  ? "bg-white/18 text-white"
-                  : notificationSummary.highPriority > 0
-                    ? "bg-rose-500/20 text-rose-100"
-                    : "bg-white/10 text-white"
-              }`}
-            >
-              {notificationSummary.actionRequired}
-            </span>
-          </Link>
-
           {quickAction ? (
             <Link
               href={quickAction.href}
@@ -369,17 +321,22 @@ export default function TopBar({
             </Link>
           ) : null}
 
-          <div className="dashboard-topbar-profile flex items-center gap-2 rounded-xl border border-slate-200 bg-white/88 px-2 py-1.5 shadow-sm">
+          <NotificationCenter />
+
+          <Link href="/dashboard/profile" aria-label="Abrir meu perfil" className="dashboard-topbar-profile flex items-center gap-2 rounded-xl border border-slate-200 bg-white/88 px-2 py-1.5 shadow-sm">
             <div className="hidden max-w-32 text-right xl:block">
               <p className="truncate text-xs font-bold text-white">{userName}</p>
               <p className="truncate text-[10px] uppercase tracking-[0.14em] text-slate-200/75">
                 {userRole}
               </p>
             </div>
-            <div className="dashboard-topbar-avatar flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-sm font-bold text-white">
-              {initials}
+            <div className="dashboard-topbar-avatar flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-950 text-sm font-bold text-white">
+              {profilePhotoUrl && failedPhotoUrl !== profilePhotoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={profilePhotoUrl} alt="Foto do meu perfil" className="h-full w-full object-cover" onError={() => setFailedPhotoUrl(profilePhotoUrl)} />
+              ) : initials}
             </div>
-          </div>
+          </Link>
         </div>
       </div>
     </header>

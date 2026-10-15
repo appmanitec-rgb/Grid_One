@@ -1,6 +1,8 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch, readApiErrorMessage } from '@/lib/api';
+import { getAccessFromToken } from '@/lib/access';
+import PortalPasswordEditor from './PortalPasswordEditor';
 
 const AREAS = [
   ['EQUIPMENT', 'Equipamentos e ordens'], ['CONTRACTS', 'Contratos'],
@@ -38,6 +40,8 @@ export default function ClientPortalAdminPanel({ clientId }: { clientId: string 
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [activationLink, setActivationLink] = useState('');
+  const [canChangePassword, setCanChangePassword] = useState(false);
+  useEffect(() => { setCanChangePassword(getAccessFromToken().users.manageSecurity); }, []);
   const load = useCallback(async () => {
     try { setOverview(await send('/clients/' + clientId + '/portal', 'GET')); }
     catch (err) { setError(err instanceof Error ? err.message : 'Falha ao carregar a central.'); }
@@ -48,6 +52,15 @@ export default function ClientPortalAdminPanel({ clientId }: { clientId: string 
     try { await action(); await load(); setNotice(success); }
     catch (err) { setError(err instanceof Error ? err.message : 'Nao foi possivel concluir.'); }
     finally { setBusy(false); }
+  }
+  async function changePassword(userId: string, password: string, confirmation: string) {
+    setBusy(true); setError(''); setNotice('');
+    try {
+      await send(base + '/users/' + userId + '/password', 'PATCH', { password, confirmPassword: confirmation });
+      setActivationLink(''); await load(); setNotice('Senha alterada. O usuário pode entrar com a nova senha.');
+    } catch (issue) {
+      setError(issue instanceof Error ? issue.message : 'Não foi possível alterar a senha.'); throw issue;
+    } finally { setBusy(false); }
   }
   function showLink(token: string) { setActivationLink(window.location.origin + '/cliente/ativar#token=' + token); }
   async function uploadLogo(file?: File) {
@@ -72,7 +85,7 @@ export default function ClientPortalAdminPanel({ clientId }: { clientId: string 
     {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
     {notice && <p role="status" className="rounded-lg bg-green-50 p-3 text-sm text-green-800">{notice}</p>}
     {activationLink && <div className="rounded-lg border border-blue-200 bg-blue-50 p-4"><p className="text-sm font-bold text-blue-900">Link de ativacao valido por 48 horas</p><div className="mt-2 flex flex-wrap gap-2"><input readOnly value={activationLink} onFocus={(event) => event.target.select()} className="min-w-0 flex-1 rounded border border-blue-200 p-2 text-xs" /><button onClick={() => void navigator.clipboard.writeText(activationLink)} className="rounded bg-blue-700 px-3 py-2 text-xs font-bold text-white">Copiar</button></div><p className="mt-1 text-xs text-blue-800">Envie este link ao usuario pelo canal de sua preferencia.</p></div>}
-    <div><h3 className="font-bold text-slate-900">Usuarios da central</h3><div className="mt-3 space-y-3">{overview.portalUsers.length ? overview.portalUsers.map((user) => <PortalUserEditor key={user.id} user={user} busy={busy} onSave={(patch) => run(() => send(base + '/users/' + user.id, 'PATCH', patch), 'Usuario atualizado.')} onActivate={() => run(async () => { const result = await send(base + '/users/' + user.id + '/activation', 'POST'); showLink(result.token); }, 'Novo link de ativacao gerado.')} />) : <p className="text-sm text-slate-500">Nenhum usuario cadastrado para este cliente.</p>}</div></div>
+    <div><h3 className="font-bold text-slate-900">Usuarios da central</h3><div className="mt-3 space-y-3">{overview.portalUsers.length ? overview.portalUsers.map((user) => <PortalUserEditor key={user.id} user={user} busy={busy} canChangePassword={canChangePassword} onChangePassword={(password, confirmation) => changePassword(user.id, password, confirmation)} onSave={(patch) => run(() => send(base + '/users/' + user.id, 'PATCH', patch), 'Usuario atualizado.')} onActivate={() => run(async () => { const result = await send(base + '/users/' + user.id + '/activation', 'POST'); showLink(result.token); }, 'Novo link de ativacao gerado.')} />) : <p className="text-sm text-slate-500">Nenhum usuario cadastrado para este cliente.</p>}</div></div>
     <form className="space-y-4 rounded-lg border border-blue-100 bg-blue-50/40 p-4" onSubmit={(event) => { event.preventDefault(); void run(async () => { const result = await send(base + '/users', 'POST', { name, email, permissions }); showLink(result.activation.token); setName(''); setEmail(''); setPermissions([...ALL]); }, 'Usuario criado. Compartilhe o link de ativacao.'); }}>
       <h3 className="font-bold text-slate-900">Adicionar usuario</h3>
       <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm font-semibold">Nome<input required value={name} onChange={(event) => setName(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2" /></label><label className="text-sm font-semibold">E-mail<input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2" /></label></div>
@@ -82,9 +95,9 @@ export default function ClientPortalAdminPanel({ clientId }: { clientId: string 
     <div><h3 className="font-bold text-slate-900">Observacoes e feedbacks recebidos</h3><div className="mt-3 space-y-2">{overview.portalFeedbacks.length ? overview.portalFeedbacks.map((item) => <div key={item.id} className="rounded-lg border border-slate-200 p-3"><div className="flex flex-wrap justify-between gap-2 text-xs font-semibold text-slate-500"><span>{item.kind === 'FEEDBACK' ? 'Feedback' : 'Observacao'} de {item.user.name}</span><time>{new Date(item.createdAt).toLocaleString('pt-BR')}</time></div><p className="mt-2 whitespace-pre-wrap text-sm text-slate-800">{item.message}</p></div>) : <p className="text-sm text-slate-500">Nenhum registro recebido.</p>}</div></div>
   </section>;
 }
-function PortalUserEditor({ user, busy, onSave, onActivate }: { user: PortalUser; busy: boolean; onSave: (patch: unknown) => Promise<void>; onActivate: () => Promise<void> }) {
+function PortalUserEditor({ user, busy, onSave, onActivate, canChangePassword, onChangePassword }: { user: PortalUser; busy: boolean; onSave: (patch: unknown) => Promise<void>; onActivate: () => Promise<void>; canChangePassword: boolean; onChangePassword: (password: string, confirmation: string) => Promise<void> }) {
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email);
   const [permissions, setPermissions] = useState(user.portalPermissions);
-  return <div className="rounded-lg border border-slate-200 p-4"><div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-slate-600">Nome<input value={name} onChange={(event) => setName(event.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 text-sm" /></label><label className="text-xs font-bold text-slate-600">E-mail<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 text-sm" /></label></div><div className="mt-3"><PermissionPicker value={permissions} onChange={setPermissions} /></div><div className="mt-3 flex flex-wrap items-center gap-2"><button disabled={busy} onClick={() => void onSave({ name, email, permissions })} className="rounded bg-slate-900 px-3 py-2 text-xs font-bold text-white">Salvar usuario</button><button disabled={busy} onClick={() => void onActivate()} className="rounded border border-blue-200 px-3 py-2 text-xs font-bold text-blue-800">Gerar novo link</button>{user.isActive && <button disabled={busy} onClick={() => void onSave({ isActive: false })} className="rounded border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700">Desativar acesso</button>}<span className="text-xs text-slate-500">{user.isActive ? 'Ativo' : 'Pendente ou desativado'}</span></div></div>;
+  return <article aria-label={"Usuário da central: " + user.email} className="rounded-lg border border-slate-200 p-4"><div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-slate-600">Nome<input value={name} onChange={(event) => setName(event.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 text-sm" /></label><label className="text-xs font-bold text-slate-600">E-mail<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1 w-full rounded border border-slate-300 p-2 text-sm" /></label></div><div className="mt-3"><PermissionPicker value={permissions} onChange={setPermissions} /></div><div className="mt-3 flex flex-wrap items-center gap-2"><button disabled={busy} onClick={() => void onSave({ name, email, permissions })} className="rounded bg-slate-900 px-3 py-2 text-xs font-bold text-white">Salvar usuario</button><button disabled={busy} onClick={() => void onActivate()} className="rounded border border-blue-200 px-3 py-2 text-xs font-bold text-blue-800">Gerar novo link</button>{user.isActive && <button disabled={busy} onClick={() => void onSave({ isActive: false })} className="rounded border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700">Desativar acesso</button>}<span className="text-xs text-slate-500">{user.isActive ? 'Ativo' : 'Pendente ou desativado'}</span>{canChangePassword && user.isActive ? <PortalPasswordEditor email={user.email} busy={busy} onChangePassword={onChangePassword} /> : null}</div></article>;
 }

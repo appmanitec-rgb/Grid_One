@@ -200,7 +200,13 @@ describe('StudioService payment profile issuer', () => {
 
     const created = await service.createRecord(
       'proposalPaymentProfiles',
-      { ...profile, beneficiary: '', beneficiaryDocument: '', pixKey: '', pixCopyPaste: '' },
+      {
+        ...profile,
+        beneficiary: '',
+        beneficiaryDocument: '',
+        pixKey: '',
+        pixCopyPaste: '',
+      },
       actor,
     );
 

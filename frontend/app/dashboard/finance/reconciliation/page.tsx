@@ -1,4 +1,5 @@
 "use client";
+import { commercialLabel } from "@/lib/commercial-labels";
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -855,11 +856,11 @@ export default function BankReconciliationPage() {
     : [];
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
         eyebrow="Financeiro"
         title="Conciliação bancária"
-        description="Importação de extrato, matching com ledger, divergências rastreáveis e relatório do período."
+        description="Importe extratos, confira os lançamentos e resolva divergências."
         stats={stats}
       />
 
@@ -1089,7 +1090,7 @@ export default function BankReconciliationPage() {
             description="O extrato selecionado ainda não retornou entradas."
           />
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
                 <tr>
@@ -1431,7 +1432,7 @@ export default function BankReconciliationPage() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="font-semibold text-slate-950">
-                        {issue.type}
+                        {commercialLabel(issue.type)}
                       </p>
                       <p className="mt-1 text-sm leading-5 text-slate-600">
                         {issue.reason}

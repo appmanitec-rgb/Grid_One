@@ -1,9 +1,10 @@
 param(
   [string[]]$Specs = @()
 )
-
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
+$frontendRoot = Join-Path $projectRoot 'frontend'
+$playwrightCli = Join-Path $frontendRoot 'node_modules\@playwright\test\cli.js'
 if (-not (Test-Path -LiteralPath (Join-Path $projectRoot 'runtime-logs/e2e-server-pids.json'))) {
   throw 'Inicie os servidores de teste com scripts/start-e2e.ps1.'
 }
@@ -11,43 +12,30 @@ $env:E2E_SKIP_WEBSERVER = '1'
 $env:E2E_API_URL = 'http://127.0.0.1:3100'
 $env:E2E_BASE_URL = 'http://127.0.0.1:3101'
 $env:E2E_DEMO_PASSWORD = 'Demo@123456'
-Push-Location (Join-Path $projectRoot 'frontend')
+# Conflicting inherited colors emit Node warnings on stderr under Windows.
+Remove-Item Env:\FORCE_COLOR -ErrorAction SilentlyContinue
+Remove-Item Env:\NO_COLOR -ErrorAction SilentlyContinue
+
+function Invoke-Playwright {
+  param([string[]]$TestSpecs, [string]$Phase)
+  $env:PLAYWRIGHT_JSON_OUTPUT_NAME = Join-Path $projectRoot "runtime-logs/production-$Phase-e2e-results.json"
+  $previousPreference = $ErrorActionPreference
+  try {
+    # Native stderr warnings are not command failures in Windows PowerShell 5.
+    $ErrorActionPreference = 'Continue'
+    & node $playwrightCli test @TestSpecs --project=chromium --workers=1 --reporter=list,json --max-failures=0
+    $testExitCode = $LASTEXITCODE
+  } finally { $ErrorActionPreference = $previousPreference }
+  if ($testExitCode -ne 0) { throw "E2E $Phase falhou com codigo $testExitCode. Consulte o relatorio JSON em runtime-logs." }
+}
+Push-Location $frontendRoot
 try {
   if ($Specs.Count -eq 0) {
-    & npx playwright test e2e/menu-routes.spec.ts --project=chromium --workers=1 --reporter=list --max-failures=0
-    if ($LASTEXITCODE -ne 0) { throw "Navegacao E2E falhou com codigo $LASTEXITCODE." }
-    $Specs = @(
-      'e2e/login-responsive.spec.ts',
-      'e2e/auth.spec.ts',
-      'e2e/client-portal.spec.ts',
-      'e2e/client-portal-management.spec.ts',
-      'e2e/commercial-contract-finance.spec.ts',
-      'e2e/customer-ticket-to-order.spec.ts',
-      'e2e/dispatch-schedule.spec.ts',
-      'e2e/documents-hub.spec.ts',
-      'e2e/finance-operational.spec.ts',
-      'e2e/generator-models.spec.ts',
-      'e2e/opportunity-create.spec.ts',
-      'e2e/payment-profile.spec.ts',
-      'e2e/pilot-operational-smoke.spec.ts',
-      'e2e/proposal-detail-actions.spec.ts',
-      'e2e/proposal-external-document.spec.ts',
-      'e2e/proposal-list.spec.ts',
-      'e2e/proposal-operational.spec.ts',
-      'e2e/proposal-pdf.spec.ts',
-      'e2e/public-links.spec.ts',
-      'e2e/scope-library.spec.ts',
-      'e2e/service-reports.spec.ts',
-      'e2e/session-persistence.spec.ts',
-      'e2e/smart-navigation.spec.ts',
-      'e2e/smoke-navigation.spec.ts',
-      'e2e/team-communication.spec.ts',
-      'e2e/technician.spec.ts',
-      'e2e/ux-operational.spec.ts'
-    )
+    $suite = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'e2e-suite.json') -Raw | ConvertFrom-Json
+    Invoke-Playwright @($suite.menus) 'menus'
+    Invoke-Playwright @($suite.flows) 'flows'
+  } else {
+    $phase = if ($Specs.Count -eq 1 -and $Specs[0] -eq 'e2e/menu-routes.spec.ts') { 'menus' } else { 'flows' }
+    Invoke-Playwright $Specs $phase
   }
-  & npx playwright test @Specs --project=chromium --workers=1 --reporter=list --max-failures=0
-  if ($LASTEXITCODE -ne 0) { throw "Fluxos E2E falharam com codigo $LASTEXITCODE." }
-} finally {
-  Pop-Location
-}
+} finally { Pop-Location }

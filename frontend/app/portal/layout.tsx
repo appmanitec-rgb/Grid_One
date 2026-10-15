@@ -13,11 +13,11 @@ const NAV_ITEMS = [
   { href: '/portal/contratos', label: 'Contratos', permission: 'CONTRACTS' },
   { href: '/portal/propostas', label: 'Propostas', permission: 'PROPOSALS' },
   { href: '/portal/chamados', label: 'Chamados', permission: 'TICKETS' },
-  { href: '/portal/solicitacoes', label: 'Solicitacoes', permission: 'REQUESTS' },
+  { href: '/portal/solicitacoes', label: 'Solicitações', permission: 'REQUESTS' },
   { href: '/portal/laudos', label: 'Laudos', permission: 'REPORTS' },
   { href: '/portal/documentos', label: 'Documentos', permission: 'DOCUMENTS' },
   { href: '/portal/financeiro', label: 'Financeiro', permission: 'FINANCIAL' },
-  { href: '/portal/feedback', label: 'Observacoes e feedback', permission: 'FEEDBACK' },
+  { href: '/portal/feedback', label: 'Observações e feedback', permission: 'FEEDBACK' },
 ];
 
 type PortalMe = {
@@ -61,19 +61,24 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
   if (!me) return <main className="min-h-screen bg-slate-50 p-6"><div className="mx-auto max-w-6xl rounded-lg border border-slate-200 bg-white p-6 text-sm font-semibold text-slate-600 shadow-sm">{error || 'Carregando portal...'}</div></main>;
 
-  return <div className="min-h-screen bg-[#f3f7fb] text-slate-900">
+  return <div className="portal-shell min-h-screen bg-[#f3f7fb] text-slate-900">
     <SessionHeartbeat source="CLIENT_PORTAL" />
-    <header className="border-b border-slate-200 bg-white"><div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
-      <div className="flex items-center gap-3">
-        {me.client.portalLogoDataUrl && <img src={me.client.portalLogoDataUrl} alt={'Logo de ' + me.client.companyName} className="h-12 w-24 rounded bg-white object-contain" />}
-        <div><Link href="/portal/dashboard" className="text-lg font-extrabold text-slate-950">MANITEC Portal</Link><p className="text-sm font-medium text-slate-500">{me.client.tradeName || me.client.companyName}</p></div>
+    <a href="#portal-content" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-white focus:p-3">Ir para o conteúdo</a>
+    <header className="border-b border-slate-200 bg-white shadow-sm">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6">
+        <div className="flex min-w-0 items-center justify-between gap-4 py-4">
+          <div className="flex min-w-0 items-center gap-3">
+            {me.client.portalLogoDataUrl && <img src={me.client.portalLogoDataUrl} alt={'Logo de ' + me.client.companyName} className="h-11 w-20 shrink-0 rounded-lg bg-white object-contain" />}
+            <div className="min-w-0"><Link href="/portal/dashboard" className="text-base font-extrabold text-slate-950">Manitec · Central do cliente</Link><p className="mt-1 truncate text-sm text-slate-500" title={me.client.companyName}>{me.client.tradeName || me.client.companyName}</p></div>
+          </div>
+          <div className="flex shrink-0 items-center gap-3"><span className="hidden max-w-48 truncate text-sm font-semibold text-slate-600 md:block">{me.user.name}</span><button type="button" onClick={handleLogout} className="min-h-10 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:border-red-200 hover:text-red-700">Sair</button></div>
+        </div>
+        <nav aria-label="Central do cliente" className="portal-nav border-t border-slate-100">{NAV_ITEMS.filter((item) => !item.permission || me.user.portalPermissions.includes(item.permission)).map((item) => {
+          const active = pathname === item.href || pathname.startsWith(item.href + '/');
+          return <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined} className={active ? 'whitespace-nowrap bg-blue-600 text-white' : 'whitespace-nowrap border border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700'}>{item.label}</Link>;
+        })}</nav>
       </div>
-      <nav className="flex gap-2 overflow-x-auto pb-1">{NAV_ITEMS.filter((item) => !item.permission || me.user.portalPermissions.includes(item.permission)).map((item) => {
-        const active = pathname === item.href || pathname.startsWith(item.href + '/');
-        return <Link key={item.href} href={item.href} className={active ? 'whitespace-nowrap rounded-lg bg-blue-600 px-3 py-2 text-sm font-bold text-white' : 'whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:border-blue-200 hover:text-blue-700'}>{item.label}</Link>;
-      })}</nav>
-      <button type="button" onClick={handleLogout} className="rounded-md border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:border-red-200 hover:text-red-700">Sair</button>
-    </div></header>
-    <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">{children}</main>
+    </header>
+    <main id="portal-content" tabIndex={-1} className="portal-main mx-auto max-w-7xl px-4 py-6 sm:px-6">{children}</main>
   </div>;
 }

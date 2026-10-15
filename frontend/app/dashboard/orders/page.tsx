@@ -50,9 +50,9 @@ type OrderListItem = {
 };
 
 const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-10 items-center justify-center rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-50";
 const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-sky-300 hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-50";
 
 export default function OrdersPage() {
   const router = useRouter();
@@ -95,6 +95,11 @@ export default function OrdersPage() {
       setLoading(false);
     }
   }, [handleUnauthorized]);
+
+  useEffect(() => {
+    const clientSearch = new URLSearchParams(window.location.search).get("q");
+    if (clientSearch) setQuery(clientSearch);
+  }, []);
 
   useEffect(() => {
     void loadOrders();
@@ -141,11 +146,13 @@ export default function OrdersPage() {
   }, [orders]);
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
+        loading={loading}
+        asideLayout="side"
         eyebrow="Execucao em campo"
-        title="Ordens de servico com visao de fila, origem e gargalos."
-        description="A oficina agora organiza melhor prioridade, alocacao, origem contratual e prontidao operacional. Tambem passamos a tratar sessao e erro com a mesma consistencia dos outros modulos."
+        title="Ordens de serviço"
+        description="Acompanhe a execução, distribua atendimentos e resolva as prioridades da equipe."
         stats={[
           {
             label: "Ordens abertas",
@@ -183,14 +190,13 @@ export default function OrdersPage() {
           </>
         }
         aside={
-          <FieldBox className="space-y-4 rounded-[28px] border-white/60 bg-white/80 p-5 shadow-[0_22px_60px_-40px_rgba(15,31,50,0.45)]">
+          <FieldBox className="space-y-3 rounded-2xl border border-white/80 bg-white/95 p-4 shadow-sm">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                Verificacao de fluxo
+                Resumo da fila
               </p>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Agora fica mais claro quais O.S. nasceram de contrato, quais ainda estao
-                sem tecnico e onde a fila precisa de resposta rapida.
+                Veja as ordens urgentes e a cobertura por contrato para decidir o próximo atendimento.
               </p>
             </div>
             <QueuePulse
@@ -212,9 +218,10 @@ export default function OrdersPage() {
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
 
       <SectionCard
+        actionsLayout="below"
         eyebrow="Fila operacional"
         title="Ordens em acompanhamento"
-        description="Pesquisa, filtra e navega pelo backlog sem depender de uma tabela pesada e pouco legivel."
+        description="Encontre rapidamente uma ordem por cliente, equipamento, contrato ou situação."
         actions={
           <div className="flex w-full flex-col gap-3 xl:w-auto xl:min-w-[640px] xl:flex-row xl:items-center xl:justify-end">
             <TextInput
@@ -274,7 +281,8 @@ function OrderCard({ order }: { order: OrderListItem }) {
   const siteName = order.site?.name || order.generator?.currentSite?.name || "-";
 
   return (
-    <article className="rounded-[28px] border border-slate-200 bg-white/92 px-5 py-5 shadow-[0_24px_60px_-48px_rgba(15,31,50,0.35)]">
+    <article className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white px-5 py-5 shadow-sm transition hover:border-sky-300 hover:shadow-md">
+      <span aria-hidden="true" className={needsAttention ? "absolute inset-y-0 left-0 w-1 bg-amber-400" : "absolute inset-y-0 left-0 w-1 bg-sky-500"} />
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -389,7 +397,7 @@ function OrderInfo({
   tone: Tone;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/85 px-4 py-4">
+    <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
       <div className="flex items-center justify-between gap-3">
         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
           {label}

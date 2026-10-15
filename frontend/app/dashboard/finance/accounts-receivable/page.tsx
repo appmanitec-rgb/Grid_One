@@ -1,6 +1,8 @@
 "use client";
+import { commercialLabel } from "@/lib/commercial-labels";
 
 import Link from "next/link";
+import ProposalPaymentsQueue from "./ProposalPaymentsQueue";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
@@ -21,7 +23,7 @@ import {
 type Tone = "blue" | "emerald" | "amber" | "rose" | "slate";
 type ReceivableStatus = "OPEN" | "PARTIAL" | "OVERDUE" | "PAID" | "CANCELED";
 type PaymentMethod = "PIX" | "BOLETO" | "TRANSFER" | "CASH" | "CARD" | "OTHER";
-type ReceivableSource = "CONTRACT" | "ORDER" | "SALES_ORDER" | "MANUAL";
+type ReceivableSource = "CONTRACT" | "ORDER" | "SALES_ORDER" | "PROPOSAL" | "MANUAL";
 
 type BankAccount = {
   id: string;
@@ -64,6 +66,8 @@ type Receivable = {
   contract?: { id: string; code?: string | null } | null;
   maintenanceOrder?: { id: string; title?: string | null } | null;
   salesOrder?: { id: string; code?: string | null } | null;
+  sourceProposal?: { id: string; code: string; downPaymentConfirmedAt?: string | null } | null;
+  proposalPaymentStage?: string | null;
   executionBillingCategory?: "PARTS" | "SERVICES" | null;
   installmentNumber?: number | null;
   installmentCount?: number | null;
@@ -127,6 +131,7 @@ const SOURCE_META: Record<ReceivableSource, { label: string; tone: Tone }> = {
   ORDER: { label: "O.S. avulsa", tone: "amber" },
   SALES_ORDER: { label: "Venda de peças", tone: "blue" },
   MANUAL: { label: "Manual", tone: "slate" },
+  PROPOSAL: { label: "Proposta", tone: "blue" },
 };
 
 const METHOD_LABELS: Record<PaymentMethod, string> = {
@@ -182,6 +187,7 @@ function parseMoneyInput(value: string) {
 }
 
 function getReceivableSource(item: Receivable): ReceivableSource {
+  if (item.sourceProposal?.id) return "PROPOSAL";
   if (item.contract?.id) return "CONTRACT";
   if (item.maintenanceOrder?.id) return "ORDER";
   if (item.salesOrder?.id) return "SALES_ORDER";
@@ -728,11 +734,11 @@ export default function AccountsReceivablePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
-        eyebrow="Financeiro e cobranca"
-        title="Contas a receber com fluxo real de contrato, O.S. avulsa e baixa bancaria."
-        description="A carteira agora mostra origem do titulo, saldo em aberto, historico de recebimentos e as acoes que realmente fecham o ciclo financeiro sem perder o vinculo com contrato e operacao."
+        eyebrow="Financeiro"
+        title="Contas a receber"
+        description="Acompanhe saldos em aberto, cobranças e recebimentos por cliente."
         stats={[
           {
             label: "Titulos ativos",
@@ -815,22 +821,24 @@ export default function AccountsReceivablePage() {
               </div>
             </FieldBox>
 
-            <StatusBanner
+
+          </div>
+        }
+      />
+<StatusBanner
               tone={activeBankAccounts.length > 0 ? "blue" : "amber"}
             >
               {activeBankAccounts.length > 0
                 ? `${activeBankAccounts.length} conta(s) bancarias ativa(s) disponivel(is) para baixa.`
                 : "Nenhuma conta bancaria ativa encontrada. Cadastre ou reative uma conta/caixa antes de registrar baixas."}
             </StatusBanner>
-          </div>
-        }
-      />
 
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
       {successMessage ? (
         <StatusBanner tone="emerald">{successMessage}</StatusBanner>
       ) : null}
 
+      <ProposalPaymentsQueue refreshKey={receivables.map(item=>item.id+":"+item.paidAmount+":"+item.status).join("|")} onUpdated={loadData} />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.75fr)_360px]">
         <SectionCard
           eyebrow="Carteira viva"
@@ -842,6 +850,7 @@ export default function AccountsReceivablePage() {
               <TextInput
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
+                aria-label="Pesquisar títulos"
                 placeholder="Cliente, contrato, O.S. ou descricao"
               />
             </FormField>
@@ -879,6 +888,7 @@ export default function AccountsReceivablePage() {
                 <option value="ORDER">O.S. avulsa</option>
                 <option value="SALES_ORDER">Venda de peças</option>
                 <option value="MANUAL">Manual</option>
+                <option value="PROPOSAL">Proposta</option>
               </SelectInput>
             </FormField>
           </div>
@@ -948,6 +958,7 @@ export default function AccountsReceivablePage() {
                           <DataPill tone={sourceMeta.tone}>
                             {sourceMeta.label}
                           </DataPill>
+                          {item.sourceProposal ? <Link href={"/dashboard/proposals/"+item.sourceProposal.id} className="text-xs font-semibold text-blue-700">{item.sourceProposal.code} · {item.proposalPaymentStage === "DOWN_PAYMENT" ? "Entrada" : "Parcela do saldo"}</Link> : null}
                           {dueInDays !== null && dueInDays < 0 ? (
                             <DataPill tone="rose">{`${Math.abs(dueInDays)} dia(s) em atraso`}</DataPill>
                           ) : null}
@@ -1218,6 +1229,7 @@ export default function AccountsReceivablePage() {
 
                           <FormField label="Metodo">
                             <SelectInput
+                              aria-label="Metodo"
                               value={draft.method}
                               onChange={(event) =>
                                 updateDraft(item.id, {
@@ -1237,6 +1249,7 @@ export default function AccountsReceivablePage() {
 
                           <FormField label="Conta destino">
                             <SelectInput
+                              aria-label="Conta destino"
                               value={draft.bankAccountId}
                               onChange={(event) =>
                                 updateDraft(item.id, {
@@ -1436,7 +1449,7 @@ export default function AccountsReceivablePage() {
           <SectionCard
             eyebrow="Conexao de fluxo"
             title="Esteira validada"
-            description="A cobranca agora conversa com os modulos que ja foram refatorados, em vez de funcionar isolada."
+            description="Consulte os contratos, ordens e documentos associados aos recebimentos."
           >
             <div className="space-y-3">
               <FieldBox>
@@ -1496,7 +1509,7 @@ export default function AccountsReceivablePage() {
                     </p>
                     <p className="mt-1 text-sm text-slate-500">
                       {account.bankName || "Banco nao informado"}
-                      {account.type ? ` / ${account.type}` : ""}
+                      {account.type ? ` / ${commercialLabel(account.type)}` : ""}
                     </p>
                     <p className="mt-3 text-lg font-bold text-slate-950">
                       {formatCurrency(Number(account.currentBalance || 0))}

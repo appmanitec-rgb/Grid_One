@@ -63,6 +63,24 @@ export async function billCompletedExecution(
       'REVIEW_REQUIRED',
       'Cliente da proposta difere do cliente do equipamento.',
     );
+  if (proposal.paymentPlan) {
+    const scheduled = await tx.accountsReceivable.findMany({
+      where: {
+        sourceProposalId: proposal.id,
+        status: { not: AccountsReceivableStatus.CANCELED },
+      },
+      select: { id: true },
+    });
+    return scheduled.length
+      ? {
+          status: 'ALREADY_BILLED',
+          receivableIds: scheduled.map((row) => row.id),
+        }
+      : result(
+          'REVIEW_REQUIRED',
+          'Financeiro deve definir os vencimentos do plano de pagamento da proposta.',
+        );
+  }
   if (proposal.hasDownPayment)
     return result(
       'REVIEW_REQUIRED',

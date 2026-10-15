@@ -43,6 +43,7 @@ import {
   ReversePayablePaymentDto,
   ReverseReceivablePaymentDto,
   ReviewExecutionBillingDto,
+  ScheduleProposalPaymentsDto,
   SyncOrderReceivableDto,
   SyncSalesOrderReceivableDto,
   UnmatchBankStatementEntryDto,
@@ -68,6 +69,25 @@ export class FinanceController {
 
   private getActorRole(req: Request): string | undefined {
     return (req as AuthenticatedRequest).user?.role;
+  }
+
+  @Get('receivables/proposals/pending')
+  pendingProposalPayments() {
+    return this.financeService.pendingProposalPayments();
+  }
+
+  @Post('receivables/proposals/:id/schedule')
+  @RequireAccessPolicy('finance.create')
+  scheduleProposalPayments(
+    @Param('id') id: string,
+    @Body() dto: ScheduleProposalPaymentsDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.scheduleProposalPayments(
+      id,
+      dto.dueDates,
+      this.getActorUserId(req),
+    );
   }
 
   @UseGuards(AuthGuard)

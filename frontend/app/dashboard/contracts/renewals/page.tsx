@@ -166,11 +166,12 @@ export default function ContractRenewalsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
-        eyebrow="Gestao contratual"
-        title="Renovacoes de contratos"
-        description="Controle de vigencia, reajuste, cobertura de pecas e negociacao ate a formalizacao do novo periodo."
+        loading={loading}
+        eyebrow="Comercial"
+        title="Renovações de contratos"
+        description="Acompanhe os vencimentos e negocie as condições do próximo período."
         stats={[
           { label: "Em renovacao", value: String(summary.inRenewal), helper: "Processos em andamento.", tone: "blue" },
           { label: "A vencer", value: String(summary.expiring), helper: "Dentro da janela de alerta.", tone: "amber" },
@@ -224,7 +225,7 @@ export default function ContractRenewalsPage() {
         ) : items.length === 0 ? (
           <EmptyState title="Nenhum contrato encontrado" description="Revise os filtros da carteira." />
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
+          <div className="overflow-x-auto rounded-lg border border-slate-200" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
             <table className="w-full min-w-[1040px] text-sm">
               <thead className="bg-slate-50 text-left text-slate-500">
                 <tr>

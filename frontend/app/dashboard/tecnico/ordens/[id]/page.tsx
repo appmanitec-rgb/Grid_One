@@ -1,4 +1,5 @@
 "use client";
+import { commercialLabel } from "@/lib/commercial-labels";
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -12,7 +13,7 @@ import {
   technicianGet,
   technicianPost,
 } from "@/lib/technician-work";
-import { StatusBanner } from "../../../components/DashboardPageKit";
+import { PageHeader, StatusBanner } from "../../../components/DashboardPageKit";
 import { OperationalBreadcrumb } from "../../../components/OperationalLinks";
 
 const PRIMARY_BUTTON =
@@ -101,7 +102,7 @@ export default function TechnicianOrderDetailPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-5 pb-8">
+    <div className="dashboard-page pb-8 space-y-5">
       <OperationalBreadcrumb
         items={[
           { label: "Dashboard", href: "/dashboard" },
@@ -114,8 +115,8 @@ export default function TechnicianOrderDetailPage() {
         Voltar para campo
       </Link>
 
-      <header className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap gap-2">
+      <PageHeader eyebrow="Atendimento em campo" title={order.title} description={order.description || "Sem descrição técnica."} meta={<>
+<div className="flex flex-wrap gap-2">
           <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
             {orderStatusLabel(order.status)}
           </span>
@@ -125,11 +126,7 @@ export default function TechnicianOrderDetailPage() {
             </span>
           ) : null}
         </div>
-        <h1 className="mt-3 text-2xl font-bold text-slate-950">{order.title}</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          {order.description || "Sem descrição técnica."}
-        </p>
-      </header>
+</>} />
 
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
       {success ? <StatusBanner tone="emerald">{success}</StatusBanner> : null}
@@ -218,7 +215,7 @@ export default function TechnicianOrderDetailPage() {
         {sessions.map((session) => (
           <article key={session.id} className="rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <span className="font-bold text-slate-950">{session.status}</span>
+              <span className="font-bold text-slate-950">{commercialLabel(session.status)}</span>
               <span className="text-slate-500">
                 {formatFieldDate(session.startedAt)} - {formatFieldDate(session.finishedAt)}
               </span>

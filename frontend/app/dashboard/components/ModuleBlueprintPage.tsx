@@ -21,7 +21,7 @@ export default function ModuleBlueprintPage({
   integrations,
 }: ModuleBlueprintPageProps) {
   return (
-    <div className="space-y-6 pb-10">
+    <div className="dashboard-page pb-10 space-y-5">
       <PageHero
         eyebrow="Módulo em estruturação"
         title={title}

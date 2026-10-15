@@ -47,6 +47,15 @@ import {
 import { UpdateProposalDto } from './dto/update-proposal.dto';
 import { ConvertGeneratorPostSaleDto } from './dto/convert-generator-post-sale.dto';
 import { createApprovedProposalOrder } from './proposal-work-order';
+import {
+  assertProposalFinancialRelease,
+  proposalEntryPending,
+} from './proposal-financial-gate';
+import {
+  paymentPresetLabel,
+  ProposalPaymentPlan,
+  resolvePaymentPlan,
+} from './proposal-payment-plan';
 
 const COMMERCIAL_GENERATOR_PROPOSAL_SELECT = {
   id: true,
@@ -132,6 +141,10 @@ export class ProposalsService {
       );
     }
 
+    if (createProposalDto.paymentPlan)
+      createProposalDto.paymentTerm =
+        paymentPresetLabel(createProposalDto.paymentPlan) ||
+        createProposalDto.paymentTerm;
     return this.prisma.$transaction(async (tx) => {
       const linkedOpportunity = createProposalDto.salesOpportunityId
         ? await tx.salesOpportunity.findUnique({
@@ -164,6 +177,8 @@ export class ProposalsService {
         tx,
         createProposalDto.clientId,
         createProposalDto.paymentTerm,
+        undefined,
+        createProposalDto.paymentPlan,
       );
       await this.assertGeneratorBelongsToClient(
         tx,
@@ -277,6 +292,18 @@ export class ProposalsService {
         );
       }
       const calculatedTotal = this.roundCurrency(subtotal - discountValue);
+      if (createProposalDto.paymentPlan) {
+        const payment = resolvePaymentPlan(
+          createProposalDto.paymentPlan,
+          calculatedTotal,
+        );
+        createProposalDto.paymentPlan = payment.plan;
+        createProposalDto.hasDownPayment = payment.hasDownPayment;
+        createProposalDto.downPaymentAmount = payment.downPaymentAmount;
+        createProposalDto.installmentCount = payment.installmentCount;
+        createProposalDto.firstDueDate = undefined;
+        createProposalDto.installmentIntervalDays = undefined;
+      }
       this.validateCommercialTerms(createProposalDto, calculatedTotal);
 
       const nextCode = await this.generateNextNewCode(tx);
@@ -329,6 +356,9 @@ export class ProposalsService {
           deliveryLeadTimeDays: createProposalDto.deliveryLeadTimeDays,
           paymentDetails,
           paymentSelections: paymentSelection?.snapshots as unknown as
+            | Prisma.InputJsonValue
+            | undefined,
+          paymentPlan: createProposalDto.paymentPlan as unknown as
             | Prisma.InputJsonValue
             | undefined,
           hasDownPayment: Boolean(createProposalDto.hasDownPayment),
@@ -451,6 +481,8 @@ export class ProposalsService {
         tx,
         source.clientId,
         source.paymentTerm,
+        source.id,
+        source.paymentPlan,
       );
 
       const sequence =
@@ -489,6 +521,7 @@ export class ProposalsService {
           deliveryLeadTimeDays: source.deliveryLeadTimeDays,
           paymentDetails: source.paymentDetails,
           paymentSelections: source.paymentSelections ?? undefined,
+          paymentPlan: source.paymentPlan ?? Prisma.JsonNull,
           hasDownPayment: source.hasDownPayment,
           downPaymentAmount: source.downPaymentAmount,
           installmentCount: source.installmentCount,
@@ -579,7 +612,7 @@ export class ProposalsService {
     await this.assertInternalActor(actorUserId);
     const proposal = await this.requireProposal(id, actorUserId);
     if (proposal.status !== ProposalStatus.DRAFT) {
-      throw new Error(
+      throw new BadRequestException(
         'Somente a revisao atual em rascunho pode ir para analise da diretoria.',
       );
     }
@@ -589,6 +622,7 @@ export class ProposalsService {
       proposal.clientId,
       proposal.paymentTerm,
       proposal.id,
+      proposal.paymentPlan,
     );
 
     const updated = await this.changeStatus(
@@ -616,7 +650,9 @@ export class ProposalsService {
     await this.assertInternalActor(actorUserId);
     const proposal = await this.requireProposal(id, actorUserId);
     if (proposal.status !== ProposalStatus.BOARD_REVIEW) {
-      throw new Error('A proposta precisa estar em analise da diretoria.');
+      throw new BadRequestException(
+        'A proposta precisa estar em analise da diretoria.',
+      );
     }
 
     await this.assertCommercialEligibility(
@@ -624,6 +660,7 @@ export class ProposalsService {
       proposal.clientId,
       proposal.paymentTerm,
       proposal.id,
+      proposal.paymentPlan,
     );
 
     if (proposal.type === ProposalType.GENERATOR_SALE && actorUserId) {
@@ -667,7 +704,9 @@ export class ProposalsService {
     );
     const proposal = await this.requireProposal(id, actorUserId);
     if (proposal.status !== ProposalStatus.BOARD_REVIEW) {
-      throw new Error('A proposta precisa estar em analise da diretoria.');
+      throw new BadRequestException(
+        'A proposta precisa estar em analise da diretoria.',
+      );
     }
 
     if (proposal.type === ProposalType.GENERATOR_SALE && actorUserId) {
@@ -704,7 +743,9 @@ export class ProposalsService {
     const rejectionReason = this.requireActionReason(reason, 'reprovacao');
     const proposal = await this.requireProposal(id, actorUserId);
     if (proposal.status !== ProposalStatus.BOARD_REVIEW) {
-      throw new Error('A proposta precisa estar em analise da diretoria.');
+      throw new BadRequestException(
+        'A proposta precisa estar em analise da diretoria.',
+      );
     }
 
     if (proposal.type === ProposalType.GENERATOR_SALE && actorUserId) {
@@ -739,7 +780,9 @@ export class ProposalsService {
   async clientApprove(id: string, actorUserId?: string) {
     const proposal = await this.requireProposal(id, actorUserId);
     if (proposal.status !== ProposalStatus.CLIENT_REVIEW) {
-      throw new Error('A proposta precisa estar em analise do cliente.');
+      throw new BadRequestException(
+        'A proposta precisa estar em analise do cliente.',
+      );
     }
 
     let ordemDeServico: Awaited<
@@ -769,7 +812,9 @@ export class ProposalsService {
     }
 
     return {
-      message: 'Proposta aprovada pelo cliente.',
+      message: (await proposalEntryPending(this.prisma, id))
+        ? 'Proposta aprovada. Aguardando confirmação da entrada pelo financeiro.'
+        : 'Proposta aprovada pelo cliente.',
       proposal: updated,
     };
   }
@@ -777,7 +822,9 @@ export class ProposalsService {
   async clientReject(id: string, actorUserId?: string, note?: string) {
     const proposal = await this.requireProposal(id, actorUserId);
     if (proposal.status !== ProposalStatus.CLIENT_REVIEW) {
-      throw new Error('A proposta precisa estar em analise do cliente.');
+      throw new BadRequestException(
+        'A proposta precisa estar em analise do cliente.',
+      );
     }
 
     return this.changeStatus(
@@ -798,17 +845,20 @@ export class ProposalsService {
     await this.assertInternalActor(actorUserId);
     const proposal = await this.requireProposal(id, actorUserId);
     if (proposal.status !== ProposalStatus.CLIENT_REVIEW) {
-      throw new Error(
+      throw new BadRequestException(
         'Somente propostas em analise do cliente podem solicitar desconto.',
       );
     }
 
-    if (!actorUserId) throw new Error('Usuario solicitante nao identificado.');
+    if (!actorUserId)
+      throw new BadRequestException('Usuario solicitante nao identificado.');
     if (discountPercent <= 0) {
-      throw new Error('Percentual de desconto deve ser maior que zero.');
+      throw new BadRequestException(
+        'Percentual de desconto deve ser maior que zero.',
+      );
     }
     if (discountPercent > 100) {
-      throw new Error('Percentual de desconto invalido.');
+      throw new BadRequestException('Percentual de desconto invalido.');
     }
 
     const actor = await this.prisma.user.findUnique({
@@ -818,7 +868,8 @@ export class ProposalsService {
         approvalDiscountLimit: true,
       },
     });
-    if (!actor) throw new Error('Usuario solicitante nao encontrado.');
+    if (!actor)
+      throw new BadRequestException('Usuario solicitante nao encontrado.');
 
     const approvalLimit = Number(actor.approvalDiscountLimit ?? 7);
     const requiresApproval = discountPercent > approvalLimit;
@@ -903,7 +954,7 @@ export class ProposalsService {
 
       if (!proposal) throw new NotFoundException('Proposta nao encontrada.');
       if (proposal.status !== ProposalStatus.WON) {
-        throw new Error(
+        throw new BadRequestException(
           'Apenas propostas ganhas podem ser convertidas em contrato.',
         );
       }
@@ -913,7 +964,7 @@ export class ProposalsService {
         );
       }
       if (!proposal.generatorId) {
-        throw new Error(
+        throw new BadRequestException(
           'A proposta precisa ter equipamento vinculado para gerar contrato.',
         );
       }
@@ -922,6 +973,7 @@ export class ProposalsService {
           'A proposta precisa ter valor maior que zero para gerar contrato.',
         );
       }
+      await assertProposalFinancialRelease(tx, proposal.id);
       if (proposal.generatedContract) {
         return {
           message: 'Contrato ja havia sido gerado para esta proposta.',
@@ -1512,6 +1564,7 @@ export class ProposalsService {
           'Somente uma proposta ganha de gerador pode seguir para o pos-venda.',
         );
       }
+      await assertProposalFinancialRelease(tx, proposal.id);
       if (proposal.postSaleGenerator) {
         return {
           message: 'Equipamento de pos-venda ja havia sido criado.',
@@ -1600,7 +1653,7 @@ export class ProposalsService {
       : null;
 
     if (!actor || actor.role !== UserRole.ADMIN) {
-      throw new Error(
+      throw new ForbiddenException(
         'Apenas diretoria/administrador pode acessar este painel.',
       );
     }
@@ -1662,6 +1715,10 @@ export class ProposalsService {
     actorUserId?: string,
   ) {
     await this.assertInternalActor(actorUserId);
+    if (updateProposalDto.paymentPlan)
+      updateProposalDto.paymentTerm =
+        paymentPresetLabel(updateProposalDto.paymentPlan) ||
+        updateProposalDto.paymentTerm;
     const current = await this.requireProposal(id, actorUserId);
     const contentFields = Object.keys(updateProposalDto).filter(
       (field) => field !== 'status',
@@ -1701,8 +1758,8 @@ export class ProposalsService {
       if (current.status !== nextStatus) {
         const allowed = this.kanbanTransitions[current.status] || [];
         if (!allowed.includes(nextStatus)) {
-          throw new Error(
-            `Transicao invalida no fluxo: ${current.status} -> ${nextStatus}.`,
+          throw new BadRequestException(
+            'Transicao invalida no fluxo. Use as acoes de aprovacao e revisao da proposta.',
           );
         }
       }
@@ -1713,8 +1770,10 @@ export class ProposalsService {
     } as Prisma.ProposalUncheckedUpdateInput;
     delete (header as { items?: unknown }).items;
     delete (header as { operationalExpenses?: unknown }).operationalExpenses;
-    delete (header as { partsPaymentProfileId?: unknown }).partsPaymentProfileId;
-    delete (header as { servicesPaymentProfileId?: unknown }).servicesPaymentProfileId;
+    delete (header as { partsPaymentProfileId?: unknown })
+      .partsPaymentProfileId;
+    delete (header as { servicesPaymentProfileId?: unknown })
+      .servicesPaymentProfileId;
 
     return this.prisma.$transaction(async (tx) => {
       const before = await tx.proposal.findUnique({
@@ -1723,13 +1782,15 @@ export class ProposalsService {
 
       if (
         updateProposalDto.clientId !== undefined ||
-        updateProposalDto.paymentTerm !== undefined
+        updateProposalDto.paymentTerm !== undefined ||
+        updateProposalDto.paymentPlan !== undefined
       ) {
         await this.assertCommercialEligibility(
           tx,
           updateProposalDto.clientId ?? current.clientId,
           updateProposalDto.paymentTerm ?? current.paymentTerm,
           id,
+          updateProposalDto.paymentPlan ?? current.paymentPlan,
         );
       }
       await this.assertGeneratorBelongsToClient(
@@ -1809,36 +1870,83 @@ export class ProposalsService {
         } as CreateProposalDto;
         const sellerUserId = editDto.userId ?? current.userId;
         if (!sellerUserId) {
-          throw new BadRequestException('Informe um vendedor comercial para a proposta.');
+          throw new BadRequestException(
+            'Informe um vendedor comercial para a proposta.',
+          );
         }
         await this.assertProposalSeller(tx, sellerUserId);
-        const normalizedItems = await this.prepareProposalItems(tx, editDto.items);
+        const normalizedItems = await this.prepareProposalItems(
+          tx,
+          editDto.items,
+        );
         const usesManagedPayment =
           editDto.origin === ProposalOrigin.MANITEC &&
           (editDto.type === ProposalType.PARTS_AND_SERVICES ||
             editDto.type === ProposalType.CONTRACT);
         if (usesManagedPayment) {
-          await this.requireAvailablePaymentProfiles(tx, normalizedItems, editDto);
+          await this.requireAvailablePaymentProfiles(
+            tx,
+            normalizedItems,
+            editDto,
+          );
         }
-        const paymentSelection = await this.preparePaymentSelections(tx, editDto);
-        const paymentDetails = paymentSelection?.details ??
-          (usesManagedPayment ? null : (editDto.paymentDetails ?? current.paymentDetails));
+        const paymentSelection = await this.preparePaymentSelections(
+          tx,
+          editDto,
+        );
+        const paymentDetails =
+          paymentSelection?.details ??
+          (usesManagedPayment
+            ? null
+            : (editDto.paymentDetails ?? current.paymentDetails));
         const operationalExpenses = await this.prepareOperationalExpenses(
           tx,
           editDto.operationalExpenses ?? [],
         );
-        const itemsSubtotal = this.roundCurrency(this.calculateTotal(normalizedItems));
-        const subtotal = this.roundCurrency(itemsSubtotal + operationalExpenses.total);
-        const allowOperationalExpenseDiscount = Boolean(editDto.allowOperationalExpenseDiscount);
-        const discountValue = this.roundCurrency(Number(editDto.discount ?? current.discount ?? 0));
-        const discountableSubtotal = allowOperationalExpenseDiscount ? subtotal : itemsSubtotal;
-        if (!Number.isFinite(discountValue) || discountValue < 0 || discountValue > discountableSubtotal) {
-          throw new BadRequestException('O desconto nao pode superar o subtotal elegivel da proposta.');
+        const itemsSubtotal = this.roundCurrency(
+          this.calculateTotal(normalizedItems),
+        );
+        const subtotal = this.roundCurrency(
+          itemsSubtotal + operationalExpenses.total,
+        );
+        const allowOperationalExpenseDiscount = Boolean(
+          editDto.allowOperationalExpenseDiscount,
+        );
+        const discountValue = this.roundCurrency(
+          Number(editDto.discount ?? current.discount ?? 0),
+        );
+        const discountableSubtotal = allowOperationalExpenseDiscount
+          ? subtotal
+          : itemsSubtotal;
+        if (
+          !Number.isFinite(discountValue) ||
+          discountValue < 0 ||
+          discountValue > discountableSubtotal
+        ) {
+          throw new BadRequestException(
+            'O desconto nao pode superar o subtotal elegivel da proposta.',
+          );
         }
         const calculatedTotal = this.roundCurrency(subtotal - discountValue);
+        if (editDto.paymentPlan) {
+          const payment = resolvePaymentPlan(
+            editDto.paymentPlan,
+            calculatedTotal,
+          );
+          editDto.paymentPlan = payment.plan;
+          editDto.paymentTerm =
+            paymentPresetLabel(payment.plan) || editDto.paymentTerm;
+          editDto.hasDownPayment = payment.hasDownPayment;
+          editDto.downPaymentAmount = payment.downPaymentAmount;
+          editDto.installmentCount = payment.installmentCount;
+          editDto.firstDueDate = undefined;
+          editDto.installmentIntervalDays = undefined;
+        }
         this.validateCommercialTerms(editDto, calculatedTotal);
         const commercialGenerator = current.commercialGeneratorId
-          ? await tx.commercialGenerator.findUnique({ where: { id: current.commercialGeneratorId } })
+          ? await tx.commercialGenerator.findUnique({
+              where: { id: current.commercialGeneratorId },
+            })
           : null;
 
         await tx.proposalItem.deleteMany({ where: { proposalId: id } });
@@ -1850,7 +1958,8 @@ export class ProposalsService {
             userId: sellerUserId,
             type: editDto.type,
             totalValue: calculatedTotal,
-            operationalExpenses: operationalExpenses.items as unknown as Prisma.InputJsonValue,
+            operationalExpenses:
+              operationalExpenses.items as unknown as Prisma.InputJsonValue,
             operationalExpensesTotal: operationalExpenses.total,
             allowOperationalExpenseDiscount,
             commercialSnapshot: this.buildCommercialSnapshot({
@@ -1864,18 +1973,29 @@ export class ProposalsService {
               discountValue,
               calculatedTotal,
             }),
-            validUntil: editDto.validUntil ? new Date(editDto.validUntil) : null,
+            validUntil: editDto.validUntil
+              ? new Date(editDto.validUntil)
+              : null,
             scope: editDto.scope ?? null,
             freight: editDto.freight ?? null,
             paymentTerm: editDto.paymentTerm ?? null,
             deliveryLeadTimeDays: editDto.deliveryLeadTimeDays ?? null,
             paymentDetails,
-            paymentSelections: paymentSelection?.snapshots as unknown as Prisma.InputJsonValue ?? Prisma.JsonNull,
+            paymentSelections:
+              (paymentSelection?.snapshots as unknown as Prisma.InputJsonValue) ??
+              Prisma.JsonNull,
+            paymentPlan:
+              (editDto.paymentPlan as unknown as Prisma.InputJsonValue) ??
+              Prisma.JsonNull,
             hasDownPayment: Boolean(editDto.hasDownPayment),
-            downPaymentAmount: editDto.hasDownPayment ? editDto.downPaymentAmount : null,
+            downPaymentAmount: editDto.hasDownPayment
+              ? editDto.downPaymentAmount
+              : null,
             installmentCount: editDto.installmentCount ?? 1,
             installmentIntervalDays: editDto.installmentIntervalDays ?? 30,
-            firstDueDate: editDto.firstDueDate ? new Date(editDto.firstDueDate) : null,
+            firstDueDate: editDto.firstDueDate
+              ? new Date(editDto.firstDueDate)
+              : null,
             internalNotes: editDto.internalNotes ?? null,
             externalNotes: editDto.externalNotes ?? null,
             discount: discountValue,
@@ -2063,6 +2183,7 @@ export class ProposalsService {
     clientId: string,
     paymentTerm?: string | null,
     excludeProposalId?: string,
+    paymentPlan?: Prisma.JsonValue | ProposalPaymentPlan | null,
   ) {
     const client = await tx.client.findUnique({
       where: { id: clientId },
@@ -2089,12 +2210,31 @@ export class ProposalsService {
     }
 
     const normalizedPaymentTerm = this.normalizeCommercialTerm(paymentTerm);
-    if (!normalizedPaymentTerm) return;
+    const preset =
+      paymentPlan && typeof paymentPlan === 'object' && 'preset' in paymentPlan
+        ? paymentPlan.preset
+        : undefined;
+    if (!normalizedPaymentTerm) {
+      if (preset)
+        throw new BadRequestException('Informe a condição de pagamento.');
+      return;
+    }
+    const aliases = new Set([normalizedPaymentTerm]);
+    const presetAliases: Record<string, string[]> = {
+      CASH: ['CASH', 'A_VISTA', 'À vista'],
+      '50_50': ['50_50', '50/50'],
+      '30_70': ['30_70', '30/70'],
+      PREPAID: ['PREPAID', '100% antecipado'],
+    };
+    if (typeof preset === 'string') {
+      for (const alias of presetAliases[preset] ?? [])
+        aliases.add(this.normalizeCommercialTerm(alias));
+    }
 
     const clientBlockedTerms = (client.blockedPaymentTerms ?? []).map((term) =>
       this.normalizeCommercialTerm(term),
     );
-    if (clientBlockedTerms.includes(normalizedPaymentTerm)) {
+    if (clientBlockedTerms.some((term) => aliases.has(term))) {
       throw new ForbiddenException(
         `A condicao de pagamento "${paymentTerm}" esta bloqueada para ${client.companyName}.`,
       );
@@ -2103,18 +2243,36 @@ export class ProposalsService {
     const availablePaymentTerms = await tx.controlOption.findMany({
       where: {
         type: 'PAYMENT_TERM',
-        isActive: true,
       },
-      select: { code: true, name: true, isBlockedForNewClients: true },
+      select: {
+        code: true,
+        name: true,
+        isActive: true,
+        isBlockedForNewClients: true,
+      },
     });
     const selectedPaymentTerm = availablePaymentTerms.find(
       (term) =>
-        this.normalizeCommercialTerm(term.code) === normalizedPaymentTerm ||
-        this.normalizeCommercialTerm(term.name) === normalizedPaymentTerm,
+        aliases.has(this.normalizeCommercialTerm(term.code)) ||
+        aliases.has(this.normalizeCommercialTerm(term.name)),
     );
     if (!selectedPaymentTerm) {
+      // Standard presets and explicitly negotiated conditions are built in.
+      // Studio and client restrictions still take precedence when present.
+      if (
+        typeof preset === 'string' &&
+        (preset in presetAliases || preset === 'CUSTOM')
+      )
+        return;
       throw new BadRequestException(
         `A condicao de pagamento "${paymentTerm}" nao esta ativa nas tabelas de controle.`,
+      );
+    }
+    if (selectedPaymentTerm.isActive === false) {
+      throw new BadRequestException(
+        'A condição de pagamento "' +
+          paymentTerm +
+          '" está desativada nas tabelas de controle.',
       );
     }
     if (!selectedPaymentTerm.isBlockedForNewClients) return;
@@ -2289,10 +2447,7 @@ export class ProposalsService {
             'O perfil de pagamento precisa de CNPJ emitente valido e igual ao favorecido.',
           );
         }
-        if (
-          profile.method === ProposalPaymentMethod.PIX &&
-          !profile.pixKey
-        ) {
+        if (profile.method === ProposalPaymentMethod.PIX && !profile.pixKey) {
           throw new BadRequestException(
             'O perfil PIX precisa de uma chave cadastrada.',
           );
@@ -3018,7 +3173,14 @@ export class ProposalsService {
       where: { id: contractId },
       include: {
         equipments: true,
-        sourceProposal: { select: { userId: true } },
+        sourceProposal: {
+          select: {
+            id: true,
+            userId: true,
+            paymentPlan: true,
+            hasDownPayment: true,
+          },
+        },
       },
     });
 
@@ -3048,6 +3210,50 @@ export class ProposalsService {
       });
 
       for (const invoice of invoiceData) {
+        if (
+          invoice === invoiceData[0] &&
+          contract.sourceProposal &&
+          (contract.sourceProposal.paymentPlan ||
+            contract.sourceProposal.hasDownPayment)
+        ) {
+          const initialPayments = await tx.accountsReceivable.findMany({
+            where: {
+              sourceProposalId: contract.sourceProposal.id,
+              status: { not: AccountsReceivableStatus.CANCELED },
+            },
+            select: { id: true, paidAmount: true, dueDate: true },
+          });
+          await tx.accountsReceivable.updateMany({
+            where: { sourceProposalId: contract.sourceProposal.id },
+            data: {
+              contractId,
+              competenceDate: invoice.competenceDate,
+              costCenterId: contract.costCenterId,
+            },
+          });
+          if (initialPayments.length) {
+            const settled =
+              initialPayments.reduce(
+                (sum, row) => sum + Math.round(row.paidAmount * 100),
+                0,
+              ) >= Math.round(invoice.amount * 100);
+            const dueDate = initialPayments.reduce(
+              (latest, row) => (row.dueDate > latest ? row.dueDate : latest),
+              initialPayments[0].dueDate,
+            );
+            await tx.contractInvoice.updateMany({
+              where: { contractId, competenceDate: invoice.competenceDate },
+              data: {
+                dueDate,
+                status: settled
+                  ? ContractInvoiceStatus.PAID
+                  : ContractInvoiceStatus.PENDING,
+                paidAt: settled ? new Date() : null,
+              },
+            });
+          }
+          continue;
+        }
         await this.syncReceivableFromContractInvoice(tx, {
           contractId,
           clientId: contract.clientId,

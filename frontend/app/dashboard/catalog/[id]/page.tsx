@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHeader } from "../../components/DashboardPageKit";
+import { commercialLabel } from "@/lib/commercial-labels";
+
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import type { ReactNode } from "react";
@@ -427,7 +430,7 @@ export default function CatalogItemDetailPage() {
     item.supplierItems?.[0];
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="dashboard-page space-y-5">
       <OperationalBreadcrumb
         items={[
           { label: "Dashboard", href: "/dashboard" },
@@ -436,20 +439,12 @@ export default function CatalogItemDetailPage() {
         ]}
       />
 
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">
-            Estoque operacional
-          </p>
-          <h1 className="mt-1 text-3xl font-bold text-zinc-900">
-            Ficha operacional do item
-          </h1>
-          <p className="mt-1 max-w-3xl text-sm text-zinc-500">
-            Cadastro, saldo, movimentacoes, compras, OS e fornecedores em uma
-            trilha navegavel.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+      <PageHeader
+        eyebrow="Suprimentos"
+        title="Ficha operacional do item"
+        description="Cadastro, saldo, movimentacoes, compras, OS e fornecedores em uma trilha navegavel."
+        actions={<>
+<div className="flex flex-wrap gap-2">
           <PermissionAwareLink
             href="/dashboard/catalog"
             permission="catalog.view"
@@ -483,7 +478,8 @@ export default function CatalogItemDetailPage() {
             </PermissionAwareLink>
           ) : null}
         </div>
-      </div>
+</>}
+      />
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -973,7 +969,7 @@ export default function CatalogItemDetailPage() {
               <TraceRow
                 key={offer.id}
                 title={`${offer.supplier.companyName}${offer.isPreferred ? " | Preferencial" : ""}`}
-                subtitle={`${offer.quoteNumber || `v${offer.version}`} | ${offer.status} | Validade ${formatDate(offer.validUntil)} | ${offer.paymentTerm || "Pagamento nao definido"}`}
+                subtitle={`${offer.quoteNumber || `v${offer.version}`} | ${commercialLabel(offer.status)} | Validade ${formatDate(offer.validUntil)} | ${commercialLabel(offer.paymentTerm,"Pagamento não definido")}`}
                 value={`${formatCurrency(offer.effectiveUnitCost)} / un.`}
                 extraHref={`/dashboard/suppliers/${offer.supplier.id}`}
                 extraLabel="Fornecedor"
@@ -1009,7 +1005,7 @@ export default function CatalogItemDetailPage() {
               <TraceRow
                 key={entry.id}
                 title={entry.proposal.code}
-                subtitle={`${entry.proposal.status} | ${entry.proposal.client?.companyName || "Cliente nao informado"} | ${formatDate(entry.proposal.createdAt)}`}
+                subtitle={`${commercialLabel(entry.proposal.status)} | ${entry.proposal.client?.companyName || "Cliente nao informado"} | ${formatDate(entry.proposal.createdAt)}`}
                 value={`${formatNumber(entry.quantity)} x ${formatCurrency(entry.unitPrice)} = ${formatCurrency(entry.totalPrice)}`}
                 href={`/dashboard/proposals/${entry.proposal.id}`}
                 extraHref={
@@ -1054,7 +1050,7 @@ export default function CatalogItemDetailPage() {
               <TraceRow
                 key={entry.id}
                 title={entry.purchaseOrder.code}
-                subtitle={`${entry.purchaseOrder.status} | ${entry.purchaseOrder.supplier.companyName} | ${formatDate(entry.purchaseOrder.issueDate)}`}
+                subtitle={`${commercialLabel(entry.purchaseOrder.status)} | ${entry.purchaseOrder.supplier.companyName} | ${formatDate(entry.purchaseOrder.issueDate)}`}
                 value={`${formatNumber(entry.receivedQty)} / ${formatNumber(entry.quantity)}`}
                 href="/dashboard/purchase-orders"
                 extraHref={`/dashboard/suppliers/${entry.purchaseOrder.supplier.id}`}
@@ -1071,7 +1067,7 @@ export default function CatalogItemDetailPage() {
               <TraceRow
                 key={material.id}
                 title={material.order.title}
-                subtitle={`${material.order.status} | ${material.order.generator.name} | ${material.warehouse?.code || material.warehouse?.name || "Sem almoxarifado"}`}
+                subtitle={`${commercialLabel(material.order.status)} | ${material.order.generator.name} | ${material.warehouse?.code || material.warehouse?.name || "Sem almoxarifado"}`}
                 value={`${formatNumber(material.quantity)} ${item.unit || ""}`}
                 href={`/dashboard/orders/${material.order.id}`}
                 extraHref={`/dashboard/equipments/${material.order.generator.id}`}
@@ -1156,9 +1152,7 @@ export default function CatalogItemDetailPage() {
                   <Info
                     label="Pagamento"
                     value={
-                      supplierItem.purchasePaymentTerm ||
-                      supplierItem.supplier.paymentTerm ||
-                      "-"
+                      commercialLabel(supplierItem.purchasePaymentTerm || supplierItem.supplier.paymentTerm, "?")
                     }
                   />
                   <Info

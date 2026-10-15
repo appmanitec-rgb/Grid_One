@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "../../components/DashboardPageKit";
+
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -152,15 +154,12 @@ export default function CollaboratorsPage() {
   ].filter(Boolean).length;
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold text-zinc-900">Agentes e Acessos</h1>
-          <p className="mt-1 max-w-3xl text-sm text-zinc-500">
-            Separação operacional entre colaboradores internos, usuários do sistema, clientes externos e auditores.
-          </p>
-        </div>
-      </div>
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Pessoas"
+        title="Agentes e Acessos"
+        description="Separação operacional entre colaboradores internos, usuários do sistema, clientes externos e auditores."
+      />
 
       <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center gap-2">
@@ -388,7 +387,7 @@ function ClientsTable({ rows }: { rows: ClientAgent[] }) {
 function TableShell({ children, empty }: { children: ReactNode; empty?: string }) {
   return (
     <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
         <table className="min-w-full text-sm">{children}</table>
       </div>
       {empty ? <p className="p-6 text-center text-sm text-zinc-500">{empty}</p> : null}

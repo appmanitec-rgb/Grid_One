@@ -1,4 +1,4 @@
-import { Logger } from '@nestjs/common';
+import { ForbiddenException, Logger } from '@nestjs/common';
 import type { ExecutionContext } from '@nestjs/common';
 import { lastValueFrom, of, throwError } from 'rxjs';
 import { RequestLoggingInterceptor } from './request-logging.interceptor';
@@ -71,4 +71,39 @@ describe('RequestLoggingInterceptor', () => {
     expect(payload).toContain('DATABASE_URL=[redacted]');
     expect(payload).not.toContain('postgres://secret');
   });
+  it.each([
+    '/deliveries/share/confidential-link-token',
+    '/deliveries/share/confidential-link-token/proposal-approval',
+  ])('redacts document share tokens in %s', async (url) => {
+    const interceptor = new RequestLoggingInterceptor();
+    await lastValueFrom(
+      interceptor.intercept(createContext(url), {
+        handle: () => of({ ok: true }),
+      }),
+    );
+    const payload = String(logSpy.mock.calls[0][0]);
+    expect(payload).toContain('/deliveries/share/[redacted]');
+    expect(payload).not.toContain('confidential-link-token');
+  });
+
+  it.each([
+    [new ForbiddenException('Permission denied'), 403],
+    [new Error('Unexpected failure'), 500],
+  ])(
+    'records the actual error status even before Nest sets the response',
+    async (issue, status) => {
+      const interceptor = new RequestLoggingInterceptor();
+      await expect(
+        lastValueFrom(
+          interceptor.intercept(
+            createContext('/proposals/board/pending', 200),
+            {
+              handle: () => throwError(() => issue),
+            },
+          ),
+        ),
+      ).rejects.toThrow();
+      expect(JSON.parse(String(errorSpy.mock.calls[0][0])).status).toBe(status);
+    },
+  );
 });

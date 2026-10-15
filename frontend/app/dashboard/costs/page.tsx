@@ -102,12 +102,13 @@ export default function CostsPage() {
 
   const summary = data?.summary;
   return (
-    <div className="space-y-5 p-4 md:p-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
+        loading={loading}
         compact
-        eyebrow="Financeiro / Operacao"
-        title="Custos de Operacao"
-        description="Resultado consolidado das ordens, contratos e centros de custo."
+        eyebrow="Financeiro"
+        title="Custos operacionais"
+        description="Acompanhe o resultado das ordens, contratos e centros de custo."
         stats={summary ? [
           { label: "Receita reconhecida", value: money(summary.revenue), helper: `${money(summary.receivedRevenue)} recebido`, tone: "blue" },
           { label: "Custo operacional", value: money(summary.totalCost), helper: `${summary.orders} O.S. no periodo`, tone: "amber" },
@@ -117,7 +118,7 @@ export default function CostsPage() {
       />
 
       <section className="border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-[minmax(150px,190px)_minmax(150px,190px)_minmax(180px,220px)_1fr_auto] md:items-end">
+        <div className="workspace-filter-grid grid gap-3 items-end">
           <Field label="De"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={INPUT} /></Field>
           <Field label="Ate"><input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={INPUT} /></Field>
           <Field label="Status da O.S.">

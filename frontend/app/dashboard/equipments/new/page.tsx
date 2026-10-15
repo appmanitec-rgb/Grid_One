@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "../../components/DashboardPageKit";
+
 import Link from "next/link";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -288,23 +290,12 @@ export default function NewEquipmentPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 pb-24 sm:p-6 lg:p-8">
-      <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div>
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
-              Cadastro mestre tecnico
-            </p>
-            <h1 className="mt-2 text-3xl font-black text-slate-950">
-              Novo equipamento
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Organize identificacao, dados do gerador, motor, alternador, QTA
-              e bateria sem depender de planilhas paralelas.
-            </p>
-          </div>
-        </div>
-      </header>
+    <div className="dashboard-page pb-24 space-y-5">
+      <PageHeader
+        eyebrow="Ativos"
+        title="Novo equipamento"
+        description="Organize identificacao, dados do gerador, motor, alternador, QTA e bateria sem depender de planilhas paralelas."
+      />
 
       {loading ? <State text="Carregando dados de apoio..." /> : null}
       {error ? <State text={error} tone="error" /> : null}

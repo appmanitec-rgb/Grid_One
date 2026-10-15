@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "../components/DashboardPageKit";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
@@ -55,18 +57,19 @@ export default function SuppliersPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold text-zinc-800">Cadastro de Fornecedores</h1>
-          <p className="mt-1 text-zinc-500">Gerencie parceiros, marcas, categorias e condicoes de compra.</p>
-        </div>
-        <div className="flex items-center gap-2">
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Suprimentos"
+        title="Fornecedores"
+        description="Gerencie parceiros, marcas, contatos e condições de compra."
+        actions={<>
+<div className="flex items-center gap-2">
           <Link href="/dashboard/suppliers/new" className="ml-2 rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white shadow-sm transition-colors hover:bg-blue-500">
             Novo Fornecedor
           </Link>
         </div>
-      </div>
+</>}
+      />
 
       {error && (
         <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
@@ -78,7 +81,7 @@ export default function SuppliersPage() {
       )}
 
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
           <table className="w-full border-collapse text-left">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 text-sm text-zinc-500">

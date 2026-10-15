@@ -1,5 +1,7 @@
 "use client";
 
+import { MetricCard as SummaryMetric, PageHeader } from "../components/DashboardPageKit";
+
 import Link from "next/link";
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
@@ -551,21 +553,14 @@ export default function OpportunitiesPage() {
   }
 
   return (
-    <div className="space-y-5 p-4 md:p-6">
-      <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
-              Comercial
-            </p>
-            <h1 className="mt-2 text-2xl font-bold text-zinc-900">
-              Funil de Vendas
-            </h1>
-            <p className="mt-1 text-sm text-zinc-600">
-              Kanban comercial com fases, valores, responsáveis e próximos passos.
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Comercial"
+        title="Funil de Vendas"
+        description="Kanban comercial com fases, valores, responsáveis e próximos passos."
+
+      />
+<div className="dashboard-metrics-grid">
             <MiniMetric label="Oportunidades" value={String(opportunities.length)} />
             <MiniMetric
               label="Pipeline"
@@ -582,8 +577,6 @@ export default function OpportunitiesPage() {
               )}
             />
           </div>
-        </div>
-      </header>
 
       {message ? (
         <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
@@ -1061,14 +1054,7 @@ function proposalHrefForOpportunity(opportunity: Opportunity) {
 }
 
 function MiniMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
-        {label}
-      </p>
-      <p className="mt-1 text-sm font-black text-slate-950">{value}</p>
-    </div>
-  );
+  return <SummaryMetric label={label} value={String(value)} tone={"blue"} />;
 }
 
 function PipelineFilterButton({

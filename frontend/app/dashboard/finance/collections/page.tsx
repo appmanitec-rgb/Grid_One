@@ -134,7 +134,7 @@ export default function CollectionsPage() {
     finally { setBusy(false); }
   }
 
-  return <main className="space-y-5 pb-10">
+  return <main className="dashboard-page pb-10 space-y-5">
     <PageHero eyebrow="FINANCEIRO / COBRANÇA" title="Boletos Santander" description="Prepare títulos, gere a remessa CNAB 240, envie pelo banco e importe o retorno para atualizar o contas a receber." compact
       stats={[
         { label: "Para preparar", value: String(data?.unprepared.length || 0), tone: "blue" },

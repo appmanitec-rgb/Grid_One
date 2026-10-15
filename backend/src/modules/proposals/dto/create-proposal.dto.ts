@@ -22,8 +22,26 @@ import {
   Max,
   Min,
   ValidateNested,
+  IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+
+export class ProposalPaymentPlanDto {
+  @IsIn(['CASH', '50_50', '30_70', 'PREPAID', 'CUSTOM', 'CONFIGURED'])
+  preset!: 'CASH' | '50_50' | '30_70' | 'PREPAID' | 'CUSTOM' | 'CONFIGURED';
+
+  @IsIn(['PERCENTAGE', 'VALUE'])
+  entryType!: 'PERCENTAGE' | 'VALUE';
+
+  @IsNumber()
+  @Min(0)
+  entryValue!: number;
+
+  @IsInt()
+  @Min(0)
+  @Max(36)
+  balanceInstallments!: number;
+}
 
 class ProposalItemDto {
   @IsString()
@@ -153,6 +171,11 @@ export class CreateProposalDto {
   @IsBoolean()
   @IsOptional()
   hasDownPayment?: boolean;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ProposalPaymentPlanDto)
+  paymentPlan?: ProposalPaymentPlanDto;
 
   @IsNumber()
   @Min(0)

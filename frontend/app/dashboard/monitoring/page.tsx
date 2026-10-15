@@ -196,16 +196,17 @@ export default function MonitoringPage() {
   }, [overview.recentEvents, search, severityFilter]);
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
-        eyebrow="Telemetria e resposta"
-        title="Monitoramento operacional com alertas, automacoes e ponte direta para o campo."
-        description="A tela agora consome telemetria real, cruza eventos com ordens ativas e deixa visivel quando combustivel baixo ja abriu abastecimento automatico. Isso fecha melhor o fluxo alerta -> triagem -> O.S. -> despacho."
+        loading={loading}
+        eyebrow="Operação"
+        title="Monitoramento"
+        description="Acompanhe equipamentos, alertas e atendimentos associados aos eventos."
         stats={[
           {
             label: "Geradores monitorados",
             value: String(overview.stats.monitoredGenerators),
-            helper: "Equipamentos com ultimo evento capturado no snapshot.",
+            helper: "Equipamentos com informações de monitoramento recebidas.",
             tone: "blue",
           },
           {
@@ -249,7 +250,7 @@ export default function MonitoringPage() {
             <Pulse
               label="Ordens ligadas"
               value={`${overview.stats.linkedActiveOrders} ativas`}
-              helper="Fila operacional atualmente conectada aos geradores do snapshot."
+              helper="Ordens abertas para os equipamentos monitorados."
               tone="blue"
             />
             <Pulse
@@ -324,13 +325,13 @@ export default function MonitoringPage() {
         >
           {loading ? (
             <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 px-5 py-10 text-sm text-slate-500">
-              Montando snapshot...
+              Carregando monitoramento...
             </div>
           ) : null}
 
           {!loading && overview.generatorSnapshots.length === 0 ? (
             <EmptyState
-              title="Sem snapshot disponivel"
+              title="Nenhuma informação de monitoramento recebida"
               description="Assim que os primeiros eventos chegarem, o monitoramento passa a montar o pulso da frota."
             />
           ) : null}

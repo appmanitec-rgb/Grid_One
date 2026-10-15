@@ -7,11 +7,14 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
 import { DatabaseService } from '../../database/database.service';
+import { clientCredentialVersion } from './client-credential-version';
 import { allAccessPolicy, effectiveAccessPolicy } from '../users/access-policy';
 
 type AuthPayload = {
   sub: string;
+  purpose?: string;
   mfaSetupRequired?: boolean;
+  credentialVersion?: string;
 };
 
 const MFA_AUTH_ENABLED = process.env.MFA_AUTH_ENABLED === 'true';
@@ -42,6 +45,12 @@ export class AuthGuard implements CanActivate {
       );
     }
 
+    if (!payload.sub || payload.purpose) {
+      throw new UnauthorizedException(
+        'Token de acesso invalido. Faca login novamente.',
+      );
+    }
+
     const path = (request.path || request.url || '').toLowerCase();
     const requiresMfaSetup =
       MFA_AUTH_ENABLED && payload.mfaSetupRequired === true;
@@ -59,6 +68,7 @@ export class AuthGuard implements CanActivate {
         id: true,
         role: true,
         isActive: true,
+        passwordHash: true,
         isSystemMaster: true,
         accessPolicy: true,
         linkedClientId: true,
@@ -73,6 +83,38 @@ export class AuthGuard implements CanActivate {
 
     if (user.role === 'CLIENT' && !user.linkedClient?.portalEnabled) {
       throw new UnauthorizedException('Central do cliente desabilitada.');
+    }
+
+    {
+      const expectedVersion = payload.credentialVersion
+        ? clientCredentialVersion(user.passwordHash)
+        : null;
+      const legacyReset = !payload.credentialVersion
+        ? await this.database.systemAuditLog.findFirst({
+            where: {
+              domain: 'USERS',
+              entityType: 'USER',
+              entityId: user.id,
+              action: {
+                in: [
+                  'USER_PASSWORD_CHANGED',
+                  'CLIENT_PORTAL_PASSWORD_CHANGED',
+                  'CLIENT_PORTAL_ACTIVATED',
+                ],
+              },
+            },
+            select: { id: true },
+          })
+        : null;
+      if (
+        (payload.credentialVersion &&
+          payload.credentialVersion !== expectedVersion) ||
+        legacyReset
+      ) {
+        throw new UnauthorizedException(
+          'A senha deste acesso foi alterada. Entre novamente.',
+        );
+      }
     }
 
     request['user'] = {

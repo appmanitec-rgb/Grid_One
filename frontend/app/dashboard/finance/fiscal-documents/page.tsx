@@ -1,5 +1,7 @@
 "use client";
 
+import { commercialLabel } from "@/lib/commercial-labels";
+
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
@@ -88,7 +90,7 @@ export default function FiscalDocumentsPage() {
     finally { setBusy(false); }
   }
 
-  return <main className="space-y-5 pb-10">
+  return <main className="dashboard-page pb-10 space-y-5">
     <PageHero eyebrow="FINANCEIRO / FISCAL" title="Notas fiscais" description="Prepare NF-e de produtos e NFS-e de serviços vinculadas ao contas a receber. Cada nota mantém seus próprios itens e histórico." compact
       stats={[
         { label: "Rascunhos", value: String(data?.documents.filter((item) => item.status === "DRAFT").length || 0), tone: "blue" },
@@ -173,7 +175,7 @@ export default function FiscalDocumentsPage() {
     <SectionCard title="3. Acompanhar notas" description="Uma mesma conta pode ter rascunhos separados para peças e serviços. A autorização aparecerá aqui quando a integração fiscal estiver ativa.">
       {!data?.documents.length ? <p className="text-sm text-slate-500">Nenhum rascunho fiscal criado.</p> : <div className="grid gap-3 xl:grid-cols-2">
         {data.documents.map((document) => <div key={document.id} className="rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wide text-blue-700">{kindName[document.kind]}</p><h3 className="mt-1 font-bold text-slate-950">{document.receivable.client.companyName}</h3><p className="text-xs text-slate-500">{document.receivable.description}</p></div><span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900">{document.status === "DRAFT" ? "Rascunho · sem valor fiscal" : document.status}</span></div>
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wide text-blue-700">{kindName[document.kind]}</p><h3 className="mt-1 font-bold text-slate-950">{document.receivable.client.companyName}</h3><p className="text-xs text-slate-500">{document.receivable.description}</p></div><span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900">{document.status === "DRAFT" ? "Rascunho · sem valor fiscal" : commercialLabel(document.status)}</span></div>
           <p className="mt-3 text-xs font-semibold text-slate-600">Emitente: {document.issuerSnapshot.name || "Pendente"} · {document.issuerSnapshot.cnpj || "CNPJ pendente"}</p>
           <p className="mt-2 text-lg font-bold text-slate-900">{money(document.totalAmount)}</p>
           <p className="mt-1 text-xs text-slate-500">{document.items.length} item(ns) · criada em {new Date(document.createdAt).toLocaleDateString("pt-BR")}{document.number ? ` · NF ${document.number}` : ""}</p>

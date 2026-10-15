@@ -27,6 +27,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const [flow, setFlow] = useState<"LOGIN" | "MFA_CHALLENGE" | "MFA_SETUP">("LOGIN");
@@ -39,6 +40,11 @@ export default function LoginPage() {
     let cancelled = false;
 
     async function resumeSession() {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("passwordChanged") === "1") {
+        setNotice("Senha alterada com sucesso. Entre com a nova senha.");
+        window.history.replaceState(null, "", "/");
+      }
       const hasSession = await ensureValidSession();
       if (!cancelled && hasSession) {
         const token = getStoredAccessToken();
@@ -223,6 +229,7 @@ export default function LoginPage() {
       password={password}
       setPassword={setPassword}
       error={error}
+      notice={notice}
       isLoading={isLoading}
       flow={flow}
       mfaCode={mfaCode}

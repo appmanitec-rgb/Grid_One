@@ -75,7 +75,8 @@ export class DocxToPdfService {
           docxPath,
         ],
         {
-          timeout: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 15_000,
+          timeout:
+            Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 15_000,
           windowsHide: true,
           maxBuffer: 1024 * 1024,
         },

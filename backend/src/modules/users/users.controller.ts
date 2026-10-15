@@ -19,6 +19,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { CreateUserSpecialtyDto } from './dto/create-user-specialty.dto';
 import { UpdateUserCertificationDto } from './dto/update-user-certification.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
 import { UpdateUserSpecialtyDto } from './dto/update-user-specialty.dto';
 import { UserPresencePingDto } from './dto/user-presence-ping.dto';
 import { UsersService } from './users.service';
@@ -74,7 +75,10 @@ export class UsersController {
 
   @RequireAccessPolicy('pages.dashboard')
   @Patch('me')
-  updateMyProfile(@Req() req: Request, @Body() updateUserDto: UpdateUserDto) {
+  updateMyProfile(
+    @Req() req: Request,
+    @Body() updateUserDto: UpdateMyProfileDto,
+  ) {
     const userId = this.extractUserId(req);
     return this.usersService.updateMyProfile(userId, updateUserDto);
   }

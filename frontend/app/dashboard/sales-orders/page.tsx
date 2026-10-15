@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHeader } from "../components/DashboardPageKit";
+import { commercialLabel } from "@/lib/commercial-labels";
+
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getAccessFromToken } from "@/lib/access";
@@ -219,15 +222,15 @@ export default function SalesOrdersPage() {
   const canDeliverNow = detail?.items.some((item) => item.allocations.some((allocation) => allocation.pickedQty > 0));
   const hasActiveReceivable = detail?.receivables.some((receivable) => receivable.status !== "CANCELED") ?? false;
 
-  return <div className="mx-auto max-w-[1600px] space-y-5 p-4 pb-16 md:p-7">
-    <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:flex md:items-end md:justify-between">
-      <div>
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Suprimentos · expedição</p>
-        <h1 className="mt-1 text-2xl font-bold text-slate-950">Pedidos de venda</h1>
-        <p className="mt-2 max-w-2xl text-sm text-slate-600">Da proposta aceita à entrega das peças, com reserva por almoxarifado e histórico de cada entrega.</p>
-      </div>
-      {permissions.canManage ? <button type="button" disabled={busy} onClick={() => void run("/sales-orders/sync-approved")} className="mt-4 rounded-xl border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50 disabled:opacity-50 md:mt-0">Buscar propostas aprovadas sem pedido</button> : null}
-    </header>
+  return <div className="dashboard-page pb-16 space-y-5">
+    <PageHeader
+        eyebrow="Comercial"
+        title="Pedidos de venda"
+        description="Da proposta aceita à entrega das peças, com reserva por almoxarifado e histórico de cada entrega."
+        actions={<>
+{permissions.canManage ? <button type="button" disabled={busy} onClick={() => void run("/sales-orders/sync-approved")} className="mt-4 rounded-xl border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50 disabled:opacity-50 md:mt-0">Buscar propostas aprovadas sem pedido</button> : null}
+</>}
+      />
 
     {error ? <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-800">{error}</div> : null}
     {message ? <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">{message}</div> : null}
@@ -262,7 +265,7 @@ export default function SalesOrdersPage() {
             </div>
             <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
               <div className="rounded-xl bg-slate-50 p-3"><span className="block text-xs text-slate-500">Valor do pedido</span><strong>{money(detail.totalValue)}</strong></div>
-              <div className="rounded-xl bg-slate-50 p-3"><span className="block text-xs text-slate-500">Condição de pagamento</span><strong>{detail.paymentTerm || "—"}</strong></div>
+              <div className="rounded-xl bg-slate-50 p-3"><span className="block text-xs text-slate-500">Condição de pagamento</span><strong>{commercialLabel(detail.paymentTerm,"—")}</strong></div>
               <div className="rounded-xl bg-slate-50 p-3"><span className="block text-xs text-slate-500">Cobrança vinculada</span><strong>{detail.receivables.length ? `${detail.receivables.length} título(s)` : "Nenhum título"}</strong></div>
             </div>
             {detail.closedReason ? <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">Motivo do encerramento: {detail.closedReason}</p> : null}

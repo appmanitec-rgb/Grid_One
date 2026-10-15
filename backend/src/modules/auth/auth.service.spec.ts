@@ -5,6 +5,7 @@ import * as bcrypt from 'bcrypt';
 import { DatabaseService } from '../../database/database.service';
 import { AuthService } from './auth.service';
 import { MfaService } from './mfa.service';
+import { clientCredentialVersion } from './client-credential-version';
 
 type RefreshSessionRunner = (
   userId: string,
@@ -32,10 +33,12 @@ function getRefreshSessionRunner(service: AuthService): RefreshSessionRunner {
 describe('AuthService', () => {
   let service: AuthService;
   let database: {
-    user: { findFirst: jest.Mock; update: jest.Mock };
+    user: { findFirst: jest.Mock; findUnique: jest.Mock; update: jest.Mock };
+    client: { findUnique: jest.Mock };
     clientPortalActivation: { findUnique: jest.Mock; updateMany: jest.Mock };
     systemAuditLog: { create: jest.Mock };
     $transaction: jest.Mock;
+    $queryRaw: jest.Mock;
     authSession: {
       findUnique: jest.Mock;
       update: jest.Mock;
@@ -62,10 +65,16 @@ describe('AuthService', () => {
 
   beforeEach(async () => {
     database = {
-      user: { findFirst: jest.fn(), update: jest.fn() },
+      user: { findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
+      client: {
+        findUnique: jest.fn().mockResolvedValue({ portalEnabled: true }),
+      },
       clientPortalActivation: { findUnique: jest.fn(), updateMany: jest.fn() },
       systemAuditLog: { create: jest.fn() },
-      $transaction: jest.fn(),
+      $transaction: jest.fn((callback: (tx: typeof database) => unknown) =>
+        callback(database),
+      ),
+      $queryRaw: jest.fn(),
       authSession: {
         findUnique: jest.fn(),
         update: jest.fn(),
@@ -90,6 +99,86 @@ describe('AuthService', () => {
     expect(service).toBeDefined();
   });
 
+  it.each([UserRole.CLIENT, UserRole.SALES])(
+    'ties %s tokens to the validated password without exposing the hash',
+    async (role) => {
+      const passwordHash = await bcrypt.hash('senha-de-teste', 4);
+      database.user.findUnique.mockResolvedValue({
+        passwordHash,
+        role,
+        isActive: true,
+      });
+      database.user.findFirst.mockResolvedValue({
+        id: 'client-user',
+        name: 'Cliente',
+        email: 'cliente@example.com',
+        passwordHash,
+        role,
+        linkedClientId: 'client-1',
+        isActive: true,
+        isSystemMaster: false,
+        accessPolicy: {},
+      });
+      const jwt = Reflect.get(service, 'jwtService') as {
+        signAsync: jest.Mock;
+      };
+      jwt.signAsync = jest.fn().mockResolvedValue('client-token');
+      const result = await service.login(
+        'cliente@example.com',
+        'senha-de-teste',
+        undefined,
+        undefined,
+        role === UserRole.CLIENT ? 'CLIENT' : 'INTERNAL',
+      );
+      expect(jwt.signAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          credentialVersion: clientCredentialVersion(passwordHash),
+        }),
+        expect.anything(),
+      );
+      expect(result.user).not.toHaveProperty('passwordHash');
+      expect(result.user).not.toHaveProperty('credentialVersion');
+      expect(JSON.stringify(jwt.signAsync.mock.calls)).not.toContain(
+        passwordHash,
+      );
+    },
+  );
+  it.each([UserRole.CLIENT, UserRole.SALES])(
+    'rejects an old %s password reset during login',
+    async (role) => {
+      const oldHash = await bcrypt.hash('senha-de-teste', 4);
+      database.user.findFirst.mockResolvedValue({
+        id: 'client-user',
+        name: 'Cliente',
+        email: 'cliente@example.com',
+        passwordHash: oldHash,
+        role,
+        linkedClientId: 'client-1',
+        isActive: true,
+        isSystemMaster: false,
+      });
+      database.user.findUnique.mockResolvedValue({
+        passwordHash: 'new-password-hash',
+        role,
+        isActive: true,
+      });
+      const jwt = Reflect.get(service, 'jwtService') as {
+        signAsync: jest.Mock;
+      };
+      jwt.signAsync = jest.fn();
+      await expect(
+        service.login(
+          'cliente@example.com',
+          'senha-de-teste',
+          undefined,
+          { deviceId: 'old-login' },
+          role === UserRole.CLIENT ? 'CLIENT' : 'INTERNAL',
+        ),
+      ).rejects.toThrow('senha deste acesso');
+      expect(jwt.signAsync).not.toHaveBeenCalled();
+      expect(database.authSession.create).not.toHaveBeenCalled();
+    },
+  );
   it('keeps client credentials out of the internal login', async () => {
     database.user.findFirst.mockResolvedValue({
       id: 'client-user',

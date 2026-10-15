@@ -1,8 +1,11 @@
 ﻿"use client";
 
+import { PageHeader } from "../components/DashboardPageKit";
+
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { commercialLabel } from "@/lib/commercial-labels";
 
 type Supplier = { id: string; companyName: string; paymentTerm?: string | null };
 type Warehouse = { id: string; code: string; name: string };
@@ -203,22 +206,26 @@ export default function PurchaseOrdersPage() {
   }, [drafts, supplierId]);
 
   return (
-    <div className="space-y-6 p-8">
-      <h1 className="text-3xl font-bold text-zinc-900">Pedidos de Compra</h1>
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Suprimentos"
+        title="Pedidos de Compra"
+        description="Prepare compras, acompanhe fornecedores e registre recebimentos."
+      />
 
       <section className="rounded-xl border border-zinc-200 bg-white p-4 space-y-3">
         <h2 className="text-lg font-bold text-zinc-800">Novo Pedido (a partir da reposicao sugerida)</h2>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-          <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm">
+          <select aria-label="Fornecedor do pedido" value={supplierId} onChange={(event) => setSupplierId(event.target.value)} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm">
             <option value="">Fornecedor</option>
             {suppliers.map((supplier) => (
               <option key={supplier.id} value={supplier.id}>{supplier.companyName}</option>
             ))}
           </select>
 
-          <input type="date" value={expectedDate} onChange={(event) => setExpectedDate(event.target.value)} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
-          <input value={paymentTerm} onChange={(event) => setPaymentTerm(event.target.value)} placeholder="Prazo (30/60/90)" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
-          <input value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Observacoes" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
+          <input aria-label="Data prevista do pedido" type="date" value={expectedDate} onChange={(event) => setExpectedDate(event.target.value)} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
+          <input aria-label="Condição de pagamento" value={paymentTerm} onChange={(event) => setPaymentTerm(event.target.value)} placeholder="Prazo (30/60/90)" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
+          <input aria-label="Observações do pedido" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Observacoes" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
         </div>
 
         <div className="rounded-lg border border-zinc-200 p-3">
@@ -248,9 +255,9 @@ export default function PurchaseOrdersPage() {
       </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-semibold text-zinc-700">Almoxarifado para recebimento:</p>
-          <select value={receiveWarehouseId} onChange={(event) => setReceiveWarehouseId(event.target.value)} className="rounded border border-zinc-300 px-2 py-1 text-xs">
+        <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+          <label htmlFor="purchase-receive-warehouse" className="text-sm font-semibold text-zinc-700">Almoxarifado para recebimento</label>
+          <select id="purchase-receive-warehouse" value={receiveWarehouseId} onChange={(event) => setReceiveWarehouseId(event.target.value)} className="rounded border border-zinc-300 px-2 py-1 text-xs">
             {warehouses.map((wh) => (
               <option key={wh.id} value={wh.id}>{wh.code} - {wh.name}</option>
             ))}
@@ -271,11 +278,11 @@ export default function PurchaseOrdersPage() {
                         {order.supplier.companyName}
                       </Link>
                     </p>
-                    <p className="text-xs text-zinc-500">Status: {order.status} | Total: R$ {Number(order.totalAmount || 0).toFixed(2)}</p>
+                    <p className="text-xs text-zinc-500">Situação: {commercialLabel(order.status)} | Total: {formatPurchaseCurrency(order.totalAmount)}</p>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <select value={order.status} onChange={(event) => void updateStatus(order.id, event.target.value as PurchaseOrder["status"])} className="rounded border border-zinc-300 px-2 py-1 text-xs">
+                    <select aria-label={`Status do pedido ${order.code}`} value={order.status} onChange={(event) => void updateStatus(order.id, event.target.value as PurchaseOrder["status"])} className="rounded border border-zinc-300 px-2 py-1 text-xs">
                       <option value="DRAFT">Rascunho</option>
                       <option value="SENT">Enviado</option>
                       <option value="APPROVED">Aprovado</option>
@@ -295,7 +302,7 @@ export default function PurchaseOrdersPage() {
                         {item.catalogItem.name}
                       </Link>
                       {" - "}
-                      {item.receivedQty}/{item.quantity} (R$ {Number(item.unitPrice).toFixed(2)})
+                      {item.receivedQty}/{item.quantity} ({formatPurchaseCurrency(item.unitPrice)})
                     </li>
                   ))}
                 </ul>
@@ -306,4 +313,8 @@ export default function PurchaseOrdersPage() {
       </section>
     </div>
   );
+}
+
+function formatPurchaseCurrency(value: number | null | undefined) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value || 0));
 }

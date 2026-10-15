@@ -1,4 +1,5 @@
 "use client";
+import { commercialLabel } from "@/lib/commercial-labels";
 
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -402,7 +403,7 @@ export default function ContractDocumentPage() {
         <PrintSection title="Regras do contrato" columns={3}>
           <ValueCard
             label="Recorrencia preventiva"
-            value={data.document.preventiveRecurrence}
+            value={commercialLabel(data.document.preventiveRecurrence)}
           />
           <ValueCard
             label="SLA de resposta"
@@ -418,7 +419,7 @@ export default function ContractDocumentPage() {
           />
           <ValueCard
             label="Cobertura de pecas"
-            value={data.document.partsCoverage}
+            value={commercialLabel(data.document.partsCoverage)}
           />
           <ValueCard label="Vencimento" value={`Dia ${data.document.dueDay}`} />
           <ValueCard label="Indice" value={data.document.adjustmentIndex} />

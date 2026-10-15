@@ -1,6 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import PaymentPlanEditor from "../../PaymentPlanEditor";
+import { type ProposalPaymentPlan } from "@/lib/proposal-payment-plan";
+import { commercialLabel, freightLabel } from "@/lib/commercial-labels";
+import { ProposalSteps, ProposalFinancialDock, focusProposalStep } from "../../../components/ProposalFormFlow";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
@@ -101,10 +105,10 @@ const STEPS = [
   "Cliente",
   "Necessidade",
   "Equipamento",
-  "Configuracao",
-  "Instalacao",
+  "Configuração",
+  "Instalação",
   "Comercial",
-  "Revisao",
+  "Revisão",
 ];
 
 const INPUT_CLASS =
@@ -165,6 +169,7 @@ export default function GeneratorProposalWizardPage() {
 
   const [paymentTerms, setPaymentTerms] = useState<ControlOption[]>([]);
   const [paymentTerm, setPaymentTerm] = useState("");
+  const [paymentPlan, setPaymentPlan] = useState<ProposalPaymentPlan | null>(null);
   const [freight, setFreight] = useState("FOB");
   const [deliveryLeadTimeDays, setDeliveryLeadTimeDays] = useState("");
   const [validUntil, setValidUntil] = useState("");
@@ -500,6 +505,7 @@ export default function GeneratorProposalWizardPage() {
     }
     setError("");
     setStep((current) => Math.min(STEPS.length - 1, current + 1));
+    focusProposalStep();
   }
 
   async function submitProposal() {
@@ -507,6 +513,7 @@ export default function GeneratorProposalWizardPage() {
       const validation = validateStep(index);
       if (validation) {
         setStep(index);
+        focusProposalStep();
         setError(validation);
         return;
       }
@@ -549,6 +556,7 @@ export default function GeneratorProposalWizardPage() {
           freight,
           validUntil: validUntil || undefined,
           paymentTerm,
+          paymentPlan: paymentPlan || undefined,
           deliveryLeadTimeDays: deliveryLeadTimeDays
             ? Number(deliveryLeadTimeDays)
             : selectedGenerator.leadTimeDays ?? undefined,
@@ -585,7 +593,7 @@ export default function GeneratorProposalWizardPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page proposal-flow-page space-y-5">
       <PageHero
         eyebrow="Comercial / Venda de geradores"
         title="Nova proposta de gerador"
@@ -602,26 +610,7 @@ export default function GeneratorProposalWizardPage() {
         }
       />
 
-      <nav className="grid gap-2 rounded-2xl border border-slate-200 bg-white p-3 md:grid-cols-7">
-        {STEPS.map((label, index) => (
-          <button
-            key={label}
-            type="button"
-            onClick={() => index <= step && setStep(index)}
-            className={`rounded-xl px-3 py-3 text-left text-xs font-bold transition ${
-              index === step
-                ? "bg-sky-600 text-white"
-                : index < step
-                  ? "bg-emerald-50 text-emerald-800"
-                  : "bg-slate-50 text-slate-400"
-            }`}
-          >
-            <span className="block text-[10px] uppercase tracking-[0.14em]">Etapa {index + 1}</span>
-            <span className="mt-1 block">{label}</span>
-          </button>
-        ))}
-      </nav>
-
+<ProposalSteps steps={STEPS.map((title,index) => ({title,description: ["Cliente e vendedor","Potência e aplicação","Modelo recomendado","Quantidade e acessórios","Instalação e vistoria","Pagamento e despesas","Conferência final"][index]}))} current={step} onChange={(index) => { for (let target = 0; target < index; target += 1) { const issue = validateStep(target); if (issue) { setError(issue); setStep(target); focusProposalStep(); return; } } setError(""); setStep(index); focusProposalStep(); }} />
       {notice ? <StatusBanner tone="emerald">{notice}</StatusBanner> : null}
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
       {loading ? <StatusBanner>Carregando dados do assistente...</StatusBanner> : null}
@@ -784,7 +773,7 @@ export default function GeneratorProposalWizardPage() {
               <Field label="Vistoria comercial">
                 <select className={INPUT_CLASS} value={inspectionId} onChange={(event) => setInspectionId(event.target.value)}>
                   <option value="">Sem vistoria vinculada</option>
-                  {(linkedOpportunity?.inspections || []).map((inspection) => <option key={inspection.id} value={inspection.id}>{inspection.code} - {inspection.status}</option>)}
+                  {(linkedOpportunity?.inspections || []).map((inspection) => <option key={inspection.id} value={inspection.id}>{inspection.code} · {commercialLabel(inspection.status)}</option>)}
                 </select>
               </Field>
               <Field label="Dados complementares">
@@ -799,8 +788,8 @@ export default function GeneratorProposalWizardPage() {
       {!loading && step === 5 ? (
         <SectionCard title="Condicoes comerciais" description="Defina somente as excecoes; os dados do equipamento vieram do Studio.">
           <div className="grid gap-4 md:grid-cols-3">
-            <Field label="Condicao de pagamento"><select className={INPUT_CLASS} value={paymentTerm} onChange={(event) => setPaymentTerm(event.target.value)}><option value="">Selecione</option>{paymentTerms.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></Field>
-            <Field label="Frete"><Select value={freight} onChange={setFreight} options={[["FOB", "FOB"], ["CIF", "CIF"], ["SEM_FRETE", "Sem frete"]]} /></Field>
+            <div className="md:col-span-3"><PaymentPlanEditor value={paymentPlan} onChange={setPaymentPlan} paymentTerm={paymentTerm} onTermChange={setPaymentTerm} total={total} options={paymentTerms} /></div>
+            <Field label="Frete"><Select value={freight} onChange={setFreight} options={[["FOB", freightLabel("FOB")], ["CIF", freightLabel("CIF")], ["SEM_FRETE", "Sem frete"]]} /></Field>
             <Field label="Prazo de entrega (dias)"><input className={INPUT_CLASS} type="number" min="0" value={deliveryLeadTimeDays} onChange={(event) => setDeliveryLeadTimeDays(event.target.value)} placeholder={String(selectedGenerator?.leadTimeDays ?? "Sob consulta")} /></Field>
             <Field label="Validade"><input className={INPUT_CLASS} type="date" value={validUntil} onChange={(event) => setValidUntil(event.target.value)} /></Field>
             <Field label="Desconto geral %"><input className={INPUT_CLASS} type="number" min="0" max="100" step="0.01" value={discountPercent} onChange={(event) => setDiscountPercent(event.target.value)} /></Field>
@@ -844,22 +833,21 @@ export default function GeneratorProposalWizardPage() {
             <Summary label="Equipamento" value={`Generac ${selectedGenerator?.model}`} />
             <Summary label="Quantidade" value={generatorQuantity} />
             <Summary label="Instalacao" value={includeInstallation ? "Incluida" : "Nao incluida"} />
-            <Summary label="Pagamento" value={paymentTerm} />
+            <Summary label="Pagamento" value={commercialLabel(paymentTerm)} />
             <Summary label="Prazo" value={deliveryLeadTimeDays || String(selectedGenerator?.leadTimeDays ?? "Sob consulta")} />
             <Summary label="Despesas operacionais" value={money(expensesTotal)} />
             <Summary label="Valor final" value={money(total)} />
           </div>
           {recommendation?.requiresEngineeringReview ? <div className="mt-5"><StatusBanner tone="amber">A proposta sera criada em rascunho com recomendacao de validacao tecnica.</StatusBanner></div> : null}
-          <button type="button" disabled={submitting} onClick={() => void submitProposal()} className="mt-6 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-bold text-white disabled:opacity-50">{submitting ? "Criando proposta..." : "Finalizar e criar rascunho"}</button>
         </SectionCard>
       ) : null}
 
-      {!loading ? (
-        <div className="sticky bottom-4 z-20 flex items-center justify-between rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-xl backdrop-blur">
-          <button type="button" disabled={step === 0} onClick={() => { setError(""); setStep((current) => Math.max(0, current - 1)); }} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40">Voltar</button>
-          <div className="flex items-center gap-3"><DataPill tone="slate">{step + 1} de {STEPS.length}</DataPill>{step < STEPS.length - 1 ? <button type="button" onClick={nextStep} className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-bold text-white">Continuar</button> : null}</div>
-        </div>
-      ) : null}
+      {!loading ? <ProposalFinancialDock
+        lines={[{label: "Equipamento e itens", value: itemsSubtotal}, {label: "Despesas", value: expensesTotal}, {label: "Desconto", value: discountValue, negative: true}]}
+        total={total} payment={commercialLabel(paymentTerm,"Pagamento a definir")} current={step} steps={STEPS.length}
+        onBack={() => {setError(""); setStep(current => Math.max(0,current-1)); focusProposalStep();}} onNext={nextStep}
+        onSave={() => void submitProposal()} saving={submitting} saveLabel="Finalizar e criar rascunho"
+      /> : null}
     </div>
   );
 }
@@ -933,7 +921,7 @@ function LookupOption({ title, helper, onClick }: { title: string; helper: strin
 }
 
 function GeneratorCard({ generator, selected, onSelect, compact = false }: { generator: CommercialGeneratorOption; selected: boolean; onSelect: () => void; compact?: boolean }) {
-  return <article className={`rounded-2xl border p-4 ${selected ? "border-sky-500 bg-sky-50 ring-2 ring-sky-100" : "border-slate-200 bg-white"}`}><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.14em] text-sky-700">{generator.classification === "RECOMMENDED" ? "Recomendado" : generator.internalCode}</p><p className="mt-1 font-bold text-slate-950">Generac {generator.model}</p></div>{selected ? <DataPill tone="emerald">Selecionado</DataPill> : null}</div><div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600"><span>{generator.capacityKw ?? generator.standbyPowerKw ?? "-"} kW</span><span>{generator.fuelType}</span><span>{generator.construction}</span><span>{generator.availability}</span></div>{!compact && generator.reservePercent !== undefined ? <p className="mt-3 text-sm font-semibold text-slate-700">Reserva estimada: {generator.reservePercent}%</p> : null}<p className="mt-3 text-lg font-bold text-slate-950">{money(generator.commercialPrice)}</p>{!compact && generator.reasons?.length ? <ul className="mt-3 space-y-1 text-xs text-emerald-800">{generator.reasons.map((reason) => <li key={reason}>✓ {reason}</li>)}</ul> : null}{!compact && generator.warnings?.length ? <ul className="mt-2 space-y-1 text-xs text-amber-800">{generator.warnings.map((warning) => <li key={warning}>⚠ {warning}</li>)}</ul> : null}<button type="button" onClick={onSelect} className="mt-4 w-full rounded-xl bg-slate-950 px-3 py-2 text-sm font-bold text-white">Selecionar</button></article>;
+  return <article className={`rounded-2xl border p-4 ${selected ? "border-sky-500 bg-sky-50 ring-2 ring-sky-100" : "border-slate-200 bg-white"}`}><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.14em] text-sky-700">{generator.classification === "RECOMMENDED" ? "Recomendado" : generator.internalCode}</p><p className="mt-1 font-bold text-slate-950">Generac {generator.model}</p></div>{selected ? <DataPill tone="emerald">Selecionado</DataPill> : null}</div><div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600"><span>{generator.capacityKw ?? generator.standbyPowerKw ?? "-"} kW</span><span>{commercialLabel(generator.fuelType)}</span><span>{commercialLabel(generator.construction)}</span><span>{commercialLabel(generator.availability)}</span></div>{!compact && generator.reservePercent !== undefined ? <p className="mt-3 text-sm font-semibold text-slate-700">Reserva estimada: {generator.reservePercent}%</p> : null}<p className="mt-3 text-lg font-bold text-slate-950">{money(generator.commercialPrice)}</p>{!compact && generator.reasons?.length ? <ul className="mt-3 space-y-1 text-xs text-emerald-800">{generator.reasons.map((reason) => <li key={reason}>✓ {reason}</li>)}</ul> : null}{!compact && generator.warnings?.length ? <ul className="mt-2 space-y-1 text-xs text-amber-800">{generator.warnings.map((warning) => <li key={warning}>⚠ {warning}</li>)}</ul> : null}<button type="button" onClick={onSelect} className="mt-4 w-full rounded-xl bg-slate-950 px-3 py-2 text-sm font-bold text-white">Selecionar</button></article>;
 }
 
 function Summary({ label, value }: { label: string; value: string }) {

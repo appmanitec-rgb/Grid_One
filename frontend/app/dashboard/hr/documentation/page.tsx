@@ -352,11 +352,11 @@ export default function DocumentationPage() {
   }
 
   return (
-    <div className="space-y-6 pb-4">
+    <div className="dashboard-page pb-4 space-y-5">
       <PageHero
-        eyebrow="Pessoas / Seguranca"
-        title="Documentacao de colaboradores"
-        description="Base operacional para NR, treinamentos, liberacoes tecnicas e vencimentos. O dashboard apenas resume estes registros."
+        eyebrow="Pessoas"
+        title="Documentação de colaboradores"
+        description="Acompanhe treinamentos, certificações, liberações e vencimentos."
         stats={[
           {
             label: "Colaboradores",

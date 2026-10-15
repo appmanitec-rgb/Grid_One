@@ -1,12 +1,22 @@
-$ErrorActionPreference = 'Stop'
-$projectRoot = Split-Path -Parent $PSScriptRoot
-$pidFile = Join-Path $projectRoot 'runtime-logs/e2e-server-pids.json'
-if (-not (Test-Path -LiteralPath $pidFile)) { Write-Output 'Servidores E2E nao registrados.'; return }
-$runtime = Get-Content -LiteralPath $pidFile -Raw | ConvertFrom-Json
-if ($runtime.database -ne 'gridone_e2e') { throw 'Registro de servidores E2E invalido.' }
-foreach ($processId in @($runtime.backendPid, $runtime.frontendPid)) {
-  $nodeProcess = Get-Process -Id $processId -ErrorAction SilentlyContinue
-  if ($nodeProcess -and $nodeProcess.ProcessName -eq 'node') { Stop-Process -Id $processId -Force }
+$ErrorActionPreference = "Stop"
+$ProjectRoot = [System.IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
+$pidFile = Join-Path $ProjectRoot "runtime-logs\e2e-server-pids.json"
+if (-not (Test-Path -LiteralPath $pidFile)) { Write-Host "Nenhum servidor registrado."; return }
+$record = Get-Content -LiteralPath $pidFile -Raw | ConvertFrom-Json
+if ($record.database -ne 'gridone_e2e') { throw 'Registro E2E invalido.' }
+$verified = @()
+foreach ($role in @("backend", "frontend")) {
+  $pidValue = [int]$record.("${role}Pid")
+  $entryValue = [string]$record.("${role}Entry")
+  $expected = if ($role -eq "backend") { Join-Path $ProjectRoot "backend\dist\src\main.js" } else { Join-Path $ProjectRoot "frontend\node_modules\next\dist\bin\next" }
+  $serverProcess = Get-CimInstance Win32_Process -Filter "ProcessId=$pidValue"
+  if (-not $serverProcess) { continue }
+  if ($entryValue -ne $expected -or -not $serverProcess.CommandLine.Contains($expected) -or $serverProcess.Name -ne "node.exe") {
+    throw "PID $pidValue nao corresponde ao servidor registrado deste projeto. Parada cancelada; verifique manualmente."
+  }
+  $verified += $pidValue
 }
+# All identities are checked before stopping either application.
+foreach ($pidValue in $verified) { Stop-Process -Id $pidValue -Force }
 Remove-Item -LiteralPath $pidFile
-Write-Output 'Servidores E2E parados; banco gridone_e2e preservado.'
+Write-Host "Servidores do GridOne parados. Banco e arquivos preservados."

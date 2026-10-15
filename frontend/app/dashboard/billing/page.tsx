@@ -432,11 +432,12 @@ export default function BillingPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
-        eyebrow="Faturamento e recebimento"
-        title="Carteira de contratos, O.S. avulsas e espelho financeiro no mesmo painel."
-        description="A central agora mostra onde a fatura de contrato ainda nao virou recebivel, quais O.S. avulsas ja podem faturar e como o recebimento fecha o ciclo financeiro sem perder o vinculo operacional."
+        loading={loading}
+        eyebrow="Financeiro"
+        title="Faturamento"
+        description="Acompanhe faturas de contratos e ordens de serviço, recebimentos e pendências."
         stats={[
           {
             label: "Faturas listadas",

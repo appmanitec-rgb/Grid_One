@@ -1,9 +1,11 @@
 import { apiFetch } from "@/lib/api";
+import { commercialLabel } from "@/lib/commercial-labels";
 
 export type ControlOption = {
   id: string;
   code: string;
   name: string;
+  displayLabel?: string;
   description?: string | null;
   sortOrder?: number | null;
   isActive?: boolean | null;
@@ -38,7 +40,7 @@ export async function loadControlOptions(
       return [
         type,
         Array.isArray(payload)
-          ? payload.filter((option) => option?.isActive !== false)
+          ? payload.filter((option) => option?.isActive !== false).map((option) => type === "PAYMENT_TERM" ? { ...option, displayLabel: commercialLabel(option.name) } : option)
           : [],
       ] as const;
     }),
@@ -51,5 +53,6 @@ export async function loadControlOptions(
 }
 
 export function optionLabel(option: ControlOption) {
+  if (option.displayLabel) return option.displayLabel;
   return option.code ? `${option.code} - ${option.name}` : option.name;
 }

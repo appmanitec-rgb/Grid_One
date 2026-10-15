@@ -197,11 +197,12 @@ export default function NotificationsPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
-        eyebrow="Alertas"
-        title="Central de notificacoes"
-        description="Aprovacoes, operacao, comercial e cobranca em uma fila unica."
+        loading={loading}
+        eyebrow="Painel"
+        title="Central de notificações"
+        description="Acompanhe alertas, aprovações e pendências do sistema."
         stats={stats}
         actions={
           <>

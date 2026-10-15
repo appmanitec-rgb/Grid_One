@@ -1,5 +1,6 @@
 "use client";
-
+import { WorkspaceState } from "@/app/dashboard/components/WorkspaceState";
+import { PageHeader, MetricCard } from "@/app/dashboard/components/DashboardPageKit";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -51,25 +52,8 @@ export default function PortalTicketsPage() {
   }, [tickets]);
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div>
-            <h1 className="text-2xl font-extrabold text-slate-950">Chamados</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Acompanhe atendimento, SLA e OS vinculada quando houver.
-            </p>
-          </div>
-          <Link href="/portal/chamados/novo" className={BUTTON}>
-            Novo chamado
-          </Link>
-        </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <Stat label="Abertos" value={stats.open} />
-          <Stat label="Aguardando voce" value={stats.waitingCustomer} />
-          <Stat label="Com OS vinculada" value={stats.converted} />
-        </div>
-      </section>
+    <div className="dashboard-page space-y-5">
+      <><PageHeader eyebrow="Atendimento" title="Chamados" description="Acompanhe o atendimento, os prazos e a ordem de serviço vinculada." actions={<Link href="/portal/chamados/novo" className={BUTTON}>Novo chamado</Link>} /><div className="dashboard-metrics-grid"><MetricCard label="Abertos" value={String(stats.open)} loading={loading} /><MetricCard label="Aguardando você" value={String(stats.waitingCustomer)} loading={loading} tone="amber" /><MetricCard label="Com O.S. vinculada" value={String(stats.converted)} loading={loading} tone="blue" /></div></>
 
       {error ? <State tone="error" text={error} /> : null}
 
@@ -117,14 +101,6 @@ export default function PortalTicketsPage() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-      <p className="text-xs font-bold uppercase text-slate-500">{label}</p>
-      <p className="mt-1 text-2xl font-extrabold text-slate-950">{value}</p>
-    </div>
-  );
-}
 
 function Badge({
   children,
@@ -150,16 +126,6 @@ function Badge({
   );
 }
 
-function State({ text, tone }: { text: string; tone?: "error" }) {
-  return (
-    <div
-      className={`rounded-md border p-3 text-sm font-semibold ${
-        tone === "error"
-          ? "border-red-200 bg-red-50 text-red-700"
-          : "border-slate-200 bg-white text-slate-600"
-      }`}
-    >
-      {text}
-    </div>
-  );
+function State({ text, tone }: { text: string; tone?: "error" | "success" }) {
+  return <WorkspaceState title={text} tone={tone || (/^Carregando/i.test(text) ? "loading" : "empty")} />;
 }

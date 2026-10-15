@@ -1,5 +1,6 @@
 import { Prisma, ProposalItemKind, ProposalType } from '@prisma/client';
 import { BadRequestException } from '@nestjs/common';
+import { proposalEntryPending } from './proposal-financial-release';
 
 type ApprovedProposal = {
   id: string;
@@ -14,6 +15,7 @@ export async function createApprovedProposalOrder(
   tx: Prisma.TransactionClient,
   proposal: ApprovedProposal,
 ) {
+  if (await proposalEntryPending(tx, proposal.id)) return null;
   if (proposal.type === ProposalType.PARTS) {
     const source = await tx.proposal.findUnique({
       where: { id: proposal.id },

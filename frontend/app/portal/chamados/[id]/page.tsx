@@ -1,5 +1,6 @@
 "use client";
-
+import { WorkspaceState } from "@/app/dashboard/components/WorkspaceState";
+import { PageHeader } from "@/app/dashboard/components/DashboardPageKit";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
@@ -91,33 +92,8 @@ export default function PortalTicketDetailPage() {
   );
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div>
-            <div className="flex flex-wrap gap-2">
-              <Badge tone={ticketTone(ticket)}>{ticket.code}</Badge>
-              <Badge tone={ticketTone(ticket)}>
-                {TICKET_PRIORITY_LABELS[ticket.priority]}
-              </Badge>
-              <Badge>{TICKET_STATUS_LABELS[ticket.status]}</Badge>
-            </div>
-            <h1 className="mt-3 text-2xl font-extrabold text-slate-950">
-              {ticket.title}
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              {ticket.generator?.name || "Sem equipamento vinculado"}
-            </p>
-          </div>
-          <Link
-            href="/portal/chamados"
-            className="rounded-md border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:border-blue-200 hover:text-blue-700"
-          >
-            Voltar
-          </Link>
-        </div>
-
-        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+    <div className="dashboard-page space-y-5">
+      <><PageHeader eyebrow="Atendimento" title={ticket.title} description={ticket.generator?.name || "Sem equipamento vinculado"} meta={<><Badge tone={ticketTone(ticket)}>{ticket.code}</Badge><Badge tone={ticketTone(ticket)}>{TICKET_PRIORITY_LABELS[ticket.priority]}</Badge><Badge>{TICKET_STATUS_LABELS[ticket.status]}</Badge></>} actions={<Link href="/portal/chamados" className="rounded-lg border border-slate-200 bg-white text-slate-700">Voltar para chamados</Link>} /><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="mt-5 grid gap-3 sm:grid-cols-3">
           <Info
             label="Resposta SLA"
             value={formatTicketDate(ticket.slaResponseDueAt)}
@@ -139,7 +115,7 @@ export default function PortalTicketDetailPage() {
         <p className="mt-5 whitespace-pre-line text-sm leading-6 text-slate-700">
           {ticket.description}
         </p>
-      </section>
+      </section></>
 
       {error ? <State text={error} tone="error" /> : null}
       {success ? <State text={success} tone="success" /> : null}
@@ -245,15 +221,5 @@ function Badge({
 }
 
 function State({ text, tone }: { text: string; tone?: "error" | "success" }) {
-  const classes =
-    tone === "error"
-      ? "border-red-200 bg-red-50 text-red-700"
-      : tone === "success"
-        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-        : "border-slate-200 bg-white text-slate-600";
-  return (
-    <div className={`rounded-md border p-3 text-sm font-semibold ${classes}`}>
-      {text}
-    </div>
-  );
+  return <WorkspaceState title={text} tone={tone || (/^Carregando/i.test(text) ? "loading" : "empty")} />;
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "../../components/DashboardPageKit";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
@@ -126,15 +128,13 @@ export default function StudioUtilizationPage() {
     : null;
 
   return (
-    <div className="space-y-5">
-      <header className="rounded-lg border border-slate-200 bg-white px-5 py-5 shadow-sm">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Studio / Observabilidade</p>
-            <h1 className="mt-1 text-2xl font-bold text-slate-950">Utilizacao do sistema</h1>
-            <p className="mt-1 text-sm text-slate-600">Conexoes, atividade, arquivos e recursos da infraestrutura em uma leitura operacional.</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Manitec Studio"
+        title="Utilização do sistema"
+        description="Acompanhe acessos, atividades, arquivos e recursos do servidor."
+        actions={<>
+<div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={() => router.back()} className="min-h-10 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">Voltar</button>
             <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1" aria-label="Periodo analisado">
               {([7, 14, 30] as const).map((period) => (
@@ -147,8 +147,9 @@ export default function StudioUtilizationPage() {
             </label>
             <button type="button" onClick={() => void loadData()} className="min-h-10 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700">Atualizar</button>
           </div>
-        </div>
-      </header>
+</>}
+      />
+
 
       {error ? <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{error}</div> : null}
       {loading && !payload ? <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm font-semibold text-slate-500">Carregando telemetria...</div> : null}
@@ -206,7 +207,7 @@ export default function StudioUtilizationPage() {
                 <label className="text-[11px] font-bold uppercase text-slate-500">Conexao<select value={connection} onChange={(event) => setConnection(event.target.value as Connection)} className="mt-1.5 block min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium normal-case xl:w-40"><option value="ALL">Todas</option><option value="ONLINE">Conectados</option><option value="OFFLINE">Sem conexao</option></select></label>
               </div>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
               <table className="min-w-[1040px] w-full text-left text-sm">
                 <thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-4 py-3">Usuario</th><th className="px-4 py-3">Conexao</th><th className="px-4 py-3">Pagina atual</th><th className="px-4 py-3 text-right">Acoes</th><th className="px-4 py-3 text-right">Arquivos</th><th className="px-4 py-3 text-right">Armazenamento</th><th className="px-4 py-3 text-right">RAM estimada</th></tr></thead>
                 <tbody className="divide-y divide-slate-100">

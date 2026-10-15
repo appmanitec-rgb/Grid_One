@@ -1,5 +1,9 @@
 "use client";
 
+import { commercialLabel } from "@/lib/commercial-labels";
+
+import { PageHeader } from "../../components/DashboardPageKit";
+
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -290,7 +294,7 @@ export default function ClientProfilePage() {
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-6">
+    <div className="dashboard-page space-y-5">
       <OperationalBreadcrumb
         items={[
           { label: "Dashboard", href: "/dashboard" },
@@ -299,24 +303,14 @@ export default function ClientProfilePage() {
         ]}
       />
 
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <Link
+      <PageHeader eyebrow="Comercial" title="Perfil do Cliente" description="Cadastro, equipamentos, propostas e histórico do relacionamento." actions={<>
+<Link
               href="/dashboard/clients"
               className="w-9 h-9 flex items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
             >
               ←
             </Link>
-            <h1 className="text-3xl font-bold text-zinc-800">
-              Perfil do Cliente
-            </h1>
-          </div>
-          <p className="text-zinc-500">
-            Visao completa cadastral, operacional e comercial.
-          </p>
-        </div>
-      </div>
+</>} />
 
       <section className="bg-white border border-zinc-200 rounded-xl p-6">
         <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">
@@ -353,17 +347,17 @@ export default function ClientProfilePage() {
             },
             {
               label: "Ver chamados",
-              href: "/dashboard/atendimento",
+              href: `/dashboard/atendimento?q=${encodeURIComponent(client.companyName)}`,
               permission: "tickets.view",
             },
             {
               label: "Ver O.S.",
-              href: "/dashboard/orders",
+              href: `/dashboard/orders?q=${encodeURIComponent(client.companyName)}`,
               permission: "orders.view",
             },
             {
               label: "Ver contratos",
-              href: "/dashboard/contracts",
+              href: `/dashboard/contracts?q=${encodeURIComponent(client.companyName)}`,
               permission: "contracts.view",
             },
           ]}
@@ -386,7 +380,7 @@ export default function ClientProfilePage() {
             })),
             ...contracts.slice(0, 4).map((contract) => ({
               label: contract.code,
-              description: `${contract.status} - vigencia ate ${new Date(contract.endDate).toLocaleDateString("pt-BR")}`,
+              description: `${commercialLabel(contract.status)} - vigência até ${new Date(contract.endDate).toLocaleDateString("pt-BR")}`,
               href: `/dashboard/contracts/${contract.id}`,
               badge: "Contrato",
               tone: "emerald" as const,
@@ -394,7 +388,7 @@ export default function ClientProfilePage() {
             })),
             ...orders.slice(0, 5).map((order) => ({
               label: order.title,
-              description: `${order.generatorName} - ${order.status}`,
+              description: `${order.generatorName} - ${commercialLabel(order.status)}`,
               href: `/dashboard/orders/${order.id}`,
               badge: "O.S.",
               tone: "amber" as const,
@@ -402,7 +396,7 @@ export default function ClientProfilePage() {
             })),
             ...tickets.slice(0, 4).map((ticket) => ({
               label: ticket.code || ticket.title,
-              description: `${ticket.status} - ${ticket.generator?.name || "sem equipamento"}`,
+              description: `${commercialLabel(ticket.status)} - ${ticket.generator?.name || "sem equipamento"}`,
               href: `/dashboard/atendimento/${ticket.id}`,
               badge: "Chamado",
               tone: "rose" as const,
@@ -410,7 +404,7 @@ export default function ClientProfilePage() {
             })),
             ...serviceReports.slice(0, 4).map((report) => ({
               label: report.code,
-              description: `${report.title || "Laudo tecnico"} - ${report.status}`,
+              description: `${report.title || "Laudo técnico"} - ${commercialLabel(report.status)}`,
               href: `/dashboard/relatorios-tecnicos/${report.id}`,
               badge: "Laudo",
               tone: "slate" as const,
@@ -529,7 +523,7 @@ export default function ClientProfilePage() {
         {contacts.length === 0 ? (
           <p className="text-sm text-zinc-500">Nenhum contato cadastrado.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-zinc-500 border-b border-zinc-200">
@@ -604,7 +598,7 @@ export default function ClientProfilePage() {
         {contracts.length === 0 ? (
           <p className="text-sm text-zinc-500">Nenhum contrato vinculado.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-zinc-500 border-b border-zinc-200">
@@ -634,8 +628,8 @@ export default function ClientProfilePage() {
                     <td className="py-2">
                       {new Date(contract.endDate).toLocaleDateString("pt-BR")}
                     </td>
-                    <td className="py-2">{contract.preventiveRecurrence}</td>
-                    <td className="py-2">{contract.status}</td>
+                    <td className="py-2">{commercialLabel(contract.preventiveRecurrence)}</td>
+                    <td className="py-2">{commercialLabel(contract.status)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -651,7 +645,7 @@ export default function ClientProfilePage() {
         {proposals.length === 0 ? (
           <p className="text-sm text-zinc-500">Nenhuma proposta cadastrada.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-zinc-500 border-b border-zinc-200">
@@ -674,7 +668,7 @@ export default function ClientProfilePage() {
                         {proposal.code}
                       </PermissionAwareLink>
                     </td>
-                    <td className="py-2">{proposal.status}</td>
+                    <td className="py-2">{commercialLabel(proposal.status)}</td>
                     <td className="py-2">
                       R$ {Number(proposal.totalValue || 0).toFixed(2)}
                     </td>

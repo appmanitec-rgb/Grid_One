@@ -1,5 +1,7 @@
 ﻿"use client";
 
+import { PageHeader } from "../../components/DashboardPageKit";
+
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 
@@ -34,8 +36,12 @@ export default function TimeTrackingPage() {
   }, [month]);
 
   return (
-    <div className="space-y-6 p-8">
-      <h1 className="text-3xl font-bold text-zinc-900">Apontamento / Banco de Horas</h1>
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Pessoas"
+        title="Apontamento e banco de horas"
+        description="Registre jornadas e acompanhe o saldo de horas da equipe."
+      />
 
       <section className="rounded-xl border border-zinc-200 bg-white p-4">
         <label className="text-sm font-semibold text-zinc-700">Competencia</label>
@@ -43,7 +49,7 @@ export default function TimeTrackingPage() {
       </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-4">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">

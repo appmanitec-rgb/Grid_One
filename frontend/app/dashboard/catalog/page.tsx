@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "../components/DashboardPageKit";
+
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getAccessFromToken } from "@/lib/access";
@@ -106,18 +108,13 @@ export default function CatalogPage() {
   ].filter(Boolean).length;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold text-zinc-800">
-            Catalogo de Pecas e Servicos
-          </h1>
-          <p className="text-zinc-500 mt-1">
-            Controle de itens e precificacao por perfil de usuario.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Suprimentos"
+        title="Catálogo de peças e serviços"
+        description="Consulte itens, preços, estoque e dados para propostas e atendimentos."
+        actions={<>
+<div className="flex flex-wrap items-center gap-2">
           {hydrated && canViewSuppliers && (
             <Link
               href="/dashboard/suppliers"
@@ -135,7 +132,8 @@ export default function CatalogPage() {
             </Link>
           )}
         </div>
-      </div>
+</>}
+      />
 
       {error && (
         <div
@@ -223,7 +221,7 @@ export default function CatalogPage() {
       </section>
 
       <div className="bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-zinc-50 text-zinc-500 text-sm border-b border-zinc-200">
@@ -263,10 +261,10 @@ export default function CatalogPage() {
                           "Sem descricao"}
                       </td>
                       <td className="p-4 text-sm text-zinc-600">
-                        <p className="font-mono font-semibold text-zinc-800">
+                        <p className="tabular-nums font-semibold text-zinc-800">
                           SKU: {item.sku || "-"}
                         </p>
-                        <p className="mt-1 font-mono text-xs text-zinc-600">
+                        <p className="mt-1 tabular-nums text-xs text-zinc-600">
                           PN: {item.manufacturerPartNumber || "-"}
                         </p>
                       </td>

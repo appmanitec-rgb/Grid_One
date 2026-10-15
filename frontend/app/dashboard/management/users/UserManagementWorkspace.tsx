@@ -1066,8 +1066,8 @@ export function UserManagementWorkspace({
       return;
     }
 
-    if (newUser.role !== "CLIENT" && newUser.password.trim().length < 6) {
-      setError("A senha inicial precisa ter ao menos 6 caracteres.");
+    if (newUser.role !== "CLIENT" && newUser.password.trim().length < 12) {
+      setError("A senha inicial precisa ter ao menos 12 caracteres.");
       return;
     }
 
@@ -1204,8 +1204,8 @@ export function UserManagementWorkspace({
 
     try {
       const trimmedPassword = selectedPassword.trim();
-      if (trimmedPassword && trimmedPassword.length < 6) {
-        throw new Error("A nova senha precisa ter ao menos 6 caracteres.");
+      if (trimmedPassword && trimmedPassword.length < 12) {
+        throw new Error("A nova senha precisa ter ao menos 12 caracteres.");
       }
 
       if (selectedUser.role === "CLIENT" && !selectedUser.linkedClientId) {
@@ -1782,9 +1782,9 @@ function AccessHero({
 }) {
   return (
     <PageHero
-      eyebrow="Governanca de Acesso"
-      title="Controle de usuarios com menos ruido e mais contexto operacional."
-      description="A tela separa provisionamento, visibilidade operacional e edicao de permissoes para que a equipe decida rapido sem navegar por blocos misturados."
+      eyebrow="Gestão"
+      title="Usuários e acessos"
+      description="Gerencie cadastros, permissões e documentos da equipe."
       stats={[
         {
           label: "Base total",
@@ -2215,7 +2215,7 @@ function ProvisioningCard({
               placeholder={newUser.role === "CLIENT" ? "contato@cliente.com.br" : "nome@manitec.com.br"}
             />
           </FormField>
-          {newUser.role !== "CLIENT" ? <FormField label="Senha inicial" hint="Minimo 6 caracteres">
+          {newUser.role !== "CLIENT" ? <FormField label="Senha inicial" hint="Minimo 12 caracteres">
             <TextInput
               type="password"
               autoComplete="new-password"
@@ -3144,7 +3144,7 @@ function UserPermissionsPanel({
           <DataPill tone="slate">{filteredUsers.length} resultado(s)</DataPill>
         }
       >
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(180px,0.28fr)_minmax(150px,0.22fr)_auto] md:items-end">
+        <div className="workspace-filter-grid grid gap-3 items-end">
           <FormField label="Buscar usuário">
             <TextInput
               type="search"
@@ -3774,7 +3774,7 @@ function UserEditorCard({
                       : null,
                   });
                 }}
-                disabled={isSelectedMaster}
+                disabled={isSelectedMaster || !canManageSecurity}
               >
                 <option value="">Selecione um cliente</option>
                 {clients.map((client) => (
@@ -3953,7 +3953,7 @@ function UserEditorCard({
                   : "A senha atual nao fica visivel no sistema. Para alterar, defina uma nova senha e salve o cadastro."}
               </p>
             </div>
-            {selectedUser.role !== "CLIENT" ? <FormField label="Nova senha" hint="Opcional; minimo 6 caracteres">
+            {selectedUser.role !== "CLIENT" && canManageSecurity ? <FormField label="Nova senha" hint="Opcional; minimo 12 caracteres">
               <TextInput
                 type="password"
                 autoComplete="new-password"

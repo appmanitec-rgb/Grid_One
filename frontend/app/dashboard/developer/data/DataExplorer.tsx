@@ -1,4 +1,7 @@
 "use client";
+import { commercialLabel } from "@/lib/commercial-labels";
+
+import { PageHeader } from "../../components/DashboardPageKit";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -571,21 +574,13 @@ export default function DataExplorer({
   }
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-[28px] border border-slate-200 bg-white/95 p-5 shadow-[0_24px_54px_-42px_rgba(15,23,42,0.28)]">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
-              Studio / Dados
-            </p>
-            <h1 className="mt-2 text-3xl font-bold text-slate-950">
-              {resource.pluralLabel}
-            </h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              {resource.description}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Manitec Studio"
+        title={resource.pluralLabel}
+        description={resource.description}
+        actions={<>
+<div className="flex flex-wrap gap-2">
             {resource.createHref && resource.canCreate && canEditData ? (
               <Link
                 href={resource.createHref}
@@ -622,9 +617,9 @@ export default function DataExplorer({
               </button>
             ) : null}
           </div>
-        </div>
-
-        <div className="mt-5 grid gap-3 md:grid-cols-3">
+</>}
+      />
+<div className="mt-5 grid gap-3 md:grid-cols-3">
           <Metric label="Registros" value={String(rows.length)} />
           <Metric label="Resultado atual" value={String(filteredRows.length)} />
           <Metric
@@ -632,7 +627,6 @@ export default function DataExplorer({
             value={String(visibleFields.length)}
           />
         </div>
-      </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -804,7 +798,7 @@ export default function DataExplorer({
                     {executingImport ? "Executando..." : "Confirmar importacao"}
                   </button>
                 </div>
-                <div className="mt-4 overflow-x-auto rounded-xl border border-amber-200 bg-white">
+                <div className="mt-4 overflow-x-auto rounded-xl border border-amber-200 bg-white" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
                   <table className="w-full text-left text-sm">
                     <thead className="bg-amber-50 text-xs uppercase tracking-[0.14em] text-amber-900">
                       <tr>
@@ -821,7 +815,7 @@ export default function DataExplorer({
                             {row.rowNumber}
                           </td>
                           <td className="px-3 py-2 font-semibold text-slate-800">
-                            {row.status}
+                            {commercialLabel(row.status)}
                           </td>
                           <td className="px-3 py-2 text-slate-700">
                             {String(
@@ -869,7 +863,7 @@ export default function DataExplorer({
           </button>
         </div>
         <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div ref={tableScrollRef} className="overflow-x-auto scroll-smooth">
+          <div ref={tableScrollRef} className="overflow-x-auto scroll-smooth" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-sm text-slate-500">

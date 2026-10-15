@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHeader } from "../../components/DashboardPageKit";
+import { commercialLabel } from "@/lib/commercial-labels";
+
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -1065,13 +1068,12 @@ export default function CatalogFormPage() {
   }
 
   return (
-    <div className="mx-auto mb-20 max-w-7xl p-8">
-      <div className="mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-zinc-800">{isEditing ? "Editar Item de Catalogo" : "Novo Item de Catalogo"}</h1>
-          <p className="mt-1 text-zinc-500">Cadastro completo com base tecnica, fiscal, estoque e precificacao.</p>
-        </div>
-      </div>
+    <div className="dashboard-page mb-20 space-y-5">
+      <PageHeader
+        eyebrow="Suprimentos"
+        title={isEditing ? "Editar Item de Catalogo" : "Novo Item de Catalogo"}
+        description="Cadastro completo com base tecnica, fiscal, estoque e precificacao."
+      />
 
       {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">{error}</div>}
       {isLoadingItem && <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-blue-700">Carregando item...</div>}
@@ -1397,7 +1399,7 @@ export default function CatalogFormPage() {
                             </span>
                             <span className="mt-0.5 block text-xs text-zinc-500">
                               {entry.isPrimary ? "Principal | " : ""}
-                              {formatCurrencyNumber(Number(entry.supplierPrice || 0))} | {entry.purchasePaymentTerm || entry.supplier.paymentTerm || "Pagamento nao definido"}
+                              {formatCurrencyNumber(Number(entry.supplierPrice || 0))} | {commercialLabel(entry.purchasePaymentTerm || entry.supplier.paymentTerm,"Pagamento não definido")}
                             </span>
                           </button>
                         ))}
@@ -1445,7 +1447,7 @@ export default function CatalogFormPage() {
                             ) : null}
                           </span>
                           <span className="mt-0.5 block text-xs text-zinc-500">
-                            {supplier.tradeName || "Sem fantasia"} | {supplier.cnpj || "Sem CNPJ"} | {supplier.paymentTerm || "Pagamento nao definido"}
+                            {supplier.tradeName || "Sem fantasia"} | {supplier.cnpj || "Sem CNPJ"} | {commercialLabel(supplier.paymentTerm,"Pagamento não definido")}
                           </span>
                         </button>
                           );
@@ -1747,7 +1749,7 @@ export default function CatalogFormPage() {
                 <tbody className="divide-y divide-zinc-100 bg-white">
                   {documents.map((document) => (
                     <tr key={document.id}>
-                      <td className="px-4 py-3 font-semibold text-zinc-800">{document.category}</td>
+                      <td className="px-4 py-3 font-semibold text-zinc-800">{commercialLabel(document.category)}</td>
                       <td className="px-4 py-3 text-zinc-700">{document.title}</td>
                       <td className="px-4 py-3 text-zinc-500">{document.version || "-"}</td>
                       <td className="px-4 py-3 text-zinc-500">

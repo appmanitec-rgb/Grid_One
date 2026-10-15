@@ -1,5 +1,7 @@
 "use client";
 
+import { commercialLabel } from "@/lib/commercial-labels";
+
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { getAccessFromToken } from "@/lib/access";
@@ -502,7 +504,7 @@ export default function ServiceReportDetailPage() {
   if (!report) return <State text="Laudo não encontrado." />;
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <OperationalBreadcrumb
         items={[
           { label: "Dashboard", href: "/dashboard" },
@@ -692,7 +694,7 @@ export default function ServiceReportDetailPage() {
             ...(report.maintenanceOrder
               ? [{
                   label: report.maintenanceOrder.title,
-                  description: `OS ${report.maintenanceOrder.status}.`,
+                  description: `O.S. ${commercialLabel(report.maintenanceOrder.status)}.`,
                   href: `/dashboard/orders/${report.maintenanceOrder.id}`,
                   badge: "O.S.",
                   tone: "amber" as const,
@@ -722,7 +724,7 @@ export default function ServiceReportDetailPage() {
             ...(report.contract
               ? [{
                   label: report.contract.code,
-                  description: report.contract.title || `Contrato ${report.contract.status}.`,
+                  description: report.contract.title || `Contrato ${commercialLabel(report.contract.status)}.`,
                   href: `/dashboard/contracts/${report.contract.id}`,
                   badge: "Contrato",
                   tone: "emerald" as const,
@@ -1272,7 +1274,7 @@ export default function ServiceReportDetailPage() {
               {accessLogs.slice(0, 12).map((log) => (
                 <div
                   key={log.id}
-                  className="grid gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 md:grid-cols-[160px_140px_1fr_160px]"
+                  className="grid gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 md:grid-cols-2 xl:grid-cols-[160px_140px_minmax(0,1fr)_160px]"
                 >
                   <p className="text-sm font-bold text-slate-950">
                     {log.accessType}

@@ -1,6 +1,7 @@
 import {
   CallHandler,
   ExecutionContext,
+  HttpException,
   Injectable,
   Logger,
   NestInterceptor,
@@ -56,6 +57,8 @@ export class RequestLoggingInterceptor implements NestInterceptor {
         error: (error: unknown) => {
           const elapsed = Date.now() - startedAt;
           const message = error instanceof Error ? error.message : 'unknown';
+          const status =
+            error instanceof HttpException ? error.getStatus() : 500;
           this.logger.error(
             JSON.stringify({
               type: 'http_request_error',
@@ -65,7 +68,7 @@ export class RequestLoggingInterceptor implements NestInterceptor {
               version: process.env.npm_package_version ?? '0.0.0',
               method,
               route: url,
-              status: response.statusCode ?? 500,
+              status,
               durationMs: elapsed,
               userId: request.user?.sub ?? null,
               ip,
@@ -91,6 +94,7 @@ export class RequestLoggingInterceptor implements NestInterceptor {
       '$1[redacted]',
     );
     return withoutSensitiveQuery
+      .replace(/(\/deliveries\/share\/)[^/?#]+/gi, '$1[redacted]')
       .replace(
         /\/public\/service-reports\/(share|verify)\/[^/?#]+/gi,
         '/public/service-reports/$1/[redacted]',

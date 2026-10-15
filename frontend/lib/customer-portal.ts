@@ -1,3 +1,4 @@
+import { commercialLabel } from "./commercial-labels";
 import { apiFetch, readApiErrorMessage } from "./api";
 
 export type PortalClient = {
@@ -285,5 +286,5 @@ export function statusLabel(status?: string | null) {
     PROPOSAL_SENT: "Proposta",
     NEGOTIATION: "Negociacao",
   };
-  return status ? labels[status] || status : "-";
+  return status ? labels[status] || commercialLabel(status) : "-";
 }

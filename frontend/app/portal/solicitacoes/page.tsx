@@ -1,5 +1,6 @@
 "use client";
-
+import { WorkspaceState } from "@/app/dashboard/components/WorkspaceState";
+import { PageHeader } from "@/app/dashboard/components/DashboardPageKit";
 import { FormEvent, useEffect, useState } from "react";
 import {
   customerPortalGet,
@@ -72,9 +73,9 @@ export default function PortalRequestsPage() {
   }
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+    <div className="dashboard-page space-y-5"><PageHeader eyebrow="Comercial" title="Solicitar cotação" description="Envie uma solicitação de peças ou serviços e acompanhe as respostas da Manitec." /><div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <h1 className="text-2xl font-extrabold text-slate-950">Solicitar cotação</h1>
+        <h2 className="text-lg font-bold text-slate-950">Nova solicitação</h2>
         <p className="mt-1 text-sm text-slate-500">
           Abra uma solicitação para atendimento comercial ou técnico.
         </p>
@@ -188,6 +189,7 @@ export default function PortalRequestsPage() {
         </div>
       </section>
     </div>
+    </div>
   );
 }
 
@@ -201,12 +203,5 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function State({ text, tone }: { text: string; tone?: "error" | "success" }) {
-  const classes =
-    tone === "error"
-      ? "border-red-200 bg-red-50 text-red-700"
-      : tone === "success"
-        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-        : "border-slate-200 bg-slate-50 text-slate-600";
-
-  return <div className={`mt-3 rounded-md border p-3 text-sm font-semibold ${classes}`}>{text}</div>;
+  return <WorkspaceState title={text} tone={tone || (/^Carregando/i.test(text) ? "loading" : "empty")} />;
 }

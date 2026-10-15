@@ -1,4 +1,5 @@
 "use client";
+import { commercialLabel } from "@/lib/commercial-labels";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -622,11 +623,11 @@ export default function AccountsPayablePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
-        eyebrow="Saidas financeiras"
-        title="Contas a pagar com origem visivel, banco de saida e vinculo real com suprimentos."
-        description="A carteira agora organiza despesas por prioridade, mostra se a conta nasceu de pedido de compra, exibe historico de pagamentos e registra a saida direto na conta bancaria correta."
+        eyebrow="Financeiro"
+        title="Contas a pagar"
+        description="Organize vencimentos, consulte a origem das despesas e registre pagamentos."
         stats={[
           {
             label: "Titulos ativos",
@@ -689,16 +690,17 @@ export default function AccountsPayablePage() {
               </div>
             </FieldBox>
 
-            <StatusBanner
+
+          </div>
+        }
+      />
+<StatusBanner
               tone={activeBankAccounts.length > 0 ? "blue" : "amber"}
             >
               {activeBankAccounts.length > 0
                 ? `${activeBankAccounts.length} conta(s) bancarias ativa(s) prontas para registrar a saida do pagamento.`
                 : "Nenhuma conta bancaria ativa encontrada. Cadastre ou reative uma conta/caixa antes de registrar pagamentos."}
             </StatusBanner>
-          </div>
-        }
-      />
 
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
       {successMessage ? (
@@ -1335,7 +1337,7 @@ export default function AccountsPayablePage() {
           <SectionCard
             eyebrow="Conexao de fluxo"
             title="Esteira validada"
-            description="Pagamentos, suprimentos e caixa agora conversam melhor entre si."
+            description="Acesse os pedidos de compra, pagamentos e movimentos bancários associados."
           >
             <div className="space-y-3">
               <FieldBox>
@@ -1393,7 +1395,7 @@ export default function AccountsPayablePage() {
                     </p>
                     <p className="mt-1 text-sm text-slate-500">
                       {account.bankName || "Banco nao informado"}
-                      {account.type ? ` / ${account.type}` : ""}
+                      {account.type ? ` / ${commercialLabel(account.type)}` : ""}
                     </p>
                     <p className="mt-3 text-lg font-bold text-slate-950">
                       {formatCurrency(Number(account.currentBalance || 0))}

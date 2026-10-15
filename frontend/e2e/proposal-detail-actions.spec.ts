@@ -3,7 +3,22 @@ import { expect, test } from "@playwright/test";
 test("rascunho só libera arquivos após aprovação da diretoria", async ({ page }) => {
   const id = "proposal-preview-test";
   let proposalStatus = "DRAFT";
-  const pdf = Buffer.from("%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\n%%EOF");
+  // A valid PDF prevents Chromium's viewer from downloading the failed preview.
+  const parts = ["%PDF-1.4\n"];
+  const offsets = [0];
+  const objects = [
+    "<</Type /Catalog /Pages 2 0 R>>",
+    "<</Type /Pages /Kids [3 0 R] /Count 1>>",
+    "<</Type /Page /Parent 2 0 R /MediaBox [0 0 300 150]>>",
+  ];
+  objects.forEach((object, index) => {
+    offsets.push(Buffer.byteLength(parts.join("")));
+    parts.push((index + 1) + " 0 obj\n" + object + "\nendobj\n");
+  });
+  const xref = Buffer.byteLength(parts.join(""));
+  parts.push("xref\n0 4\n0000000000 65535 f \n" + offsets.slice(1).map((offset) => String(offset).padStart(10, "0") + " 00000 n \n").join(""));
+  parts.push("trailer\n<</Size 4 /Root 1 0 R>>\nstartxref\n" + xref + "\n%%EOF");
+  const pdf = Buffer.from(parts.join(""));
   await page.route("http://127.0.0.1:3100/**", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
   );

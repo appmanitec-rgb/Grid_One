@@ -37,6 +37,9 @@ type ProposalListItem = {
   code: string;
   status: string;
   totalValue?: number | null;
+  hasDownPayment?: boolean;
+  downPaymentAmount?: number | null;
+  downPaymentConfirmedAt?: string | null;
   type: string;
   origin?: "MANITEC" | "EXTERNAL";
   externalReference?: string | null;
@@ -73,7 +76,7 @@ type FlowColumnSummary = {
 };
 
 const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-sky-300 hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-50";
 
 export default function ProposalsPage() {
   const router = useRouter();
@@ -312,6 +315,10 @@ export default function ProposalsPage() {
   const commercialHandoffs = useMemo(
     () =>
       proposals.flatMap((proposal) => {
+        if (proposal.status === "WON" && proposal.hasDownPayment &&
+            Number(proposal.downPaymentAmount || 0) > 0 && !proposal.downPaymentConfirmedAt) {
+          return [{ proposal, action: "Aguardando confirmação da entrada pelo financeiro" }];
+        }
         if (
           proposal.status === "WON" &&
           proposal.type === "CONTRACT" &&
@@ -332,8 +339,9 @@ export default function ProposalsPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
+        loading={loading}
         eyebrow="Modulo comercial"
         title={isClient ? "Minhas propostas" : "Central de propostas"}
         description={
@@ -370,7 +378,7 @@ export default function ProposalsPage() {
         actions={
           <>
             {!isClient ? (
-              <Link href="/dashboard/proposals/new" className="inline-flex items-center justify-center rounded-2xl bg-sky-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-sky-700">
+              <Link href="/dashboard/proposals/new" className="inline-flex min-h-10 items-center justify-center rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-sky-700">
                 + Nova proposta
               </Link>
             ) : null}
@@ -384,11 +392,11 @@ export default function ProposalsPage() {
 
       {!isClient ? (
         <section aria-label="Prioridades comerciais" className="grid gap-3 sm:grid-cols-2">
-          <button type="button" onClick={() => { setCategory("ALL"); setQuery(""); setStatusFilter("BOARD_REVIEW"); setViewMode("list"); }} className="flex items-center justify-between gap-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-left transition hover:border-sky-400 hover:bg-sky-100">
+          <button type="button" onClick={() => { setCategory("ALL"); setQuery(""); setStatusFilter("BOARD_REVIEW"); setViewMode("list"); }} className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition hover:border-sky-300 hover:shadow-md">
             <span><span className="block text-xs font-bold uppercase tracking-[0.14em] text-sky-700">Aguardando diretoria</span><span className="mt-1 block text-sm text-slate-700">Inclui revisão de desconto</span></span>
             <span className="text-2xl font-black text-sky-950">{stats.boardReview}</span>
           </button>
-          <button type="button" onClick={() => { setCategory("ALL"); setQuery(""); setStatusFilter("CLIENT_REVIEW"); setViewMode("list"); }} className="flex items-center justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-left transition hover:border-amber-400 hover:bg-amber-100">
+          <button type="button" onClick={() => { setCategory("ALL"); setQuery(""); setStatusFilter("CLIENT_REVIEW"); setViewMode("list"); }} className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition hover:border-amber-300 hover:shadow-md">
             <span><span className="block text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Aguardando cliente</span><span className="mt-1 block text-sm text-slate-700">Propostas em análise externa</span></span>
             <span className="text-2xl font-black text-amber-950">{stats.clientReview}</span>
           </button>
@@ -396,22 +404,15 @@ export default function ProposalsPage() {
       ) : null}
 
       {!isClient ? (
-        <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_24px_54px_-40px_rgba(15,23,42,0.24)] sm:p-6">
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-sky-700">Começar</p>
-              <h2 className="mt-1 text-xl font-bold text-slate-950">Qual proposta você vai preparar?</h2>
-              <p className="mt-1 text-sm text-slate-600">Escolha o fluxo certo e continue com os dados comerciais.</p>
-            </div>
-            <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800">4 formatos disponíveis</span>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <details className="dashboard-page-context">
+        <summary><span>Nova proposta: escolher o tipo</span><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="h-4 w-4"><path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg></summary>
+        <div className="dashboard-page-context-body"><p className="mb-3 text-sm text-slate-600">Escolha o formato para iniciar uma proposta.</p><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <CreateProposalCard index="01" title="Peças e serviços" description="Manutenção, materiais e atendimento." href="/dashboard/proposals/new" />
             <CreateProposalCard index="02" title="Gerador" description="Venda de equipamento e acessórios." href="/dashboard/proposals/new/generator" />
             <CreateProposalCard index="03" title="Contrato" description="Cobertura e serviços recorrentes." href="/dashboard/proposals/new?proposalType=CONTRACT" />
             <CreateProposalCard index="04" title="Proposta externa" description="Registre uma venda de origem externa." href="/dashboard/proposals/new/external" />
-          </div>
-        </section>
+          </div></div>
+      </details>
       ) : null}
       {notice ? <StatusBanner tone="emerald">{notice}</StatusBanner> : null}
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
@@ -420,7 +421,7 @@ export default function ProposalsPage() {
         <SectionCard
           eyebrow="Passagem comercial"
           title="Vendas ganhas aguardando o próximo passo"
-          description="O aceite do cliente atualiza a proposta. A continuidade aparece aqui até o contrato ou o pré-cadastro de pós-venda estar vinculado."
+          description="Após o aceite, acompanhe a confirmação da entrada e a continuidade para o contrato ou o pós-venda."
           actions={<DataPill tone="amber">{commercialHandoffs.length} pendente(s)</DataPill>}
         >
           <div className="grid gap-3 lg:grid-cols-2">
@@ -451,6 +452,7 @@ export default function ProposalsPage() {
       ) : null}
 
       <SectionCard
+        actionsLayout="below"
         eyebrow={
           viewMode === "list" ? "Vista de carteira" : "Vista de operacao"
         }
@@ -465,7 +467,7 @@ export default function ProposalsPage() {
           viewMode === "list"
             ? isClient
               ? "Acompanhe revisoes, liberacoes e propostas prontas para sua decisao sem entrar no fluxo interno."
-              : "Uma leitura mais limpa para navegar pelo portfolio comercial sem a poluicao de uma tabela pesada."
+              : "Pesquise propostas por cliente, equipamento ou etapa e acompanhe os valores da carteira."
             : "Arraste as propostas entre as colunas permitidas para manter o funil vivo e visivel."
         }
         actions={
@@ -762,7 +764,8 @@ function ProposalPortfolioCard({ proposal }: { proposal: ProposalListItem }) {
   const step = statusToFlowStep(proposal.status);
 
   return (
-    <article className="group rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm transition hover:border-sky-300 hover:shadow-[0_18px_42px_-30px_rgba(15,31,50,0.35)] sm:p-5">
+    <article className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-sky-300 hover:shadow-[0_18px_42px_-30px_rgba(15,31,50,0.35)] sm:p-5">
+      <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1 bg-sky-500" />
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-start gap-3">
           <span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-lg font-black text-sky-700">
@@ -791,7 +794,7 @@ function ProposalPortfolioCard({ proposal }: { proposal: ProposalListItem }) {
               {formatCurrency(Number(proposal.totalValue || 0), proposal.externalCurrency || "BRL")}
             </p>
           </div>
-          <Link href={'/dashboard/proposals/' + proposal.id} className="inline-flex shrink-0 items-center rounded-xl bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-sky-700">
+          <Link href={'/dashboard/proposals/' + proposal.id} className="inline-flex shrink-0 items-center rounded-xl bg-sky-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-sky-700">
             Abrir proposta <span aria-hidden="true" className="ml-2">→</span>
           </Link>
         </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { commercialLabel } from "@/lib/commercial-labels";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
 import { clearAuthSession } from "@/lib/auth-session";
@@ -193,7 +194,7 @@ export default function ClientPortalPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
         eyebrow="Portal do cliente"
         title={`Bem-vindo, ${data?.profile.name || "cliente"}`}
@@ -277,7 +278,7 @@ export default function ClientPortalPage() {
                 />
                 <PulseLine
                   label="Condicao comercial"
-                  value={data.client.paymentTermDefault || "A combinar"}
+                  value={commercialLabel(data.client.paymentTermDefault,"A combinar")}
                   tone="slate"
                 />
                 <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 px-4 py-4">
@@ -447,7 +448,7 @@ export default function ClientPortalPage() {
                           <DataPill tone={order.status === "COMPLETED" ? "emerald" : "blue"}>
                             {orderStatusLabel(order.status)}
                           </DataPill>
-                          <DataPill tone="slate">{order.priority}</DataPill>
+                          <DataPill tone="slate">{commercialLabel(order.priority)}</DataPill>
                         </div>
                       </div>
                       <div className="mt-4 grid gap-3 md:grid-cols-2">

@@ -1,5 +1,6 @@
 "use client";
-
+import { WorkspaceState } from "@/app/dashboard/components/WorkspaceState";
+import { PageHeader } from "@/app/dashboard/components/DashboardPageKit";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -44,23 +45,8 @@ export default function PortalEquipmentDetailPage() {
   if (!equipment) return <State text="Equipamento não encontrado." />;
 
   return (
-    <div className="space-y-5">
-      <header className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <Link href="/portal/equipamentos" className="text-sm font-bold text-blue-700 hover:text-blue-900">
-          Voltar para equipamentos
-        </Link>
-        <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <h1 className="text-2xl font-extrabold text-slate-950">{equipment.name}</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              {equipment.brand} {equipment.serialNumber ? `- Série ${equipment.serialNumber}` : ""}
-            </p>
-          </div>
-          <span className="w-fit rounded-full bg-blue-50 px-3 py-1 text-sm font-bold text-blue-700">
-            {statusLabel(equipment.operationalStatus)}
-          </span>
-        </div>
-      </header>
+    <div className="dashboard-page space-y-5">
+      <PageHeader eyebrow="Equipamento" title={equipment.name} description={<>{equipment.brand} {equipment.serialNumber ? `· Série ${equipment.serialNumber}` : ""}</>} meta={<span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">{statusLabel(equipment.operationalStatus)}</span>} actions={<Link href="/portal/equipamentos" className="rounded-lg border border-slate-200 bg-white text-slate-700">Voltar para equipamentos</Link>} />
 
       <section className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
         <Info label="Potência" value={`${equipment.power} kVA`} />
@@ -140,16 +126,6 @@ function Empty({ text }: { text: string }) {
   return <p className="rounded-md bg-slate-50 p-3 text-sm font-medium text-slate-500">{text}</p>;
 }
 
-function State({ text, tone }: { text: string; tone?: "error" }) {
-  return (
-    <div
-      className={`rounded-lg border p-4 text-sm font-semibold ${
-        tone === "error"
-          ? "border-red-200 bg-red-50 text-red-700"
-          : "border-slate-200 bg-white text-slate-600"
-      }`}
-    >
-      {text}
-    </div>
-  );
+function State({ text, tone }: { text: string; tone?: "error" | "success" }) {
+  return <WorkspaceState title={text} tone={tone || (/^Carregando/i.test(text) ? "loading" : "empty")} />;
 }

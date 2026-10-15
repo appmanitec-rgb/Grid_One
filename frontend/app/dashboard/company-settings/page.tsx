@@ -1,5 +1,7 @@
 "use client";
 
+import { MetricCard as SummaryMetric, PageHeader } from "../components/DashboardPageKit";
+
 import Image, { type ImageLoaderProps } from "next/image";
 import { FormEvent, InputHTMLAttributes, ReactNode, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
@@ -293,21 +295,13 @@ export default function CompanySettingsPage() {
   }
 
   return (
-    <div className="space-y-6 p-6 md:p-8">
-      <section className="rounded-[30px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(15,76,129,0.18),_transparent_38%),linear-gradient(135deg,#f8fafc_0%,#eef4ff_55%,#fff7ed_100%)] p-6 shadow-[0_24px_70px_-45px_rgba(15,23,42,0.45)]">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl">
-            <span className="inline-flex rounded-full border border-blue-200 bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-blue-800">Multiempresa</span>
-            <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-950 md:text-4xl">Configuracoes da Empresa</h1>
-            <p className="mt-2 text-sm text-slate-600 md:text-base">Agora o sistema aceita mais de um CNPJ. Cada empresa pode ter dados fiscais, contatos, identidade visual e padroes proprios para envios externos.</p>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3">
+    <div className="dashboard-page space-y-5">
+      <PageHeader eyebrow="Empresa" title="Configurações da empresa" description="Gerencie os CNPJs, dados fiscais, contatos e identidade visual de cada empresa." />
+<div className="dashboard-metrics-grid">
             <Metric label="Cadastros" value={String(companies.length || 0)} hint="Empresas ativas" />
             <Metric label="Principal" value={companies.find((item) => item.isPrimary)?.tradeName || companies.find((item) => item.isPrimary)?.companyName || "-"} hint="Empresa padrao" />
             <Metric label="Atualizacao" value={formatDate(selectedCompany?.updatedAt)} hint="Cadastro selecionado" />
           </div>
-        </div>
-      </section>
 
       {feedback ? <div className={`rounded-2xl border px-4 py-3 text-sm font-medium ${feedback.kind === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}>{feedback.text}</div> : null}
 
@@ -498,13 +492,7 @@ export default function CompanySettingsPage() {
 }
 
 function Metric({ label, value, hint }: { label: string; value: string; hint: string }) {
-  return (
-    <div className="rounded-[24px] border border-white/70 bg-white/80 p-4 shadow-sm">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <p className="mt-2 min-h-[2.75rem] text-lg font-black text-slate-950">{value}</p>
-      <p className="mt-1 text-xs text-slate-500">{hint}</p>
-    </div>
-  );
+  return <SummaryMetric label={label} value={String(value)} helper={hint} tone={"slate"} />;
 }
 
 function Section({ title, description, children }: { title: string; description: string; children: ReactNode }) {

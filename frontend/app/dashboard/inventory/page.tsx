@@ -1,5 +1,7 @@
 ﻿"use client";
 
+import { PageHeader } from "../components/DashboardPageKit";
+
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getAccessFromToken } from "@/lib/access";
@@ -144,8 +146,12 @@ export default function InventoryPage() {
   }, [rows]);
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <h1 className="text-3xl font-bold text-zinc-900">Controle de Estoque (Multilocal)</h1>
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Suprimentos"
+        title="Controle de estoque"
+        description="Consulte saldos, movimentos e materiais por local."
+      />
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Metric title="Saldos controlados" value={String(kpi.total)} />
@@ -201,7 +207,7 @@ export default function InventoryPage() {
 
       <section className="rounded-xl border border-zinc-200 bg-white p-4">
         <h2 className="mb-3 text-lg font-bold text-zinc-800">Fisico x Reservado x Disponivel</h2>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">

@@ -1,5 +1,5 @@
 "use client";
-
+import { PageHeader } from "@/app/dashboard/components/DashboardPageKit";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
@@ -87,26 +87,15 @@ export default function PortalDashboardPage() {
   ].filter((stat) => can(({ "/portal/equipamentos": "EQUIPMENT", "/portal/contratos": "CONTRACTS", "/portal/propostas": "PROPOSALS", "/portal/chamados": "TICKETS", "/portal/solicitacoes": "REQUESTS" } as Record<string, string>)[stat.href] || ""));
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <p className="text-sm font-bold uppercase text-blue-700">
-          Área do Cliente
-        </p>
-        <h1 className="mt-1 text-2xl font-extrabold text-slate-950">
-          {data.client.tradeName || data.client.companyName}
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Acompanhe equipamentos, propostas, ordens, documentos e cobranças
-          liberadas.
-        </p>
-      </section>
+    <div className="dashboard-page space-y-5">
+      <PageHeader eyebrow="Central do cliente" title={data.client.tradeName || data.client.companyName} description="Acompanhe os equipamentos, propostas, atendimentos e documentos da sua empresa." />
 
       <div className="flex flex-wrap gap-3">
         {can("PROPOSALS") && <Link href="/portal/propostas" className="rounded-xl bg-blue-700 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-blue-800">Avaliar minhas propostas</Link>}
         {can("REQUESTS") && <Link href="/portal/solicitacoes" className="rounded-xl border border-blue-200 bg-white px-5 py-3 text-sm font-bold text-blue-800 hover:bg-blue-50">Solicitar peças ou serviços</Link>}
       </div>
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+      <section className="dashboard-metrics-grid">
         {stats.map((stat) => (
           <Link
             key={stat.label}

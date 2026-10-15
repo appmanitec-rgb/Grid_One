@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "../components/DashboardPageKit";
+
 import { FormEvent, useEffect, useState } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
 
@@ -227,14 +229,12 @@ export default function CommercialInspectionsPage() {
   }
 
   return (
-    <div className="space-y-6 p-8">
-      <header className="space-y-2">
-        <h1 className="text-3xl font-bold text-zinc-900">Vistorias Comerciais</h1>
-        <p className="text-sm text-zinc-600">
-          Fluxo tecnico vinculado a oportunidade, cliente e local para orcamento
-          sem erro de escopo.
-        </p>
-      </header>
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Comercial"
+        title="Vistorias comerciais"
+        description="Organize as visitas e informações técnicas para preparar o orçamento."
+      />
 
       {message ? (
         <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
@@ -251,7 +251,7 @@ export default function CommercialInspectionsPage() {
         <h2 className="text-lg font-bold text-zinc-900">Nova vistoria</h2>
         <form
           onSubmit={(event) => void handleCreateInspection(event)}
-          className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-6"
+          className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3"
         >
           <select
             value={opportunityId}
@@ -339,7 +339,7 @@ export default function CommercialInspectionsPage() {
       </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-4">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">

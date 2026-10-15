@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   AccountsReceivableStatus,
@@ -28,6 +29,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { CreateUserSpecialtyDto } from './dto/create-user-specialty.dto';
 import { UpdateUserCertificationDto } from './dto/update-user-certification.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
 import { UpdateUserSpecialtyDto } from './dto/update-user-specialty.dto';
 import { UserPresencePingDto } from './dto/user-presence-ping.dto';
 
@@ -138,8 +140,13 @@ export class UsersService {
       createUserDto.linkedClientId,
     );
 
-    if (createUserDto.portalPermissions && createUserDto.role !== UserRole.CLIENT) {
-      throw new BadRequestException('Permissoes da central sao exclusivas de usuarios clientes.');
+    if (
+      createUserDto.portalPermissions &&
+      createUserDto.role !== UserRole.CLIENT
+    ) {
+      throw new BadRequestException(
+        'Permissoes da central sao exclusivas de usuarios clientes.',
+      );
     }
     if (createUserDto.portalPermissions) {
       await this.assertCanManageSecurity(actorUserId);
@@ -172,7 +179,10 @@ export class UsersService {
       role,
       managerId: managerId ?? null,
       linkedClientId,
-      portalPermissions: createUserDto.role === UserRole.CLIENT ? normalizePortalPermissions(createUserDto.portalPermissions) : [],
+      portalPermissions:
+        createUserDto.role === UserRole.CLIENT
+          ? normalizePortalPermissions(createUserDto.portalPermissions)
+          : [],
       availabilityStatus:
         createUserDto.availabilityStatus ?? UserAvailabilityStatus.AVAILABLE,
       regionTags: createUserDto.regionTags || [],
@@ -213,6 +223,63 @@ export class UsersService {
     });
 
     return this.withManager(created);
+  }
+
+  async changeClientPortalPassword(
+    clientId: string,
+    userId: string,
+    password: string,
+    actorUserId: string,
+  ) {
+    await this.assertCanManageSecurity(actorUserId);
+    if (
+      Array.from(password).length < 12 ||
+      Buffer.byteLength(password, 'utf8') > 72
+    ) {
+      throw new BadRequestException(
+        'Use uma senha com pelo menos 12 caracteres, dentro do limite de tamanho.',
+      );
+    }
+    const passwordHash = await bcrypt.hash(password, 12);
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+      const user = await tx.user.findFirst({
+        where: { id: userId, linkedClientId: clientId, role: UserRole.CLIENT },
+        select: { id: true, isActive: true, isSystemMaster: true },
+      });
+      if (!user)
+        throw new NotFoundException('Usuário não pertence a este cliente.');
+      if (user.isSystemMaster)
+        throw new ForbiddenException('Usuário master não pode ser editado.');
+      if (!user.isActive)
+        throw new BadRequestException(
+          'Para uma conta pendente ou desativada, gere um novo link de ativação.',
+        );
+      const now = new Date();
+      await tx.user.update({ where: { id: userId }, data: { passwordHash } });
+      await tx.authSession.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: now },
+      });
+      await tx.clientPortalActivation.updateMany({
+        where: { userId, usedAt: null },
+        data: { usedAt: now },
+      });
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.USERS,
+          entityType: 'USER',
+          entityId: userId,
+          action: 'CLIENT_PORTAL_PASSWORD_CHANGED',
+          actorUserId,
+          afterPayload: { linkedClientId: clientId, sessionsRevoked: true },
+        },
+        tx,
+      );
+      return {
+        message: 'Senha alterada. O usuário pode entrar com a nova senha.',
+      };
+    });
   }
 
   async issueClientPortalActivation(userId: string, actorUserId?: string) {
@@ -303,7 +370,8 @@ export class UsersService {
   }
 
   async update(id: string, updateUserDto: UpdateUserDto, actorUserId?: string) {
-    const { password, accessPolicy, role, portalPermissions, ...updateData } = updateUserDto;
+    const { password, accessPolicy, role, portalPermissions, ...updateData } =
+      updateUserDto;
     const currentUser = await this.prisma.user.findUnique({
       where: { id },
       select: {
@@ -350,6 +418,9 @@ export class UsersService {
       : currentPolicy;
     if (
       (role !== undefined && role !== currentUser.role) ||
+      (targetRole === UserRole.CLIENT &&
+        updateUserDto.linkedClientId !== undefined &&
+        updateUserDto.linkedClientId !== currentUser.linkedClientId) ||
       JSON.stringify(currentPolicy) !== JSON.stringify(nextPolicy)
     ) {
       await this.assertCanManageSecurity(actorUserId);
@@ -390,19 +461,23 @@ export class UsersService {
 
     if (portalPermissions !== undefined) {
       if (targetRole !== UserRole.CLIENT) {
-        throw new BadRequestException('Permissoes da central sao exclusivas de usuarios clientes.');
+        throw new BadRequestException(
+          'Permissoes da central sao exclusivas de usuarios clientes.',
+        );
       }
       await this.assertCanManageSecurity(actorUserId);
     }
     const dataToUpdate: Prisma.UserUncheckedUpdateInput = {
       ...(updateData as Prisma.UserUncheckedUpdateInput),
       linkedClientId: targetLinkedClientId,
-      ...(portalPermissions !== undefined ? { portalPermissions: normalizePortalPermissions(portalPermissions) } : {}),
+      ...(portalPermissions !== undefined
+        ? { portalPermissions: normalizePortalPermissions(portalPermissions) }
+        : {}),
     };
 
     if (password) {
-      const salt = await bcrypt.genSalt(10);
-      dataToUpdate.passwordHash = await bcrypt.hash(password, salt);
+      await this.assertCanManageSecurity(actorUserId);
+      dataToUpdate.passwordHash = await bcrypt.hash(password, 12);
     }
 
     if (
@@ -432,11 +507,32 @@ export class UsersService {
     }
 
     const before = await this.findOne(id);
-    const updated = await this.prisma.user.update({
-      where: { id },
-      data: dataToUpdate,
-      select: userPublicSelect,
-    });
+    const update = (db: Pick<Prisma.TransactionClient, 'user'>) =>
+      db.user.update({
+        where: { id },
+        data: dataToUpdate,
+        select: userPublicSelect,
+      });
+    const updated = dataToUpdate.passwordHash
+      ? await this.prisma.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT id FROM users WHERE id = ${id} FOR UPDATE`;
+          const user = await update(tx);
+          await tx.authSession.updateMany({
+            where: { userId: id, revokedAt: null },
+            data: { revokedAt: new Date() },
+          });
+          await tx.systemAuditLog.create({
+            data: {
+              domain: AuditDomain.USERS,
+              entityType: 'USER',
+              entityId: id,
+              action: 'USER_PASSWORD_CHANGED',
+              actorUserId,
+            },
+          });
+          return user;
+        })
+      : await update(this.prisma);
 
     await this.auditLogsService.record({
       domain: AuditDomain.USERS,
@@ -518,30 +614,26 @@ export class UsersService {
     return user;
   }
 
-  async updateMyProfile(userId: string, updateUserDto: UpdateUserDto) {
+  async updateMyProfile(userId: string, updateUserDto: UpdateMyProfileDto) {
     const currentUser = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, email: true },
     });
     if (!currentUser) throw new BadRequestException('Usuario nao encontrado.');
 
-    const allowed = { ...updateUserDto };
-    delete (allowed as Partial<UpdateUserDto>).role;
-    delete (allowed as Partial<UpdateUserDto>).isActive;
-    delete (allowed as Partial<UpdateUserDto>).accessPolicy;
-    delete (allowed as Partial<UpdateUserDto>).mfaEnabled;
-    delete (allowed as Partial<UpdateUserDto>).linkedClientId;
-    delete (allowed as Partial<UpdateUserDto>).approvalDiscountLimit;
-    delete (allowed as Partial<UpdateUserDto>).hourCost;
-    delete (allowed as Partial<UpdateUserDto>).functionalId;
-    delete (allowed as Partial<UpdateUserDto>).documentId;
-    delete (allowed as Partial<UpdateUserDto>).managerId;
-    delete (allowed as Partial<UpdateUserDto>).availabilityStatus;
-    delete (allowed as Partial<UpdateUserDto>).skillLevel;
-    delete (allowed as Partial<UpdateUserDto>).regionTags;
-    delete (allowed as Partial<UpdateUserDto>).digitalSignatureUrl;
-    delete (allowed as Partial<UpdateUserDto>).salesTargetMonthly;
-    delete (allowed as Partial<UpdateUserDto>).kpiTargetJson;
+    const personalFields = [
+      'name',
+      'email',
+      'password',
+      'department',
+      'branch',
+      'profilePhotoUrl',
+    ];
+    const allowed = Object.fromEntries(
+      Object.entries(updateUserDto).filter(([key]) =>
+        personalFields.includes(key),
+      ),
+    ) as UpdateMyProfileDto;
 
     if (allowed.email) {
       const normalizedEmail = normalizeEmail(allowed.email);
@@ -559,34 +651,71 @@ export class UsersService {
       allowed.email = normalizedEmail;
     }
 
-    const dataToUpdate: Prisma.UserUpdateInput = {
-      ...(allowed as Prisma.UserUpdateInput),
-    };
-    if (allowed.password) {
-      const salt = await bcrypt.genSalt(10);
-      dataToUpdate.passwordHash = await bcrypt.hash(allowed.password, salt);
-      delete (dataToUpdate as any).password;
+    const { password, ...personalData } = allowed;
+    if (password && password !== updateUserDto.confirmPassword) {
+      throw new BadRequestException('A confirmacao da nova senha nao confere.');
     }
+    if (password && !updateUserDto.currentPassword) {
+      throw new BadRequestException(
+        'Informe a senha atual para alterar sua senha.',
+      );
+    }
+    const dataToUpdate: Prisma.UserUpdateInput = personalData;
+    const update = (db: Pick<Prisma.TransactionClient, 'user'>) =>
+      db.user.update({
+        where: { id: userId },
+        data: dataToUpdate,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          department: true,
+          branch: true,
+          profilePhotoUrl: true,
+          isActive: true,
+          mfaEnabled: true,
+          availabilityStatus: true,
+          availabilityUpdatedAt: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
 
-    const updated = await this.prisma.user.update({
-      where: { id: userId },
-      data: dataToUpdate,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        department: true,
-        branch: true,
-        profilePhotoUrl: true,
-        isActive: true,
-        mfaEnabled: true,
-        availabilityStatus: true,
-        availabilityUpdatedAt: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+    const updated = password
+      ? await this.prisma.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+          const credential = await tx.user.findUnique({
+            where: { id: userId },
+            select: { passwordHash: true },
+          });
+          if (
+            !credential ||
+            !(await bcrypt.compare(
+              updateUserDto.currentPassword!,
+              credential.passwordHash,
+            ))
+          ) {
+            throw new BadRequestException('A senha atual esta incorreta.');
+          }
+          dataToUpdate.passwordHash = await bcrypt.hash(password, 12);
+          const user = await update(tx);
+          await tx.authSession.updateMany({
+            where: { userId, revokedAt: null },
+            data: { revokedAt: new Date() },
+          });
+          await tx.systemAuditLog.create({
+            data: {
+              domain: AuditDomain.USERS,
+              entityType: 'USER',
+              entityId: userId,
+              action: 'USER_PASSWORD_CHANGED',
+              actorUserId: userId,
+            },
+          });
+          return user;
+        })
+      : await update(this.prisma);
 
     await this.auditLogsService.record({
       domain: AuditDomain.USERS,

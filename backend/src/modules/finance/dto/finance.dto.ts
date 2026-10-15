@@ -1,5 +1,8 @@
 import {
   IsBoolean,
+  IsArray,
+  ArrayMinSize,
+  ArrayMaxSize,
   IsDateString,
   IsEnum,
   IsInt,
@@ -23,6 +26,14 @@ import {
   PaymentMethod,
 } from '@prisma/client';
 import { PartialType } from '@nestjs/mapped-types';
+
+export class ScheduleProposalPaymentsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(37)
+  @IsDateString({}, { each: true })
+  dueDates!: string[];
+}
 
 export class CreateAccountsReceivableDto {
   @IsUUID()

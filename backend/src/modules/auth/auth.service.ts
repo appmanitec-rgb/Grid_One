@@ -6,6 +6,7 @@ import { Prisma, User, UserRole } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
 import { allAccessPolicy, effectiveAccessPolicy } from '../users/access-policy';
 import { MfaService } from './mfa.service';
+import { clientCredentialVersion } from './client-credential-version';
 
 const ACCESS_TOKEN_TTL = '12h';
 const MFA_SETUP_TOKEN_TTL = '30m';
@@ -26,6 +27,7 @@ type LoginContext = {
   isSystemMaster: boolean;
   accessPolicy: unknown;
   linkedClientId?: string | null;
+  credentialVersion?: string;
 };
 
 @Injectable()
@@ -70,8 +72,12 @@ export class AuthService {
     }
 
     if (user.role === UserRole.CLIENT) {
-      const client = await this.database.client.findUnique({ where: { id: user.linkedClientId || '' }, select: { portalEnabled: true } });
-      if (!client?.portalEnabled) throw new UnauthorizedException('Central do cliente desabilitada.');
+      const client = await this.database.client.findUnique({
+        where: { id: user.linkedClientId || '' },
+        select: { portalEnabled: true },
+      });
+      if (!client?.portalEnabled)
+        throw new UnauthorizedException('Central do cliente desabilitada.');
     }
 
     if (!user.isActive) {
@@ -79,6 +85,7 @@ export class AuthService {
     }
 
     const accessPolicy = this.resolveAccessPolicy(user);
+    const credentialVersion = clientCredentialVersion(user.passwordHash);
 
     if (MFA_AUTH_ENABLED) {
       const userPayload = this.buildUserPayload(user, accessPolicy);
@@ -92,6 +99,7 @@ export class AuthService {
           isSystemMaster: user.isSystemMaster,
           accessPolicy,
           linkedClientId: user.linkedClientId,
+          credentialVersion,
           mfaSetupRequired: true,
         });
 
@@ -115,6 +123,7 @@ export class AuthService {
               isSystemMaster: user.isSystemMaster,
               accessPolicy,
               linkedClientId: user.linkedClientId,
+              credentialVersion,
             },
             device,
           );
@@ -124,6 +133,7 @@ export class AuthService {
           {
             sub: user.id,
             purpose: 'mfa_challenge',
+            ...(credentialVersion ? { credentialVersion } : {}),
             nonce: randomBytes(16).toString('hex'),
           },
           { expiresIn: MFA_CHALLENGE_TTL },
@@ -147,6 +157,7 @@ export class AuthService {
         isSystemMaster: user.isSystemMaster,
         accessPolicy,
         linkedClientId: user.linkedClientId,
+        credentialVersion,
       },
       device,
     );
@@ -169,8 +180,12 @@ export class AuthService {
       throw new UnauthorizedException('Link de ativacao invalido ou expirado.');
     }
 
-    const client = await this.database.client.findUnique({ where: { id: activation.user.linkedClientId }, select: { portalEnabled: true } });
-    if (!client?.portalEnabled) throw new UnauthorizedException('Central do cliente desabilitada.');
+    const client = await this.database.client.findUnique({
+      where: { id: activation.user.linkedClientId },
+      select: { portalEnabled: true },
+    });
+    if (!client?.portalEnabled)
+      throw new UnauthorizedException('Central do cliente desabilitada.');
     const passwordHash = await bcrypt.hash(password, 12);
     await this.database.$transaction(async (tx) => {
       const claimed = await tx.clientPortalActivation.updateMany({
@@ -216,7 +231,7 @@ export class AuthService {
     code: string,
     device?: DeviceContext,
   ) {
-    let payload: { sub: string; purpose?: string };
+    let payload: { sub: string; purpose?: string; credentialVersion?: string };
     try {
       payload = await this.jwtService.verifyAsync(challengeToken);
     } catch {
@@ -239,6 +254,11 @@ export class AuthService {
     }
 
     const accessPolicy = this.resolveAccessPolicy(user);
+    const credentialVersion = clientCredentialVersion(user.passwordHash);
+    if (credentialVersion && payload.credentialVersion !== credentialVersion)
+      throw new UnauthorizedException(
+        'A senha deste acesso foi alterada. Entre novamente.',
+      );
 
     return this.issueLoginSuccess(
       {
@@ -249,6 +269,7 @@ export class AuthService {
         isSystemMaster: user.isSystemMaster,
         accessPolicy,
         linkedClientId: user.linkedClientId,
+        credentialVersion,
       },
       device,
     );
@@ -277,6 +298,7 @@ export class AuthService {
         role: user.role,
         isSystemMaster: user.isSystemMaster,
         accessPolicy,
+        credentialVersion: clientCredentialVersion(user.passwordHash),
       },
       device,
     );
@@ -324,8 +346,12 @@ export class AuthService {
     }
 
     if (session.user.role === UserRole.CLIENT) {
-      const client = await this.database.client.findUnique({ where: { id: session.user.linkedClientId || '' }, select: { portalEnabled: true } });
-      if (!client?.portalEnabled) throw new UnauthorizedException('Central do cliente desabilitada.');
+      const client = await this.database.client.findUnique({
+        where: { id: session.user.linkedClientId || '' },
+        select: { portalEnabled: true },
+      });
+      if (!client?.portalEnabled)
+        throw new UnauthorizedException('Central do cliente desabilitada.');
     }
     const accessPolicy = this.resolveAccessPolicy(session.user);
     const accessToken = await this.issueAccessToken({
@@ -336,6 +362,7 @@ export class AuthService {
       isSystemMaster: session.user.isSystemMaster,
       accessPolicy,
       linkedClientId: session.user.linkedClientId,
+      credentialVersion: clientCredentialVersion(session.user.passwordHash),
       mfaSetupRequired: false,
     });
 
@@ -379,33 +406,46 @@ export class AuthService {
     params: LoginContext,
     device?: DeviceContext,
   ) {
-    const token = await this.issueAccessToken({
-      id: params.id,
-      email: params.email,
-      name: params.name,
-      role: params.role,
-      isSystemMaster: params.isSystemMaster,
-      accessPolicy: params.accessPolicy,
-      linkedClientId: params.linkedClientId,
-      mfaSetupRequired: false,
-    });
-    const refreshSession = await this.createOrRotateRefreshSession(
-      params.id,
-      device,
-    );
-
-    return {
-      access_token: token,
-      ...(refreshSession
-        ? {
-            refresh_token: refreshSession.refreshToken,
-            refresh_token_expires_at: refreshSession.expiresAt.toISOString(),
-          }
-        : {}),
-      user: this.buildUserPayload(params, params.accessPolicy),
+    const issue = async (db: Pick<Prisma.TransactionClient, 'authSession'>) => {
+      const token = await this.issueAccessToken({
+        ...params,
+        mfaSetupRequired: false,
+      });
+      const refreshSession = await this.createOrRotateRefreshSession(
+        params.id,
+        device,
+        db,
+      );
+      return {
+        access_token: token,
+        ...(refreshSession
+          ? {
+              refresh_token: refreshSession.refreshToken,
+              refresh_token_expires_at: refreshSession.expiresAt.toISOString(),
+            }
+          : {}),
+        user: this.buildUserPayload(params, params.accessPolicy),
+      };
     };
+    return this.database.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${params.id} FOR UPDATE`;
+      const current = await tx.user.findUnique({
+        where: { id: params.id },
+        select: { passwordHash: true, role: true, isActive: true },
+      });
+      if (
+        !current?.isActive ||
+        current.role !== params.role ||
+        clientCredentialVersion(current.passwordHash) !==
+          params.credentialVersion
+      ) {
+        throw new UnauthorizedException(
+          'A senha deste acesso foi alterada. Entre novamente.',
+        );
+      }
+      return issue(tx);
+    });
   }
-
   private issueAccessToken(params: {
     id: string;
     email: string;
@@ -414,6 +454,7 @@ export class AuthService {
     isSystemMaster: boolean;
     accessPolicy: unknown;
     linkedClientId?: string | null;
+    credentialVersion?: string;
     mfaSetupRequired: boolean;
   }) {
     const payload = {
@@ -424,6 +465,9 @@ export class AuthService {
       isSystemMaster: params.isSystemMaster,
       accessPolicy: params.accessPolicy,
       linkedClientId: params.linkedClientId,
+      ...(params.credentialVersion
+        ? { credentialVersion: params.credentialVersion }
+        : {}),
       mfaSetupRequired: params.mfaSetupRequired,
     };
     return this.jwtService.signAsync(payload, {
@@ -466,6 +510,7 @@ export class AuthService {
   private async createOrRotateRefreshSession(
     userId: string,
     device?: DeviceContext,
+    db: Pick<Prisma.TransactionClient, 'authSession'> = this.database,
   ) {
     const deviceId = this.normalizeDeviceId(device?.deviceId);
     if (!deviceId) {
@@ -478,7 +523,7 @@ export class AuthService {
     const refreshTokenHash = this.hashRefreshToken(refreshToken);
     const deviceName = this.normalizeDeviceName(device?.deviceName);
 
-    const existingSession = await this.database.authSession.findUnique({
+    const existingSession = await db.authSession.findUnique({
       where: {
         userId_deviceId: {
           userId,
@@ -491,7 +536,7 @@ export class AuthService {
     });
 
     if (existingSession) {
-      await this.database.authSession.update({
+      await db.authSession.update({
         where: {
           id: existingSession.id,
         },
@@ -505,7 +550,7 @@ export class AuthService {
       });
     } else {
       try {
-        await this.database.authSession.create({
+        await db.authSession.create({
           data: {
             userId,
             deviceId,
@@ -520,7 +565,7 @@ export class AuthService {
           throw error;
         }
 
-        await this.database.authSession.update({
+        await db.authSession.update({
           where: {
             userId_deviceId: {
               userId,

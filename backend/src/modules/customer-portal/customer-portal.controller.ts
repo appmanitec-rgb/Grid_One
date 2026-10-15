@@ -354,8 +354,14 @@ export class CustomerPortalController {
   }
 
   @Post('feedback')
-  createFeedback(@Req() req: AuthenticatedRequest, @Body() dto: CreatePortalFeedbackDto) {
-    return this.customerPortalService.createFeedback(this.extractUserId(req), dto);
+  createFeedback(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: CreatePortalFeedbackDto,
+  ) {
+    return this.customerPortalService.createFeedback(
+      this.extractUserId(req),
+      dto,
+    );
   }
 
   @Get('financial')

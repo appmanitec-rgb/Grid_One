@@ -1,9 +1,12 @@
 "use client";
 
+import { MetricCard as SummaryMetric, PageHeader } from "../components/DashboardPageKit";
+
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
+import { commercialLabel } from "@/lib/commercial-labels";
 import { getAccessFromToken } from "@/lib/access";
 import ListPagination, {
   useListPagination,
@@ -165,15 +168,13 @@ export default function EquipmentsPage() {
   );
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold text-zinc-800">Equipamentos</h1>
-          <p className="mt-1 text-zinc-500">
-            Geradores por cliente, contrato, manutencao, chamados e prontuario tecnico.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Ativos"
+        title="Equipamentos"
+        description="Consulte geradores, contratos, manutenções e o histórico técnico."
+        actions={<>
+<div className="flex items-center gap-2">
           {access.equipments.manageModels ? (
             <Link href="/dashboard/equipments/models" className={SECONDARY_BUTTON}>
               Modelos
@@ -185,7 +186,8 @@ export default function EquipmentsPage() {
             </Link>
           ) : null}
         </div>
-      </div>
+</>}
+      />
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Metric label="Equipamentos" value={String(totals.total)} />
@@ -334,7 +336,7 @@ export default function EquipmentsPage() {
                   </div>
                   <p className="mt-1 text-sm text-slate-500">
                     Código interno{" "}
-                    <span className="font-mono font-semibold text-slate-700">
+                    <span className="tabular-nums font-semibold text-slate-700">
                       {item.code}
                     </span>
                     {serialNumber ? <> | Série {serialNumber}</> : null}
@@ -447,20 +449,7 @@ function Metric({
   value: string;
   tone?: "slate" | "rose" | "blue" | "amber";
 }) {
-  const tones = {
-    slate: "border-slate-200 bg-white text-slate-950",
-    rose: "border-rose-200 bg-rose-50 text-rose-700",
-    blue: "border-blue-200 bg-blue-50 text-blue-700",
-    amber: "border-amber-200 bg-amber-50 text-amber-700",
-  };
-  return (
-    <div className={`rounded-2xl border p-4 shadow-sm ${tones[tone]}`}>
-      <p className="text-xs font-bold uppercase tracking-[0.16em] opacity-70">
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-black">{value}</p>
-    </div>
-  );
+  return <SummaryMetric label={label} value={String(value)} tone={tone} />;
 }
 
 function Info({ label, value }: { label: string; value: string }) {
@@ -643,7 +632,7 @@ function statusLabel(status?: string | null) {
     PREVENTIVE: "Preventiva",
     CORRECTIVE: "Corretiva",
   };
-  return status ? labels[status] || status.replace(/_/g, " ") : "-";
+  return status ? labels[status] || commercialLabel(status) : "-";
 }
 
 function formatDate(value?: string | null) {

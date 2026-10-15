@@ -1,5 +1,7 @@
 "use client";
 
+import { commercialLabel } from "@/lib/commercial-labels";
+
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
@@ -748,7 +750,7 @@ export default function OperationalCasesWorkspace({ mode }: { mode: Mode }) {
       ];
 
   return (
-    <main className="mx-auto w-full max-w-[1800px] space-y-5 p-4 pb-12 sm:p-6 lg:p-8">
+    <main className="dashboard-page w-full pb-12 space-y-5">
       <PageHero
         eyebrow="Operação · Fluxo rastreável"
         title={isDowntime ? "Máquinas paradas" : "Gestão de garantias"}
@@ -955,7 +957,7 @@ export default function OperationalCasesWorkspace({ mode }: { mode: Mode }) {
                     <option value="">Vincular depois</option>
                     {formOrders.map((item) => (
                       <option key={item.id} value={item.id}>
-                        {item.title} · {item.status}
+                        {item.title} · {commercialLabel(item.status)}
                       </option>
                     ))}
                   </SelectInput>,

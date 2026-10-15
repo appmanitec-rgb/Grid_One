@@ -64,7 +64,7 @@ test('gestao por cliente, acesso limitado e feedback', async ({ page }) => {
   }, login);
   await page.goto('/portal/dashboard');
   await expect(page.getByRole('link', { name: 'Propostas' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Observacoes e feedback' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Observações e feedback' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Equipamentos' })).toHaveCount(0);
   await page.goto('/portal/feedback');
   await expect(page.getByText(message)).toBeVisible();

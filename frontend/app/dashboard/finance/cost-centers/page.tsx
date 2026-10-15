@@ -614,11 +614,11 @@ export default function CostCentersPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
-        eyebrow="Margem e rentabilidade"
-        title="Centros de custo com DRE vivo, governanca de origem e lancamento manual."
-        description="A central agora conecta cliente, contrato e gerador ao DRE operacional, em vez de deixar o centro de custo como uma tela isolada de consulta."
+        eyebrow="Financeiro"
+        title="Centros de custo"
+        description="Acompanhe receitas, despesas e resultados por cliente, contrato e equipamento."
         stats={[
           {
             label: "Centros ativos",
@@ -675,16 +675,17 @@ export default function CostCentersPage() {
               </div>
             </FieldBox>
 
-            <StatusBanner
+
+          </div>
+        }
+      />
+<StatusBanner
               tone={selectedCenter?.isActive === false ? "amber" : "blue"}
             >
               {selectedCenter
                 ? `${selectedCenter.code} · ${selectedCenter.name}${selectedCenter.isActive ? " esta ativo para novos lancamentos." : " esta inativo e so deve ser lido historicamente."}`
                 : "Selecione um centro para ler o DRE e operar o modulo."}
             </StatusBanner>
-          </div>
-        }
-      />
 
       {error && !editingId ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
       {successMessage ? (
@@ -698,7 +699,7 @@ export default function CostCentersPage() {
             title="Selecionar centro e ler o DRE"
             description="Escolha o centro correto e acompanhe o resultado com filtro de periodo e historico de lancamentos."
           >
-            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_180px_140px]">
+            <div className="workspace-filter-grid grid gap-3 items-end">
               <FormField label="Centro selecionado">
                 <SelectInput
                   value={selectedId}
@@ -1324,7 +1325,7 @@ export default function CostCentersPage() {
           <SectionCard
             eyebrow="Fluxo validado"
             title="O que esta protegido neste modulo"
-            description="A tela foi alinhada com as regras reais do backend para evitar DREs soltos ou centros mal ancorados."
+            description="Confira as origens e os vínculos dos lançamentos deste centro de custo."
           >
             <div className="space-y-3">
               <FieldBox>

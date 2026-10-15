@@ -149,11 +149,11 @@ export default function ServiceReportsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
-        eyebrow="Operacao tecnica"
-        title="Laudos tecnicos"
-        description="Checklist, diagnostico, evidencias, assinatura e liberacao controlada para o Portal do Cliente."
+        eyebrow="Operação"
+        title="Laudos técnicos"
+        description="Consulte diagnósticos, evidências, assinaturas e documentos liberados ao cliente."
         stats={[
           { label: "Total", value: String(reports.length), tone: "slate" },
           { label: "Pendentes", value: String(stats.pending), tone: "amber" },

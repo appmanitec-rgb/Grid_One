@@ -1,5 +1,7 @@
 ﻿"use client";
 
+import { PageHeader } from "../../components/DashboardPageKit";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -539,24 +541,20 @@ export default function NewClientPage() {
   };
 
   return (
-    <div className="p-8 max-w-6xl mx-auto mb-20">
-      <div className="flex items-center gap-4 mb-8">
-        <Link
+    <div className="dashboard-page mb-20 space-y-5">
+      <PageHeader
+        eyebrow="Comercial"
+        title={isEditing ? "Editar Cliente" : "Novo Cliente Completo"}
+        description="Pessoa fisica/juridica, dois enderecos, contatos e multiplas maquinas."
+        actions={<>
+<Link
           href="/dashboard/clients"
           className="w-10 h-10 flex items-center justify-center bg-white border border-zinc-200 rounded-lg hover:bg-zinc-50 transition-colors text-zinc-500 shadow-sm"
         >
           ←
         </Link>
-        <div>
-          <h1 className="text-3xl font-bold text-zinc-800">
-            {isEditing ? "Editar Cliente" : "Novo Cliente Completo"}
-          </h1>
-          <p className="text-zinc-500 mt-1">
-            Pessoa fisica/juridica, dois enderecos, contatos e multiplas
-            maquinas.
-          </p>
-        </div>
-      </div>
+</>}
+      />
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6 font-medium">
@@ -619,7 +617,7 @@ export default function NewClientPage() {
                     setFormData({ ...formData, document: e.target.value })
                   }
                   placeholder="CPF numerico ou CNPJ com letras e numeros"
-                  className="w-full border border-zinc-300 rounded-lg p-3 font-mono bg-zinc-50 focus:bg-white outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full border border-zinc-300 rounded-lg p-3 tabular-nums bg-zinc-50 focus:bg-white outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
 

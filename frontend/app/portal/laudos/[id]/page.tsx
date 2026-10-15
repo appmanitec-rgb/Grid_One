@@ -1,5 +1,6 @@
 "use client";
-
+import { WorkspaceState } from "@/app/dashboard/components/WorkspaceState";
+import { PageHeader } from "@/app/dashboard/components/DashboardPageKit";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -98,7 +99,7 @@ export default function PortalServiceReportDetailPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="dashboard-page space-y-5">
       <Link
         href="/portal/laudos"
         className="text-sm font-bold text-blue-700 hover:text-blue-900"
@@ -107,23 +108,7 @@ export default function PortalServiceReportDetailPage() {
       </Link>
       {success ? <State text={success} tone="success" /> : null}
 
-      <header className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
-            {report.code}
-          </span>
-          <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">
-            Liberado em {formatServiceReportDate(report.releasedToCustomerAt)}
-          </span>
-        </div>
-        <h1 className="mt-3 text-2xl font-extrabold text-slate-950">
-          {report.title}
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          {report.generator?.name || "Equipamento"} -{" "}
-          {report.maintenanceOrder?.title || "Ordem de serviço"}
-        </p>
-        <div className="mt-4 flex flex-wrap gap-2">
+      <PageHeader eyebrow="Laudo técnico" title={report.title} description={<>{report.generator?.name || "Equipamento"} · {report.maintenanceOrder?.title || "Ordem de serviço"}</>} meta={<><span>{report.code}</span><span>Liberado em {formatServiceReportDate(report.releasedToCustomerAt)}</span></>} actions={<div className="mt-4 flex flex-wrap gap-2">
           {report.validationUrl ? (
             <a
               href={report.validationUrl}
@@ -148,8 +133,7 @@ export default function PortalServiceReportDetailPage() {
               PDF ainda não gerado
             </span>
           )}
-        </div>
-      </header>
+        </div>} />
 
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         {report.customerAcceptedAt ? (
@@ -332,17 +316,5 @@ function Info({ label, value }: { label: string; value?: string | null }) {
 }
 
 function State({ text, tone }: { text: string; tone?: "error" | "success" }) {
-  return (
-    <div
-      className={`rounded-lg border p-4 text-sm font-semibold ${
-        tone === "error"
-          ? "border-red-200 bg-red-50 text-red-700"
-          : tone === "success"
-            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-            : "border-slate-200 bg-white text-slate-600"
-      }`}
-    >
-      {text}
-    </div>
-  );
+  return <WorkspaceState title={text} tone={tone || (/^Carregando/i.test(text) ? "loading" : "empty")} />;
 }

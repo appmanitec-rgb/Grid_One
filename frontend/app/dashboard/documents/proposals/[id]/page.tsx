@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
+import { commercialLabel } from "@/lib/commercial-labels";
 import { useCallback, useEffect, useState } from "react";
 import { clearAuthSession } from "@/lib/auth-session";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
@@ -259,7 +260,7 @@ export default function ProposalDocumentPage() {
       >
         <div className="flex flex-wrap gap-2">
           <ToolbarPill>{data.document.statusLabel}</ToolbarPill>
-          <ToolbarPill>{data.document.type}</ToolbarPill>
+          <ToolbarPill>{commercialLabel(data.document.type)}</ToolbarPill>
           <ToolbarPill>{formatCurrency(data.document.totalValue)}</ToolbarPill>
         </div>
 
@@ -318,7 +319,7 @@ export default function ProposalDocumentPage() {
 
         <PrintSection title="Condicoes comerciais" columns={3}>
           <ValueCard label="Frete" value={data.document.freight || "-"} />
-          <ValueCard label="Pagamento" value={data.document.paymentTerm || "-"} />
+          <ValueCard label="Pagamento" value={commercialLabel(data.document.paymentTerm, "—")} />
           <ValueCard
             label="Prazo"
             value={

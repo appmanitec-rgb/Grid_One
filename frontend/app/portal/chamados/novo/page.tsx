@@ -1,5 +1,7 @@
 "use client";
-
+import { WorkspaceState } from "@/app/dashboard/components/WorkspaceState";
+import { PageHeader } from "@/app/dashboard/components/DashboardPageKit";
+import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { customerPortalGet, PortalEquipment } from "@/lib/customer-portal";
@@ -79,17 +81,13 @@ export default function NewPortalTicketPage() {
   }
 
   return (
-    <section className="mx-auto max-w-3xl rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <h1 className="text-2xl font-extrabold text-slate-950">Novo chamado</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Informe o problema ou solicitação. A equipe interna classificará e dará
-        andamento.
-      </p>
+    <section className="dashboard-page mx-auto max-w-4xl">
+      <PageHeader eyebrow="Atendimento" title="Novo chamado" description="Descreva a solicitação e selecione o equipamento. Nossa equipe acompanhará o atendimento." actions={<Link href="/portal/chamados" className="rounded-lg border border-slate-200 bg-white text-slate-700">Voltar para chamados</Link>} />
 
       {error ? <State text={error} tone="error" /> : null}
       {loading ? <State text="Carregando equipamentos..." /> : null}
 
-      <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+      <form onSubmit={handleSubmit} className="mt-5 space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <Field label="Equipamento">
           <select
             value={form.generatorId}
@@ -242,16 +240,6 @@ function Field({
   );
 }
 
-function State({ text, tone }: { text: string; tone?: "error" }) {
-  return (
-    <div
-      className={`mt-3 rounded-md border p-3 text-sm font-semibold ${
-        tone === "error"
-          ? "border-red-200 bg-red-50 text-red-700"
-          : "border-slate-200 bg-slate-50 text-slate-600"
-      }`}
-    >
-      {text}
-    </div>
-  );
+function State({ text, tone }: { text: string; tone?: "error" | "success" }) {
+  return <WorkspaceState title={text} tone={tone || (/^Carregando/i.test(text) ? "loading" : "empty")} />;
 }

@@ -217,6 +217,10 @@ describe('UsersService', () => {
       approvalDiscountLimit: 90,
       role: 'FINANCE',
       accessPolicy: { finance: { view: true } },
+      portalPermissions: ['all'],
+      linkedClientId: 'another-client',
+      isSystemMaster: true,
+      passwordHash: 'attacker-hash',
     } as unknown as Parameters<UsersService['updateMyProfile']>[1];
 
     const updated = await service.updateMyProfile('user-1', payload);
@@ -232,6 +236,14 @@ describe('UsersService', () => {
     expect(updateCall.data).not.toHaveProperty('approvalDiscountLimit');
     expect(updateCall.data).not.toHaveProperty('role');
     expect(updateCall.data).not.toHaveProperty('accessPolicy');
+    for (const field of [
+      'portalPermissions',
+      'linkedClientId',
+      'isSystemMaster',
+      'passwordHash',
+    ]) {
+      expect(updateCall.data).not.toHaveProperty(field);
+    }
     expect(updated).not.toHaveProperty('hourCost');
     expect(auditLogsService.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -268,6 +280,32 @@ describe('UsersService', () => {
     ).rejects.toThrow('dados sensiveis');
 
     expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('blocks reassigning a portal login to another client without security permission', async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: 'portal-user',
+        role: UserRole.CLIENT,
+        accessPolicy: null,
+        isSystemMaster: false,
+        linkedClientId: 'client-a',
+        isActive: true,
+      })
+      .mockResolvedValueOnce({
+        role: UserRole.AUDITOR,
+        isSystemMaster: false,
+        accessPolicy: { users: { manage: true, manageSecurity: false } },
+      });
+    await expect(
+      service.update(
+        'portal-user',
+        { linkedClientId: 'client-b' },
+        'delegated-user',
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.client.findUnique).not.toHaveBeenCalled();
   });
 
   it('blocks changes to another user access policy without security permission', async () => {

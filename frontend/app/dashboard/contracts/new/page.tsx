@@ -246,11 +246,11 @@ export default function NewContractPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
-        eyebrow="Novo contrato"
-        title="Cadastrar contrato com mais clareza e menos ruído."
-        description="O formulario foi reorganizado por contexto operacional: vigencia, cobertura, SLA e faturamento. Tambem corrigimos a consistencia entre cliente e equipamentos para evitar falhas silenciosas no fluxo."
+        eyebrow="Comercial"
+        title="Novo contrato"
+        description="Defina cliente, equipamentos, cobertura, vigência e condições de faturamento."
         stats={[
           {
             label: "Clientes carregados",
@@ -399,7 +399,7 @@ export default function NewContractPage() {
         <SectionCard
           eyebrow="Cobertura tecnica"
           title="Equipamentos cobertos"
-          description="Selecione somente ativos do cliente escolhido. O formulario agora remove automaticamente equipamentos invalidos quando o cliente muda."
+          description="Selecione os equipamentos do cliente que serão cobertos pelo contrato."
           actions={
             <button
               type="button"

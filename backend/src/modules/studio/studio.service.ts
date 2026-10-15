@@ -754,13 +754,8 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
         include: { issuerCompany: { select: { id: true, companyName: true } } },
       }),
     validate: (data, creating) => {
-      if (
-        creating &&
-        (!data.name || !data.purpose || !data.method)
-      ) {
-        throw new BadRequestException(
-          'Informe nome, destino e meio.',
-        );
+      if (creating && (!data.name || !data.purpose || !data.method)) {
+        throw new BadRequestException('Informe nome, destino e meio.');
       }
       if (
         creating &&
@@ -775,14 +770,23 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
     },
     create: async (tx, data) => {
       const issuer = await validatePaymentProfileIssuer(tx, data);
-      const beneficiary = studioString(data.beneficiary).trim() || issuer?.companyName || '';
+      const beneficiary =
+        studioString(data.beneficiary).trim() || issuer?.companyName || '';
       if (!beneficiary) {
         throw new BadRequestException('Informe o favorecido da conta.');
       }
-      const pixKey = studioString(data.pixKey).trim() ||
-        (data.method === ProposalPaymentMethod.PIX ? issuer?.cnpj : '') || '';
-      if (data.isActive === true && data.method === ProposalPaymentMethod.PIX && !pixKey) {
-        throw new BadRequestException('Cadastre o CNPJ emitente para usar como chave PIX.');
+      const pixKey =
+        studioString(data.pixKey).trim() ||
+        (data.method === ProposalPaymentMethod.PIX ? issuer?.cnpj : '') ||
+        '';
+      if (
+        data.isActive === true &&
+        data.method === ProposalPaymentMethod.PIX &&
+        !pixKey
+      ) {
+        throw new BadRequestException(
+          'Cadastre o CNPJ emitente para usar como chave PIX.',
+        );
       }
       return tx.proposalPaymentProfile.create({
         data: {
@@ -792,7 +796,9 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
           method: data.method as ProposalPaymentMethod,
           beneficiary,
           beneficiaryDocument:
-            studioString(data.beneficiaryDocument).trim() || issuer?.cnpj || null,
+            studioString(data.beneficiaryDocument).trim() ||
+            issuer?.cnpj ||
+            null,
           bankName: studioString(data.bankName).trim() || null,
           agency: studioString(data.agency).trim() || null,
           accountNumber: studioString(data.accountNumber).trim() || null,
@@ -816,12 +822,15 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
         throw new NotFoundException('Perfil de pagamento nao encontrado.');
       const merged = { ...current, ...data };
       const issuer = await validatePaymentProfileIssuer(tx, merged);
-      const beneficiary = studioString(merged.beneficiary).trim() || issuer?.companyName || '';
+      const beneficiary =
+        studioString(merged.beneficiary).trim() || issuer?.companyName || '';
       if (!studioString(merged.name).trim() || !beneficiary) {
         throw new BadRequestException('Nome e favorecido sao obrigatorios.');
       }
-      const pixKey = studioString(merged.pixKey).trim() ||
-        (merged.method === ProposalPaymentMethod.PIX ? issuer?.cnpj : '') || '';
+      const pixKey =
+        studioString(merged.pixKey).trim() ||
+        (merged.method === ProposalPaymentMethod.PIX ? issuer?.cnpj : '') ||
+        '';
       if (
         merged.isActive &&
         merged.method === ProposalPaymentMethod.PIX &&
@@ -845,7 +854,10 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
         data: {
           ...data,
           beneficiary,
-          beneficiaryDocument: studioString(merged.beneficiaryDocument).trim() || issuer?.cnpj || null,
+          beneficiaryDocument:
+            studioString(merged.beneficiaryDocument).trim() ||
+            issuer?.cnpj ||
+            null,
           pixKey: pixKey || null,
         },
         include: { issuerCompany: { select: { id: true, companyName: true } } },

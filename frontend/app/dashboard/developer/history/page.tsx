@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "../../components/DashboardPageKit";
+
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getAccessFromToken } from "@/lib/access";
@@ -122,22 +124,13 @@ export default function StudioHistoryPage() {
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <section className="rounded-[28px] border border-slate-200 bg-white/95 p-5 shadow-[0_24px_54px_-42px_rgba(15,23,42,0.28)]">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
-              Manitec Studio
-            </p>
-            <h1 className="mt-2 text-3xl font-bold text-slate-950">
-              Historico
-            </h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              Eventos auditados pelo sistema. Edicoes feitas pelo Studio devem ficar rastreaveis por usuario, registro e origem nas proximas etapas.
-            </p>
-          </div>
-        </div>
-      </section>
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Manitec Studio"
+        title="Histórico de atividades"
+        description="Eventos auditados pelo sistema. Edicoes feitas pelo Studio devem ficar rastreaveis por usuario, registro e origem nas proximas etapas."
+      />
+
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="grid gap-3 lg:grid-cols-[1fr_240px_auto] lg:items-end">
@@ -181,7 +174,7 @@ export default function StudioHistoryPage() {
       ) : null}
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
           <table className="w-full border-collapse text-left">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-sm text-slate-500">

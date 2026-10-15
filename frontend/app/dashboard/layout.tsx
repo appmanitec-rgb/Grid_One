@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import TopBar from "./components/TopBar";
+import MobileNavigation from "./components/MobileNavigation";
 import SessionHeartbeat from "../SessionHeartbeat";
 import DashboardTableSorting from "./components/DashboardTableSorting";
 import DashboardTablePagination from "./components/DashboardTablePagination";
@@ -38,7 +39,6 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [accessReady, setAccessReady] = useState(false);
   const [appearanceTheme, setAppearanceTheme] =
     useState<DashboardThemeId>("mist");
@@ -184,18 +184,6 @@ export default function DashboardLayout({
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [accessReady, router]);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("manitec_sidebar_collapsed");
-    setIsSidebarCollapsed(saved === "1");
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem(
-      "manitec_sidebar_collapsed",
-      isSidebarCollapsed ? "1" : "0",
-    );
-  }, [isSidebarCollapsed]);
 
   useEffect(() => {
     const savedTheme = readStoredDashboardTheme();
@@ -387,9 +375,7 @@ export default function DashboardLayout({
       <DashboardTablePagination />
       <SidebarNavigation
         pathname={pathname}
-        collapsed={isSidebarCollapsed}
         access={visiblePages}
-        onToggleCollapsed={() => setIsSidebarCollapsed((prev) => !prev)}
         onLogout={logout}
       />
 
@@ -407,7 +393,9 @@ export default function DashboardLayout({
         </main>
       </div>
 
-      <nav className="glass-surface fixed inset-x-4 bottom-3 z-30 flex gap-2 overflow-x-auto rounded-[24px] p-2 md:hidden">
+      <nav aria-label="Atalhos rápidos" className="glass-surface fixed inset-x-4 bottom-3 z-30 flex min-w-0 gap-2 rounded-[24px] p-2 md:hidden">
+        <MobileNavigation pathname={pathname} access={visiblePages} onLogout={logout} />
+        <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto">
         {allowedItems.map((item) => {
           const active = pathname === item.href;
           return (
@@ -425,6 +413,7 @@ export default function DashboardLayout({
             </Link>
           );
         })}
+        </div>
       </nav>
     </div>
   );

@@ -1,5 +1,8 @@
 "use client";
 
+import { PageHeader } from "../../components/DashboardPageKit";
+import { commercialLabel } from "@/lib/commercial-labels";
+
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useState } from "react";
@@ -96,23 +99,22 @@ export default function OpportunityDetailPage() {
   if (!opportunity) return <div className="p-8"><p className="text-rose-700">{error || "Oportunidade não encontrada."}</p><Link href="/dashboard/opportunities" className="text-blue-700">Voltar ao funil</Link></div>;
   const effectiveProbability = opportunity.probabilityPercent ?? stageProbability[opportunity.stage] ?? 0;
 
-  return <main className="mx-auto max-w-6xl space-y-5 p-5 md:p-8">
+  return <main className="dashboard-page space-y-5">
     <Link href="/dashboard/opportunities" className="text-sm font-semibold text-blue-700 hover:underline">← Funil de vendas</Link>
-    <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-blue-600">Oportunidade · {stageLabels[opportunity.stage] || opportunity.stage}</p>
-          <h1 className="mt-1 text-2xl font-bold text-slate-900">{opportunity.title}</h1>
-          <Link href={`/dashboard/clients/${opportunity.client.id}`} className="mt-2 inline-block text-sm font-semibold text-blue-700 hover:underline">{opportunity.client.tradeName || opportunity.client.companyName}</Link>
-          <p className="text-sm text-slate-600">Responsável: {opportunity.assignedSeller?.name || "Não definido"}</p>
-        </div>
-        <div className="rounded-xl bg-blue-50 p-4 text-right">
+    <PageHeader
+        eyebrow="Comercial"
+        title={opportunity.title}
+        description={<>Responsável: {opportunity.assignedSeller?.name || "Não definido"}</>}
+
+        meta={<>
+<Link href={`/dashboard/clients/${opportunity.client.id}`} className="mt-2 inline-block text-sm font-semibold text-blue-700 hover:underline">{opportunity.client.tradeName || opportunity.client.companyName}</Link>
+</>}
+      />
+<div className="rounded-2xl border border-slate-200 bg-white p-4">
           <p className="text-xs font-bold uppercase text-slate-600">Previsão ponderada</p>
           <p className="text-xl font-bold text-blue-900">{currency.format(Number(opportunity.estimatedValue || 0) * effectiveProbability / 100)}</p>
           <p className="text-xs text-slate-600">{effectiveProbability}% de {currency.format(Number(opportunity.estimatedValue || 0))}</p>
         </div>
-      </div>
-    </header>
 
     <form onSubmit={(event) => void saveForecast(event)} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 className="text-lg font-bold text-slate-900">Previsão de vendas</h2>
@@ -128,6 +130,6 @@ export default function OpportunityDetailPage() {
     </form>
 
     <CrmTimeline clientId={opportunity.client.id} opportunityId={opportunity.id} />
-    {opportunity.proposals?.length ? <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="font-bold text-slate-900">Propostas vinculadas</h2><div className="mt-3 flex flex-wrap gap-2">{opportunity.proposals.map((proposal) => <Link key={proposal.id} href={`/dashboard/proposals/${proposal.id}`} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-blue-700">{proposal.code} · {proposal.status}</Link>)}</div></section> : null}
+    {opportunity.proposals?.length ? <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="font-bold text-slate-900">Propostas vinculadas</h2><div className="mt-3 flex flex-wrap gap-2">{opportunity.proposals.map((proposal) => <Link key={proposal.id} href={`/dashboard/proposals/${proposal.id}`} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-blue-700">{proposal.code} · {commercialLabel(proposal.status)}</Link>)}</div></section> : null}
   </main>;
 }

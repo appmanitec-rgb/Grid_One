@@ -1,4 +1,5 @@
 "use client";
+import { commercialLabel } from "@/lib/commercial-labels";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, apiUrl } from "@/lib/api";
@@ -300,11 +301,12 @@ export default function TechniciansPage() {
   }
 
   return (
-    <div className="space-y-6 pb-10">
+    <div className="dashboard-page pb-10 space-y-5">
       <PageHero
-        eyebrow="Operacao & campo"
-        title="Equipe de Tecnicos"
-        description="Cadastro operacional com skills, capacidade de despacho e validade de certificacoes. A tela foi reorganizada para separar melhor cadastro, leitura de carga e manutencao da equipe."
+        contextExpanded={Boolean(editingId)}
+        eyebrow="Operação"
+        title="Equipe de técnicos"
+        description="Gerencie profissionais, especialidades, disponibilidade e certificações."
         stats={[
           {
             label: "Tecnicos",
@@ -339,8 +341,8 @@ export default function TechniciansPage() {
             </InlineMessage>
           ) : (
             <InlineMessage>
-              Use este painel para organizar skills, cobertura geografica e carga atual da equipe
-              sem misturar tudo no mesmo bloco visual.
+              Organize as especialidades, regiões de atendimento e disponibilidade
+              da equipe técnica.
             </InlineMessage>
           )
         }
@@ -510,7 +512,7 @@ export default function TechniciansPage() {
             />
           ) : (
             <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white">
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
                 <table className="min-w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50/90 text-left text-[11px] uppercase tracking-[0.18em] text-slate-500">
@@ -573,7 +575,7 @@ export default function TechniciansPage() {
                             <div className="mt-2 space-y-1">
                               {openOrders.slice(0, 2).map((order) => (
                                 <p key={order.id} className="text-xs text-slate-500">
-                                  {order.title} ({order.status})
+                                  {order.title} ({commercialLabel(order.status)})
                                 </p>
                               ))}
                               {openOrders.length === 0 ? (

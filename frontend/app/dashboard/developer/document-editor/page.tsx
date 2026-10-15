@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "../../components/DashboardPageKit";
+
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAccessFromToken } from "@/lib/access";
@@ -443,20 +445,18 @@ export default function DocumentEditorPage() {
   if (!canView) return <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-900">Seu perfil precisa de acesso de visualização ao Manitec Studio.</div>;
 
   return (
-    <div className="space-y-5 p-4 sm:p-6 lg:p-8">
-      <header className="rounded-[28px] bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 p-6 text-white shadow-xl">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-200">Manitec Studio · Documentos</p>
-            <h1 className="mt-2 text-3xl font-bold">Editor Inteligente de Documentos</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">Monte seu documento com texto e campos prontos. A prévia mostra o resultado antes de publicar.</p>
-          </div>
-          <Link href="/dashboard/developer/data" className="rounded-xl border border-white/20 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10">Voltar ao Studio</Link>
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Manitec Studio"
+        title="Editor Inteligente de Documentos"
+        description="Monte seu documento com texto e campos prontos. A prévia mostra o resultado antes de publicar."
+        actions={<>
+<Link href="/dashboard/developer/data" className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Voltar ao Studio</Link>
+</>}
+      />
+<div className="mt-6 grid gap-2 sm:grid-cols-3">
+          {KINDS.map((option) => <button key={option.value} type="button" onClick={() => { if (option.value !== kind) reset(option.value); }} className={`rounded-xl border p-3 text-left transition ${kind === option.value ? "border-blue-300 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:bg-blue-50"}`}><span className="block font-bold">{option.label}</span><span className="mt-1 block text-xs opacity-80">{option.hint}</span></button>)}
         </div>
-        <div className="mt-6 grid gap-2 sm:grid-cols-3">
-          {KINDS.map((option) => <button key={option.value} type="button" onClick={() => { if (option.value !== kind) reset(option.value); }} className={`rounded-xl border p-3 text-left transition ${kind === option.value ? "border-blue-300 bg-blue-600 text-white" : "border-white/15 bg-white/5 text-slate-300 hover:bg-white/10"}`}><span className="block font-bold">{option.label}</span><span className="mt-1 block text-xs opacity-80">{option.hint}</span></button>)}
-        </div>
-      </header>
 
       {feedback ? <div role="status" className={`rounded-xl border px-4 py-3 text-sm font-semibold ${feedback.kind === "error" ? "border-red-200 bg-red-50 text-red-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>{feedback.text}</div> : null}
 

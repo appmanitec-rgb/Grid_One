@@ -1,5 +1,7 @@
 ﻿"use client";
 
+import { PageHeader } from "../components/DashboardPageKit";
+
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
@@ -179,17 +181,13 @@ export default function ClientsPage() {
   ]);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold text-zinc-800">
-            Carteira de Clientes
-          </h1>
-          <p className="mt-1 text-zinc-500">
-            Faca a gestao das empresas, contatos e equipamentos associados.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Comercial"
+        title="Carteira de Clientes"
+        description="Gerencie empresas, contatos e equipamentos associados."
+        actions={<>
+<div className="flex items-center gap-2">
           <Link
             href="/dashboard/clients/new"
             className="ml-2 flex items-center rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white shadow-sm transition-colors hover:bg-blue-500"
@@ -197,7 +195,8 @@ export default function ClientsPage() {
             <span className="mr-2">+</span> Novo Cliente
           </Link>
         </div>
-      </div>
+</>}
+      />
 
       {error ? (
         <div
@@ -300,7 +299,7 @@ export default function ClientsPage() {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
           <table className="w-full border-collapse text-left">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 text-sm text-zinc-500">
@@ -318,7 +317,7 @@ export default function ClientsPage() {
                     key={client.id}
                     className="transition-colors hover:bg-zinc-50"
                   >
-                    <td className="p-4 font-mono text-sm font-bold text-zinc-700">
+                    <td className="p-4 tabular-nums text-sm font-bold text-zinc-700">
                       {client.code}
                     </td>
                     <td className="p-4">

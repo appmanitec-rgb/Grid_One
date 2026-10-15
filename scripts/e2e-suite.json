@@ -1,0 +1,47 @@
+{
+  "menus": [
+    "e2e/menu-routes.spec.ts"
+  ],
+  "flows": [
+    "e2e/login-responsive.spec.ts",
+    "e2e/auth.spec.ts",
+    "e2e/dashboard-presentation.spec.ts",
+    "e2e/profile-photo.spec.ts",
+    "e2e/client-portal.spec.ts",
+    "e2e/client-portal-management.spec.ts",
+    "e2e/client-portal-password.spec.ts",
+    "e2e/commercial-contract-finance.spec.ts",
+    "e2e/customer-ticket-to-order.spec.ts",
+    "e2e/dispatch-schedule.spec.ts",
+    "e2e/documents-hub.spec.ts",
+    "e2e/finance-operational.spec.ts",
+    "e2e/generator-models.spec.ts",
+    "e2e/opportunity-create.spec.ts",
+    "e2e/payment-profile.spec.ts",
+    "e2e/pilot-operational-smoke.spec.ts",
+    "e2e/proposal-detail-actions.spec.ts",
+    "e2e/proposal-external-document.spec.ts",
+    "e2e/proposal-list.spec.ts",
+    "e2e/proposal-operational.spec.ts",
+    "e2e/proposal-pdf.spec.ts",
+    "e2e/proposal-wizard.spec.ts",
+    "e2e/proposal-payment-flow.spec.ts",
+    "e2e/public-links.spec.ts",
+    "e2e/scope-library.spec.ts",
+    "e2e/service-reports.spec.ts",
+    "e2e/session-persistence.spec.ts",
+    "e2e/smart-navigation.spec.ts",
+    "e2e/smoke-navigation.spec.ts",
+    "e2e/team-communication.spec.ts",
+    "e2e/technician.spec.ts",
+    "e2e/ux-operational.spec.ts",
+    "e2e/profile-security.spec.ts",
+    "e2e/staff-password-security.spec.ts",
+    "e2e/client-link-security.spec.ts"
+  ],
+  "visual": [
+    "e2e/visual-system.spec.ts",
+    "e2e/visual-interactions.spec.ts",
+    "e2e/dashboard-presentation.spec.ts"
+  ]
+}

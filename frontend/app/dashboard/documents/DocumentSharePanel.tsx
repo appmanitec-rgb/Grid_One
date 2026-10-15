@@ -335,7 +335,7 @@ export default function DocumentSharePanel({
         ) : (
           <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-600">
             <DataPill tone="blue">POST assinado</DataPill>
-            O payload inclui metadados, link seguro e snapshot do documento.
+            O compartilhamento inclui os dados do documento e um link seguro para consulta.
           </div>
         )}
 

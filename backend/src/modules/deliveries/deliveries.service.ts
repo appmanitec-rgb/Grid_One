@@ -535,14 +535,16 @@ export class DeliveriesService {
       templates: preferences.templates,
       providerStatus: {
         email: Boolean(
+          process.env.EXTERNAL_DELIVERIES_DISABLED !== 'true' &&
           process.env.RESEND_API_KEY?.trim() &&
           (preferences.fromEmail || envFromEmail),
         ),
         whatsapp: Boolean(
+          process.env.EXTERNAL_DELIVERIES_DISABLED !== 'true' &&
           process.env.WHATSAPP_ACCESS_TOKEN?.trim() &&
           process.env.WHATSAPP_PHONE_NUMBER_ID?.trim(),
         ),
-        webhook: true,
+        webhook: process.env.EXTERNAL_DELIVERIES_DISABLED !== 'true',
       },
     };
   }
@@ -979,6 +981,25 @@ export class DeliveriesService {
   private async dispatchDelivery(
     input: DispatchInput,
   ): Promise<DispatchResult> {
+    if (process.env.EXTERNAL_DELIVERIES_DISABLED === 'true') {
+      return {
+        mode: 'manual',
+        provider:
+          input.channel === DeliveryChannel.WHATSAPP
+            ? 'whatsapp-link'
+            : 'manual-link',
+        providerConfigured: false,
+        ...(input.channel === DeliveryChannel.WHATSAPP
+          ? {
+              launchUrl: this.buildWhatsappLaunchUrl(
+                input.recipientTarget,
+                `${input.message}\n\n${input.shareUrl}`,
+              ),
+            }
+          : {}),
+        note: 'Envio automático desativado neste ambiente. Link seguro preparado para envio manual.',
+      };
+    }
     if (input.channel === DeliveryChannel.WHATSAPP) {
       return this.dispatchWhatsappDelivery(input);
     }

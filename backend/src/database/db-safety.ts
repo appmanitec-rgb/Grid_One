@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaClient } from '@prisma/client';
+import { validateRuntimeEnvironment } from '../config/runtime-environment';
 
 function loadEnvFile() {
   const envPath = path.resolve(process.cwd(), '.env');
@@ -81,6 +82,7 @@ async function assertRequiredColumns(
 
 export async function runDatabaseSafetyChecks() {
   loadEnvFile();
+  validateRuntimeEnvironment();
   const databaseUrl = assertDatabaseUrl();
   validateExpectedDatabase(databaseUrl);
   const isIsolatedE2eSchema =
@@ -105,6 +107,25 @@ export async function runDatabaseSafetyChecks() {
       throw new Error('Table "_prisma_migrations" not found.');
     }
 
+    if (migrationsTable?.[0]?.exists) {
+      const failed = await prisma.$queryRaw<Array<{ migration_name: string }>>`
+        SELECT migration_name FROM "_prisma_migrations"
+        WHERE finished_at IS NULL AND rolled_back_at IS NULL;
+      `;
+      if (failed.length)
+        throw new Error(
+          `Migrações incompletas: ${failed.map((row) => row.migration_name).join(', ')}.`,
+        );
+    }
+    await assertRequiredColumns(prisma, 'proposals', [
+      'paymentPlan',
+      'downPaymentConfirmedAt',
+    ]);
+    await assertRequiredColumns(prisma, 'accounts_receivable', [
+      'sourceProposalId',
+      'proposalPaymentKey',
+    ]);
+    await assertRequiredColumns(prisma, 'clients', ['portalEnabled']);
     await assertRequiredColumns(prisma, 'service_contracts', [
       'includesFuelManagement',
       'costCenterId',

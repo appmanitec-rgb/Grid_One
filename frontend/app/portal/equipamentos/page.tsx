@@ -1,5 +1,7 @@
 "use client";
+import { WorkspaceState } from "@/app/dashboard/components/WorkspaceState";
 
+import { PageHeader } from "@/app/dashboard/components/DashboardPageKit";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
@@ -38,11 +40,8 @@ export default function PortalEquipmentPage() {
   }, []);
 
   return (
-    <div className="space-y-5">
-      <header className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <h1 className="text-2xl font-extrabold text-slate-950">Equipamentos</h1>
-        <p className="mt-1 text-sm text-slate-500">Geradores vinculados ao seu cadastro.</p>
-      </header>
+    <div className="dashboard-page space-y-5">
+      <PageHeader eyebrow="Central do cliente" title={<>Equipamentos</>} description={<>Geradores vinculados ao seu cadastro.</>} />
 
       {loading ? <State text="Carregando equipamentos..." /> : null}
       {error ? <State text={error} tone="error" /> : null}
@@ -91,16 +90,6 @@ function Info({ label, value }: { label: string; value: string }) {
   );
 }
 
-function State({ text, tone }: { text: string; tone?: "error" }) {
-  return (
-    <div
-      className={`rounded-lg border p-4 text-sm font-semibold ${
-        tone === "error"
-          ? "border-red-200 bg-red-50 text-red-700"
-          : "border-slate-200 bg-white text-slate-600"
-      }`}
-    >
-      {text}
-    </div>
-  );
+function State({ text, tone }: { text: string; tone?: "error" | "success" }) {
+  return <WorkspaceState title={text} tone={tone || (/^Carregando/i.test(text) ? "loading" : "empty")} />;
 }
