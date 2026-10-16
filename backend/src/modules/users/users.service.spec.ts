@@ -420,7 +420,6 @@ describe('UsersService', () => {
     );
   });
 
-
   it('uses the new department profile instead of retaining the previous role permissions', async () => {
     const target = {
       id: 'target-user',
@@ -434,26 +433,35 @@ describe('UsersService', () => {
       linkedClientId: null,
       managerId: null,
     };
-    prisma.user.findUnique.mockImplementation(({ where }: { where: { id: string } }) =>
-      Promise.resolve(where.id === 'admin-user'
-        ? { role: UserRole.ADMIN, isSystemMaster: false, accessPolicy: null }
-        : target),
+    prisma.user.findUnique.mockImplementation(
+      ({ where }: { where: { id: string } }) =>
+        Promise.resolve(
+          where.id === 'admin-user'
+            ? {
+                role: UserRole.ADMIN,
+                isSystemMaster: false,
+                accessPolicy: null,
+              }
+            : target,
+        ),
     );
     prisma.user.update.mockResolvedValue({ ...target, role: UserRole.SALES });
 
     await service.update('target-user', { role: UserRole.SALES }, 'admin-user');
 
-    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
-        role: UserRole.SALES,
-        accessPolicy: expect.objectContaining({
-          pages: expect.objectContaining({ finance: false, proposals: true }),
-          finance: expect.objectContaining({ view: false, pay: false }),
-          users: expect.objectContaining({ manageSecurity: false }),
-          proposals: expect.objectContaining({ create: true }),
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          role: UserRole.SALES,
+          accessPolicy: expect.objectContaining({
+            pages: expect.objectContaining({ finance: false, proposals: true }),
+            finance: expect.objectContaining({ view: false, pay: false }),
+            users: expect.objectContaining({ manageSecurity: false }),
+            proposals: expect.objectContaining({ create: true }),
+          }),
         }),
       }),
-    }));
+    );
   });
 
   it('keeps custom permissions when saving the same profile', async () => {
@@ -470,13 +478,15 @@ describe('UsersService', () => {
 
     await service.update('target-user', { role: UserRole.SALES });
 
-    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
-        accessPolicy: expect.objectContaining({
-          finance: expect.objectContaining({ view: true, pay: false }),
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          accessPolicy: expect.objectContaining({
+            finance: expect.objectContaining({ view: true, pay: false }),
+          }),
         }),
       }),
-    }));
+    );
   });
 
   it('honors the explicitly reviewed policy when an administrator changes the profile', async () => {
@@ -488,25 +498,38 @@ describe('UsersService', () => {
       linkedClientId: null,
       managerId: null,
     };
-    prisma.user.findUnique.mockImplementation(({ where }: { where: { id: string } }) =>
-      Promise.resolve(where.id === 'admin-user'
-        ? { role: UserRole.ADMIN, isSystemMaster: false, accessPolicy: null }
-        : target),
+    prisma.user.findUnique.mockImplementation(
+      ({ where }: { where: { id: string } }) =>
+        Promise.resolve(
+          where.id === 'admin-user'
+            ? {
+                role: UserRole.ADMIN,
+                isSystemMaster: false,
+                accessPolicy: null,
+              }
+            : target,
+        ),
     );
     prisma.user.update.mockResolvedValue({ ...target, role: UserRole.SALES });
 
-    await service.update('target-user', {
-      role: UserRole.SALES,
-      accessPolicy: { finance: { view: true, pay: false } },
-    } as Parameters<UsersService['update']>[1], 'admin-user');
+    await service.update(
+      'target-user',
+      {
+        role: UserRole.SALES,
+        accessPolicy: { finance: { view: true, pay: false } },
+      } as Parameters<UsersService['update']>[1],
+      'admin-user',
+    );
 
-    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
-        accessPolicy: expect.objectContaining({
-          finance: expect.objectContaining({ view: true, pay: false }),
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          accessPolicy: expect.objectContaining({
+            finance: expect.objectContaining({ view: true, pay: false }),
+          }),
         }),
       }),
-    }));
+    );
   });
 
   it('allows sensitive people fields when actor has people.manageSensitive', async () => {
