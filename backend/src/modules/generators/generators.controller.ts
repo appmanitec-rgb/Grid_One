@@ -46,6 +46,18 @@ export class GeneratorsController {
     return this.generatorsService.findAll();
   }
 
+  @RequireAccessPolicy(
+    'pages.equipments',
+    'equipments.view',
+    'orders.view',
+    'pages.orders',
+  )
+  @Get(':id/order-summary')
+  orderSummary(@Param('id') id: string, @Req() req: Request) {
+    const user = req['user'] as { sub: string };
+    return this.generatorsService.orderSummary(id, user.sub);
+  }
+
   @RequireAccessPolicy('pages.equipments', 'equipments.view')
   @Get('models')
   findAllModels() {

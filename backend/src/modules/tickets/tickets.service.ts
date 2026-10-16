@@ -31,7 +31,14 @@ import {
   ListTicketsQueryDto,
   TicketActionNoteDto,
   UpdateTicketDto,
+  TicketWorkspaceQueryDto,
 } from './dto/ticket.dto';
+
+import {
+  TICKET_COLUMNS,
+  TICKET_STATUS_NAMES,
+  TICKET_PRIORITY_NAMES,
+} from './ticket-workspace';
 
 type RequestMetadata = {
   ip?: string;
@@ -73,8 +80,8 @@ type TicketRelationInput = {
   siteId?: string;
   contractId?: string;
   maintenanceOrderId?: string;
-  assignedToUserId?: string;
-  technicianId?: string;
+  assignedToUserId?: string | null;
+  technicianId?: string | null;
 };
 
 type PrismaClientLike = DatabaseService | Prisma.TransactionClient;
@@ -127,17 +134,209 @@ export class TicketsService {
   ) {}
 
   async findAll(query: ListTicketsQueryDto) {
-    const now = new Date();
     const page = Math.max(1, Number(query.page ?? 1));
     const pageSize = Math.min(100, Math.max(1, Number(query.pageSize ?? 100)));
+    const rows = await this.prisma.serviceTicket.findMany({
+      where: this.queueWhere(query),
+      include: this.ticketInclude(),
+      orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    });
+    return rows.map((row) => this.mapTicket(row));
+  }
+
+  async workspace(query: TicketWorkspaceQueryDto, actorUserId?: string) {
+    const now = new Date();
+    const where = this.queueWhere(query, actorUserId, now);
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const include = { ...this.ticketInclude(), comments: false };
+    const orderBy: Prisma.ServiceTicketOrderByWithRelationInput[] =
+      query.sort === 'newest'
+        ? [{ createdAt: 'desc' }, { id: 'desc' }]
+        : query.sort === 'oldest'
+          ? [{ createdAt: 'asc' }, { id: 'asc' }]
+          : query.sort === 'updated'
+            ? [{ updatedAt: 'desc' }, { id: 'desc' }]
+            : [
+                { priority: 'desc' },
+                { slaResolutionDueAt: { sort: 'asc', nulls: 'last' } },
+                { updatedAt: 'desc' },
+                { id: 'desc' },
+              ];
+    const keys = [
+      'ACTIVE',
+      'NEW',
+      'UNASSIGNED',
+      'WAITING',
+      'OVERDUE',
+      'DUE_SOON',
+    ] as const;
+    const [total, totals] = await Promise.all([
+      this.prisma.serviceTicket.count({ where }),
+      Promise.all(
+        keys.map((key) =>
+          this.prisma.serviceTicket.count({
+            where: this.queueBucketWhere(key, now),
+          }),
+        ),
+      ),
+    ]);
+    const summary = Object.fromEntries(
+      keys.map((key, index) => [key, totals[index]]),
+    );
+    if (query.view === 'board' && !query.column) {
+      const grouped = await this.prisma.serviceTicket.groupBy({
+        by: ['status'],
+        where,
+        _count: { _all: true },
+      });
+      const counts = new Map(
+        grouped.map((group) => [group.status, group._count._all]),
+      );
+      const columns = await Promise.all(
+        Object.entries(TICKET_COLUMNS).map(async ([key, column]) => {
+          const items = await this.prisma.serviceTicket.findMany({
+            where: { AND: [where, { status: { in: column.statuses } }] },
+            include,
+            orderBy,
+            take: pageSize,
+          });
+          const total = column.statuses.reduce(
+            (sum, status) => sum + (counts.get(status) || 0),
+            0,
+          );
+          return {
+            key,
+            label: column.label,
+            total,
+            page: 1,
+            hasMore: total > pageSize,
+            items: items.map((item) => this.mapTicket(item)),
+          };
+        }),
+      );
+      return { items: [], total, page, pageSize, summary, columns };
+    }
+    const items = await this.prisma.serviceTicket.findMany({
+      where,
+      include,
+      orderBy,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    });
+    return {
+      items: items.map((item) => this.mapTicket(item)),
+      total,
+      page,
+      pageSize,
+      summary,
+      columns: [],
+    };
+  }
+
+  async createOptions(clientId?: string) {
+    const [clients, generators] = await Promise.all([
+      this.prisma.client.findMany({
+        where: { isActive: true },
+        select: {
+          id: true,
+          companyName: true,
+          tradeName: true,
+          contactName: true,
+          phone: true,
+          email: true,
+        },
+        orderBy: { companyName: 'asc' },
+      }),
+      clientId
+        ? this.prisma.generator.findMany({
+            where: { clientId },
+            select: {
+              id: true,
+              name: true,
+              serialNumber: true,
+              clientId: true,
+            },
+            orderBy: { name: 'asc' },
+          })
+        : Promise.resolve([]),
+    ]);
+    return { clients, generators };
+  }
+
+  async equipmentOptions(id: string) {
+    const ticket = await this.getTicketRecord(id);
+    return this.prisma.generator.findMany({
+      where: { clientId: ticket.clientId },
+      select: { id: true, name: true, serialNumber: true, clientId: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  assignees() {
+    return this.prisma.user.findMany({
+      where: { isActive: true, role: { not: UserRole.CLIENT } },
+      select: { id: true, name: true },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+    });
+  }
+
+  private queueBucketWhere(
+    bucket: TicketWorkspaceQueryDto['bucket'],
+    now: Date,
+    actorUserId?: string,
+  ): Prisma.ServiceTicketWhereInput {
+    const active = { status: { notIn: TERMINAL_TICKET_STATUSES } };
+    if (!bucket || bucket === 'ALL') return {};
+    if (bucket === 'ACTIVE') return active;
+    if (bucket === 'NEW') return { ...active, firstResponseAt: null };
+    if (bucket === 'UNASSIGNED')
+      return { ...active, assignedToUserId: null, technicianId: null };
+    if (bucket === 'WAITING')
+      return {
+        status: {
+          in: [TicketStatus.WAITING_CUSTOMER, TicketStatus.WAITING_INTERNAL],
+        },
+      };
+    if (bucket === 'MINE') {
+      if (!actorUserId)
+        throw new UnauthorizedException('Usuário não identificado.');
+      return {
+        ...active,
+        OR: [
+          { assignedToUserId: actorUserId },
+          { technician: { userId: actorUserId } },
+        ],
+      };
+    }
+    const due =
+      bucket === 'OVERDUE'
+        ? { lt: now }
+        : { gte: now, lte: new Date(now.getTime() + 24 * 60 * 60 * 1000) };
+    return {
+      ...active,
+      OR: [
+        { firstResponseAt: null, slaResponseDueAt: due },
+        { resolvedAt: null, slaResolutionDueAt: due },
+      ],
+    };
+  }
+
+  private queueWhere(
+    query: TicketWorkspaceQueryDto,
+    actorUserId?: string,
+    now = new Date(),
+  ): Prisma.ServiceTicketWhereInput {
     const search = query.search?.trim();
-    const where: Prisma.ServiceTicketWhereInput = {
+    return {
       status: query.status,
       priority: query.priority,
+      category: query.category,
       origin: query.origin,
       clientId: query.clientId,
       generatorId: query.generatorId,
-      assignedToUserId: query.assignedToUserId,
       technicianId: query.technicianId,
       createdAt:
         query.from || query.to
@@ -157,47 +356,37 @@ export class TicketsService {
               },
             },
             {
-              client: {
-                tradeName: { contains: search, mode: 'insensitive' },
+              client: { tradeName: { contains: search, mode: 'insensitive' } },
+            },
+            { generator: { name: { contains: search, mode: 'insensitive' } } },
+            {
+              technician: {
+                user: { name: { contains: search, mode: 'insensitive' } },
               },
             },
             {
-              generator: {
+              assignedToUser: {
                 name: { contains: search, mode: 'insensitive' },
               },
             },
           ]
         : undefined,
+      AND: [
+        this.queueBucketWhere(query.bucket, now, actorUserId),
+        query.assignedToUserId
+          ? {
+              OR: [
+                { assignedToUserId: query.assignedToUserId },
+                { technician: { userId: query.assignedToUserId } },
+              ],
+            }
+          : {},
+        query.column
+          ? { status: { in: TICKET_COLUMNS[query.column].statuses } }
+          : {},
+        query.overdue === 'true' ? this.queueBucketWhere('OVERDUE', now) : {},
+      ],
     };
-
-    if (query.overdue === 'true') {
-      where.AND = [
-        {
-          OR: [
-            {
-              firstResponseAt: null,
-              slaResponseDueAt: { lt: now },
-              status: { notIn: TERMINAL_TICKET_STATUSES },
-            },
-            {
-              resolvedAt: null,
-              slaResolutionDueAt: { lt: now },
-              status: { notIn: TERMINAL_TICKET_STATUSES },
-            },
-          ],
-        },
-      ];
-    }
-
-    const rows = await this.prisma.serviceTicket.findMany({
-      where,
-      include: this.ticketInclude(),
-      orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    });
-
-    return rows.map((row) => this.mapTicket(row));
   }
 
   async findOne(id: string) {
@@ -304,6 +493,30 @@ export class TicketsService {
       throw new BadRequestException('Chamado cancelado nao pode ser alterado.');
     }
 
+    if (
+      dto.status &&
+      [
+        'CONVERTING_TO_ORDER',
+        'CONVERTED_TO_ORDER',
+        'RESOLVED',
+        'CLOSED',
+        'CANCELED',
+      ].includes(dto.status) &&
+      dto.status !== current.status
+    ) {
+      throw new BadRequestException(
+        'Use a ação de conversão, resolução, fechamento ou cancelamento para esta mudança.',
+      );
+    }
+    if (
+      TERMINAL_TICKET_STATUSES.includes(current.status) &&
+      dto.status &&
+      dto.status !== current.status
+    ) {
+      throw new BadRequestException(
+        'Este chamado já foi encaminhado ou finalizado.',
+      );
+    }
     return this.prisma.$transaction(async (tx) => {
       const relations = await this.validateRelations(tx, current.clientId, {
         generatorId: dto.generatorId ?? current.generatorId ?? undefined,
@@ -352,7 +565,35 @@ export class TicketsService {
       await this.addSystemComment(tx, {
         ticketId: id,
         actorUserId,
-        message: 'Chamado atualizado pela equipe interna.',
+        message:
+          [
+            current.status !== updated.status
+              ? 'Status: ' +
+                TICKET_STATUS_NAMES[current.status] +
+                ' → ' +
+                TICKET_STATUS_NAMES[updated.status] +
+                '.'
+              : '',
+            current.priority !== updated.priority
+              ? 'Prioridade: ' +
+                TICKET_PRIORITY_NAMES[current.priority] +
+                ' → ' +
+                TICKET_PRIORITY_NAMES[updated.priority] +
+                '.'
+              : '',
+            current.category !== updated.category
+              ? 'Categoria do atendimento atualizada.'
+              : '',
+            (current.internalNotes || '') !== (updated.internalNotes || '')
+              ? 'Notas internas atualizadas.'
+              : '',
+            current.title !== updated.title ||
+            current.description !== updated.description
+              ? 'Descrição do atendimento atualizada.'
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' ') || 'Dados do chamado atualizados pela equipe interna.',
         customerVisible: false,
       });
 
@@ -408,9 +649,11 @@ export class TicketsService {
         where: { id },
         data: {
           ...firstResponseData,
-          status: dto.customerVisible
-            ? TicketStatus.WAITING_CUSTOMER
-            : undefined,
+          status:
+            dto.customerVisible &&
+            !TERMINAL_TICKET_STATUSES.includes(current.status)
+              ? TicketStatus.WAITING_CUSTOMER
+              : undefined,
         },
         include: this.ticketInclude(),
       });
@@ -443,6 +686,21 @@ export class TicketsService {
     metadata: RequestMetadata,
   ) {
     const current = await this.getTicketRecord(id);
+    if (TERMINAL_TICKET_STATUSES.includes(current.status))
+      throw new BadRequestException(
+        'Este chamado já foi encaminhado ou finalizado.',
+      );
+    if (dto.assignedToUserId === undefined && dto.technicianId === undefined)
+      throw new BadRequestException(
+        'Informe o responsável ou técnico a alterar.',
+      );
+    const nextAssigned =
+      dto.assignedToUserId === undefined
+        ? current.assignedToUserId
+        : dto.assignedToUserId;
+    const nextTechnician =
+      dto.technicianId === undefined ? current.technicianId : dto.technicianId;
+    const hasAssignee = Boolean(nextAssigned || nextTechnician);
     await this.validateRelations(this.prisma, current.clientId, {
       assignedToUserId: dto.assignedToUserId,
       technicianId: dto.technicianId,
@@ -455,10 +713,11 @@ export class TicketsService {
           assignedToUserId: dto.assignedToUserId,
           technicianId: dto.technicianId,
           status:
-            current.status === TicketStatus.OPEN
+            current.status === TicketStatus.OPEN && hasAssignee
               ? TicketStatus.TRIAGE
               : undefined,
-          firstResponseAt: current.firstResponseAt ? undefined : new Date(),
+          firstResponseAt:
+            !current.firstResponseAt && hasAssignee ? new Date() : undefined,
         },
         include: this.ticketInclude(),
       });
@@ -466,7 +725,13 @@ export class TicketsService {
       await this.addSystemComment(tx, {
         ticketId: id,
         actorUserId,
-        message: 'Responsavel atribuido ao chamado.',
+        message:
+          'Responsável: ' +
+          (ticket.assignedToUser?.name || 'Sem responsável') +
+          (ticket.technician?.user?.name
+            ? ' · Técnico: ' + ticket.technician.user.name
+            : '') +
+          '.',
         customerVisible: false,
       });
 
@@ -482,8 +747,8 @@ export class TicketsService {
             technicianId: current.technicianId,
           },
           afterPayload: {
-            assignedToUserId: dto.assignedToUserId ?? null,
-            technicianId: dto.technicianId ?? null,
+            assignedToUserId: ticket.assignedToUserId,
+            technicianId: ticket.technicianId,
             metadata,
           } as unknown as Prisma.InputJsonValue,
         },
@@ -1110,7 +1375,9 @@ export class TicketsService {
       await this.addSystemComment(tx, {
         ticketId: id,
         actorUserId: input.actorUserId,
-        message: input.note ?? `Status alterado para ${status}.`,
+        message:
+          input.note ??
+          'Status alterado para ' + TICKET_STATUS_NAMES[status] + '.',
         customerVisible: input.customerVisible,
       });
 
@@ -1444,7 +1711,11 @@ export class TicketsService {
     const isWarning =
       !isResponseOverdue &&
       !isResolutionOverdue &&
-      [ticket.slaResponseDueAt, ticket.slaResolutionDueAt].some(
+      !TERMINAL_TICKET_STATUSES.includes(ticket.status) &&
+      [
+        !ticket.firstResponseAt ? ticket.slaResponseDueAt : null,
+        !ticket.resolvedAt ? ticket.slaResolutionDueAt : null,
+      ].some(
         (date) =>
           date &&
           date.getTime() > now.getTime() &&
@@ -1532,6 +1803,12 @@ export class TicketsService {
           companyName: true,
           tradeName: true,
           phone: true,
+          email: true,
+          contactName: true,
+          cnpj: true,
+          address: true,
+          city: true,
+          state: true,
         },
       },
       generator: {

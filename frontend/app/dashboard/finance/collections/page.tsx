@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
@@ -151,23 +152,23 @@ export default function CollectionsPage() {
       actions={<button className={secondary} onClick={() => setShowSettings(!showSettings)}>{showSettings ? "Fechar configuração" : "Configurar convênio"}</button>}>
       <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
         <label className="block text-sm font-semibold text-slate-700">Conta bancária
-          <select className={`${input} mt-2`} value={accountId} onChange={(event) => setAccountId(event.target.value)}>
+          <SelectField className={`${input} mt-2`} value={accountId} onChange={(event) => setAccountId(event.target.value)}>
             {data?.accounts.map((account) => <option key={account.id} value={account.id}>{account.name} · {account.bankName || "Banco não informado"}</option>)}
-          </select>
+          </SelectField>
         </label>
         <span className={`rounded-xl px-3 py-2 text-sm font-semibold ${currentAgreement?.homologated ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}>
           {currentAgreement ? currentAgreement.homologated ? "Teste do banco registrado" : "Aguardando teste no banco" : "Convênio não configurado"}
         </span>
       </div>
       {showSettings && <div className="mt-5 grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-3">
-        <label className="text-xs font-semibold text-slate-700">Empresa beneficiária<select className={`${input} mt-1`} value={agreement.issuerCompanyId} onChange={(event) => {
+        <label className="text-xs font-semibold text-slate-700">Empresa beneficiária<SelectField className={`${input} mt-1`} value={agreement.issuerCompanyId} onChange={(event) => {
           const issuer = data?.issuers.find((item) => item.id === event.target.value);
           setAgreement((previous) => ({ ...previous, issuerCompanyId: event.target.value, beneficiaryDocument: issuer?.cnpj || "" }));
-        }}><option value="">Selecione o CNPJ</option>{data?.issuers.map((issuer) => <option key={issuer.id} value={issuer.id}>{issuer.companyName || "Empresa"} · {issuer.cnpj || "CNPJ pendente"}</option>)}</select></label>
+        }}><option value="">Selecione o CNPJ</option>{data?.issuers.map((issuer) => <option key={issuer.id} value={issuer.id}>{issuer.companyName || "Empresa"} · {issuer.cnpj || "CNPJ pendente"}</option>)}</SelectField></label>
         {([ ["transmissionCode", "Código de transmissão (15 dígitos)"], ["beneficiaryName", "Nome do beneficiário"], ["beneficiaryDocument", "CPF/CNPJ do beneficiário"], ["agency", "Agência (4 dígitos)"], ["agencyDigit", "Dígito da agência"], ["accountNumber", "Conta (9 dígitos)"], ["accountDigit", "Dígito da conta"] ] as const).map(([key, label]) =>
           <label key={key} className="text-xs font-semibold text-slate-700">{label}<input className={`${input} mt-1`} value={agreement[key]} onChange={(event) => setAgreement((previous) => ({ ...previous, [key]: event.target.value }))} /></label>)}
-        <label className="text-xs font-semibold text-slate-700">Carteira<select className={`${input} mt-1`} value={agreement.walletCode} onChange={(event) => setAgreement((previous) => ({ ...previous, walletCode: event.target.value }))}><option value="1">1 · Simples eletrônica</option><option value="3">3 · Caucionada</option><option value="5">5 · Simples rápida com registro</option></select></label>
-        <label className="text-xs font-semibold text-slate-700">Tipo do documento<select className={`${input} mt-1`} value={agreement.documentType} onChange={(event) => setAgreement((previous) => ({ ...previous, documentType: event.target.value }))}><option value="2">2 · Tradicional</option><option value="1">1 · Escritural</option></select></label>
+        <label className="text-xs font-semibold text-slate-700">Carteira<SelectField className={`${input} mt-1`} value={agreement.walletCode} onChange={(event) => setAgreement((previous) => ({ ...previous, walletCode: event.target.value }))}><option value="1">1 · Simples eletrônica</option><option value="3">3 · Caucionada</option><option value="5">5 · Simples rápida com registro</option></SelectField></label>
+        <label className="text-xs font-semibold text-slate-700">Tipo do documento<SelectField className={`${input} mt-1`} value={agreement.documentType} onChange={(event) => setAgreement((previous) => ({ ...previous, documentType: event.target.value }))}><option value="2">2 · Tradicional</option><option value="1">1 · Escritural</option></SelectField></label>
         <div className="md:col-span-3"><button disabled={busy || !accountId || !agreement.issuerCompanyId} className={button} onClick={() => void mutate("/finance/collections/agreement", "POST", { bankAccountId: accountId, ...agreement }, "Convênio salvo.")}>Salvar convênio</button></div>
       </div>}
       {currentAgreement && <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
@@ -175,7 +176,7 @@ export default function CollectionsPage() {
         <p className="mt-1 text-xs text-amber-900">Baixe uma remessa abaixo e teste em Internet Banking PJ → Cobrança e Recebimentos → Teste de Arquivos. Registre a referência do resultado aprovado e a remessa testada. O teste de arquivo não confirma o registro dos boletos; confira também o retorno real.</p>
         {currentAgreement.homologated && <p className="mt-2 text-xs font-medium text-emerald-800">Referência registrada: {currentAgreement.homologationReference} · {date(currentAgreement.homologatedAt)}</p>}
         <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
-          <label className="text-xs font-semibold text-slate-700">Remessa testada<select className={`${input} mt-1`} value={bankTest.batchId} onChange={(event) => setBankTest((previous) => ({ ...previous, batchId: event.target.value }))}><option value="">Selecione</option>{batches.map((batch) => <option key={batch.id} value={batch.id}>{batch.fileName}</option>)}</select></label>
+          <label className="text-xs font-semibold text-slate-700">Remessa testada<SelectField className={`${input} mt-1`} value={bankTest.batchId} onChange={(event) => setBankTest((previous) => ({ ...previous, batchId: event.target.value }))}><option value="">Selecione</option>{batches.map((batch) => <option key={batch.id} value={batch.id}>{batch.fileName}</option>)}</SelectField></label>
           <label className="text-xs font-semibold text-slate-700">Referência do resultado aprovado<input className={`${input} mt-1`} maxLength={160} value={bankTest.bankTestReference} onChange={(event) => setBankTest((previous) => ({ ...previous, bankTestReference: event.target.value }))} /></label>
           <button className={secondary} disabled={busy || !bankTest.batchId || bankTest.bankTestReference.trim().length < 6} onClick={() => void mutate(`/finance/collections/agreements/${currentAgreement.id}/homologation`, "POST", bankTest, "Validação do arquivo no banco registrada.")}>Registrar validação</button>
         </div>

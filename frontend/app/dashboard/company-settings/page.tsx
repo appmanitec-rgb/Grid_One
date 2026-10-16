@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField as SearchableField } from "@/app/dashboard/components/SelectField";
 import { MetricCard as SummaryMetric, PageHeader } from "../components/DashboardPageKit";
 
 import Image, { type ImageLoaderProps } from "next/image";
@@ -538,10 +539,10 @@ function SelectField({ label, value, onChange, options }: { label: string; value
   return (
     <label className="block text-sm font-semibold text-slate-700">
       <span>{label}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)} className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+      <SearchableField value={value} onChange={(event) => onChange(event.target.value)} className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
         <option value="">Selecione</option>
         {options.filter(Boolean).map((option) => <option key={option} value={option}>{option}</option>)}
-      </select>
+      </SearchableField>
     </label>
   );
 }

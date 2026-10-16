@@ -1,5 +1,6 @@
 "use client";
 
+import { RecordPhoto } from "../../components/RecordPhotoField";
 import { PageHeader } from "../../components/DashboardPageKit";
 import { commercialLabel } from "@/lib/commercial-labels";
 
@@ -215,6 +216,7 @@ type Item = {
   legacySequence?: string | null;
   radarCode?: string | null;
   name: string;
+  photoUrl?: string | null;
   description?: string | null;
   commercialDescription?: string | null;
   type: "PART" | "SERVICE";
@@ -441,8 +443,8 @@ export default function CatalogItemDetailPage() {
 
       <PageHeader
         eyebrow="Suprimentos"
-        title="Ficha operacional do item"
-        description="Cadastro, saldo, movimentacoes, compras, OS e fornecedores em uma trilha navegavel."
+        title={item.type === "SERVICE" ? "Ficha do serviço" : "Ficha da peça"}
+        description="Dados do cadastro, histórico, ordens de serviço e fornecedores."
         actions={<>
 <div className="flex flex-wrap gap-2">
           <PermissionAwareLink
@@ -482,15 +484,17 @@ export default function CatalogItemDetailPage() {
       />
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
+        <div className={item.photoUrl ? "grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)]" : undefined}>
+          {item.photoUrl ? <RecordPhoto value={item.photoUrl} label={item.type === "SERVICE" ? "Foto do serviço" : "Foto da peça"} /> : null}
+        <div className="flex min-w-0 flex-col items-start justify-between gap-4 sm:flex-row sm:flex-wrap">
+          <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-2xl font-bold text-zinc-900">{item.name}</h2>
+              <h2 className="break-words text-2xl font-bold text-zinc-900">{item.name}</h2>
               <Badge tone={item.isActive ? "emerald" : "slate"}>
                 {item.isActive ? "Ativo" : "Inativo"}
               </Badge>
               <Badge tone={item.type === "PART" ? "blue" : "purple"}>
-                {item.type === "PART" ? "Peca" : "Servico"}
+                {item.type === "PART" ? "Peça" : "Serviço"}
               </Badge>
               {summary?.isLowStock ? (
                 <Badge tone="rose">Baixo estoque</Badge>
@@ -507,7 +511,7 @@ export default function CatalogItemDetailPage() {
                 "Sem descricao cadastrada."}
             </p>
           </div>
-          <div className="min-w-48 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+          <div className="w-full rounded-xl border border-zinc-200 bg-zinc-50 p-4 sm:w-48 sm:shrink-0">
             <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">
               Fornecedor principal
             </p>
@@ -530,6 +534,7 @@ export default function CatalogItemDetailPage() {
                 : "-"}
             </p>
           </div>
+        </div>
         </div>
       </section>
 

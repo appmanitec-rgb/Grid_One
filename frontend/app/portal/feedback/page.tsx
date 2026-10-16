@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader, SectionCard } from "@/app/dashboard/components/DashboardPageKit";
 import { WorkspaceState } from "@/app/dashboard/components/WorkspaceState";
@@ -40,7 +41,7 @@ export default function PortalFeedbackPage() {
     <div className="grid items-start gap-5 lg:grid-cols-2">
       <SectionCard title="Nova mensagem" description="Seu relato ajuda nossa equipe a acompanhar o atendimento.">
         <form onSubmit={(event) => void submit(event)} className="space-y-4">
-          <div><label htmlFor="feedback-kind" className="block text-sm font-semibold text-slate-700">Tipo</label><select id="feedback-kind" value={kind} onChange={(event) => setKind(event.target.value as "OBSERVATION" | "FEEDBACK")} className="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2"><option value="OBSERVATION">Observação</option><option value="FEEDBACK">Feedback ou sugestão</option></select></div>
+          <div><label htmlFor="feedback-kind" className="block text-sm font-semibold text-slate-700">Tipo</label><SelectField id="feedback-kind" value={kind} onChange={(event) => setKind(event.target.value as "OBSERVATION" | "FEEDBACK")} className="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2"><option value="OBSERVATION">Observação</option><option value="FEEDBACK">Feedback ou sugestão</option></SelectField></div>
           <div><label htmlFor="feedback-message" className="block text-sm font-semibold text-slate-700">Mensagem</label><textarea id="feedback-message" required maxLength={2000} value={message} onChange={(event) => setMessage(event.target.value)} rows={6} className="mt-2 block w-full rounded-lg border border-slate-300 p-3" placeholder="Escreva sua mensagem..." /></div>
           <div className="flex flex-wrap items-center justify-between gap-3"><span className="text-xs text-slate-500">{message.length}/2000 caracteres</span><button disabled={busy || !message.trim()} className="min-h-11 rounded-lg bg-blue-700 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50">{busy ? "Enviando..." : "Enviar mensagem"}</button></div>
         </form>

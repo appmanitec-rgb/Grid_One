@@ -1,3 +1,4 @@
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import { WorkspaceState } from "./WorkspaceState";
 import type {
   InputHTMLAttributes,
@@ -273,7 +274,7 @@ export function SelectInput({
   ...props
 }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select
+    <SelectField
       {...props}
       className={cx(
         "w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100",

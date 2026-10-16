@@ -1,0 +1,73 @@
+.input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px 12px;
+  color: #1e293b;
+  font: inherit;
+}
+.input:focus {
+  outline: 2px solid #bfdbfe;
+  border-color: #3b82f6;
+}
+.popup {
+  position: fixed;
+  z-index: 10000;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid #dbe3ee;
+  border-radius: 12px;
+  background: #fff;
+  padding: 4px;
+  box-shadow: 0 12px 32px #0f172a26;
+  color: #1e293b;
+  font-family: inherit;
+}
+.option {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  background: transparent;
+  color: #334155;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+.option:hover,
+.active {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.option[aria-selected="true"] {
+  font-weight: 700;
+}
+.option:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.hint {
+  margin: 4px 0 0;
+  border-top: 1px solid #edf2f7;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #64748b;
+}
+.suggestion {
+  display: contents;
+}
+
+.searchInput.searchInput {
+  padding-right: 32px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2716%27 height=%2716%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%2364748b%27 stroke-width=%272%27%3E%3Ccircle cx=%2710%27 cy=%2710%27 r=%276%27/%3E%3Cpath d=%27m15 15 5 5%27/%3E%3C/svg%3E");
+  background-position: right 10px center;
+  background-repeat: no-repeat;
+}

@@ -1,4 +1,5 @@
 "use client";
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import { WorkspaceState } from "@/app/dashboard/components/WorkspaceState";
 import { PageHeader } from "@/app/dashboard/components/DashboardPageKit";
 import Link from "next/link";
@@ -89,7 +90,7 @@ export default function NewPortalTicketPage() {
 
       <form onSubmit={handleSubmit} className="mt-5 space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <Field label="Equipamento">
-          <select
+          <SelectField searchable
             value={form.generatorId}
             onChange={(event) =>
               setForm((current) => ({
@@ -105,12 +106,12 @@ export default function NewPortalTicketPage() {
                 {item.name} {item.serialNumber ? `- ${item.serialNumber}` : ""}
               </option>
             ))}
-          </select>
+          </SelectField>
         </Field>
 
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Categoria">
-            <select
+            <SelectField
               value={form.category}
               onChange={(event) =>
                 setForm((current) => ({
@@ -125,10 +126,10 @@ export default function NewPortalTicketPage() {
                   {TICKET_CATEGORY_LABELS[category]}
                 </option>
               ))}
-            </select>
+            </SelectField>
           </Field>
           <Field label="Prioridade">
-            <select
+            <SelectField
               value={form.priority}
               onChange={(event) =>
                 setForm((current) => ({
@@ -143,7 +144,7 @@ export default function NewPortalTicketPage() {
                   {TICKET_PRIORITY_LABELS[priority]}
                 </option>
               ))}
-            </select>
+            </SelectField>
           </Field>
         </div>
 

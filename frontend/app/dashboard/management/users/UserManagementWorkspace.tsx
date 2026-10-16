@@ -18,6 +18,7 @@ import {
   getAccessFromToken,
 } from "@/lib/access";
 import { apiFetch } from "@/lib/api";
+import { ROLE_DEPARTMENTS, USER_ROLE_LABELS } from "@/lib/user-departments";
 import { clearAuthSession } from "@/lib/auth-session";
 import {
   DataPill,
@@ -259,20 +260,7 @@ const AVAILABILITY_OPTIONS: UserAvailabilityStatus[] = [
   "VACATION",
 ];
 
-const ROLE_LABELS: Record<UserRole, string> = {
-  ADMIN: "Administrador",
-  MANAGER: "Gestor",
-  NORMAL: "Usuario",
-  TECHNICIAN: "Tecnico",
-  SALES: "Comercial",
-  ENGINEER_APPLICATION: "Engenharia",
-  LOGISTICS: "Logistica",
-  FINANCE: "Financeiro",
-  SUPPLIES: "Suprimentos",
-  HR: "Pessoas/RH",
-  AUDITOR: "Auditor",
-  CLIENT: "Cliente",
-};
+const ROLE_LABELS = USER_ROLE_LABELS as Record<UserRole, string>;
 const SKILL_LABELS: Record<SkillLevel, string> = {
   TRAINEE: "Trainee",
   JUNIOR: "Junior",
@@ -306,20 +294,20 @@ const AUDIT_LABELS: Record<AuditDomain, string> = {
 
 const PAGE_ITEMS = [
   { key: "dashboard", label: "Dashboard executivo" },
-  { key: "proposals", label: "Modulo de propostas" },
-  { key: "orders", label: "Ordens e execucao" },
+  { key: "proposals", label: "Módulo de propostas" },
+  { key: "orders", label: "Ordens e execução" },
   { key: "contracts", label: "Contratos" },
-  { key: "catalog", label: "Catalogo" },
+  { key: "catalog", label: "Catálogo" },
   { key: "clients", label: "Clientes e sites" },
   { key: "equipments", label: "Equipamentos" },
   { key: "finance", label: "Financeiro" },
   { key: "inventory", label: "Estoque e compras" },
   { key: "people", label: "Pessoas/RH" },
-  { key: "usersControl", label: "Governanca de usuarios" },
+  { key: "usersControl", label: "Gestão de usuários" },
   { key: "studio", label: "Manitec Studio" },
   { key: "tickets", label: "Atendimento/SLA" },
-  { key: "serviceReports", label: "Laudos tecnicos" },
-  { key: "technicianPortal", label: "Campo tecnico" },
+  { key: "serviceReports", label: "Laudos técnicos" },
+  { key: "technicianPortal", label: "Campo técnico" },
 ] as const satisfies ReadonlyArray<PermissionItem<keyof AccessPolicy["pages"]>>;
 const CLIENT_ITEMS = [
   { key: "view", label: "Visualizar clientes" },
@@ -332,14 +320,14 @@ const CLIENT_ITEMS = [
 const EQUIPMENT_ITEMS = [
   { key: "view", label: "Visualizar equipamentos" },
   { key: "create", label: "Criar equipamentos" },
-  { key: "update", label: "Editar ficha tecnica" },
+  { key: "update", label: "Editar ficha técnica" },
   { key: "delete", label: "Excluir equipamentos" },
   { key: "manageModels", label: "Gerenciar modelos" },
 ] as const satisfies ReadonlyArray<
   PermissionItem<keyof AccessPolicy["equipments"]>
 >;
 const CATALOG_ITEMS = [
-  { key: "view", label: "Visualizar catalogo" },
+  { key: "view", label: "Visualizar catálogo" },
   { key: "create", label: "Criar itens" },
   { key: "update", label: "Editar itens" },
   { key: "delete", label: "Excluir itens" },
@@ -351,10 +339,10 @@ const CATALOG_ITEMS = [
 const USER_ITEMS = [
   { key: "manage", label: "Gerenciar cadastros de usuários" },
   { key: "manageSecurity", label: "Alterar cargos e permissões" },
-  { key: "manageCertifications", label: "Certificacoes" },
+  { key: "manageCertifications", label: "Certificações" },
   { key: "manageSpecialties", label: "Especialidades" },
   { key: "manageHierarchy", label: "Hierarquia e gestores" },
-  { key: "viewLiveLocation", label: "Localizacao ao vivo" },
+  { key: "viewLiveLocation", label: "Localização ao vivo" },
 ] as const satisfies ReadonlyArray<PermissionItem<keyof AccessPolicy["users"]>>;
 const PROPOSAL_ITEMS = [
   { key: "view", label: "Visualizar propostas" },
@@ -390,20 +378,20 @@ const ORDER_ACTION_ITEMS = [
   PermissionItem<keyof AccessPolicy["orders"]>
 >;
 const ORDER_ITEMS = [
-  { key: "submitVisitReport", label: "Enviar relatorio de visita" },
-  { key: "approveVisitReport", label: "Aprovar relatorio de visita" },
-  { key: "assignWithOverride", label: "Alocar com override" },
+  { key: "submitVisitReport", label: "Enviar relatório de visita" },
+  { key: "approveVisitReport", label: "Aprovar relatório de visita" },
+  { key: "assignWithOverride", label: "Alocar com autorização excepcional" },
 ] as const satisfies ReadonlyArray<
   PermissionItem<keyof AccessPolicy["maintenanceOrders"]>
 >;
 const TICKET_ITEMS = [
   { key: "view", label: "Visualizar chamados" },
-  { key: "viewOwn", label: "Visualizar chamados proprios" },
+  { key: "viewOwn", label: "Visualizar chamados próprios" },
   { key: "create", label: "Criar chamados" },
-  { key: "update", label: "Editar classificacao/status" },
-  { key: "assign", label: "Atribuir responsavel" },
+  { key: "update", label: "Editar classificação e status" },
+  { key: "assign", label: "Atribuir responsável" },
   { key: "comment", label: "Comentar/interagir" },
-  { key: "commentOwn", label: "Comentar chamados proprios" },
+  { key: "commentOwn", label: "Comentar chamados próprios" },
   { key: "convertToOrder", label: "Converter em OS" },
   { key: "resolve", label: "Resolver chamado" },
   { key: "close", label: "Fechar chamado" },
@@ -415,13 +403,13 @@ const SERVICE_REPORT_ITEMS = [
   { key: "view", label: "Visualizar laudos" },
   { key: "create", label: "Criar laudos" },
   { key: "update", label: "Editar laudos" },
-  { key: "addEvidence", label: "Adicionar evidencias" },
+  { key: "addEvidence", label: "Adicionar evidências" },
   { key: "sign", label: "Registrar assinatura" },
   { key: "approve", label: "Aprovar laudos" },
   { key: "releaseToCustomer", label: "Liberar ao cliente" },
   { key: "generateDocument", label: "Gerar documento" },
-  { key: "manageShareLinks", label: "Gerenciar links publicos" },
-  { key: "manageDocuments", label: "Gerenciar politica documental" },
+  { key: "manageShareLinks", label: "Gerenciar links públicos" },
+  { key: "manageDocuments", label: "Gerenciar política documental" },
   { key: "cancel", label: "Cancelar laudos" },
 ] as const satisfies ReadonlyArray<
   PermissionItem<keyof AccessPolicy["serviceReports"]>
@@ -448,10 +436,10 @@ const PURCHASE_ORDER_ITEMS = [
 >;
 const FINANCE_ITEMS = [
   { key: "view", label: "Visualizar financeiro" },
-  { key: "create", label: "Criar lancamentos" },
+  { key: "create", label: "Criar lançamentos" },
   { key: "update", label: "Editar financeiro" },
   { key: "pay", label: "Baixar/pagar" },
-  { key: "cancel", label: "Cancelar titulos" },
+  { key: "cancel", label: "Cancelar títulos" },
   { key: "reconcile", label: "Conciliar/sincronizar" },
 ] as const satisfies ReadonlyArray<
   PermissionItem<keyof AccessPolicy["finance"]>
@@ -461,34 +449,34 @@ const PEOPLE_ITEMS = [
   { key: "create", label: "Criar registros de pessoas" },
   { key: "update", label: "Editar pessoas/RH" },
   { key: "delete", label: "Excluir registros de pessoas" },
-  { key: "viewSensitive", label: "Ver dados sensiveis" },
-  { key: "manageSensitive", label: "Editar dados sensiveis" },
+  { key: "viewSensitive", label: "Ver dados sensíveis" },
+  { key: "manageSensitive", label: "Editar dados sensíveis" },
 ] as const satisfies ReadonlyArray<
   PermissionItem<keyof AccessPolicy["people"]>
 >;
 const TECHNICIAN_ITEMS = [
-  { key: "view", label: "Visualizar tecnicos" },
-  { key: "dispatch", label: "Despachar tecnico" },
-  { key: "schedule", label: "Agenda de tecnicos" },
+  { key: "view", label: "Visualizar técnicos" },
+  { key: "dispatch", label: "Despachar técnico" },
+  { key: "schedule", label: "Agenda de técnicos" },
 ] as const satisfies ReadonlyArray<
   PermissionItem<keyof AccessPolicy["technicians"]>
 >;
 const TECHNICIAN_WORK_ITEMS = [
-  { key: "view", label: "Visualizar propria fila tecnica" },
+  { key: "view", label: "Visualizar própria fila técnica" },
   { key: "checkInOut", label: "Check-in/check-out em campo" },
 ] as const satisfies ReadonlyArray<
   PermissionItem<keyof AccessPolicy["technicianWork"]>
 >;
 const REPORT_ITEMS = [
-  { key: "view", label: "Visualizar relatorios" },
-  { key: "export", label: "Exportar relatorios" },
+  { key: "view", label: "Visualizar relatórios" },
+  { key: "export", label: "Exportar relatórios" },
 ] as const satisfies ReadonlyArray<
   PermissionItem<keyof AccessPolicy["reports"]>
 >;
 const SETTINGS_ITEMS = [
-  { key: "view", label: "Visualizar configuracoes" },
-  { key: "update", label: "Editar configuracoes" },
-  { key: "admin", label: "Administrar automacoes/empresa" },
+  { key: "view", label: "Visualizar configurações" },
+  { key: "update", label: "Editar configurações" },
+  { key: "admin", label: "Administrar automações e empresa" },
 ] as const satisfies ReadonlyArray<
   PermissionItem<keyof AccessPolicy["settings"]>
 >;
@@ -498,7 +486,7 @@ const STUDIO_ITEMS = [
   { key: "dataEdit", label: "Editar registros" },
   { key: "dataExport", label: "Exportar dados" },
   { key: "dataImport", label: "Importar dados" },
-  { key: "auditView", label: "Ver historico do Studio" },
+  { key: "auditView", label: "Ver histórico do Studio" },
 ] as const satisfies ReadonlyArray<
   PermissionItem<keyof AccessPolicy["studio"]>
 >;
@@ -517,17 +505,6 @@ type PermissionSectionDefinition = {
   items: ReadonlyArray<PermissionItem<string>>;
 };
 
-const PERMISSION_GROUPS: ReadonlyArray<{
-  key: PermissionGroup | "all";
-  label: string;
-}> = [
-  { key: "all", label: "Todas as áreas" },
-  { key: "access", label: "Acesso e cadastros" },
-  { key: "commercial", label: "Comercial" },
-  { key: "operations", label: "Operação" },
-  { key: "supply", label: "Suprimentos" },
-  { key: "governance", label: "Gestão e dados" },
-];
 
 const PERMISSION_SECTIONS: ReadonlyArray<PermissionSectionDefinition> = [
   {
@@ -679,6 +656,31 @@ const PERMISSION_SECTIONS: ReadonlyArray<PermissionSectionDefinition> = [
   },
 ];
 
+type PermissionArea = {
+  key: keyof AccessPolicy["pages"];
+  title: string;
+  department: string;
+  screens: readonly string[];
+  sections: ReadonlyArray<{ section: keyof AccessPolicy; keys?: readonly string[]; title?: string }>;
+};
+const PERMISSION_AREAS: readonly PermissionArea[] = [
+  { key: "dashboard", title: "Painel e relatórios", department: "Geral", screens: ["Dashboard", "Equipe e mensagens", "Documentos", "Envios", "Alertas", "Relatórios"], sections: [{ section: "reports" }] },
+  { key: "clients", title: "Clientes e locais", department: "Comercial", screens: ["Clientes", "Locais e instalações"], sections: [{ section: "clients" }] },
+  { key: "proposals", title: "Propostas e oportunidades", department: "Comercial", screens: ["Oportunidades", "Vistorias comerciais", "Propostas", "Pedidos de venda"], sections: [{ section: "proposals" }] },
+  { key: "contracts", title: "Contratos e renovações", department: "Comercial", screens: ["Contratos", "Renovações"], sections: [{ section: "contracts" }] },
+  { key: "orders", title: "Ordens e programação", department: "Operação", screens: ["Ordens de serviço", "Máquinas paradas", "Garantias", "Programação", "Técnicos", "Monitoramento"], sections: [{ section: "orders" }, { section: "maintenanceOrders" }, { section: "technicians" }, { section: "users", keys: ["viewLiveLocation"], title: "Monitoramento da equipe" }] },
+  { key: "tickets", title: "Atendimento", department: "Operação", screens: ["Chamados e solicitações"], sections: [{ section: "tickets" }] },
+  { key: "serviceReports", title: "Laudos técnicos", department: "Operação", screens: ["Laudos", "Evidências e documentos"], sections: [{ section: "serviceReports" }] },
+  { key: "technicianPortal", title: "Área de campo", department: "Operação", screens: ["Fila do técnico", "Apontamentos em campo"], sections: [{ section: "technicianWork" }] },
+  { key: "equipments", title: "Equipamentos", department: "Ativos", screens: ["Equipamentos", "Modelos"], sections: [{ section: "equipments" }] },
+  { key: "catalog", title: "Peças e serviços", department: "Suprimentos", screens: ["Catálogo", "Peças", "Serviços"], sections: [{ section: "catalog" }] },
+  { key: "inventory", title: "Estoque e compras", department: "Suprimentos", screens: ["Estoque", "Pedidos de compra", "Fornecedores"], sections: [{ section: "inventory" }, { section: "purchaseOrders" }] },
+  { key: "finance", title: "Financeiro", department: "Financeiro", screens: ["Fluxo de caixa", "Contas a receber", "Contas a pagar", "Cobranças", "Conciliação", "Contas bancárias", "Centros de custo", "Documentos fiscais"], sections: [{ section: "finance" }] },
+  { key: "people", title: "Colaboradores e RH", department: "Recursos Humanos", screens: ["Colaboradores e acessos", "Documentação", "EPIs e ferramentas", "Banco de horas", "Comissões", "Frota"], sections: [{ section: "people" }, { section: "users", keys: ["manageCertifications", "manageSpecialties"], title: "Documentação e especialidades" }] },
+  { key: "usersControl", title: "Gestão e segurança", department: "Administração", screens: ["Cadastros de usuários", "Permissões", "Hierarquia", "Empresa", "Automação"], sections: [{ section: "users", keys: ["manage", "manageSecurity", "manageHierarchy"], title: "Contas e segurança" }, { section: "settings" }, { section: "audit" }] },
+  { key: "studio", title: "Manitec Studio", department: "Administração", screens: ["Dados", "Editor de documentos", "Histórico", "Utilização"], sections: [{ section: "studio" }] },
+];
+
 const PRIMARY_BUTTON =
   "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
 const SECONDARY_BUTTON =
@@ -787,7 +789,7 @@ export function UserManagementWorkspace({
   }, [selectedUserId]);
 
   useEffect(() => {
-    if (area !== "permissions") return;
+    if (area !== "permissions" && area !== "control") return;
     const requestedUserId = new URLSearchParams(window.location.search).get(
       "user",
     );
@@ -3091,7 +3093,6 @@ function UserPermissionsPanel({
   onSetPermission: PermissionSectionSetter;
 }) {
   const [permissionQuery, setPermissionQuery] = useState("");
-  const [group, setGroup] = useState<PermissionGroup | "all">("all");
   const [permissionState, setPermissionState] = useState<
     "all" | "enabled" | "disabled"
   >("all");
@@ -3113,26 +3114,7 @@ function UserPermissionsPanel({
   const hasChanges = Boolean(
     originalPolicy && JSON.stringify(originalPolicy) !== JSON.stringify(policy),
   );
-  const visibleSections = PERMISSION_SECTIONS.map((section) => {
-    const values = policy[section.section] as Record<string, boolean>;
-    const sectionMatches = normalizePermissionSearch(
-      `${section.title} ${section.description}`,
-    ).includes(search);
-    const items = section.items.filter((item) => {
-      const enabled = values[item.key];
-      if (permissionState === "enabled" && !enabled) return false;
-      if (permissionState === "disabled" && enabled) return false;
-      return (
-        !search ||
-        sectionMatches ||
-        normalizePermissionSearch(item.label).includes(search)
-      );
-    });
-    return { ...section, items, values };
-  }).filter(
-    (section) =>
-      section.items.length > 0 && (group === "all" || section.group === group),
-  );
+
 
   return (
     <div className="space-y-5">
@@ -3212,7 +3194,7 @@ function UserPermissionsPanel({
               <button
                 key={user.id}
                 type="button"
-                onClick={() => onSelectUser(user.id)}
+                onClick={() => { if (!hasChanges || window.confirm("Descartar as alterações de permissões antes de trocar de usuário?")) onSelectUser(user.id); }}
                 aria-pressed={user.id === selectedUserId}
                 className={`min-w-0 rounded-2xl border px-4 py-3 text-left transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 ${user.id === selectedUserId ? "border-sky-400 bg-sky-50 shadow-sm" : "border-slate-200 bg-white hover:border-sky-300 hover:bg-slate-50"}`}
               >
@@ -3231,6 +3213,7 @@ function UserPermissionsPanel({
                 <span className="mt-2 block text-[11px] font-semibold text-sky-800">
                   {ROLE_LABELS[user.role]} · {user.code}
                 </span>
+                <span className="mt-1 block truncate text-xs text-slate-500">{user.department || ROLE_DEPARTMENTS[user.role]}</span>
               </button>
             ))}
           </div>
@@ -3272,6 +3255,7 @@ function UserPermissionsPanel({
                 onClick={() => void onSave()}
                 disabled={
                   !hasChanges ||
+                  isLoading ||
                   saving ||
                   isSelectedMaster ||
                   !canManageSecurity
@@ -3296,8 +3280,8 @@ function UserPermissionsPanel({
 
           <SectionCard
             eyebrow="Matriz de acesso"
-            title="Permissões por área"
-            description="Filtre por módulo, ação ou estado. As alterações são aplicadas à conta ao salvar."
+            title="Abas e ações por departamento"
+            description="Escolha uma área, revise as telas que pode visualizar e depois as ações permitidas. Salve para aplicar à conta."
           >
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
               <FormField label="Localizar permissão">
@@ -3332,52 +3316,15 @@ function UserPermissionsPanel({
                 ))}
               </div>
             </div>
-            <div
-              className="mt-4 flex flex-wrap gap-2"
-              role="group"
-              aria-label="Filtrar por área"
-            >
-              {PERMISSION_GROUPS.map((item) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  aria-pressed={group === item.key}
-                  onClick={() => setGroup(item.key)}
-                  className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${group === item.key ? "border-sky-700 bg-sky-700 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-sky-300"}`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-            <p className="mt-4 text-xs font-medium text-slate-600">
-              {visibleSections.length} área(s) encontrada(s). {activeCount}{" "}
-              permissões ativas no perfil.
-            </p>
-
-            {visibleSections.length === 0 ? (
-              <div className="mt-5">
-                <EmptyState
-                  title="Nenhuma permissão encontrada"
-                  description="Tente outra busca, área ou estado."
-                />
-              </div>
-            ) : (
-              <div className="mt-5 grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-                {visibleSections.map((section) => (
-                  <PermissionBlock
-                    key={section.section}
-                    title={section.title}
-                    description={section.description}
-                    items={section.items}
-                    values={section.values}
-                    onToggle={(key, value) =>
-                      onSetPermission(section.section, key as never, value)
-                    }
-                    disabled={isSelectedMaster || !canManageSecurity}
-                  />
-                ))}
-              </div>
-            )}
+            <PermissionAreaTabs
+              key={selectedUser.id}
+              policy={policy}
+              search={search}
+              permissionState={permissionState}
+              role={selectedUser.role}
+              disabled={isLoading || isSelectedMaster || !canManageSecurity || saving}
+              onSetPermission={onSetPermission}
+            />
           </SectionCard>
 
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4">
@@ -3399,13 +3346,103 @@ function UserPermissionsPanel({
               }
               disabled={saving || isSelectedMaster || !canManageSecurity}
             >
-              Reaplicar padrão do cargo
+              Aplicar padrão de {ROLE_DEPARTMENTS[selectedUser.role] || ROLE_LABELS[selectedUser.role]}
             </button>
           </div>
         </section>
       )}
     </div>
   );
+}
+
+
+function PermissionAreaTabs({ policy, search, permissionState, role, disabled, onSetPermission }: {
+  policy: AccessPolicy;
+  search: string;
+  permissionState: "all" | "enabled" | "disabled";
+  role: UserRole;
+  disabled: boolean;
+  onSetPermission: PermissionSectionSetter;
+}) {
+  const initialArea = role === "SALES" || role === "ENGINEER_APPLICATION" ? "proposals"
+    : role === "FINANCE" ? "finance" : role === "SUPPLIES" ? "inventory"
+    : role === "HR" ? "people" : role === "TECHNICIAN" ? "technicianPortal"
+    : role === "LOGISTICS" ? "orders" : "dashboard";
+  const [activeKey, setActiveKey] = useState<string>(initialArea);
+  const [department, setDepartment] = useState("Todas");
+  const departments = ["Todas", ...new Set(PERMISSION_AREAS.map(area => area.department))];
+  const areas = PERMISSION_AREAS.filter(area => {
+    if (department !== "Todas" && area.department !== department) return false;
+    const text = [area.title, area.department, ...area.screens, ...area.sections.flatMap(ref => {
+      const section = PERMISSION_SECTIONS.find(section => section.section === ref.section);
+      return section?.items.filter(item => !ref.keys || ref.keys.includes(item.key)).map(item => item.label) || [];
+    })].join(" ");
+    return !search || normalizePermissionSearch(text).includes(search);
+  });
+  const activeArea = areas.find(area => area.key === activeKey) || areas[0];
+  const sections = activeArea?.sections.flatMap(ref => {
+    const section = PERMISSION_SECTIONS.find(section => section.section === ref.section);
+    if (!section) return [];
+    const values = policy[ref.section] as Record<string, boolean>;
+    const items = section.items.filter(item => {
+      if (ref.keys && !ref.keys.includes(item.key)) return false;
+      if (permissionState === "enabled" && !values[item.key]) return false;
+      if (permissionState === "disabled" && values[item.key]) return false;
+      return true;
+    });
+    return items.length ? [{ ...section, title: ref.title || section.title, values, items }] : [];
+  }) || [];
+
+  return <>
+    <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Departamentos das permissões">
+      {departments.map(item => <button key={item} type="button" aria-pressed={department === item} onClick={() => setDepartment(item)} className={"rounded-full border px-3 py-2 text-xs font-semibold " + (department === item ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50")}>{item}</button>)}
+    </div>
+    {!activeArea ? <div className="mt-5"><EmptyState title="Nenhuma área encontrada" description="Ajuste o departamento ou a busca." /></div> : (
+      <div className="mt-5 grid min-w-0 gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
+        <div role="tablist" aria-label="Abas do sistema" aria-orientation="vertical" className="flex max-h-[620px] flex-col gap-1 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-2">
+          {areas.map((area, index) => <button
+            key={area.key} id={"access-area-" + area.key} type="button" role="tab"
+            aria-selected={activeArea.key === area.key} aria-controls="access-area-panel"
+            tabIndex={activeArea.key === area.key ? 0 : -1}
+            onClick={() => setActiveKey(area.key)}
+            onKeyDown={event => {
+              let next = index;
+              if (["ArrowDown", "ArrowRight"].includes(event.key)) next = (index + 1) % areas.length;
+              else if (["ArrowUp", "ArrowLeft"].includes(event.key)) next = (index + areas.length - 1) % areas.length;
+              else if (event.key === "Home") next = 0;
+              else if (event.key === "End") next = areas.length - 1;
+              else return;
+              event.preventDefault();
+              setActiveKey(areas[next].key);
+              document.getElementById("access-area-" + areas[next].key)?.focus();
+            }}
+            className={"flex min-h-12 items-center justify-between gap-3 rounded-lg px-3 py-3 text-left text-sm font-semibold " + (activeArea.key === area.key ? "bg-white text-blue-800 shadow-sm ring-1 ring-blue-200" : "text-slate-600 hover:bg-white")}
+          >
+            <span>{area.title}</span>
+            <span className={"shrink-0 text-xs " + (policy.pages[area.key] ? "text-emerald-700" : "text-slate-400")}>{policy.pages[area.key] ? "Visível" : "Oculta"}</span>
+          </button>)}
+        </div>
+        <div id="access-area-panel" role="tabpanel" aria-labelledby={"access-area-" + activeArea.key} tabIndex={0} className="min-w-0 space-y-4">
+          <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-5">
+            <p className="text-xs font-semibold text-blue-700">1 · Visualização</p>
+            <h3 className="mt-1 text-lg font-bold text-slate-950">{activeArea.title}</h3>
+            <label className="mt-4 flex items-center gap-3 rounded-lg border border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800">
+              <input type="checkbox" checked={policy.pages[activeArea.key]} onChange={event => onSetPermission("pages", activeArea.key, event.target.checked)} disabled={disabled} className="h-4 w-4 rounded border-slate-300" />
+              Pode visualizar esta área
+            </label>
+            <p className="mb-2 mt-4 text-xs font-medium text-slate-600">Telas incluídas neste acesso:</p>
+            <div className="flex flex-wrap gap-2">{activeArea.screens.map(screen => <span key={screen} className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-600">{screen}</span>)}</div>
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-950">2 · O que pode fazer nesta área</h3>
+            <p className="mb-4 mt-1 text-xs text-slate-500">As ações são independentes da visibilidade no menu e também podem ser usadas em rotinas vinculadas.</p>
+            <div className="grid gap-4 xl:grid-cols-2">{sections.map(section => <PermissionBlock key={section.section} title={section.title} description={section.description} items={section.items} values={section.values} onToggle={(key, value) => onSetPermission(section.section, key as never, value)} disabled={disabled} />)}</div>
+            {sections.length === 0 ? <FieldBox>Nenhuma ação corresponde ao filtro selecionado.</FieldBox> : null}
+          </div>
+        </div>
+      </div>
+    )}
+  </>;
 }
 
 function normalizePermissionSearch(value: string) {

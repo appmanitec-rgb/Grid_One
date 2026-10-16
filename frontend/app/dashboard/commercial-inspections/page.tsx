@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import { PageHeader } from "../components/DashboardPageKit";
 
 import { FormEvent, useEffect, useState } from "react";
@@ -253,7 +254,7 @@ export default function CommercialInspectionsPage() {
           onSubmit={(event) => void handleCreateInspection(event)}
           className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3"
         >
-          <select
+          <SelectField
             value={opportunityId}
             onChange={(event) => setOpportunityId(event.target.value)}
             className="rounded-lg border border-zinc-300 px-3 py-2 text-sm md:col-span-2"
@@ -265,8 +266,8 @@ export default function CommercialInspectionsPage() {
                 {opportunity.title} - {opportunity.client.companyName}
               </option>
             ))}
-          </select>
-          <select
+          </SelectField>
+          <SelectField searchable
             value={inspectorUserId}
             onChange={(event) => setInspectorUserId(event.target.value)}
             className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
@@ -277,7 +278,7 @@ export default function CommercialInspectionsPage() {
                 {user.name}
               </option>
             ))}
-          </select>
+          </SelectField>
           <input
             type="datetime-local"
             value={scheduledAt}
@@ -374,7 +375,7 @@ export default function CommercialInspectionsPage() {
                     <p>Munck: {inspection.needsMunck ? "Sim" : "Nao"}</p>
                   </td>
                   <td className="px-2 py-2">
-                    <select
+                    <SelectField
                       value={inspection.status}
                       onChange={(event) =>
                         void handleStatusChange(
@@ -389,7 +390,7 @@ export default function CommercialInspectionsPage() {
                           {STATUS_LABEL[status]}
                         </option>
                       ))}
-                    </select>
+                    </SelectField>
                   </td>
                   <td className="px-2 py-2">
                     <p className="text-xs text-zinc-600">

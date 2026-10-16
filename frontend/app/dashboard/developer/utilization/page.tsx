@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import { PageHeader } from "../../components/DashboardPageKit";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -203,8 +204,8 @@ export default function StudioUtilizationPage() {
             <div className="border-b border-slate-200 p-4">
               <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
                 <label className="flex-1 text-[11px] font-bold uppercase text-slate-500">Pesquisar usuario<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nome, e-mail, empresa, setor ou pagina..." className="mt-1.5 min-h-10 w-full rounded-lg border border-slate-300 px-3 text-sm font-medium normal-case outline-none focus:border-blue-500" /></label>
-                <label className="text-[11px] font-bold uppercase text-slate-500">Publico<select value={audience} onChange={(event) => setAudience(event.target.value as Audience)} className="mt-1.5 block min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium normal-case xl:w-44"><option value="ALL">Todos</option><option value="INTERNAL">Equipe interna</option><option value="CLIENT">Clientes</option></select></label>
-                <label className="text-[11px] font-bold uppercase text-slate-500">Conexao<select value={connection} onChange={(event) => setConnection(event.target.value as Connection)} className="mt-1.5 block min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium normal-case xl:w-40"><option value="ALL">Todas</option><option value="ONLINE">Conectados</option><option value="OFFLINE">Sem conexao</option></select></label>
+                <label className="text-[11px] font-bold uppercase text-slate-500">Publico<SelectField value={audience} onChange={(event) => setAudience(event.target.value as Audience)} className="mt-1.5 block min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium normal-case xl:w-44"><option value="ALL">Todos</option><option value="INTERNAL">Equipe interna</option><option value="CLIENT">Clientes</option></SelectField></label>
+                <label className="text-[11px] font-bold uppercase text-slate-500">Conexao<SelectField value={connection} onChange={(event) => setConnection(event.target.value as Connection)} className="mt-1.5 block min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium normal-case xl:w-40"><option value="ALL">Todas</option><option value="ONLINE">Conectados</option><option value="OFFLINE">Sem conexao</option></SelectField></label>
               </div>
             </div>
             <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">

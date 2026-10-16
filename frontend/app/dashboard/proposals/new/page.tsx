@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField, SearchLookup } from "@/app/dashboard/components/SelectField";
 import { PageHeader } from "../../components/DashboardPageKit";
 import { ProposalSteps, ProposalFinancialDock, ProposalFormSection, focusProposalStep } from "../../components/ProposalFormFlow";
 import { commercialLabel, freightLabel } from "@/lib/commercial-labels";
@@ -348,84 +349,12 @@ function defaultHourlyDiscount(hourType: string) {
   return hourType === "CONTRACT" ? "20" : "0";
 }
 
-function SearchableSelect({
-  items,
-  value,
-  onChange,
-  onSearch,
-  placeholder,
-}: {
-  items: CatalogItem[];
-  value: string;
-  onChange: (val: string) => void;
-  onSearch?: (term: string) => void;
-  placeholder: string;
+function SearchableSelect({ items, value, onChange, onSearch, placeholder }: {
+  items: CatalogItem[]; value:string; onChange:(value:string)=>void; onSearch?:(query:string)=>void; placeholder:string;
 }) {
-  const [search, setSearch] = useState("");
-  const [isOpen, setIsOpen] = useState(false);
-
-  useEffect(() => {
-    const selected = items.find((i) => i.id === value);
-    if (selected) {
-      const code = selected.code || selected.sku;
-      setSearch(`${code ? `[${code}] ` : ""}${selected.name}`);
-    }
-  }, [value, items]);
-
-  const filtered = useMemo(() => {
-    const term = search.toLowerCase();
-    return items.filter(
-      (i) =>
-        (i.name || "").toLowerCase().includes(term) ||
-        (i.code || "").toLowerCase().includes(term),
-    );
-  }, [items, search]);
-
-  return (
-    <div className="relative w-full">
-      <input
-        type="text"
-        value={search}
-        onChange={(e) => {
-          const next = e.target.value;
-          setSearch(next);
-          setIsOpen(true);
-          onChange("");
-          onSearch?.(next);
-        }}
-        onFocus={() => setIsOpen(true)}
-        onBlur={() => setTimeout(() => setIsOpen(false), 180)}
-        placeholder={placeholder}
-        className="w-full rounded-md border border-zinc-300 p-2 text-sm outline-none focus:border-emerald-500"
-      />
-      {isOpen && search && !value ? (
-        <ul className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-md border border-zinc-200 bg-white shadow-xl">
-          {filtered.length > 0 ? (
-            filtered.map((item) => (
-              <li
-                key={item.id}
-                onClick={() => {
-                  onChange(item.id);
-                  setSearch(item.name);
-                  setIsOpen(false);
-                }}
-                className="cursor-pointer border-b border-zinc-100 p-2 text-sm hover:bg-emerald-50 last:border-0"
-              >
-                <span className="mr-2 tabular-nums text-xs font-bold text-zinc-400">
-                  {item.code || item.sku || "S/COD"}
-                </span>
-                <span className="text-zinc-700">{item.name}</span>
-              </li>
-            ))
-          ) : (
-            <li className="p-2 text-sm text-zinc-500">
-              Nenhum item encontrado.
-            </li>
-          )}
-        </ul>
-      ) : null}
-    </div>
-  );
+  return <SearchLookup value={value} options={items.map(item => ({value:item.id, label:[item.code || item.sku, item.name].filter(Boolean).join(" · ")}))}
+    onSelect={onChange} onSearch={onSearch} placeholder={placeholder} aria-label={placeholder}
+    className="w-full rounded-lg border border-zinc-300 bg-white p-2.5 text-sm outline-none focus:border-sky-500" />;
 }
 
 function PaymentProfileSelector({ label, purpose, profiles, value, onChange }: {
@@ -441,7 +370,7 @@ function PaymentProfileSelector({ label, purpose, profiles, value, onChange }: {
     <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
       <label htmlFor={"proposal-payment-" + purpose} className="block text-sm font-semibold text-zinc-800">{label}</label>
       <p className="mt-1 text-xs text-zinc-500">A conta define a empresa Manitec emitente e os dados que aparecerão no documento.</p>
-      <select
+      <SelectField
         id={"proposal-payment-" + purpose}
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -453,7 +382,7 @@ function PaymentProfileSelector({ label, purpose, profiles, value, onChange }: {
             {profile.method === "PIX" ? "PIX" : "Boleto"} · {profile.name}{profile.issuerCompany?.companyName ? ` · ${profile.issuerCompany.companyName}` : ""}
           </option>
         ))}
-      </select>
+      </SelectField>
       {choices.length === 0 ? (
         <p className="mt-3 text-xs text-amber-800">Nenhum perfil ativo. Cadastre os dados reais no Manitec Studio.</p>
       ) : null}
@@ -794,6 +723,17 @@ export default function NewProposalPage() {
     }
 
     if (clientIdFromUrl) setSelectedClientId(clientIdFromUrl);
+    const generatorIdFromUrl = params.get("generatorId");
+    if (generatorIdFromUrl && clientIdFromUrl && !params.get("editId")) {
+      void apiFetch(apiUrl("/generators/" + encodeURIComponent(generatorIdFromUrl)), {cache:"no-store"})
+        .then(async response=>response.ok ? response.json() as Promise<Generator> : null)
+        .then(generator=>{
+          if(!generator || generator.clientId !== clientIdFromUrl) return;
+          setGenerators(current=>[generator,...current.filter(item=>item.id!==generator.id)]);
+          setSelectedEquipmentId(generator.id);
+          setEquipmentSearch(formatGeneratorOption(generator));
+        }).catch(()=>undefined);
+    }
     if (renewalContractIdFromUrl) {
       setScope(
         (current) =>
@@ -922,13 +862,16 @@ export default function NewProposalPage() {
           apiUrl(`/proposals/generator-lookup?${params.toString()}`),
           { cache: "no-store" },
         );
-        if (res.ok) setGenerators((await res.json()) as Generator[]);
+        if (res.ok) {
+          const items = await res.json() as Generator[];
+          setGenerators(current=>[...items,...current.filter(item=>item.id===selectedEquipmentId&&!items.some(option=>option.id===item.id))]);
+        }
       } finally {
         setEquipmentLookupLoading(false);
       }
     }, 250);
     return () => window.clearTimeout(handle);
-  }, [equipmentSearch, selectedClientId]);
+  }, [equipmentSearch, selectedClientId, selectedEquipmentId]);
 
   useEffect(() => {
     if (linkedOpportunity?.assignedSeller?.id) return;
@@ -1980,7 +1923,7 @@ export default function NewProposalPage() {
                           Nenhum cliente encontrado.
                         </p>
                       ) : (
-                        clients.map((c) => (
+                        clients.slice(0, 10).map((c) => (
                           <button
                             key={c.id}
                             type="button"
@@ -2065,7 +2008,7 @@ export default function NewProposalPage() {
                         Nenhuma maquina encontrada.
                       </p>
                     ) : (
-                      availableGenerators.map((gen) => (
+                      availableGenerators.slice(0, 10).map((gen) => (
                         <button
                           key={gen.id}
                           type="button"
@@ -2148,7 +2091,7 @@ export default function NewProposalPage() {
                           Nenhum vendedor encontrado.
                         </p>
                       ) : (
-                        sellers.map((seller) => (
+                        sellers.slice(0, 10).map((seller) => (
                           <button
                             key={seller.id}
                             type="button"
@@ -2179,7 +2122,7 @@ export default function NewProposalPage() {
               <label className="mb-1 block text-sm font-medium text-zinc-700">
                 Tipo de Servico
               </label>
-              <select
+              <SelectField searchable
                 value={serviceType}
                 onChange={(e) => setServiceType(e.target.value)}
                 disabled={!selectedEquipmentId}
@@ -2194,7 +2137,7 @@ export default function NewProposalPage() {
                 <option value="TB">TB</option>
                 <option value="TMA">TMA</option>
                 <option value="OUTROS">Outros</option>
-              </select>
+              </SelectField>
             </div>
           </div>
 
@@ -2501,7 +2444,7 @@ export default function NewProposalPage() {
               <label className="mb-1 block text-sm font-medium text-zinc-700">
                 Frete
               </label>
-              <select
+              <SelectField
                 value={freight}
                 onChange={(e) => setFreight(e.target.value)}
                 className="w-full rounded-lg border border-zinc-300 p-2.5" aria-label="Frete"
@@ -2509,7 +2452,7 @@ export default function NewProposalPage() {
                 <option value="FOB">{freightLabel("FOB")}</option>
                 <option value="CIF">{freightLabel("CIF")}</option>
                 <option value="SEM_FRETE">Sem frete</option>
-              </select>
+              </SelectField>
             </div>
 <div className="grid gap-4 md:col-span-4 lg:grid-cols-2">
               <PaymentProfileSelector
@@ -2803,7 +2746,7 @@ export default function NewProposalPage() {
                     updateHourlyService(index, "description", e.target.value)
                   }
                 />
-                <select
+                <SelectField
                   value={item.hourType}
                   onChange={(e) =>
                     updateHourlyService(index, "hourType", e.target.value)
@@ -2817,8 +2760,8 @@ export default function NewProposalPage() {
                       {option.label}
                     </option>
                   ))}
-                </select>
-                <select
+                </SelectField>
+                <SelectField
                   value={item.technicianType}
                   onChange={(e) =>
                     updateHourlyService(index, "technicianType", e.target.value)
@@ -2834,7 +2777,7 @@ export default function NewProposalPage() {
                       {option.label}
                     </option>
                   ))}
-                </select>
+                </SelectField>
                 <input
                   type="number"
                   min="0"
@@ -3096,7 +3039,7 @@ export default function NewProposalPage() {
                 <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-700">
                   Tipo desconto
                 </label>
-                <select
+                <SelectField
                   value={discountType}
                   onChange={(e) => {
                     setDiscountType(e.target.value as "PERCENTAGE" | "VALUE");
@@ -3106,7 +3049,7 @@ export default function NewProposalPage() {
                 >
                   <option value="PERCENTAGE">Porcentagem (%)</option>
                   <option value="VALUE">Valor fixo (R$)</option>
-                </select>
+                </SelectField>
               </div>
 
               <div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import { commercialLabel } from "@/lib/commercial-labels";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
@@ -1042,7 +1043,7 @@ export default function ServiceReportDetailPage() {
                 disabled={!canEdit}
                 placeholder="Item verificado"
               />
-              <select
+              <SelectField
                 value={item.result}
                 onChange={(event) =>
                   updateChecklistItem(index, {
@@ -1057,7 +1058,7 @@ export default function ServiceReportDetailPage() {
                     {CHECKLIST_RESULT_LABELS[result]}
                   </option>
                 ))}
-              </select>
+              </SelectField>
               <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
                 <input
                   type="checkbox"
@@ -1103,7 +1104,7 @@ export default function ServiceReportDetailPage() {
             className="mb-5 grid gap-4 lg:grid-cols-2"
           >
             <FormField label="Tipo">
-              <select
+              <SelectField
                 value={evidenceForm.type}
                 onChange={(event) =>
                   setEvidenceForm((current) => ({
@@ -1118,7 +1119,7 @@ export default function ServiceReportDetailPage() {
                     {EVIDENCE_TYPE_LABELS[type]}
                   </option>
                 ))}
-              </select>
+              </SelectField>
             </FormField>
             <FormField label="Título">
               <TextInput

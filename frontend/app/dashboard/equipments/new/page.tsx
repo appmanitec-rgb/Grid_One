@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField as SearchableField, SuggestionInput } from "@/app/dashboard/components/SelectField";
 import { PageHeader } from "../../components/DashboardPageKit";
 
 import Link from "next/link";
@@ -303,7 +304,7 @@ export default function NewEquipmentPage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         <EditSection title="1. Identificacao e vinculos">
           <Field label="Cliente">
-            <select
+            <SearchableField searchable
               value={form.clientId}
               onChange={(event) =>
                 setForm((prev) => ({
@@ -321,10 +322,10 @@ export default function NewEquipmentPage() {
                   {client.companyName} {client.cnpj ? `(${client.cnpj})` : ""}
                 </option>
               ))}
-            </select>
+            </SearchableField>
           </Field>
           <Field label="Local/site">
-            <select
+            <SearchableField
               value={form.currentSiteId}
               onChange={(event) =>
                 setForm((prev) => ({ ...prev, currentSiteId: event.target.value }))
@@ -337,7 +338,7 @@ export default function NewEquipmentPage() {
                   {site.name} {site.code ? `(${site.code})` : ""}
                 </option>
               ))}
-            </select>
+            </SearchableField>
           </Field>
           <TextField label="Nome/apelido" field="name" form={form} setForm={setForm} required />
           <ManufacturerField
@@ -350,7 +351,7 @@ export default function NewEquipmentPage() {
             required
           />
           <Field label="Modelo">
-            <select
+            <SearchableField searchable
               value={form.modelId}
               onChange={(event) =>
                 setForm((prev) => ({ ...prev, modelId: event.target.value }))
@@ -364,7 +365,7 @@ export default function NewEquipmentPage() {
                   {model.name}
                 </option>
               ))}
-            </select>
+            </SearchableField>
           </Field>
           <TextField label="Numero de serie" field="serialNumber" form={form} setForm={setForm} />
           <TextField label="Tag patrimonial" field="assetTag" form={form} setForm={setForm} />
@@ -572,23 +573,23 @@ function ManufacturerField({
 }) {
   return (
     <Field label={label}>
-      <input
+      <SuggestionInput aria-label={label} id={listId}
         data-testid={`equipment-field-${field}`}
         value={form[field] || ""}
-        list={listId}
+
         onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
         required={required}
         className={INPUT_CLASS}
-      />
-      <datalist id={listId}>
+      >
         {manufacturers.map((manufacturer) => (
           <option
             key={manufacturer.id}
             value={manufacturer.name}
-            label={manufacturer.type || undefined}
+            label={manufacturer.name}
           />
         ))}
-      </datalist>
+      </SuggestionInput>
+
     </Field>
   );
 }
@@ -608,14 +609,13 @@ function ControlOptionField({
 }) {
   return (
     <Field label={label}>
-      <input
+      <SuggestionInput aria-label={label} id={listId}
         data-testid={`equipment-field-${field}`}
         value={form[field] || ""}
-        list={listId}
+
         onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
         className={INPUT_CLASS}
-      />
-      <datalist id={listId}>
+      >
         {options.map((option) => (
           <option
             key={option.id}
@@ -623,7 +623,8 @@ function ControlOptionField({
             label={optionLabel(option)}
           />
         ))}
-      </datalist>
+      </SuggestionInput>
+
     </Field>
   );
 }
@@ -675,7 +676,7 @@ function SelectField({
 }: FieldProps & { options: ReadonlyArray<readonly [string, string]> }) {
   return (
     <Field label={label}>
-      <select
+      <SearchableField
         data-testid={`equipment-field-${field}`}
         value={form[field] || ""}
         onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
@@ -686,7 +687,7 @@ function SelectField({
             {optionLabel}
           </option>
         ))}
-      </select>
+      </SearchableField>
     </Field>
   );
 }

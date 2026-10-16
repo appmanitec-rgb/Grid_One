@@ -349,23 +349,11 @@ export const MAIN_SECTIONS: NavSection[] = [
     ],
   },
   {
-    id: "people",
-    title: "Agentes",
-    icon: "people",
-    items: [
-      {
-        key: "hr_collaborators",
-        label: "Agentes e Acessos",
-        href: "/dashboard/hr/collaborators",
-        enabled: true,
-      },
-    ],
-  },
-  {
     id: "hr",
-    title: "RH Operacional",
+    title: "Recursos Humanos",
     icon: "hr",
     items: [
+      { key: "hr_collaborators", label: "Colaboradores e acessos", href: "/dashboard/hr/collaborators", enabled: true },
       {
         key: "hr_documentation",
         label: "Documentação",

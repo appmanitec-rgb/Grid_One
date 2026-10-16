@@ -1,4 +1,5 @@
 "use client";
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import { commercialLabel } from "@/lib/commercial-labels";
 
 import { PageHeader } from "../../components/DashboardPageKit";
@@ -1192,7 +1193,7 @@ function EditField({
     return (
       <label className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
         {field.label}
-        <select
+        <SelectField
           value={String(Boolean(value))}
           onChange={(event) => onChange(event.target.value === "true")}
           className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium normal-case text-slate-800"
@@ -1202,7 +1203,7 @@ function EditField({
               {option.label}
             </option>
           ))}
-        </select>
+        </SelectField>
       </label>
     );
   }
@@ -1211,7 +1212,7 @@ function EditField({
     return (
       <label className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
         {field.label}
-        <select
+        <SelectField
           value={String(value ?? "")}
           onChange={(event) => onChange(event.target.value)}
           className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium normal-case text-slate-800"
@@ -1222,7 +1223,7 @@ function EditField({
               {option.label}
             </option>
           ))}
-        </select>
+        </SelectField>
       </label>
     );
   }

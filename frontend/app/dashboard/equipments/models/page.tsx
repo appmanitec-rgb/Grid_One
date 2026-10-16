@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField, SuggestionInput } from "@/app/dashboard/components/SelectField";
 import { PageHeader } from "../../components/DashboardPageKit";
 
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
@@ -610,12 +611,12 @@ export default function EquipmentModelsPage() {
             </h3>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
               <Field label="Fabricante">
-                <input value={form.brand} list="model-manufacturer-options" onChange={(e) => updateForm({ brand: e.target.value })} className={INPUT_CLASS} placeholder="STEMAC" />
-                <datalist id="model-manufacturer-options">
+                <SuggestionInput aria-label="Fabricante" value={form.brand}  onChange={(e) => updateForm({ brand: e.target.value })} className={INPUT_CLASS} placeholder="STEMAC" >
                   {manufacturers.map((manufacturer) => (
-                    <option key={manufacturer.id} value={manufacturer.name} label={manufacturer.type || undefined} />
+                    <option key={manufacturer.id} value={manufacturer.name} label={manufacturer.name} />
                   ))}
-                </datalist>
+                </SuggestionInput>
+
               </Field>
               <Field label="Modelo">
                 <input value={form.name} onChange={(e) => updateForm({ name: e.target.value })} className={INPUT_CLASS} placeholder="180 kVA" required />
@@ -633,18 +634,18 @@ export default function EquipmentModelsPage() {
                 <input value={form.frequencyHz} onChange={(e) => updateForm({ frequencyHz: e.target.value })} className={INPUT_CLASS} inputMode="numeric" placeholder="60" />
               </Field>
               <Field label="Tipo">
-                <input value={form.category} list="model-application-options" onChange={(e) => updateForm({ category: e.target.value })} className={INPUT_CLASS} placeholder="Diesel, standby..." />
-                <datalist id="model-application-options">
+                <SuggestionInput aria-label="Tipo" value={form.category}  onChange={(e) => updateForm({ category: e.target.value })} className={INPUT_CLASS} placeholder="Diesel, standby..." >
                   {controlOptions.applications.map((option) => (
                     <option key={option.id} value={option.name} label={optionLabel(option)} />
                   ))}
-                </datalist>
+                </SuggestionInput>
+
               </Field>
               <Field label="Status">
-                <select value={form.isActive ? "ACTIVE" : "INACTIVE"} onChange={(e) => updateForm({ isActive: e.target.value === "ACTIVE" })} className={INPUT_CLASS}>
+                <SelectField value={form.isActive ? "ACTIVE" : "INACTIVE"} onChange={(e) => updateForm({ isActive: e.target.value === "ACTIVE" })} className={INPUT_CLASS}>
                   <option value="ACTIVE">Ativo</option>
                   <option value="INACTIVE">Inativo</option>
-                </select>
+                </SelectField>
               </Field>
               <Field label="Controlador">
                 <input value={form.controllerType} onChange={(e) => updateForm({ controllerType: e.target.value })} className={INPUT_CLASS} placeholder="Deep Sea, ComAp..." />
@@ -695,17 +696,17 @@ export default function EquipmentModelsPage() {
                 <div key={item.id || idx} className="rounded-lg border border-slate-200 p-3">
                   <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-6">
                     <input aria-label={`Nome do item de manutencao ${idx + 1}`} value={item.name} onChange={(e) => updateMaintenanceItem(idx, { name: e.target.value })} className={`${INPUT_CLASS} xl:col-span-2`} placeholder="Troca de oleo" />
-                    <select aria-label={`Tipo do item de manutencao ${idx + 1}`} value={item.category} onChange={(e) => updateMaintenanceItem(idx, { category: e.target.value as MaintenanceCategory })} className={INPUT_CLASS}>
+                    <SelectField aria-label={`Tipo do item de manutencao ${idx + 1}`} value={item.category} onChange={(e) => updateMaintenanceItem(idx, { category: e.target.value as MaintenanceCategory })} className={INPUT_CLASS}>
                       {maintenanceCategoryOptions.map((option) => (
                         <option key={option.value} value={option.value}>{option.label}</option>
                       ))}
-                    </select>
+                    </SelectField>
                     <input aria-label={`Intervalo por tempo ${idx + 1}`} value={item.intervalValue} onChange={(e) => updateMaintenanceItem(idx, { intervalValue: e.target.value })} className={INPUT_CLASS} inputMode="numeric" placeholder="6" />
-                    <select aria-label={`Unidade de tempo ${idx + 1}`} value={item.intervalUnit || "MONTHS"} onChange={(e) => updateMaintenanceItem(idx, { intervalUnit: e.target.value as IntervalUnit })} className={INPUT_CLASS}>
+                    <SelectField aria-label={`Unidade de tempo ${idx + 1}`} value={item.intervalUnit || "MONTHS"} onChange={(e) => updateMaintenanceItem(idx, { intervalUnit: e.target.value as IntervalUnit })} className={INPUT_CLASS}>
                       {UNIT_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value}>{option.label}</option>
                       ))}
-                    </select>
+                    </SelectField>
                     <input aria-label={`Intervalo por horimetro ${idx + 1}`} value={item.hourMeterInterval} onChange={(e) => updateMaintenanceItem(idx, { hourMeterInterval: e.target.value })} className={INPUT_CLASS} inputMode="numeric" placeholder="250 h" />
                     <input aria-label={`Descricao do item de manutencao ${idx + 1}`} value={item.description || ""} onChange={(e) => updateMaintenanceItem(idx, { description: e.target.value })} className={`${INPUT_CLASS} md:col-span-2 xl:col-span-3`} placeholder="Descricao ou recomendacao tecnica" />
                     <input aria-label={`Observacoes do item de manutencao ${idx + 1}`} value={item.notes || ""} onChange={(e) => updateMaintenanceItem(idx, { notes: e.target.value })} className={`${INPUT_CLASS} md:col-span-2`} placeholder="Observacoes" />
@@ -765,9 +766,9 @@ export default function EquipmentModelsPage() {
                       }}
                       placeholder="Buscar item no catalogo"
                     />
-                    <select value={item.serviceGroup} onChange={(e) => updateBaseItem(idx, { serviceGroup: e.target.value as ServiceGroup })} className={INPUT_CLASS}>
+                    <SelectField value={item.serviceGroup} onChange={(e) => updateBaseItem(idx, { serviceGroup: e.target.value as ServiceGroup })} className={INPUT_CLASS}>
                       {GROUPS.map((group) => <option key={group.value} value={group.value}>{group.label}</option>)}
-                    </select>
+                    </SelectField>
                     <input type="number" min={1} value={item.defaultQuantity} onChange={(e) => updateBaseItem(idx, { defaultQuantity: Number(e.target.value || 1) })} className={INPUT_CLASS} />
                     <button type="button" onClick={() => removeBaseItem(idx)} className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 font-semibold text-red-700 hover:bg-red-100">
                       Remover

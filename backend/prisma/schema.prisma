@@ -1528,6 +1528,7 @@ model GeneratorModelMaintenanceTemplate {
 }
 
 model Generator {
+  photoUrl                     String?
   id                           String                     @id @default(uuid())
   code                         String                     @unique @default(dbgenerated())
   legacyCode                   String?                    @unique
@@ -1642,6 +1643,7 @@ model CatalogItem {
   name                   String
   description            String?
   commercialDescription  String?
+  photoUrl               String?
   category               String?
   subcategory            String?
   type                   ItemType

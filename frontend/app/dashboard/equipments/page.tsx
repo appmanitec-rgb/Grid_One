@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import { MetricCard as SummaryMetric, PageHeader } from "../components/DashboardPageKit";
 
 import Link from "next/link";
@@ -322,7 +323,7 @@ export default function EquipmentsPage() {
                     className="break-words text-lg font-bold leading-snug text-slate-950"
                     title={displayTitle}
                   >
-                    <button type="button" onClick={() => setSelectedEquipmentId(item.id)} className="dashboard-record-link text-left" title="Abrir cadastro rápido do equipamento">
+                    <button type="button" onClick={() => setSelectedEquipmentId(item.id)} className="dashboard-record-link text-left" title="Abrir resumo do equipamento">
                       {displayTitle}
                     </button>
                   </h2>
@@ -477,7 +478,7 @@ function FilterSelect({
   return (
     <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
       {label}
-      <select
+      <SelectField
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-sm font-medium normal-case text-zinc-700"
@@ -487,7 +488,7 @@ function FilterSelect({
             {optionLabel}
           </option>
         ))}
-      </select>
+      </SelectField>
     </label>
   );
 }

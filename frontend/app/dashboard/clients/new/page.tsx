@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import { SelectField, SuggestionInput } from "@/app/dashboard/components/SelectField";
 import { PageHeader } from "../../components/DashboardPageKit";
 
 import { useEffect, useState } from "react";
@@ -637,7 +638,7 @@ export default function NewClientPage() {
                 <label className="block text-sm font-bold text-zinc-700 mb-1">
                   Tipo do Cliente *
                 </label>
-                <select
+                <SelectField searchable
                   value={formData.clientType}
                   onChange={(e) =>
                     setFormData({ ...formData, clientType: e.target.value })
@@ -646,7 +647,7 @@ export default function NewClientPage() {
                 >
                   <option value="NO_CONTRACT">Sem Contrato</option>
                   <option value="CONTRACT">Com Contrato</option>
-                </select>
+                </SelectField>
               </div>
 
               <div>
@@ -716,7 +717,7 @@ export default function NewClientPage() {
                 <label className="block text-sm font-bold text-zinc-700 mb-1">
                   Condicao de Pagamento
                 </label>
-                <input
+                <SuggestionInput aria-label="UF"
                   type="text"
                   value={formData.paymentTermDefault}
                   onChange={(e) =>
@@ -725,11 +726,10 @@ export default function NewClientPage() {
                       paymentTermDefault: e.target.value,
                     })
                   }
-                  list="client-payment-term-options"
+
                   placeholder="Ex: 28 dias, 30/60"
                   className="w-full border border-zinc-300 rounded-lg p-3 bg-zinc-50 focus:bg-white outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-                <datalist id="client-payment-term-options">
+                >
                   {controlOptions.paymentTerms.map((option) => (
                     <option
                       key={option.id}
@@ -737,7 +737,8 @@ export default function NewClientPage() {
                       label={optionLabel(option)}
                     />
                   ))}
-                </datalist>
+                </SuggestionInput>
+
               </div>
 
               <div>
@@ -775,7 +776,7 @@ export default function NewClientPage() {
                 <label className="block text-sm font-bold text-zinc-700 mb-1">
                   Retem INSS?
                 </label>
-                <select
+                <SelectField
                   value={formData.withholdsInss ? "YES" : "NO"}
                   onChange={(e) =>
                     setFormData({
@@ -787,14 +788,14 @@ export default function NewClientPage() {
                 >
                   <option value="NO">Nao</option>
                   <option value="YES">Sim</option>
-                </select>
+                </SelectField>
               </div>
 
               <div>
                 <label className="block text-sm font-bold text-zinc-700 mb-1">
                   Retem ISS?
                 </label>
-                <select
+                <SelectField
                   value={formData.withholdsIss ? "YES" : "NO"}
                   onChange={(e) =>
                     setFormData({
@@ -806,7 +807,7 @@ export default function NewClientPage() {
                 >
                   <option value="NO">Nao</option>
                   <option value="YES">Sim</option>
-                </select>
+                </SelectField>
               </div>
 
               <div className="md:col-span-2">
@@ -1024,7 +1025,7 @@ export default function NewClientPage() {
                       }
                       className="border border-zinc-300 rounded-lg p-2.5 bg-white"
                     />
-                    <select
+                    <SelectField
                       value={contact.status}
                       onChange={(e) =>
                         updateContact(
@@ -1038,7 +1039,7 @@ export default function NewClientPage() {
                       <option value="ACTIVE">Ativo</option>
                       <option value="INACTIVE">Inativo</option>
                       <option value="LEFT_COMPANY">Saiu da empresa</option>
-                    </select>
+                    </SelectField>
                     <input
                       type="text"
                       placeholder="Cargo"
@@ -1208,7 +1209,7 @@ export default function NewClientPage() {
                         }
                         className="border border-zinc-300 rounded-lg p-2.5 bg-white"
                       />
-                      <select
+                      <SelectField
                         value={machine.brand}
                         onChange={(e) => {
                           updateMachine(index, "brand", e.target.value);
@@ -1222,8 +1223,8 @@ export default function NewClientPage() {
                             {brand}
                           </option>
                         ))}
-                      </select>
-                      <select
+                      </SelectField>
+                      <SelectField
                         value={machine.model}
                         onChange={(e) =>
                           updateMachine(index, "model", e.target.value)
@@ -1242,7 +1243,7 @@ export default function NewClientPage() {
                             {model}
                           </option>
                         ))}
-                      </select>
+                      </SelectField>
                       <input
                         type="number"
                         min="0"
@@ -1349,12 +1350,12 @@ function AddressFields({
         onChange={(e) => onChange({ ...value, city: e.target.value })}
         className="md:col-span-2 border border-zinc-300 rounded-lg p-2.5 bg-zinc-50"
       />
-      <input
+      <SuggestionInput aria-label="UF" id={listId}
         type="text"
         placeholder="UF *"
         maxLength={2}
         value={value.state}
-        list={listId}
+
         onChange={(e) =>
           onChange({
             ...value,
@@ -1362,12 +1363,12 @@ function AddressFields({
           })
         }
         className="border border-zinc-300 rounded-lg p-2.5 bg-zinc-50 uppercase"
-      />
-      <datalist id={listId}>
+      >
         {stateOptions.map((option) => (
           <option key={option.id} value={option.code} label={option.name} />
         ))}
-      </datalist>
+      </SuggestionInput>
+
       <input
         type="text"
         placeholder="Pais"

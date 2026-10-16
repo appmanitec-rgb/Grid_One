@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import { commercialLabel } from "@/lib/commercial-labels";
 
 import Link from "next/link";
@@ -110,10 +111,10 @@ export default function FiscalDocumentsPage() {
         {data?.issuers.length || 0} empresa(s) cadastrada(s). Para operar com os dois CNPJs, complete os dois cadastros fiscais e homologue cada tipo de nota separadamente.
       </div>
       <label className="mb-4 block max-w-xl text-xs font-semibold uppercase tracking-wide text-slate-600">Empresa emitente
-        <select className={`${field} mt-1`} value={draft.issuerCompanyId} onChange={(event) => setDraft((current) => ({ ...current, issuerCompanyId: event.target.value }))}>
+        <SelectField className={`${field} mt-1`} value={draft.issuerCompanyId} onChange={(event) => setDraft((current) => ({ ...current, issuerCompanyId: event.target.value }))}>
           <option value="">Selecione o CNPJ emitente</option>
           {data?.issuers.map((issuer) => <option key={issuer.id} value={issuer.id}>{issuer.companyName || "Empresa sem nome"} · {issuer.cnpj || "CNPJ pendente"}</option>)}
-        </select>
+        </SelectField>
       </label>
       <div className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
         {[
@@ -137,16 +138,16 @@ export default function FiscalDocumentsPage() {
         <div>
           <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">Buscar conta a receber</label>
           <input className={`${field} mt-1`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cliente, CNPJ ou descrição" disabled={!!editingId} />
-          <select className={`${field} mt-2`} value={draft.receivableId} disabled={!!editingId} onChange={(event) => setDraft((current) => ({ ...current, receivableId: event.target.value }))}>
+          <SelectField className={`${field} mt-2`} value={draft.receivableId} disabled={!!editingId} onChange={(event) => setDraft((current) => ({ ...current, receivableId: event.target.value }))}>
             <option value="">Selecione a conta</option>
             {matchingReceivables.map((item) => <option key={item.id} value={item.id}>{item.client.companyName} · {item.description} · {money(item.grossAmount)}</option>)}
             {selectedReceivable && !matchingReceivables.some((item) => item.id === selectedReceivable.id) && <option value={selectedReceivable.id}>{selectedReceivable.client.companyName} · {selectedReceivable.description}</option>}
-          </select>
+          </SelectField>
         </div>
         <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">Tipo de nota
-          <select className={`${field} mt-1`} value={draft.kind} disabled={!!editingId} onChange={(event) => setDraft((current) => ({ ...current, kind: event.target.value as Kind, items: [blankItem()] }))}>
+          <SelectField className={`${field} mt-1`} value={draft.kind} disabled={!!editingId} onChange={(event) => setDraft((current) => ({ ...current, kind: event.target.value as Kind, items: [blankItem()] }))}>
             <option value="NFSE">NFS-e · serviços</option><option value="NFE">NF-e · produtos</option>
-          </select>
+          </SelectField>
         </label>
       </div>
       <div className="mt-5 space-y-3">

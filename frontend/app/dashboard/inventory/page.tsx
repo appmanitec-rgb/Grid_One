@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import { PageHeader } from "../components/DashboardPageKit";
 
 import Link from "next/link";
@@ -161,12 +162,12 @@ export default function InventoryPage() {
 
       <section className="rounded-xl border border-zinc-200 bg-white p-4 space-y-3">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <select value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm">
+          <SelectField value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm">
             <option value="">Todos almoxarifados</option>
             {warehouses.map((wh) => (
               <option key={wh.id} value={wh.id}>{wh.code} - {wh.name}</option>
             ))}
-          </select>
+          </SelectField>
 
           <input
             value={search}
@@ -178,19 +179,19 @@ export default function InventoryPage() {
 
         {canAdjust ? (
           <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
-            <select value={adjustWarehouseId} onChange={(event) => setAdjustWarehouseId(event.target.value)} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm">
+            <SelectField value={adjustWarehouseId} onChange={(event) => setAdjustWarehouseId(event.target.value)} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm">
               <option value="">Almoxarifado do ajuste</option>
               {warehouses.map((wh) => (
                 <option key={wh.id} value={wh.id}>{wh.code} - {wh.name}</option>
               ))}
-            </select>
+            </SelectField>
 
-            <select value={adjustItemId} onChange={(event) => setAdjustItemId(event.target.value)} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm">
+            <SelectField searchable value={adjustItemId} onChange={(event) => setAdjustItemId(event.target.value)} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm">
               <option value="">Item</option>
               {rows.map((row) => (
                 <option key={`${row.warehouseId}-${row.catalogItemId}`} value={row.catalogItemId}>{row.item}</option>
               ))}
-            </select>
+            </SelectField>
 
             <input value={adjustDelta} onChange={(event) => setAdjustDelta(event.target.value)} placeholder="+10 ou -2" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
 

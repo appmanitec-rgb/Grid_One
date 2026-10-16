@@ -1,5 +1,6 @@
 "use client";
 
+import { SuggestionInput } from "@/app/dashboard/components/SelectField";
 import { useRouter } from "next/navigation";
 import {
   ChangeEvent,
@@ -370,18 +371,18 @@ export default function SupplierFormPage() {
               </FormField>
 
               <FormField label="Condicao de pagamento" className="md:col-span-2">
-                <TextInput
+                <SuggestionInput aria-label="Condição de pagamento"
                   name="paymentTerm"
                   value={formData.paymentTerm}
                   onChange={onChange}
-                  list="supplier-payment-term-options"
+
                   placeholder="Ex: 28 ddl, 50/50, a vista com desconto"
-                />
-                <datalist id="supplier-payment-term-options">
+                >
                   {controlOptions.paymentTerms.map((option) => (
                     <option key={option.id} value={option.name} label={optionLabel(option)} />
                   ))}
-                </datalist>
+                </SuggestionInput>
+
               </FormField>
             </div>
           </SectionCard>
@@ -411,7 +412,7 @@ export default function SupplierFormPage() {
               </FormField>
 
               <FormField label="Estado">
-                <TextInput
+                <SuggestionInput aria-label="Estado"
                   name="state"
                   value={formData.state}
                   onChange={(event) =>
@@ -420,14 +421,14 @@ export default function SupplierFormPage() {
                       state: event.target.value.toUpperCase().slice(0, 2),
                     }))
                   }
-                  list="supplier-state-options"
+
                   placeholder="UF"
-                />
-                <datalist id="supplier-state-options">
+                >
                   {controlOptions.states.map((option) => (
                     <option key={option.id} value={option.code} label={option.name} />
                   ))}
-                </datalist>
+                </SuggestionInput>
+
               </FormField>
 
               <FormField label="Cidade">

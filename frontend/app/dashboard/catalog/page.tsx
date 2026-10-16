@@ -1,5 +1,7 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
+
 import { PageHeader } from "../components/DashboardPageKit";
 
 import Link from "next/link";
@@ -250,7 +252,7 @@ export default function CatalogPage() {
                           type="button"
                           onClick={() => setSelectedItemId(item.id)}
                           className="dashboard-record-link text-left"
-                          title="Abrir cadastro rápido do item"
+                          title={item.type === "SERVICE" ? "Abrir resumo do serviço" : "Abrir resumo da peça"}
                         >
                           {item.name}
                         </button>
@@ -362,7 +364,7 @@ function SelectFilter({
   return (
     <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
       {label}
-      <select
+      <SelectField
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-sm font-medium normal-case text-zinc-700"
@@ -372,7 +374,7 @@ function SelectFilter({
             {option.label}
           </option>
         ))}
-      </select>
+      </SelectField>
     </label>
   );
 }

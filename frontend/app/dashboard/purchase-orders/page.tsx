@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import { PageHeader } from "../components/DashboardPageKit";
 
 import Link from "next/link";
@@ -216,12 +217,12 @@ export default function PurchaseOrdersPage() {
       <section className="rounded-xl border border-zinc-200 bg-white p-4 space-y-3">
         <h2 className="text-lg font-bold text-zinc-800">Novo Pedido (a partir da reposicao sugerida)</h2>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-          <select aria-label="Fornecedor do pedido" value={supplierId} onChange={(event) => setSupplierId(event.target.value)} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm">
+          <SelectField searchable aria-label="Fornecedor do pedido" value={supplierId} onChange={(event) => setSupplierId(event.target.value)} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm">
             <option value="">Fornecedor</option>
             {suppliers.map((supplier) => (
               <option key={supplier.id} value={supplier.id}>{supplier.companyName}</option>
             ))}
-          </select>
+          </SelectField>
 
           <input aria-label="Data prevista do pedido" type="date" value={expectedDate} onChange={(event) => setExpectedDate(event.target.value)} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
           <input aria-label="Condição de pagamento" value={paymentTerm} onChange={(event) => setPaymentTerm(event.target.value)} placeholder="Prazo (30/60/90)" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
@@ -257,11 +258,11 @@ export default function PurchaseOrdersPage() {
       <section className="rounded-xl border border-zinc-200 bg-white p-4 space-y-3">
         <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
           <label htmlFor="purchase-receive-warehouse" className="text-sm font-semibold text-zinc-700">Almoxarifado para recebimento</label>
-          <select id="purchase-receive-warehouse" value={receiveWarehouseId} onChange={(event) => setReceiveWarehouseId(event.target.value)} className="rounded border border-zinc-300 px-2 py-1 text-xs">
+          <SelectField id="purchase-receive-warehouse" value={receiveWarehouseId} onChange={(event) => setReceiveWarehouseId(event.target.value)} className="rounded border border-zinc-300 px-2 py-1 text-xs">
             {warehouses.map((wh) => (
               <option key={wh.id} value={wh.id}>{wh.code} - {wh.name}</option>
             ))}
-          </select>
+          </SelectField>
         </div>
 
         {orders.length === 0 ? (
@@ -282,14 +283,14 @@ export default function PurchaseOrdersPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <select aria-label={`Status do pedido ${order.code}`} value={order.status} onChange={(event) => void updateStatus(order.id, event.target.value as PurchaseOrder["status"])} className="rounded border border-zinc-300 px-2 py-1 text-xs">
+                    <SelectField aria-label={`Status do pedido ${order.code}`} value={order.status} onChange={(event) => void updateStatus(order.id, event.target.value as PurchaseOrder["status"])} className="rounded border border-zinc-300 px-2 py-1 text-xs">
                       <option value="DRAFT">Rascunho</option>
                       <option value="SENT">Enviado</option>
                       <option value="APPROVED">Aprovado</option>
                       <option value="PARTIALLY_RECEIVED">Parcial</option>
                       <option value="RECEIVED">Recebido</option>
                       <option value="CANCELED">Cancelado</option>
-                    </select>
+                    </SelectField>
 
                     <button type="button" onClick={() => void receiveOrder(order)} className="rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">Receber saldo</button>
                   </div>

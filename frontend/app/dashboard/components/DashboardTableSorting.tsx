@@ -132,7 +132,7 @@ function sortTable(table: HTMLTableElement, columnIndex: number, direction: Sort
 }
 
 function enhanceTable(table: HTMLTableElement) {
-  if (table.dataset.sortEnhanced === "1") return;
+  if (table.dataset.sortEnhanced === "1" || table.dataset.sortSkip === "true") return;
   if (table.closest(".document-print-page")) return;
 
   const headerRow = table.tHead?.rows[0];

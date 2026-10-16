@@ -1,6 +1,7 @@
 ﻿import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -199,6 +200,7 @@ export class GeneratorsService {
       const createData: Prisma.GeneratorUncheckedCreateInput = {
         legacyCode: data.legacyCode?.trim() || undefined,
         name: data.name,
+        photoUrl: data.photoUrl,
         brand: data.brand,
         serialNumber: data.serialNumber,
         power: data.power,
@@ -237,6 +239,69 @@ export class GeneratorsService {
       orderBy: [{ criticality: 'asc' }, { name: 'asc' }],
       select: buildGeneratorListSelect(today),
     });
+  }
+
+  async orderSummary(id: string, actorUserId: string) {
+    const actor = await this.database.user.findUnique({
+      where: { id: actorUserId },
+      select: {
+        role: true,
+        linkedClientId: true,
+        technicianProfile: { select: { id: true } },
+      },
+    });
+    if (!actor) throw new ForbiddenException('Usuario nao identificado.');
+    const generator = await this.database.generator.findUnique({
+      where: { id },
+      select: { id: true, clientId: true },
+    });
+    if (!generator) throw new NotFoundException('Gerador nao encontrado.');
+    if (actor.role === 'CLIENT' && actor.linkedClientId !== generator.clientId)
+      throw new NotFoundException('Gerador nao encontrado.');
+    if (actor.role === 'TECHNICIAN' && !actor.technicianProfile?.id)
+      throw new ForbiddenException('Perfil tecnico nao encontrado.');
+    const scope: Prisma.MaintenanceOrderWhereInput = {
+      generatorId: id,
+      ...(actor.role === 'TECHNICIAN'
+        ? { technicianId: actor.technicianProfile!.id }
+        : {}),
+    };
+    const pending: Prisma.MaintenanceOrderWhereInput = {
+      ...scope,
+      status: { in: ['OPEN', 'IN_PROGRESS'] },
+    };
+    const completed: Prisma.MaintenanceOrderWhereInput = {
+      ...scope,
+      status: 'COMPLETED',
+    };
+    const select = {
+      id: true,
+      title: true,
+      status: true,
+      scheduledTo: true,
+      finishedAt: true,
+    };
+    const [pendingTotal, completedTotal, pendingItems, completedItems] =
+      await Promise.all([
+        this.database.maintenanceOrder.count({ where: pending }),
+        this.database.maintenanceOrder.count({ where: completed }),
+        this.database.maintenanceOrder.findMany({
+          where: pending,
+          select,
+          orderBy: [{ scheduledTo: 'asc' }, { openedAt: 'desc' }],
+          take: 5,
+        }),
+        this.database.maintenanceOrder.findMany({
+          where: completed,
+          select,
+          orderBy: [{ finishedAt: 'desc' }, { openedAt: 'desc' }],
+          take: 5,
+        }),
+      ]);
+    return {
+      pending: { total: pendingTotal, items: pendingItems },
+      completed: { total: completedTotal, items: completedItems },
+    };
   }
 
   async findOne(id: string) {
@@ -438,6 +503,8 @@ export class GeneratorsService {
 
     const updateData: Prisma.GeneratorUncheckedUpdateInput = {};
 
+    if (updateGeneratorDto.photoUrl !== undefined)
+      updateData.photoUrl = updateGeneratorDto.photoUrl;
     if (updateGeneratorDto.name !== undefined)
       updateData.name = updateGeneratorDto.name;
     if (updateGeneratorDto.brand !== undefined)

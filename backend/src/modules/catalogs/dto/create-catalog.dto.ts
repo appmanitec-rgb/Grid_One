@@ -8,6 +8,7 @@
   IsString,
 } from 'class-validator';
 import { ItemType, ProductOrigin } from '@prisma/client';
+import { IsProfilePhoto } from '../../users/profile-photo.validator';
 
 export class CreateCatalogDto {
   @IsString()
@@ -41,6 +42,10 @@ export class CreateCatalogDto {
   @IsString()
   @IsNotEmpty()
   name!: string;
+
+  @IsOptional()
+  @IsProfilePhoto()
+  photoUrl?: string | null;
 
   @IsEnum(ItemType, { message: 'O tipo deve ser PART ou SERVICE validos' })
   @IsNotEmpty()

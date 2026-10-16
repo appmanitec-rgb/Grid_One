@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import { PageHeader } from "../../components/DashboardPageKit";
 
 import { useRouter } from "next/navigation";
@@ -145,7 +146,7 @@ export default function StudioHistoryPage() {
           </label>
           <label className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
             Dominio
-            <select
+            <SelectField
               value={domain}
               onChange={(event) => setDomain(event.target.value)}
               className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium normal-case text-slate-800"
@@ -155,7 +156,7 @@ export default function StudioHistoryPage() {
                   {item === "ALL" ? "Todos" : item}
                 </option>
               ))}
-            </select>
+            </SelectField>
           </label>
           <button
             type="button"

@@ -1,4 +1,5 @@
 "use client";
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import { WorkspaceState } from "@/app/dashboard/components/WorkspaceState";
 import { PageHeader } from "@/app/dashboard/components/DashboardPageKit";
 import { FormEvent, useEffect, useState } from "react";
@@ -85,7 +86,7 @@ export default function PortalRequestsPage() {
 
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
           <Field label="Equipamento">
-            <select
+            <SelectField searchable
               value={form.equipmentId}
               onChange={(event) => setForm((current) => ({ ...current, equipmentId: event.target.value }))}
               className="w-full rounded-md border border-slate-300 p-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
@@ -96,7 +97,7 @@ export default function PortalRequestsPage() {
                   {item.name} {item.serialNumber ? `- ${item.serialNumber}` : ""}
                 </option>
               ))}
-            </select>
+            </SelectField>
           </Field>
 
           <Field label="Tipo de serviço">
@@ -110,7 +111,7 @@ export default function PortalRequestsPage() {
           </Field>
 
           <Field label="Urgência">
-            <select
+            <SelectField
               value={form.urgency}
               onChange={(event) => setForm((current) => ({ ...current, urgency: event.target.value }))}
               className="w-full rounded-md border border-slate-300 p-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
@@ -119,7 +120,7 @@ export default function PortalRequestsPage() {
               <option value="NORMAL">Normal</option>
               <option value="HIGH">Alta</option>
               <option value="EMERGENCY">Emergencial</option>
-            </select>
+            </SelectField>
           </Field>
 
           <Field label="Descrição">

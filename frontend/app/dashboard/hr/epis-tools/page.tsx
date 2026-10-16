@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import { PageHeader } from "../../components/DashboardPageKit";
 
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
@@ -158,13 +159,13 @@ function SelectFilter({
   return (
     <label className="space-y-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
       <span>{label}</span>
-      <select
+      <SelectField
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium normal-case tracking-normal text-slate-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
       >
         {children}
-      </select>
+      </SelectField>
     </label>
   );
 }
@@ -920,7 +921,7 @@ export default function EpisToolsPage() {
             placeholder="Buscar item, SKU ou descricao..."
             emptyLabel="Nenhum item encontrado."
           />
-          <select
+          <SelectField
             value={assetType}
             onChange={(event) => handleAssetTypeChange(event.target.value as AssetType)}
             className="h-10 rounded-lg border border-zinc-300 px-3 text-sm"
@@ -930,7 +931,7 @@ export default function EpisToolsPage() {
                 {ASSET_TYPE_LABEL[type]}
               </option>
             ))}
-          </select>
+          </SelectField>
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
@@ -1039,7 +1040,7 @@ export default function EpisToolsPage() {
                     <td className="px-2 py-2 text-zinc-700">{formatDate(item.deliveredAt)}</td>
                     <td className="px-2 py-2 text-zinc-700">{formatDate(item.expiresAt)}</td>
                     <td className="px-2 py-2">
-                      <select
+                      <SelectField
                         value={item.status}
                         disabled={item.status === "RETURNED"}
                         onChange={(event) =>
@@ -1055,7 +1056,7 @@ export default function EpisToolsPage() {
                             {ASSET_STATUS_LABEL[status as AssetStatus]}
                           </option>
                         ))}
-                      </select>
+                      </SelectField>
                     </td>
                     <td className="px-2 py-2 text-zinc-700">
                       {item.signedTermUrl ? (

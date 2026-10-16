@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -806,7 +807,7 @@ export default function DashboardPage() {
                 placeholder="Pesquisar no kanban..."
                 className="h-10 min-w-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-4 focus:ring-sky-100 xl:min-w-[280px]"
               />
-              <select
+              <SelectField
                 value={pipelineStatusFilter}
                 onChange={(event) =>
                   setPipelineStatusFilter(event.target.value)
@@ -819,7 +820,7 @@ export default function DashboardPage() {
                     {column.label}
                   </option>
                 ))}
-              </select>
+              </SelectField>
               {pipelineCounts
                 .filter((column) => column.total > 0)
                 .slice(0, 3)

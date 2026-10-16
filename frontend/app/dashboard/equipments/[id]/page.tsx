@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField as SearchableField } from "@/app/dashboard/components/SelectField";
 import { MetricCard as SummaryMetric, PageHeader } from "../../components/DashboardPageKit";
 
 import { useParams } from "next/navigation";
@@ -19,6 +20,7 @@ type Equipment = {
   code: string;
   name: string;
   brand: string;
+  photoUrl?: string | null;
   serialNumber?: string | null;
   power: number;
   hourMeter?: number | null;
@@ -217,6 +219,7 @@ const DATE_FIELDS = [
 export default function EquipmentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [equipment, setEquipment] = useState<Equipment | null>(null);
+  const [failedPhoto, setFailedPhoto] = useState("");
   const [form, setForm] = useState<EditForm>({});
   const [tab, setTab] = useState<TabKey>("resumo");
   const [error, setError] = useState("");
@@ -433,9 +436,17 @@ export default function EquipmentDetailPage() {
         ]}
       />
 
-      <PageHeader eyebrow="Prontuário técnico operacional" title={equipment.name} description={<><span className="tabular-nums font-semibold text-slate-700">{equipment.code}</span>{" | "}{equipment.assetTag || "Sem tag"}| Serie{" "}{equipment.serialNumber || "nao informada"}|{" "}{equipment.power}kVA
-            </>} actions={<>
-{equipment.client?.id ? (
+      <div className={equipment.photoUrl ? "grid gap-4 sm:grid-cols-[minmax(0,1fr)_220px]" : undefined}>
+        <PageHeader
+          eyebrow="Prontuário técnico operacional"
+          title={equipment.name}
+          description={<>
+            <span className="tabular-nums font-semibold text-slate-700">{equipment.code}</span>
+            {" · "}{equipment.assetTag || "Sem tag"}
+            {" · Série "}{equipment.serialNumber || "não informada"}
+            {" · "}{equipment.power} kVA
+          </>}
+          actions={equipment.client?.id ? (
             <PermissionAwareLink
               href={`/dashboard/clients/${equipment.client.id}`}
               permission="clients.view"
@@ -444,8 +455,24 @@ export default function EquipmentDetailPage() {
               Abrir cliente
             </PermissionAwareLink>
           ) : null}
-</>} />
-<div className="dashboard-metrics-grid">
+        />
+        {equipment.photoUrl ? (
+          <figure aria-label="Foto do equipamento" className="flex h-44 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+            {failedPhoto === equipment.photoUrl ? (
+              <p className="px-4 text-center text-sm text-slate-500">Foto indisponível</p>
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={equipment.photoUrl}
+                alt="Foto do equipamento do cliente"
+                className="h-full w-full rounded-xl object-contain"
+                onError={() => setFailedPhoto(equipment.photoUrl || "")}
+              />
+            )}
+          </figure>
+        ) : null}
+      </div>
+      <div className="dashboard-metrics-grid">
           <Metric label="Status" value={statusLabel(equipment.operationalStatus)} />
           <Metric label="Criticidade" value={equipment.criticality || "-"} />
           <Metric
@@ -762,13 +789,13 @@ export default function EquipmentDetailPage() {
                   }}
                   placeholder="Buscar no catalogo geral"
                 />
-                <select
+                <SearchableField
                   value={newBaseItem.serviceGroup}
                   onChange={(event) => setNewBaseItem((current) => ({ ...current, serviceGroup: event.target.value }))}
                   className={INPUT_CLASS}
                 >
                   {SERVICE_GROUP_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select>
+                </SearchableField>
                 <input
                   type="number"
                   min="1"
@@ -803,14 +830,14 @@ export default function EquipmentDetailPage() {
                         {item.isCustomized ? <span className="rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700">Quantidade personalizada</span> : null}
                       </div>
                     </div>
-                    <select
+                    <SearchableField
                       value={item.serviceGroup}
                       disabled={!canEdit}
                       onChange={(event) => setBaseItems((current) => current.map((candidate, itemIndex) => itemIndex === index ? { ...candidate, serviceGroup: event.target.value } : candidate))}
                       className={INPUT_CLASS}
                     >
                       {SERVICE_GROUP_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                    </select>
+                    </SearchableField>
                     <input
                       type="number"
                       min="1"
@@ -1150,7 +1177,7 @@ function SelectField({
 }: FieldProps & { options: ReadonlyArray<readonly [string, string]> }) {
   return (
     <Field label={label}>
-      <select
+      <SearchableField
         data-testid={`equipment-field-${field}`}
         value={form[field] || ""}
         onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
@@ -1161,7 +1188,7 @@ function SelectField({
             {optionLabel}
           </option>
         ))}
-      </select>
+      </SearchableField>
     </Field>
   );
 }

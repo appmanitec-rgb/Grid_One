@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -172,7 +173,7 @@ export default function ServiceReportsPage() {
         >
           <form onSubmit={createReport} className="grid gap-4 lg:grid-cols-2">
             <FormField label="OS">
-              <select
+              <SelectField searchable
                 value={form.maintenanceOrderId}
                 onChange={(event) =>
                   setForm((current) => ({
@@ -188,7 +189,7 @@ export default function ServiceReportsPage() {
                     {order.title} - {order.generator?.name || "sem equipamento"}
                   </option>
                 ))}
-              </select>
+              </SelectField>
             </FormField>
             <FormField label="Titulo">
               <TextInput
@@ -279,7 +280,7 @@ export default function ServiceReportsPage() {
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Buscar por cliente, OS, equipamento ou codigo"
           />
-          <select
+          <SelectField
             value={statusFilter}
             onChange={(event) =>
               setStatusFilter(event.target.value as "ALL" | ReportStatus)
@@ -291,7 +292,7 @@ export default function ServiceReportsPage() {
                 {status === "ALL" ? "Todos os status" : REPORT_STATUS_LABELS[status]}
               </option>
             ))}
-          </select>
+          </SelectField>
         </div>
 
         {loading ? <EmptyState text="Carregando laudos..." /> : null}

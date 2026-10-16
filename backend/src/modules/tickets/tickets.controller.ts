@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  ForbiddenException,
   Param,
   Patch,
   Post,
@@ -21,6 +22,7 @@ import {
   ListTicketsQueryDto,
   TicketActionNoteDto,
   UpdateTicketDto,
+  TicketWorkspaceQueryDto,
 } from './dto/ticket.dto';
 import { TicketsService } from './tickets.service';
 
@@ -35,14 +37,37 @@ export class TicketsController {
     return this.ticketsService.findAll(query);
   }
 
+  @Get('workspace')
+  workspace(@Req() req: Request, @Query() query: TicketWorkspaceQueryDto) {
+    return this.ticketsService.workspace(query, this.extractUserId(req));
+  }
+
+  @Get('create-options')
+  @RequireAccessPolicy('tickets.create')
+  createOptions(@Query() query: ListTicketsQueryDto) {
+    return this.ticketsService.createOptions(query.clientId);
+  }
+
+  @Get('assignees')
+  assignees() {
+    return this.ticketsService.assignees();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.ticketsService.findOne(id);
   }
 
+  @Get(':id/equipment-options')
+  @RequireAccessPolicy('tickets.convertToOrder')
+  equipmentOptions(@Param('id') id: string) {
+    return this.ticketsService.equipmentOptions(id);
+  }
+
   @Post()
   @RequireAccessPolicy('tickets.create')
   create(@Req() req: Request, @Body() dto: CreateTicketDto) {
+    this.assertAssignmentPermission(req, dto);
     return this.ticketsService.createInternal(
       dto,
       this.extractUserId(req),
@@ -57,6 +82,7 @@ export class TicketsController {
     @Param('id') id: string,
     @Body() dto: UpdateTicketDto,
   ) {
+    this.assertAssignmentPermission(req, dto);
     return this.ticketsService.update(
       id,
       dto,
@@ -152,6 +178,30 @@ export class TicketsController {
       dto,
       this.extractUserId(req),
       this.extractMetadata(req),
+    );
+  }
+
+  private assertAssignmentPermission(
+    req: Request,
+    dto: { assignedToUserId?: string | null; technicianId?: string | null },
+  ) {
+    if (dto.assignedToUserId === undefined && dto.technicianId === undefined)
+      return;
+    const user = req['user'] as
+      | {
+          role?: string;
+          isSystemMaster?: boolean;
+          accessPolicy?: { tickets?: { assign?: boolean } };
+        }
+      | undefined;
+    if (
+      user?.role === 'ADMIN' ||
+      user?.isSystemMaster ||
+      user?.accessPolicy?.tickets?.assign
+    )
+      return;
+    throw new ForbiddenException(
+      'Seu perfil não permite atribuir responsáveis.',
     );
   }
 

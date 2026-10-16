@@ -1,5 +1,9 @@
 // Labels are for presentation only. Persist the original value in API requests.
 const LABELS: Record<string, string> = {
+  OPERATING: "Em operação",
+  STOPPED_BY_FAILURE: "Parado por falha",
+  IN_MAINTENANCE: "Em manutenção",
+  DEACTIVATED: "Desativado",
   PREVENTIVE: "Preventiva",
   CORRECTIVE: "Corretiva",
   PREDICTIVE: "Preditiva",

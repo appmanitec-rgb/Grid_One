@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import Link from "next/link";
 import PaymentPlanEditor from "../../PaymentPlanEditor";
 import { type ProposalPaymentPlan } from "@/lib/proposal-payment-plan";
@@ -640,7 +641,7 @@ export default function GeneratorProposalWizardPage() {
                 setClientLookupOpen(true);
               }}
             >
-              {clients.map((client) => (
+              {clients.slice(0, 10).map((client) => (
                 <LookupOption
                   key={client.id}
                   title={client.companyName}
@@ -669,7 +670,7 @@ export default function GeneratorProposalWizardPage() {
                 setSellerLookupOpen(true);
               }}
             >
-              {sellers.map((seller) => (
+              {sellers.slice(0, 10).map((seller) => (
                 <LookupOption
                   key={seller.id}
                   title={seller.name}
@@ -730,7 +731,7 @@ export default function GeneratorProposalWizardPage() {
             <label className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Escolher manualmente</label>
             <input className={INPUT_CLASS} value={manualSearch} onChange={(event) => setManualSearch(event.target.value)} placeholder="Buscar codigo, linha ou modelo" />
             <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {manualCatalog.slice(0, 12).map((generator) => (
+              {manualCatalog.slice(0, 10).map((generator) => (
                 <GeneratorCard key={generator.id} generator={generator} selected={selectedGenerator?.id === generator.id} onSelect={() => setSelectedGenerator(generator)} compact />
               ))}
             </div>
@@ -771,10 +772,10 @@ export default function GeneratorProposalWizardPage() {
           {includeInstallation ? (
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <Field label="Vistoria comercial">
-                <select className={INPUT_CLASS} value={inspectionId} onChange={(event) => setInspectionId(event.target.value)}>
+                <SelectField className={INPUT_CLASS} value={inspectionId} onChange={(event) => setInspectionId(event.target.value)}>
                   <option value="">Sem vistoria vinculada</option>
                   {(linkedOpportunity?.inspections || []).map((inspection) => <option key={inspection.id} value={inspection.id}>{inspection.code} · {commercialLabel(inspection.status)}</option>)}
-                </select>
+                </SelectField>
               </Field>
               <Field label="Dados complementares">
                 <textarea className={INPUT_CLASS} rows={5} value={installationNotes} onChange={(event) => setInstallationNotes(event.target.value)} placeholder="Acesso, infraestrutura, tubulacao, icamento e observacoes." />
@@ -857,7 +858,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function Select({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[][] }) {
-  return <select className={INPUT_CLASS} value={value} onChange={(event) => onChange(event.target.value)}>{options.map(([optionValue, label]) => <option key={optionValue} value={optionValue}>{label}</option>)}</select>;
+  return <SelectField className={INPUT_CLASS} value={value} onChange={(event) => onChange(event.target.value)}>{options.map(([optionValue, label]) => <option key={optionValue} value={optionValue}>{label}</option>)}</SelectField>;
 }
 
 function LookupField({ label, value, locked, open, loading, error, hasResults, emptyText, onChange, onOpenChange, children }: {

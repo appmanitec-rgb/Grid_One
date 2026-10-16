@@ -5,6 +5,7 @@ import {
   IsEmail,
   IsEnum,
   IsInt,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -76,6 +77,45 @@ export class ListTicketsQueryDto {
   @IsString()
   @IsOptional()
   overdue?: string;
+}
+
+export class TicketWorkspaceQueryDto extends ListTicketsQueryDto {
+  @IsIn([
+    'ALL',
+    'ACTIVE',
+    'NEW',
+    'UNASSIGNED',
+    'WAITING',
+    'OVERDUE',
+    'DUE_SOON',
+    'MINE',
+  ])
+  @IsOptional()
+  bucket?:
+    | 'ALL'
+    | 'ACTIVE'
+    | 'NEW'
+    | 'UNASSIGNED'
+    | 'WAITING'
+    | 'OVERDUE'
+    | 'DUE_SOON'
+    | 'MINE';
+
+  @IsEnum(TicketCategory)
+  @IsOptional()
+  category?: TicketCategory;
+
+  @IsIn(['NEW', 'IN_PROGRESS', 'WAITING', 'SCHEDULED', 'ORDER', 'DONE'])
+  @IsOptional()
+  column?: 'NEW' | 'IN_PROGRESS' | 'WAITING' | 'SCHEDULED' | 'ORDER' | 'DONE';
+
+  @IsIn(['list', 'board'])
+  @IsOptional()
+  view?: 'list' | 'board';
+
+  @IsIn(['urgency', 'updated', 'newest', 'oldest'])
+  @IsOptional()
+  sort?: 'urgency' | 'updated' | 'newest' | 'oldest';
 }
 
 export class CreateTicketDto {
@@ -215,11 +255,11 @@ export class AddTicketCommentDto {
 export class AssignTicketDto {
   @IsUUID()
   @IsOptional()
-  assignedToUserId?: string;
+  assignedToUserId?: string | null;
 
   @IsUUID()
   @IsOptional()
-  technicianId?: string;
+  technicianId?: string | null;
 }
 
 export class ConvertTicketToOrderDto {

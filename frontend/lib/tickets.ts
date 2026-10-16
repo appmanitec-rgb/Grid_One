@@ -56,6 +56,12 @@ export type ServiceTicket = {
     companyName: string;
     tradeName?: string | null;
     phone?: string | null;
+    email?: string | null;
+    cnpj?: string | null;
+    address?: string | null;
+    city?: string | null;
+    state?: string | null;
+    contactName?: string | null;
   };
   generator?: {
     id: string;
@@ -88,6 +94,9 @@ export type ServiceTicket = {
     id: string;
     user?: { id?: string; name?: string | null; email?: string | null } | null;
   } | null;
+  openedByUser?: { id: string; name: string; role?: string } | null;
+  assignedToUserId?: string | null;
+  technicianId?: string | null;
   comments?: TicketComment[];
 };
 
@@ -116,25 +125,31 @@ export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
 
 export const TICKET_PRIORITY_LABELS: Record<TicketPriority, string> = {
   LOW: "Baixa",
-  MEDIUM: "Media",
+  MEDIUM: "Média",
   HIGH: "Alta",
-  CRITICAL: "Critica",
+  CRITICAL: "Crítica",
 };
 
 export const TICKET_CATEGORY_LABELS: Record<TicketCategory, string> = {
-  CORRECTIVE_MAINTENANCE: "Manutencao corretiva",
-  PREVENTIVE_REQUEST: "Solicitacao preventiva",
-  EMERGENCY: "Emergencia",
-  QUOTE_REQUEST: "Cotacao",
+  CORRECTIVE_MAINTENANCE: "Manutenção corretiva",
+  PREVENTIVE_REQUEST: "Solicitação preventiva",
+  EMERGENCY: "Emergência",
+  QUOTE_REQUEST: "Cotação",
   DOCUMENT_REQUEST: "Documento",
   FINANCIAL: "Financeiro",
   CONTRACT: "Contrato",
-  TECHNICAL_SUPPORT: "Suporte tecnico",
+  TECHNICAL_SUPPORT: "Suporte técnico",
   OTHER: "Outro",
 };
 
-export async function ticketsGet<T>(path = "") {
-  const response = await apiFetch(`/tickets${path}`, { cache: "no-store" });
+export async function ticketsGet<T>(
+  path = "",
+  options: { signal?: AbortSignal } = {},
+) {
+  const response = await apiFetch(`/tickets${path}`, {
+    cache: "no-store",
+    signal: options.signal,
+  });
   if (!response.ok) {
     throw new Error(
       await readApiErrorMessage(response, "Falha ao carregar chamados."),
@@ -192,12 +207,17 @@ export function formatTicketDate(value?: string | null) {
 export function ticketTone(
   ticket: Pick<ServiceTicket, "slaStatus" | "priority" | "status">,
 ) {
-  if (ticket.status === "CANCELED") return "slate";
+  if (
+    ticket.status === "CANCELED" ||
+    ticket.status === "CONVERTED_TO_ORDER" ||
+    ticket.status === "CONVERTING_TO_ORDER"
+  )
+    return "slate";
+  if (ticket.status === "RESOLVED" || ticket.status === "CLOSED")
+    return "emerald";
   if (ticket.slaStatus === "OVERDUE" || ticket.priority === "CRITICAL")
     return "rose";
   if (ticket.slaStatus === "WARNING" || ticket.priority === "HIGH")
     return "amber";
-  if (ticket.status === "RESOLVED" || ticket.status === "CLOSED")
-    return "emerald";
   return "blue";
 }

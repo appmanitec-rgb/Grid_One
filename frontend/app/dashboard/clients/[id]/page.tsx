@@ -9,11 +9,11 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
 import CrmTimeline from "../../components/CrmTimeline";
+import ClientRelationshipMap from "../ClientRelationshipMap";
 import {
   OperationalBreadcrumb,
   PermissionAwareLink,
   QuickActions,
-  RelatedEntityGrid,
 } from "../../components/OperationalLinks";
 
 type ClientAddress = {
@@ -274,15 +274,6 @@ export default function ClientProfilePage() {
   const generators = client.generators ?? [];
   const proposals = client.proposals ?? [];
   const contracts = client.contracts ?? [];
-  const orders = generators.flatMap((generator) =>
-    (generator.orders ?? []).map((order) => ({
-      ...order,
-      generatorId: generator.id,
-      generatorName: generator.name,
-    })),
-  );
-  const tickets = client.serviceTickets ?? [];
-  const serviceReports = client.serviceReports ?? [];
   const logItems = (client.auditLogs ?? [])
     .map((log) => ({
       id: log.id,
@@ -368,51 +359,7 @@ export default function ClientProfilePage() {
         <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">
           Mapa de relacionamentos
         </h2>
-        <RelatedEntityGrid
-          items={[
-            ...generators.slice(0, 6).map((generator) => ({
-              label: generator.name,
-              description: `Equipamento ${generator.serialNumber || "sem serie"} - ${generator.power} kVA`,
-              href: `/dashboard/equipments/${generator.id}`,
-              badge: "Equipamento",
-              tone: "blue" as const,
-              permission: "equipments.view",
-            })),
-            ...contracts.slice(0, 4).map((contract) => ({
-              label: contract.code,
-              description: `${commercialLabel(contract.status)} - vigência até ${new Date(contract.endDate).toLocaleDateString("pt-BR")}`,
-              href: `/dashboard/contracts/${contract.id}`,
-              badge: "Contrato",
-              tone: "emerald" as const,
-              permission: "contracts.view",
-            })),
-            ...orders.slice(0, 5).map((order) => ({
-              label: order.title,
-              description: `${order.generatorName} - ${commercialLabel(order.status)}`,
-              href: `/dashboard/orders/${order.id}`,
-              badge: "O.S.",
-              tone: "amber" as const,
-              permission: "orders.view",
-            })),
-            ...tickets.slice(0, 4).map((ticket) => ({
-              label: ticket.code || ticket.title,
-              description: `${commercialLabel(ticket.status)} - ${ticket.generator?.name || "sem equipamento"}`,
-              href: `/dashboard/atendimento/${ticket.id}`,
-              badge: "Chamado",
-              tone: "rose" as const,
-              permission: "tickets.view",
-            })),
-            ...serviceReports.slice(0, 4).map((report) => ({
-              label: report.code,
-              description: `${report.title || "Laudo técnico"} - ${commercialLabel(report.status)}`,
-              href: `/dashboard/relatorios-tecnicos/${report.id}`,
-              badge: "Laudo",
-              tone: "slate" as const,
-              permission: "serviceReports.view",
-            })),
-          ]}
-          empty="Nenhum relacionamento navegavel encontrado para este cliente."
-        />
+        <ClientRelationshipMap client={client} />
       </section>
 
       <section className="bg-white border border-zinc-200 rounded-xl p-6">

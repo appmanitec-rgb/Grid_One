@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -334,7 +335,7 @@ export default function ContractsPage() {
               placeholder="Buscar por contrato, cliente, titulo ou proposta..."
               className="xl:min-w-[320px]"
             />
-            <select
+            <SelectField
               value={statusFilter}
               onChange={(event) =>
                 setStatusFilter(event.target.value as "ALL" | ContractStatus)
@@ -346,7 +347,7 @@ export default function ContractsPage() {
               <option value="SUSPENDED">Suspensos</option>
               <option value="RENEWAL">Em renovacao</option>
               <option value="CANCELED">Cancelados</option>
-            </select>
+            </SelectField>
           </div>
         }
       >

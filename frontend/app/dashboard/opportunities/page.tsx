@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import { MetricCard as SummaryMetric, PageHeader } from "../components/DashboardPageKit";
 
 import Link from "next/link";
@@ -294,7 +295,7 @@ export default function OpportunitiesPage() {
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       const params = new URLSearchParams({
-        take: "20",
+        take: "10",
         pipeline: formPipeline,
       });
       if (sellerSearch.trim()) params.set("q", sellerSearch.trim());
@@ -643,7 +644,7 @@ export default function OpportunitiesPage() {
             className="rounded-lg border border-zinc-300 px-3 py-2 text-sm md:col-span-2"
             required
           />
-          <select
+          <SelectField searchable
             value={formPipeline}
             onChange={(event) => {
               const nextPipeline = event.target.value as CommercialPipeline;
@@ -659,8 +660,8 @@ export default function OpportunitiesPage() {
                 {PIPELINE_LABEL[pipelineOption]}
               </option>
             ))}
-          </select>
-          <select
+          </SelectField>
+          <SelectField
             value={opportunityType}
             onChange={(event) =>
               setOpportunityType(event.target.value as OpportunityType)
@@ -672,7 +673,7 @@ export default function OpportunitiesPage() {
                 {OPPORTUNITY_TYPE_LABEL[typeOption]}
               </option>
             ))}
-          </select>
+          </SelectField>
           <div className="relative">
             <input
               value={clientSearch}
@@ -695,7 +696,7 @@ export default function OpportunitiesPage() {
                 loading={clientLookupLoading}
                 emptyLabel="Nenhum cliente encontrado."
               >
-                {clients.map((client) => (
+                {clients.slice(0, 10).map((client) => (
                   <button
                     key={client.id}
                     type="button"
@@ -846,7 +847,7 @@ export default function OpportunitiesPage() {
                 loading={sellerLookupLoading}
                 emptyLabel="Nenhum vendedor comercial encontrado."
               >
-                {sellers.map((seller) => (
+                {sellers.slice(0, 10).map((seller) => (
                   <button
                     key={seller.id}
                     type="button"
@@ -871,7 +872,7 @@ export default function OpportunitiesPage() {
               </LookupPanel>
             ) : null}
           </div>
-          <select
+          <SelectField
             value={temperature}
             onChange={(event) => setTemperature(event.target.value as Temperature)}
             className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
@@ -879,7 +880,7 @@ export default function OpportunitiesPage() {
             <option value="HOT">Quente</option>
             <option value="WARM">Morno</option>
             <option value="COLD">Frio</option>
-          </select>
+          </SelectField>
           <input
             value={estimatedValue}
             onChange={(event) => setEstimatedValue(event.target.value)}
@@ -1009,7 +1010,7 @@ export default function OpportunitiesPage() {
                           </Link>
                         ) : null}
                       </div>
-                      <select
+                      <SelectField
                         value={item.stage}
                         disabled={changingStageId === item.id}
                         onChange={(event) =>
@@ -1022,7 +1023,7 @@ export default function OpportunitiesPage() {
                             {STAGE_LABEL[stageOption]}
                           </option>
                         ))}
-                      </select>
+                      </SelectField>
                       {changingStageId === item.id ? (
                         <p className="mt-2 text-xs font-semibold text-sky-700">
                           Atualizando etapa...

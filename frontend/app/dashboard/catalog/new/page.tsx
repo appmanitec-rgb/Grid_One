@@ -1,5 +1,7 @@
 "use client";
 
+import { SelectField, SuggestionInput } from "@/app/dashboard/components/SelectField";
+
 import { PageHeader } from "../../components/DashboardPageKit";
 import { commercialLabel } from "@/lib/commercial-labels";
 
@@ -1110,30 +1112,30 @@ export default function CatalogFormPage() {
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                   <div>
                     <label className="mb-1 block text-sm font-bold text-zinc-700">Area do SKU {formData.type === "PART" ? <RequiredMark /> : null}</label>
-                    <select value={formData.skuAreaId} onChange={(event) => handleSkuAreaChange(event.target.value)} className="w-full rounded-lg border border-zinc-300 bg-white p-3">
+                    <SelectField searchable value={formData.skuAreaId} onChange={(event) => handleSkuAreaChange(event.target.value)} className="w-full rounded-lg border border-zinc-300 bg-white p-3">
                       <option value="">Selecione a area</option>
                       {skuTaxonomy.areas.map((area) => (
                         <option key={area.id} value={area.id}>{area.code} - {area.name}</option>
                       ))}
-                    </select>
+                    </SelectField>
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-bold text-zinc-700">Familia {formData.type === "PART" ? <RequiredMark /> : null}</label>
-                    <select value={formData.skuFamilyId} onChange={(event) => handleSkuFamilyChange(event.target.value)} disabled={!formData.skuAreaId} className="w-full rounded-lg border border-zinc-300 bg-white p-3 disabled:bg-zinc-100">
+                    <SelectField searchable value={formData.skuFamilyId} onChange={(event) => handleSkuFamilyChange(event.target.value)} disabled={!formData.skuAreaId} className="w-full rounded-lg border border-zinc-300 bg-white p-3 disabled:bg-zinc-100">
                       <option value="">{formData.skuAreaId ? "Selecione a familia" : "Escolha uma area primeiro"}</option>
                       {availableSkuFamilies.map((family) => (
                         <option key={family.id} value={family.id}>{family.code} - {family.name}</option>
                       ))}
-                    </select>
+                    </SelectField>
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-bold text-zinc-700">Aplicacao {formData.type === "PART" ? <RequiredMark /> : null}</label>
-                    <select value={formData.skuApplicationId} onChange={(event) => handleSkuApplicationChange(event.target.value)} disabled={!formData.skuFamilyId} className="w-full rounded-lg border border-zinc-300 bg-white p-3 disabled:bg-zinc-100">
+                    <SelectField searchable value={formData.skuApplicationId} onChange={(event) => handleSkuApplicationChange(event.target.value)} disabled={!formData.skuFamilyId} className="w-full rounded-lg border border-zinc-300 bg-white p-3 disabled:bg-zinc-100">
                       <option value="">{formData.skuFamilyId ? "Selecione a aplicacao" : "Escolha uma familia primeiro"}</option>
                       {availableSkuApplications.map((application) => (
                         <option key={application.id} value={application.id}>{application.code} - {application.name}</option>
                       ))}
-                    </select>
+                    </SelectField>
                   </div>
                 </div>
                 <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -1150,10 +1152,10 @@ export default function CatalogFormPage() {
               </div>
               <div>
                 <label className="mb-1 block text-sm font-bold text-zinc-700">Tipo <RequiredMark /></label>
-                <select name="type" value={formData.type} onChange={handleChange} className="w-full rounded-lg border border-zinc-300 p-3">
+                <SelectField name="type" value={formData.type} onChange={handleChange} className="w-full rounded-lg border border-zinc-300 p-3">
                   <option value="PART">Peca / Produto</option>
                   <option value="SERVICE">Servico / Mao de Obra</option>
-                </select>
+                </SelectField>
               </div>
               <Input
                 label="Tipo do item / classificacao"
@@ -1171,10 +1173,10 @@ export default function CatalogFormPage() {
               />
               <div>
                 <label className="mb-1 block text-sm font-bold text-zinc-700">Status</label>
-                <select name="isActive" value={formData.isActive} onChange={handleChange} className="w-full rounded-lg border border-zinc-300 p-3">
+                <SelectField name="isActive" value={formData.isActive} onChange={handleChange} className="w-full rounded-lg border border-zinc-300 p-3">
                   <option value="true">Ativo</option>
                   <option value="false">Inativo</option>
-                </select>
+                </SelectField>
               </div>
               <Input label="Nome do Item" name="name" value={formData.name} onChange={handleChange} className="md:col-span-2" requiredMark required />
               <div className="md:col-span-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
@@ -1269,9 +1271,9 @@ export default function CatalogFormPage() {
               <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-5">
                 <div>
                   <label className="mb-1 block text-sm font-bold text-zinc-700">Tipo</label>
-                  <select value={identifierDraft.type} onChange={(event) => setIdentifierDraft((prev) => ({ ...prev, type: event.target.value as IdentifierType }))} className="w-full rounded-lg border border-zinc-300 p-3">
+                  <SelectField value={identifierDraft.type} onChange={(event) => setIdentifierDraft((prev) => ({ ...prev, type: event.target.value as IdentifierType }))} className="w-full rounded-lg border border-zinc-300 p-3">
                     {IDENTIFIER_TYPES.map((type) => <option key={type} value={type}>{identifierTypeLabel(type)}</option>)}
-                  </select>
+                  </SelectField>
                 </div>
                 <Input label="Codigo" value={identifierDraft.code} onChange={(event) => setIdentifierDraft((prev) => ({ ...prev, code: event.target.value }))} />
                 <Input label="Origem" value={identifierDraft.source} onChange={(event) => setIdentifierDraft((prev) => ({ ...prev, source: event.target.value }))} />
@@ -1537,10 +1539,10 @@ export default function CatalogFormPage() {
                       <div>
                         <label className="mb-1 block text-sm font-bold text-zinc-700">Imposto de compra</label>
                         <div className="grid grid-cols-[110px_1fr] gap-2">
-                          <select name="purchaseTaxMode" value={formData.purchaseTaxMode} onChange={handleChange} className="w-full rounded-lg border border-zinc-300 p-3">
+                          <SelectField name="purchaseTaxMode" value={formData.purchaseTaxMode} onChange={handleChange} className="w-full rounded-lg border border-zinc-300 p-3">
                             <option value="AMOUNT">R$</option>
                             <option value="PERCENT">%</option>
-                          </select>
+                          </SelectField>
                           <input
                             name={formData.purchaseTaxMode === "PERCENT" ? "purchaseTaxPercent" : "purchaseTaxAmount"}
                             type="number"
@@ -1716,11 +1718,11 @@ export default function CatalogFormPage() {
               <Input label="CEST" name="cest" value={formData.cest} onChange={handleChange} />
               <div>
                 <label className="mb-1 block text-sm font-bold text-zinc-700">Origem da mercadoria</label>
-                <select name="origin" value={formData.origin} onChange={handleChange} className="w-full rounded-lg border border-zinc-300 p-3">
+                <SelectField name="origin" value={formData.origin} onChange={handleChange} className="w-full rounded-lg border border-zinc-300 p-3">
                   <option value="NACIONAL">Nacional</option>
                   <option value="ESTRANGEIRA_IMPORTACAO_DIRETA">Estrangeira - Importacao direta</option>
                   <option value="ESTRANGEIRA_MERCADO_INTERNO">Estrangeira - Mercado interno</option>
-                </select>
+                </SelectField>
               </div>
               <p className="md:col-span-4 text-xs text-zinc-500">
                 NCM, CEST e origem continuam no cadastro fiscal. Os percentuais que alteram preco ficam na tabela de formacao da aba Fornecedores e dependem de aprovacao financeira.
@@ -1773,13 +1775,13 @@ export default function CatalogFormPage() {
               <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-5">
                 <div>
                   <label className="mb-1 block text-sm font-bold text-zinc-700">Categoria</label>
-                  <select value={documentDraft.category} onChange={(event) => setDocumentDraft((prev) => ({ ...prev, category: event.target.value }))} className="w-full rounded-lg border border-zinc-300 p-3">
+                  <SelectField value={documentDraft.category} onChange={(event) => setDocumentDraft((prev) => ({ ...prev, category: event.target.value }))} className="w-full rounded-lg border border-zinc-300 p-3">
                     {(controlOptions.documentCategories.length ? controlOptions.documentCategories : DEFAULT_DOCUMENT_CATEGORIES).map((category) => (
                       <option key={category.code} value={category.code}>
                         {category.name}
                       </option>
                     ))}
-                  </select>
+                  </SelectField>
                 </div>
                 <Input label="Titulo" value={documentDraft.title} onChange={(event) => setDocumentDraft((prev) => ({ ...prev, title: event.target.value }))} />
                 <Input label="Versao" value={documentDraft.version} onChange={(event) => setDocumentDraft((prev) => ({ ...prev, version: event.target.value }))} />
@@ -1901,14 +1903,13 @@ function ControlOptionInput({
   return (
     <div className={className}>
       <label className="mb-1 block text-sm font-bold text-zinc-700">{label}</label>
-      <input
+      <SuggestionInput aria-label={label} id={listId}
         value={value}
-        list={listId}
+
         placeholder={placeholder}
         onChange={(event) => onValueChange(event.target.value)}
         className="w-full rounded-lg border border-zinc-300 p-3"
-      />
-      <datalist id={listId}>
+      >
         {options.map((option) => (
           <option
             key={option.id}
@@ -1916,7 +1917,8 @@ function ControlOptionInput({
             label={optionLabel(option)}
           />
         ))}
-      </datalist>
+      </SuggestionInput>
+
     </div>
   );
 }

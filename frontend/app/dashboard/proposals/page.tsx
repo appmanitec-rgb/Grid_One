@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -489,18 +490,18 @@ export default function ProposalsPage() {
                 className="min-w-0"
               />
               <label className="sr-only" htmlFor="proposal-status-filter">Filtrar por etapa</label>
-              <select id="proposal-status-filter" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-11 min-w-0 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100">
+              <SelectField id="proposal-status-filter" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-11 min-w-0 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100">
                 <option value="ALL">Todas as etapas</option>
                 {KANBAN_COLUMNS.map((column) => <option key={column.key} value={column.key}>{column.label}</option>)}
-              </select>
+              </SelectField>
               <label className="sr-only" htmlFor="proposal-sort">Ordenar propostas</label>
-              <select id="proposal-sort" value={sortBy} onChange={(event) => setSortBy(event.target.value)} className="h-11 min-w-0 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100">
+              <SelectField id="proposal-sort" value={sortBy} onChange={(event) => setSortBy(event.target.value)} className="h-11 min-w-0 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100">
                 <option value="RECENT">Mais recentes</option>
                 <option value="OLDEST">Mais antigas</option>
                 <option value="VALUE_DESC">Maior valor</option>
                 <option value="VALUE_ASC">Menor valor</option>
                 <option value="CLIENT">Cliente A–Z</option>
-              </select>
+              </SelectField>
               <button type="button" onClick={() => { setQuery(""); setStatusFilter("ALL"); setSortBy("RECENT"); setCategory("ALL"); }} disabled={!query && statusFilter === "ALL" && sortBy === "RECENT" && category === "ALL"} className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
                 Limpar filtros
               </button>

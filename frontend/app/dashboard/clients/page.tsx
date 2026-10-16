@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import { PageHeader } from "../components/DashboardPageKit";
 
 import Link from "next/link";
@@ -321,7 +322,7 @@ export default function ClientsPage() {
                       {client.code}
                     </td>
                     <td className="p-4">
-                      <button type="button" onClick={() => setSelectedClientId(client.id)} className="dashboard-record-link text-left font-bold" title="Abrir cadastro rápido do cliente">
+                      <button type="button" onClick={() => setSelectedClientId(client.id)} className="dashboard-record-link text-left font-bold" title="Abrir resumo do cliente">
                         {client.companyName}
                       </button>
                       <p className="text-xs text-zinc-500">
@@ -396,7 +397,7 @@ function SelectFilter({
   return (
     <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
       {label}
-      <select
+      <SelectField
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-sm font-medium normal-case text-zinc-700"
@@ -406,7 +407,7 @@ function SelectFilter({
             {option.label}
           </option>
         ))}
-      </select>
+      </SelectField>
     </label>
   );
 }

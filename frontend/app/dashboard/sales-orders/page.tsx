@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import { PageHeader } from "../components/DashboardPageKit";
 import { commercialLabel } from "@/lib/commercial-labels";
 
@@ -239,9 +240,9 @@ export default function SalesOrdersPage() {
       <aside className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
           <input aria-label="Pesquisar pedidos" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Pedido, proposta ou cliente" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-          <select aria-label="Filtrar por situação" value={status} onChange={(event) => setStatus(event.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <SelectField aria-label="Filtrar por situação" value={status} onChange={(event) => setStatus(event.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
             <option value="">Todas as situações</option>{Object.entries(statusLabel).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-          </select>
+          </SelectField>
         </div>
         {proposalId ? <button type="button" onClick={() => setProposalId("")} className="mt-2 text-xs font-semibold text-blue-700">Limpar filtro da proposta</button> : null}
         {orderIdFilter ? <button type="button" onClick={() => setOrderIdFilter("")} className="mt-2 ml-2 text-xs font-semibold text-blue-700">Mostrar todos os pedidos</button> : null}
@@ -285,7 +286,7 @@ export default function SalesOrdersPage() {
                   {permissions.canManage && permissions.canSearchCatalog ? <div className="mt-2"><div className="flex gap-2"><input aria-label="Buscar peça no catálogo" value={catalogForItem === item.id ? catalogSearch : ""} onChange={(event) => { setCatalogForItem(item.id); setCatalogSearch(event.target.value); }} placeholder="Buscar por nome, SKU ou PN" className="min-w-0 flex-1 rounded-lg border border-amber-300 px-3 py-2 text-sm" /><button type="button" disabled={busy} onClick={() => void searchCatalog(item.id)} className="rounded-lg bg-amber-200 px-3 py-2 text-xs font-bold">Buscar</button></div>{catalogForItem === item.id && catalogOptions.length ? <div className="mt-2 space-y-1">{catalogOptions.map((option) => <button type="button" key={option.id} disabled={busy} onClick={() => void run(`/sales-orders/${detail.id}/items/${item.id}/catalog`, { catalogItemId: option.id }, "PATCH").then((saved) => { if (saved) setCatalogOptions([]); })} className="block w-full rounded-lg border border-amber-200 bg-white p-2 text-left text-xs hover:bg-amber-100">{option.sku || "Sem SKU"} · {option.manufacturerPartNumber || "Sem PN"} · {option.name}</button>)}</div> : null}</div> : null}
                 </div> : null}
                 {active && item.catalogItemId && pending > 0 && permissions.canReserve ? <div className="mt-3 grid gap-2 rounded-lg bg-slate-50 p-3 sm:grid-cols-[minmax(0,1fr)_90px_auto]">
-                  <select aria-label={`Almoxarifado para ${item.description}`} value={warehouseByItem[item.id] || ""} onChange={(event) => setWarehouseByItem((current) => ({ ...current, [item.id]: event.target.value }))} className="min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="">Selecione o almoxarifado</option>{warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name} · disponível {stock.find((row) => row.catalogItemId === item.catalogItemId && row.warehouseId === warehouse.id)?.availableQty ?? 0}</option>)}</select>
+                  <SelectField aria-label={`Almoxarifado para ${item.description}`} value={warehouseByItem[item.id] || ""} onChange={(event) => setWarehouseByItem((current) => ({ ...current, [item.id]: event.target.value }))} className="min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="">Selecione o almoxarifado</option>{warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name} · disponível {stock.find((row) => row.catalogItemId === item.catalogItemId && row.warehouseId === warehouse.id)?.availableQty ?? 0}</option>)}</SelectField>
                   <input aria-label={`Quantidade a reservar de ${item.description}`} type="number" min="1" max={pending} value={reserveQty[item.id] || ""} onChange={(event) => setReserveQty((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Qtd" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
                   <button type="button" disabled={busy || !warehouseByItem[item.id]} onClick={() => void run(`/sales-orders/${detail.id}/reserve`, { itemId: item.id, warehouseId: warehouseByItem[item.id], quantity: Number(reserveQty[item.id]) })} className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Reservar</button>
                 </div> : null}

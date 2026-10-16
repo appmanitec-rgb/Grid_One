@@ -31,7 +31,8 @@ async function mockWizard(page: Page) {
   await page.route("http://127.0.0.1:3100/**", async (route) => {
     const url = new URL(route.request().url());
     let data: unknown = [];
-    if (url.pathname === "/proposals/wizard-draft") data = draft;
+    if (url.pathname === "/notifications/inbox") data = { userRole:"ADMIN", summary:{total:0,actionRequired:0,highPriority:0}, items:[] };
+    else if (url.pathname === "/proposals/wizard-draft") data = draft;
     else if (url.pathname.startsWith("/crm/opportunities/")) data = opportunity;
     else if (url.pathname === "/clients/" + client.id) data = client;
     else if (url.pathname === "/clients/lookup") data = [client];

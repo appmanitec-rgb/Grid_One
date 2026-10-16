@@ -28,6 +28,7 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/dashboard/opportunities": { title: "Funil de Vendas", subtitle: "Pipeline por fase, temperatura e previsão de receita." },
   "/dashboard/commercial-inspections": { title: "Vistorias Comerciais", subtitle: "Checklists técnicos e mídias para dimensionamento." },
   "/dashboard/proposals": { title: "Central de Propostas", subtitle: "Controle completo por fase e revisões." },
+  "/dashboard/atendimento": { title: "Central de Atendimento", subtitle: "Chamados, responsáveis, conversas e prazos de atendimento." },
   "/dashboard/orders": { title: "Centro de Ordens", subtitle: "Execução técnica com SLA e prioridade." },
   "/dashboard/operation/downtimes": { title: "Máquinas Paradas", subtitle: "Resposta a falhas, retorno à operação e causa raiz." },
   "/dashboard/operation/warranties": { title: "Gestão de Garantias", subtitle: "Cobertura própria, fábrica e acompanhamento de fornecedores." },
@@ -47,7 +48,7 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/dashboard/finance/cash-flow": { title: "Fluxo de Caixa", subtitle: "Previsão de saldo, entradas e saídas do dia." },
   "/dashboard/finance/bank-accounts": { title: "Contas Bancárias & Caixas", subtitle: "Consolidação de saldos por banco e caixa interno." },
   "/dashboard/finance/cost-centers": { title: "Centros de Custo (DRE)", subtitle: "Margem por contrato, ativo e cliente." },
-  "/dashboard/hr/collaborators": { title: "Agentes e Acessos", subtitle: "Colaboradores, usuários internos, clientes de portal e auditores separados." },
+  "/dashboard/hr/collaborators": { title: "Colaboradores e acessos", subtitle: "Equipe, departamentos e contas de acesso no RH." },
   "/dashboard/hr/epis-tools": { title: "EPIs e Ferramentas", subtitle: "Controle de entrega, responsabilidade e rastreabilidade." },
   "/dashboard/hr/time-tracking": { title: "Apontamento e Banco de Horas", subtitle: "Horas de campo, extras e sobreaviso." },
   "/dashboard/hr/commissions": { title: "Comissões e Premiação", subtitle: "Consolidado de variáveis do comercial e operação." },
@@ -77,15 +78,16 @@ function getRouteFamily(pathname: string) {
   if (pathname.startsWith("/dashboard/deliveries")) return "Painel";
   if (pathname.startsWith("/dashboard/notifications")) return "Painel";
   if (pathname.startsWith("/dashboard/finance")) return "Financeiro";
-  if (pathname.startsWith("/dashboard/hr/collaborators")) return "Agentes";
-  if (pathname.startsWith("/dashboard/hr")) return "RH Operacional";
+  if (pathname.startsWith("/dashboard/hr/collaborators")) return "Recursos Humanos";
+  if (pathname.startsWith("/dashboard/hr")) return "Recursos Humanos";
+  if (pathname.startsWith("/dashboard/equipments") || pathname.startsWith("/dashboard/sites")) return "Ativos";
   if (pathname.startsWith("/dashboard/catalog") || pathname.startsWith("/dashboard/suppliers") || pathname.startsWith("/dashboard/inventory") || pathname.startsWith("/dashboard/sales-orders") || pathname.startsWith("/dashboard/purchase-orders")) {
     return "Suprimentos";
   }
   if (pathname.startsWith("/dashboard/clients") || pathname.startsWith("/dashboard/opportunities") || pathname.startsWith("/dashboard/commercial-inspections") || pathname.startsWith("/dashboard/proposals") || pathname.startsWith("/dashboard/contracts")) {
     return "Comercial";
   }
-  if (pathname.startsWith("/dashboard/orders") || pathname.startsWith("/dashboard/operation") || pathname.startsWith("/dashboard/dispatch") || pathname.startsWith("/dashboard/technicians") || pathname.startsWith("/dashboard/monitoring") || pathname.startsWith("/dashboard/sites") || pathname.startsWith("/dashboard/equipments")) {
+  if (pathname.startsWith("/dashboard/atendimento") || pathname.startsWith("/dashboard/orders") || pathname.startsWith("/dashboard/operation") || pathname.startsWith("/dashboard/dispatch") || pathname.startsWith("/dashboard/technicians") || pathname.startsWith("/dashboard/monitoring") || pathname.startsWith("/dashboard/sites") || pathname.startsWith("/dashboard/equipments")) {
     return "Operação";
   }
   if (pathname.startsWith("/dashboard/control") || pathname.startsWith("/dashboard/management") || pathname.startsWith("/dashboard/company-settings") || pathname.startsWith("/dashboard/profile") || pathname.startsWith("/dashboard/automation") || pathname.startsWith("/dashboard/reports")) {

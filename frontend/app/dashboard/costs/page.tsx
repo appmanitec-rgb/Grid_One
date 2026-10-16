@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
@@ -122,9 +123,9 @@ export default function CostsPage() {
           <Field label="De"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={INPUT} /></Field>
           <Field label="Ate"><input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={INPUT} /></Field>
           <Field label="Status da O.S.">
-            <select value={status} onChange={(e) => setStatus(e.target.value)} className={INPUT}>
+            <SelectField value={status} onChange={(e) => setStatus(e.target.value)} className={INPUT}>
               {STATUS_OPTIONS.map(([value, label]) => <option key={value || "all"} value={value}>{label}</option>)}
-            </select>
+            </SelectField>
           </Field>
           <Field label="Pesquisar"><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="O.S., cliente, contrato ou equipamento" className={INPUT} /></Field>
           <button type="button" onClick={() => void load()} disabled={loading} className="h-10 border border-slate-900 bg-slate-950 px-4 text-sm font-semibold text-white disabled:opacity-50">

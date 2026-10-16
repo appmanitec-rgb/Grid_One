@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import { useEffect, useMemo, useState } from "react";
 
 export const PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
@@ -65,7 +66,7 @@ export default function ListPagination({
       <div className="flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
           Itens por pagina
-          <select
+          <SelectField
             value={pageSize}
             onChange={(event) => onPageSizeChange(Number(event.target.value))}
             className="rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-blue-500"
@@ -76,7 +77,7 @@ export default function ListPagination({
                 {option}
               </option>
             ))}
-          </select>
+          </SelectField>
         </label>
 
         <span className="min-w-20 text-center text-xs font-semibold text-slate-500">

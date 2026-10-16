@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const MAX_PHOTO_BYTES = 256000;
 
-async function preparePhoto(file: File) {
+export async function preparePhoto(file: File) {
   if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
     throw new Error("Escolha uma foto JPG, PNG ou WebP.");
   }

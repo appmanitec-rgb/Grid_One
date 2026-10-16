@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -230,7 +231,7 @@ export default function OrdersPage() {
               placeholder="Buscar por titulo, cliente, equipamento ou contrato..."
               className="xl:min-w-[320px]"
             />
-            <select
+            <SelectField
               value={statusFilter}
               onChange={(event) =>
                 setStatusFilter(event.target.value as "ALL" | OrderStatus)
@@ -242,7 +243,7 @@ export default function OrdersPage() {
               <option value="IN_PROGRESS">Em andamento</option>
               <option value="COMPLETED">Concluidas</option>
               <option value="CANCELED">Canceladas</option>
-            </select>
+            </SelectField>
           </div>
         }
       >

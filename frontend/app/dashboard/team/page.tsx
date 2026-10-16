@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import { PageHeader } from "../components/DashboardPageKit";
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -924,7 +925,7 @@ function TeamWorkspace() {
             </div>
             <div className="space-y-2 border-y border-slate-200 bg-white p-3">
               <label htmlFor="direct-person" className="block text-xs font-bold text-slate-700">Conversar com uma pessoa</label>
-              <select
+              <SelectField searchable
                 id="direct-person"
                 value={directPersonId}
                 onChange={(event) => setDirectPersonId(event.target.value)}
@@ -932,7 +933,7 @@ function TeamWorkspace() {
               >
                 <option value="">Escolha um colaborador</option>
                 {people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
-              </select>
+              </SelectField>
               <button type="button" onClick={() => void startDirect()} disabled={busy || !directPersonId} className={`${secondaryButton} w-full`}>
                 Abrir conversa
               </button>

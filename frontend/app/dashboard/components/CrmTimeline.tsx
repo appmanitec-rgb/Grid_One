@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
@@ -142,9 +143,9 @@ export default function CrmTimeline({ clientId, opportunityId }: { clientId: str
 
       {access.proposals.create || access.proposals.update ? <form onSubmit={(event) => void save(event)} className="mt-5 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-6">
         <label className="text-xs font-semibold text-slate-700 md:col-span-2">Tipo
-          <select value={type} disabled={Boolean(editingId)} onChange={(event) => { const selected = event.target.value as ActivityType; setType(selected); setPlanned(selected === "TASK"); }} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+          <SelectField value={type} disabled={Boolean(editingId)} onChange={(event) => { const selected = event.target.value as ActivityType; setType(selected); setPlanned(selected === "TASK"); }} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
             {Object.entries(typeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
+          </SelectField>
         </label>
         <label className="text-xs font-semibold text-slate-700 md:col-span-4">Assunto
           <input required maxLength={200} value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Ex.: Confirmar condições da proposta" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />

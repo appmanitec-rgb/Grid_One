@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import Link from "next/link";
 import PaymentPlanEditor from "../../PaymentPlanEditor";
 import { type ProposalPaymentPlan } from "@/lib/proposal-payment-plan";
@@ -188,7 +189,7 @@ export default function ExternalProposalPage() {
             </div>
           </Field>
           <Field label="Carteira">
-            <select
+            <SelectField
               className={INPUT}
               value={type}
               onChange={(event) => setType(event.target.value)}
@@ -196,7 +197,7 @@ export default function ExternalProposalPage() {
               <option value="GENERATOR_SALE">Venda de gerador</option>
               <option value="PARTS_AND_SERVICES">Pecas e servicos</option>
               <option value="CONTRACT">Contrato</option>
-            </select>
+            </SelectField>
           </Field>
           <Field label="Numero / referencia externa">
             <input
@@ -223,7 +224,7 @@ export default function ExternalProposalPage() {
             selected={Boolean(clientId)}
           >
             {!clientId
-              ? clients.map((client) => (
+              ? clients.slice(0, 10).map((client) => (
                   <Option
                     key={client.id}
                     title={client.companyName}
@@ -246,7 +247,7 @@ export default function ExternalProposalPage() {
             selected={Boolean(sellerId)}
           >
             {!sellerId
-              ? sellers.map((seller) => (
+              ? sellers.slice(0, 10).map((seller) => (
                   <Option
                     key={seller.id}
                     title={seller.name}

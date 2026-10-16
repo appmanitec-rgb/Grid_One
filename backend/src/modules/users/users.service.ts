@@ -415,7 +415,9 @@ export class UsersService {
     );
     const nextPolicy = accessPolicy
       ? effectiveAccessPolicy(targetRole, accessPolicy)
-      : currentPolicy;
+      : role && role !== currentUser.role
+        ? effectiveAccessPolicy(targetRole, null)
+        : currentPolicy;
     if (
       (role !== undefined && role !== currentUser.role) ||
       (targetRole === UserRole.CLIENT &&
@@ -496,10 +498,7 @@ export class UsersService {
     }
 
     if (accessPolicy || role) {
-      dataToUpdate.accessPolicy = effectiveAccessPolicy(
-        targetRole,
-        accessPolicy ?? currentUser.accessPolicy,
-      ) as any;
+      dataToUpdate.accessPolicy = nextPolicy as any;
     }
 
     if (updateUserDto.regionTags) {
