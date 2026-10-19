@@ -20,6 +20,9 @@ import {
 } from './dto/generator-model.dto';
 import { UpsertGeneratorBaseItemsDto } from './dto/generator-base-items.dto';
 
+import { EquipmentListPageDto } from '../../common/list-page.dto';
+import { equipmentPageIndex } from './equipment-list-page';
+
 const generatorTechnicalFields = [
   'application',
   'notes',
@@ -231,6 +234,25 @@ export class GeneratorsService {
 
       return generator;
     });
+  }
+
+  async listPage(query: EquipmentListPageDto) {
+    const index = await equipmentPageIndex(this.database, query);
+    const items = await this.database.generator.findMany({
+      where: { id: { in: index.ids } },
+      select: buildGeneratorListSelect(new Date()),
+    });
+    const byId = new Map(items.map((item) => [item.id, item]));
+    return {
+      total: index.total,
+      page: index.page,
+      pageSize: index.pageSize,
+      summary: index.summary,
+      items: index.ids.flatMap((id) => {
+        const item = byId.get(id);
+        return item ? [item] : [];
+      }),
+    };
   }
 
   findAll() {

@@ -1019,7 +1019,7 @@ function CreateProposalCard({
   return (
     <Link
       href={href}
-      className="group flex min-h-32 flex-col justify-between rounded-2xl border border-slate-200 bg-[linear-gradient(145deg,#f8fbff,#ffffff)] p-4 transition hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-[0_18px_36px_-28px_rgba(2,132,199,0.42)]"
+      className="group flex min-h-32 flex-col justify-between rounded-2xl border border-slate-200 dashboard-tinted-surface bg-[linear-gradient(145deg,#f8fbff,#ffffff)] p-4 transition hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-[0_18px_36px_-28px_rgba(2,132,199,0.42)]"
     >
       <div className="flex items-start justify-between">
         <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-xs font-black text-sky-700 shadow-sm">

@@ -59,8 +59,9 @@ function refreshPagination(table: HTMLTableElement) {
     return;
   }
 
+  const dataRows = new Set(rows);
   allRows.forEach((row) => {
-    if (!rows.includes(row)) row.hidden = false;
+    if (!dataRows.has(row) && row.hidden) row.hidden = false;
   });
 
   const id = table.dataset.paginationId || `table-${Math.random().toString(36).slice(2)}`;
@@ -73,7 +74,8 @@ function refreshPagination(table: HTMLTableElement) {
   const start = (page - 1) * pageSize;
   const end = Math.min(start + pageSize, rows.length);
   rows.forEach((row, index) => {
-    row.hidden = index < start || index >= end;
+    const hidden = index < start || index >= end;
+    if (row.hidden !== hidden) row.hidden = hidden;
   });
 
   let controls = document.querySelector<HTMLElement>(`[data-table-pagination-for="${id}"]`);

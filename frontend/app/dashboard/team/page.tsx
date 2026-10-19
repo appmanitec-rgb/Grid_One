@@ -1040,7 +1040,7 @@ function TeamWorkspace() {
               role="log"
               aria-live="polite"
               aria-label="Mensagens do canal"
-              className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-[linear-gradient(180deg,#f8fafc_0%,#ffffff_100%)] px-4 py-5 md:px-6"
+              className="min-h-0 flex-1 space-y-4 overflow-y-auto dashboard-tinted-surface bg-[linear-gradient(180deg,#f8fafc_0%,#ffffff_100%)] px-4 py-5 md:px-6"
             >
               {messageCursor ? (
                 <button
@@ -1077,7 +1077,7 @@ function TeamWorkspace() {
                 >
                   <Avatar author={message.author} size="small" />
                   <div
-                    className={`min-w-0 max-w-[min(86%,640px)] rounded-2xl px-4 py-3 shadow-sm ${message.author.id === meId ? "bg-[#e8f2fa]" : "border border-slate-200 bg-white"}`}
+                    className={`min-w-0 max-w-[min(86%,640px)] rounded-2xl px-4 py-3 shadow-sm ${message.author.id === meId ? "dashboard-tinted-surface border-sky-200 bg-[#e8f2fa]" : "border border-slate-200 bg-white"}`}
                   >
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <strong className="text-xs text-slate-900">

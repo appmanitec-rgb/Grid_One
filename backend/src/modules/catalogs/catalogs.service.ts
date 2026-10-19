@@ -24,6 +24,9 @@ import { UpdateCatalogPricingDto } from './dto/update-catalog-pricing.dto';
 import { UpdateCatalogPricingParametersDto } from './dto/update-catalog-pricing-parameters.dto';
 import { UpdateCatalogDto } from './dto/update-catalog.dto';
 
+import { CatalogListPageDto } from '../../common/list-page.dto';
+import { catalogGroup, catalogPageIndex } from './catalog-list-page';
+
 export type CatalogActor = {
   sub?: string;
   isSystemMaster?: boolean;
@@ -165,6 +168,45 @@ export class CatalogsService {
       });
       return created;
     });
+  }
+
+  async listSummary() {
+    const index = await catalogPageIndex(
+      this.prisma,
+      new CatalogListPageDto(),
+      true,
+    );
+    return index.summary;
+  }
+
+  async listPage(query: CatalogListPageDto, actor?: CatalogActor) {
+    const index = await catalogPageIndex(this.prisma, query);
+    const items = await this.prisma.catalogItem.findMany({
+      where: { id: { in: index.ids }, isActive: true },
+      select: catalogListSelect,
+    });
+    const byId = new Map(items.map((item) => [item.id, item]));
+    const canViewCosts = this.canViewCostData(actor);
+    return {
+      total: index.total,
+      page: index.page,
+      pageSize: index.pageSize,
+      items: index.ids.flatMap((id) => {
+        const item = byId.get(id);
+        if (!item) return [];
+        const summarized = this.withOperationalSummary(item) as Record<
+          string,
+          unknown
+        >;
+        delete summarized.inventoryBalances;
+        return [
+          {
+            ...this.maskCatalogValues(summarized, canViewCosts),
+            catalogGroup: catalogGroup(item),
+          },
+        ];
+      }),
+    };
   }
 
   async findAll(actor?: CatalogActor) {

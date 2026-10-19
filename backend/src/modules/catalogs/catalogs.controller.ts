@@ -24,6 +24,8 @@ import { UpdateCatalogPricingDto } from './dto/update-catalog-pricing.dto';
 import { UpdateCatalogPricingParametersDto } from './dto/update-catalog-pricing-parameters.dto';
 import { UpdateCatalogDto } from './dto/update-catalog.dto';
 
+import { CatalogListPageDto } from '../../common/list-page.dto';
+
 @Controller('catalogs')
 @UseGuards(AuthGuard, AccessPolicyGuard)
 @RequireAccessPolicy('catalog.view')
@@ -58,6 +60,18 @@ export class CatalogsController {
   @Get('pricing-policies')
   pricingPolicies() {
     return this.catalogsService.pricingPolicies();
+  }
+
+  @RequireAccessPolicy('catalog.view')
+  @Get('list-summary')
+  listSummary() {
+    return this.catalogsService.listSummary();
+  }
+
+  @RequireAccessPolicy('catalog.view')
+  @Get('page')
+  listPage(@Query() query: CatalogListPageDto, @Req() req: Request) {
+    return this.catalogsService.listPage(query, req['user'] as CatalogActor);
   }
 
   @RequireAccessPolicy('catalog.view')

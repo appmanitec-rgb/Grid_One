@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import TopBar from "./components/TopBar";
 import MobileNavigation from "./components/MobileNavigation";
 import SessionHeartbeat from "../SessionHeartbeat";
@@ -18,6 +18,9 @@ import {
 } from "@/lib/access";
 import {
   applyDashboardTheme,
+  readStoredDashboardMode,
+  saveStoredDashboardMode,
+  type DashboardColorMode,
   clearAppliedDashboardTheme,
   readStoredDashboardTheme,
   saveStoredDashboardTheme,
@@ -40,6 +43,8 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [accessReady, setAccessReady] = useState(false);
+  const [colorMode, setColorMode] = useState<DashboardColorMode>("light");
+  const [appearanceReady, setAppearanceReady] = useState(false);
   const [appearanceTheme, setAppearanceTheme] =
     useState<DashboardThemeId>("mist");
   const [currentRole, setCurrentRole] = useState("NORMAL");
@@ -185,19 +190,19 @@ export default function DashboardLayout({
     };
   }, [accessReady, router]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const savedTheme = readStoredDashboardTheme();
+    const savedMode = readStoredDashboardMode();
     setAppearanceTheme(savedTheme);
-    applyDashboardTheme(savedTheme);
-
-    return () => {
-      clearAppliedDashboardTheme();
-    };
+    setColorMode(savedMode);
+    applyDashboardTheme(savedTheme, savedMode);
+    setAppearanceReady(true);
+    return () => { clearAppliedDashboardTheme(); };
   }, []);
 
   useEffect(() => {
-    applyDashboardTheme(appearanceTheme);
-  }, [appearanceTheme]);
+    if (appearanceReady) applyDashboardTheme(appearanceTheme, colorMode);
+  }, [appearanceTheme, colorMode, appearanceReady]);
 
   const navItems = useMemo(
     () => [
@@ -389,6 +394,8 @@ export default function DashboardLayout({
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <TopBar
           appearanceTheme={appearanceTheme}
+          colorMode={colorMode}
+          onChangeColorMode={(mode) => { setColorMode(mode); saveStoredDashboardMode(mode); }}
           onChangeAppearanceTheme={handleThemeChange}
         />
         <main

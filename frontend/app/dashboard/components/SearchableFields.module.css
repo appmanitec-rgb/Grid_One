@@ -1,11 +1,11 @@
 .input {
   width: 100%;
   min-width: 0;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--border, #cbd5e1);
   border-radius: 10px;
-  background: #fff;
+  background: var(--surface, #fff);
   padding: 10px 12px;
-  color: #1e293b;
+  color: var(--foreground, #1e293b);
   font: inherit;
 }
 .input:focus {
@@ -17,12 +17,12 @@
   z-index: 10000;
   overflow: auto;
   overscroll-behavior: contain;
-  border: 1px solid #dbe3ee;
+  border: 1px solid var(--border, #dbe3ee);
   border-radius: 12px;
-  background: #fff;
+  background: var(--surface, #fff);
   padding: 4px;
   box-shadow: 0 12px 32px #0f172a26;
-  color: #1e293b;
+  color: var(--foreground, #1e293b);
   font-family: inherit;
 }
 .option {
@@ -35,7 +35,7 @@
   white-space: normal;
   overflow-wrap: anywhere;
   background: transparent;
-  color: #334155;
+  color: var(--foreground, #334155);
   font: inherit;
   font-size: 14px;
   line-height: 1.45;
@@ -43,8 +43,8 @@
 }
 .option:hover,
 .active {
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: var(--theme-highlight, #eff6ff);
+  color: var(--theme-link, #1d4ed8);
 }
 .option[aria-selected="true"] {
   font-weight: 700;
@@ -55,11 +55,11 @@
 }
 .hint {
   margin: 4px 0 0;
-  border-top: 1px solid #edf2f7;
+  border-top: 1px solid var(--border, #edf2f7);
   padding: 8px 12px;
   font-size: 12px;
   line-height: 1.5;
-  color: #64748b;
+  color: var(--text-muted, #64748b);
 }
 .suggestion {
   display: contents;

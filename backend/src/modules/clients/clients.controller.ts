@@ -25,6 +25,8 @@ import {
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 
+import { ClientListPageDto } from '../../common/list-page.dto';
+
 @Controller('clients')
 @UseGuards(AuthGuard, AccessPolicyGuard)
 @RequireAccessPolicy('clients.view')
@@ -59,6 +61,12 @@ export class ClientsController {
   @Get('lookup')
   lookup(@Query('q') query?: string, @Query('take') take?: string) {
     return this.clientsService.lookup(query, take);
+  }
+
+  @RequireAccessPolicy('clients.view')
+  @Get('page')
+  listPage(@Query() query: ClientListPageDto) {
+    return this.clientsService.listPage(query);
   }
 
   @RequireAccessPolicy('clients.view')

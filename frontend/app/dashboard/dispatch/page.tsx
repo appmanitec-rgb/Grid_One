@@ -894,7 +894,7 @@ export default function DispatchPage() {
                 </div>
               </FieldBox>
 
-              <div className="flex flex-col justify-between gap-3 rounded-[24px] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-4 shadow-[0_18px_46px_-38px_rgba(15,31,50,0.35)]">
+              <div className="flex flex-col justify-between gap-3 rounded-[24px] border border-slate-200 dashboard-tinted-surface bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-4 shadow-[0_18px_46px_-38px_rgba(15,31,50,0.35)]">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
                     Comando

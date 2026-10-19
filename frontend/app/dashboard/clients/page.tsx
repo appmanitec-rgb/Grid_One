@@ -4,10 +4,12 @@ import { SelectField } from "@/app/dashboard/components/SelectField";
 import { PageHeader } from "../components/DashboardPageKit";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
+import { useEffect, useState } from "react";
 import { getAccessFromToken } from "@/lib/access";
 import QuickRecordEditor from "../components/QuickRecordEditor";
+import ListPagination from "../components/ListPagination";
+import { usePagedList } from "../components/usePagedList";
+import { ListSortHeader } from "../components/ListSortHeader";
 
 type ClientListItem = {
   id: string;
@@ -50,9 +52,6 @@ type FilterOption = "ALL" | "YES" | "NO";
 type ContractFilter = "ALL" | "CONTRACT" | "NO_CONTRACT";
 
 export default function ClientsPage() {
-  const [clients, setClients] = useState<ClientListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
@@ -66,120 +65,12 @@ export default function ClientsPage() {
 
   useEffect(() => {
     setCanEditClients(getAccessFromToken().clients.update);
-    void loadClients();
   }, []);
 
-  async function loadClients() {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await apiFetch(apiUrl("/clients"), { cache: "no-store" });
-      if (!res.ok) {
-        throw new Error(
-          await readApiErrorMessage(
-            res,
-            "Nao foi possivel carregar os clientes.",
-          ),
-        );
-      }
-      setClients((await res.json()) as ClientListItem[]);
-    } catch (loadError: unknown) {
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Nao foi possivel carregar os clientes.",
-      );
-      setClients([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const filteredClients = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    return clients.filter((client) => {
-      const matchesInss =
-        inssFilter === "ALL" ||
-        (inssFilter === "YES"
-          ? Boolean(client.withholdsInss)
-          : !client.withholdsInss);
-      const matchesRetention =
-        retentionFilter === "ALL" ||
-        (retentionFilter === "YES"
-          ? Boolean(client.withholdsIss)
-          : !client.withholdsIss);
-      const matchesDelinquent =
-        delinquentFilter === "ALL" ||
-        (delinquentFilter === "YES"
-          ? Boolean(client.isDelinquent)
-          : !client.isDelinquent);
-      const matchesContract =
-        contractFilter === "ALL" || client.clientType === contractFilter;
-      const matchesProposalBlock =
-        proposalBlockFilter === "ALL" ||
-        (proposalBlockFilter === "YES"
-          ? Boolean(client.proposalCreationBlocked)
-          : !client.proposalCreationBlocked);
-
-      if (
-        !matchesInss ||
-        !matchesRetention ||
-        !matchesDelinquent ||
-        !matchesContract ||
-        !matchesProposalBlock
-      ) {
-        return false;
-      }
-      if (!term) return true;
-
-      const topLevel = [
-        client.code,
-        client.companyName,
-        client.tradeName,
-        client.cnpj,
-        client.email,
-        client.phone,
-        client.address,
-        client.city,
-        client.state,
-        client.preferences,
-      ];
-
-      const contactFields =
-        client.contacts?.flatMap((contact) => [
-          contact.name,
-          contact.role,
-          contact.phone,
-          contact.mobile,
-          contact.email,
-        ]) ?? [];
-
-      const addressFields =
-        client.addresses?.flatMap((address) => [
-          address.street,
-          address.number,
-          address.complement,
-          address.district,
-          address.city,
-          address.state,
-          address.zipCode,
-        ]) ?? [];
-
-      return [...topLevel, ...contactFields, ...addressFields].some((value) =>
-        String(value ?? "")
-          .toLowerCase()
-          .includes(term),
-      );
-    });
-  }, [
-    clients,
-    query,
-    inssFilter,
-    retentionFilter,
-    delinquentFilter,
-    contractFilter,
-    proposalBlockFilter,
-  ]);
+  const { items: filteredClients, total, loading, error, refresh: loadClients, paginationProps, sort, direction, onSort } = usePagedList<ClientListItem>({
+    endpoint: "/clients/page", search: query,
+    filters: { inss: inssFilter, iss: retentionFilter, delinquent: delinquentFilter, blocked: proposalBlockFilter, contract: contractFilter },
+  });
 
   return (
     <div className="dashboard-page space-y-5">
@@ -295,20 +186,20 @@ export default function ClientsPage() {
           </div>
         ) : null}
         <p className="mt-2 text-xs text-zinc-500">
-          {filteredClients.length} resultado(s)
+          {total} resultado(s)
         </p>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
         <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
-          <table className="w-full border-collapse text-left">
+          <table data-pagination-skip="true" data-sort-skip="true" aria-busy={loading} className="w-full border-collapse text-left">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 text-sm text-zinc-500">
-                <th className="p-4 font-medium">Codigo</th>
-                <th className="p-4 font-medium">Empresa / Nome</th>
-                <th className="p-4 font-medium">CNPJ/CPF</th>
-                <th className="p-4 font-medium">Contatos</th>
-                <th className="p-4 font-medium">Endereco</th>
+                <ListSortHeader column="code" sort={sort} direction={direction} onSort={onSort}>Codigo</ListSortHeader>
+                <ListSortHeader column="name" sort={sort} direction={direction} onSort={onSort}>Empresa / Nome</ListSortHeader>
+                <ListSortHeader column="document" sort={sort} direction={direction} onSort={onSort}>CNPJ/CPF</ListSortHeader>
+                <ListSortHeader column="contact" sort={sort} direction={direction} onSort={onSort}>Contatos</ListSortHeader>
+                <ListSortHeader column="address" sort={sort} direction={direction} onSort={onSort}>Endereco</ListSortHeader>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200">
@@ -376,6 +267,7 @@ export default function ClientsPage() {
           </table>
         </div>
       </div>
+      <ListPagination {...paginationProps} />
       {selectedClientId ? (
         <QuickRecordEditor kind="client" id={selectedClientId} canEdit={canEditClients} onClose={() => setSelectedClientId(null)} onSaved={loadClients} />
       ) : null}

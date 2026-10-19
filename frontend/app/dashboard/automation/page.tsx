@@ -467,7 +467,7 @@ function ActionCard({
   onClick: () => void;
 }) {
   return (
-    <div className="rounded-[24px] border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f8fafc_100%)] p-4">
+    <div className="rounded-[24px] border border-slate-200 dashboard-tinted-surface bg-[linear-gradient(135deg,#ffffff_0%,#f8fafc_100%)] p-4">
       <p className="text-base font-black text-slate-950">{title}</p>
       <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
       <button

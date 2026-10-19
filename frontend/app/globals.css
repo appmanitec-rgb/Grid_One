@@ -1,6 +1,7 @@
 ﻿@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap");
 @import "tailwindcss";
+@import "./dashboard-dark.css";
 
 :root {
   --background: #e8edf3;
@@ -871,6 +872,11 @@ h3 {
 
 .dashboard-kanban-track::-webkit-scrollbar-track {
   background: transparent;
+}
+
+.dashboard-container .dashboard-kanban-track > .dashboard-kanban-column {
+  min-width: 292px;
+  flex: 1 0 292px;
 }
 
 .dashboard-kanban-column {

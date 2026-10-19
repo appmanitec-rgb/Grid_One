@@ -10,9 +10,9 @@
   align-items: flex-start;
   gap: 10px;
   padding: 16px 18px;
-  border: 1px solid #dfe7f1;
+  border: 1px solid var(--ticket-border, #dfe7f1);
   border-radius: 14px;
-  background: #fff;
+  background: var(--ticket-surface, #fff);
   text-align: left;
   box-shadow: 0 2px 5px #0f172a04;
   transition:
@@ -21,30 +21,30 @@
 }
 .metric:hover {
   border-color: #93c5fd;
-  background: #f8fbff;
+  background: var(--ticket-hover, #f8fbff);
 }
 .metric[aria-pressed="true"] {
   border-color: #3b82f6;
   box-shadow: 0 0 0 1px #3b82f6;
-  background: #eff6ff;
+  background: var(--ticket-selection, #eff6ff);
 }
 .metric span {
   font-size: 12px;
   font-weight: 650;
-  color: #52647c;
+  color: var(--ticket-muted, #52647c);
   line-height: 1.4;
 }
 .metric strong {
   font-size: 26px;
   line-height: 1.1;
   letter-spacing: -0.04em;
-  color: #12263f;
+  color: var(--ticket-text, #12263f);
 }
 .metric[data-tone="rose"] strong {
-  color: #be123c;
+  color: var(--ticket-danger, #be123c);
 }
 .metric[data-tone="amber"] strong {
-  color: #b45309;
+  color: var(--ticket-warning, #b45309);
 }
 .toolbar {
   display: flex;
@@ -72,7 +72,7 @@
   gap: 6px;
   font-size: 12px;
   font-weight: 650;
-  color: #52647c;
+  color: var(--ticket-muted, #52647c);
   min-width: 0;
 }
 .field input,
@@ -80,14 +80,14 @@
 .field textarea {
   min-width: 0;
   width: 100%;
-  border: 1px solid #cad6e5;
+  border: 1px solid var(--ticket-border-strong, #cad6e5);
   border-radius: 10px;
-  background: #fff;
+  background: var(--ticket-surface, #fff);
   padding: 10px 12px;
   font: inherit;
   font-size: 14px;
   font-weight: 500;
-  color: #18314d;
+  color: var(--ticket-text, #18314d);
   outline: none;
 }
 .field textarea {
@@ -97,20 +97,20 @@
 .field select:focus,
 .field textarea:focus {
   border-color: #3b82f6;
-  box-shadow: 0 0 0 3px #dbeafe;
+  box-shadow: 0 0 0 3px var(--ticket-focus-ring, #dbeafe);
 }
 .field input:disabled,
 .field select:disabled,
 .field textarea:disabled {
-  background: #f8fafc;
-  color: #64748b;
+  background: var(--ticket-soft, #f8fafc);
+  color: var(--ticket-muted, #64748b);
 }
 .tableRegion {
   max-width: 100%;
   overflow-x: auto;
-  border: 1px solid #e1e8f1;
+  border: 1px solid var(--ticket-border, #e1e8f1);
   border-radius: 14px;
-  background: #fff;
+  background: var(--ticket-surface, #fff);
 }
 .table {
   width: 100%;
@@ -119,31 +119,31 @@
   text-align: left;
 }
 .table th {
-  background: #f8fafc;
+  background: var(--ticket-soft, #f8fafc);
   padding: 13px 16px;
-  border-bottom: 1px solid #e1e8f1;
+  border-bottom: 1px solid var(--ticket-border, #e1e8f1);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: #6b7c93;
+  color: var(--ticket-muted, #6b7c93);
   font-weight: 700;
   white-space: nowrap;
 }
 .table td {
   padding: 16px;
   vertical-align: top;
-  border-bottom: 1px solid #edf1f6;
+  border-bottom: 1px solid var(--ticket-border, #edf1f6);
   font-size: 13px;
-  color: #42546c;
+  color: var(--ticket-text, #42546c);
 }
 .table tr:last-child td {
   border-bottom: 0;
 }
 .table tbody tr:hover {
-  background: #f8fbff;
+  background: var(--ticket-hover, #f8fbff);
 }
 .table a {
-  color: #154c92;
+  color: var(--ticket-link, #154c92);
 }
 .table a:hover {
   text-decoration: underline;
@@ -161,7 +161,7 @@
   margin-top: 5px;
   font-size: 12px;
   line-height: 1.5;
-  color: #71829a;
+  color: var(--ticket-muted, #71829a);
   overflow-wrap: anywhere;
 }
 .mobileList {
@@ -182,9 +182,9 @@
 .column {
   min-width: 0;
   overflow: hidden;
-  border: 1px solid #e0e7f0;
+  border: 1px solid var(--ticket-border, #e0e7f0);
   border-radius: 14px;
-  background: #f3f6fa;
+  background: var(--ticket-soft, #f3f6fa);
 }
 .columnHeader {
   display: flex;
@@ -192,10 +192,10 @@
   align-items: center;
   gap: 8px;
   padding: 15px 14px;
-  border-bottom: 1px solid #e0e7f0;
+  border-bottom: 1px solid var(--ticket-border, #e0e7f0);
   font-size: 13px;
   font-weight: 750;
-  color: #243c59;
+  color: var(--ticket-text, #243c59);
 }
 .columnHeader span {
   display: flex;
@@ -221,7 +221,7 @@
 }
 .columnHeader b {
   font-size: 11px;
-  background: #e2e8f0;
+  background: var(--ticket-badge, #e2e8f0);
   border-radius: 6px;
   padding: 2px 6px;
 }
@@ -236,9 +236,9 @@
 .boardCard {
   display: block;
   padding: 14px;
-  border: 1px solid #dfe7f1;
+  border: 1px solid var(--ticket-border, #dfe7f1);
   border-radius: 12px;
-  background: #fff;
+  background: var(--ticket-surface, #fff);
   box-shadow: 0 2px 3px #0f172a03;
   transition: border-color 0.15s;
 }
@@ -250,7 +250,7 @@
   font-size: 14px;
   line-height: 1.55;
   font-weight: 750;
-  color: #152e4a;
+  color: var(--ticket-text, #152e4a);
   overflow-wrap: anywhere;
 }
 .boardMeta {
@@ -260,9 +260,9 @@
   gap: 6px;
   margin-top: 13px;
   padding-top: 11px;
-  border-top: 1px solid #f0f3f7;
+  border-top: 1px solid var(--ticket-border, #f0f3f7);
   font-size: 11px;
-  color: #5d718b;
+  color: var(--ticket-muted, #5d718b);
 }
 .detailGrid {
   display: grid;
@@ -287,32 +287,32 @@
 .contextGrid dt {
   font-size: 11px;
   font-weight: 650;
-  color: #71829a;
+  color: var(--ticket-muted, #71829a);
   margin-bottom: 5px;
 }
 .contextGrid dd {
   font-size: 13px;
   line-height: 1.6;
-  color: #253d59;
+  color: var(--ticket-text, #253d59);
   overflow-wrap: anywhere;
 }
 .tabs {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--ticket-border, #e2e8f0);
   margin-bottom: 20px;
 }
 .tab {
   padding: 12px 16px;
   font-size: 13px;
   font-weight: 700;
-  color: #64748b;
+  color: var(--ticket-muted, #64748b);
   border-bottom: 2px solid transparent;
 }
 .tab[aria-selected="true"] {
   border-color: #2563eb;
-  color: #1d4ed8;
+  color: var(--ticket-link, #1d4ed8);
 }
 .thread {
   display: flex;
@@ -320,22 +320,22 @@
   gap: 16px;
 }
 .message {
-  border: 1px solid #e0e7f0;
+  border: 1px solid var(--ticket-border, #e0e7f0);
   border-radius: 14px;
   padding: 18px;
-  background: #fff;
+  background: var(--ticket-surface, #fff);
 }
 .message[data-kind="note"] {
-  border-color: #f2dfb9;
-  background: #fffcf5;
+  border-color: var(--ticket-note-border, #f2dfb9);
+  background: var(--ticket-note, #fffcf5);
 }
 .message[data-kind="customer"] {
-  border-color: #bbd9fb;
-  background: #f5faff;
+  border-color: var(--ticket-customer-border, #bbd9fb);
+  background: var(--ticket-customer, #f5faff);
 }
 .message[data-kind="system"] {
   border-style: dashed;
-  background: #f8fafc;
+  background: var(--ticket-soft, #f8fafc);
 }
 .messageHead {
   display: flex;
@@ -346,11 +346,11 @@
 }
 .messageHead strong {
   font-size: 13px;
-  color: #233c58;
+  color: var(--ticket-text, #233c58);
 }
 .messageHead time {
   font-size: 11px;
-  color: #71829a;
+  color: var(--ticket-muted, #71829a);
 }
 .message p {
   margin-top: 12px;
@@ -358,40 +358,40 @@
   overflow-wrap: anywhere;
   font-size: 14px;
   line-height: 1.75;
-  color: #334b66;
+  color: var(--ticket-text, #334b66);
 }
 .composer {
   margin-top: 24px;
-  border: 1px solid #d9e4f0;
+  border: 1px solid var(--ticket-border, #d9e4f0);
   border-radius: 14px;
   overflow: hidden;
-  background: #fff;
+  background: var(--ticket-surface, #fff);
 }
 .composer[data-mode="note"] {
-  border-color: #ecd39c;
+  border-color: var(--ticket-note-border, #ecd39c);
 }
 .composerHead {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   padding: 8px;
-  background: #f7f9fc;
-  border-bottom: 1px solid #e4ebf3;
+  background: var(--ticket-soft, #f7f9fc);
+  border-bottom: 1px solid var(--ticket-border, #e4ebf3);
 }
 .composerHead button {
   border-radius: 8px;
   padding: 8px 12px;
   font-size: 13px;
   font-weight: 700;
-  color: #61738c;
+  color: var(--ticket-muted, #61738c);
 }
 .composerHead button[aria-pressed="true"] {
-  background: #fff;
+  background: var(--ticket-surface, #fff);
   box-shadow: 0 1px 4px #0f172a12;
-  color: #1d4ed8;
+  color: var(--ticket-link, #1d4ed8);
 }
 .composer[data-mode="note"] .composerHead {
-  background: #fffbeb;
+  background: var(--ticket-note, #fffbeb);
 }
 .composer textarea {
   display: block;
@@ -403,7 +403,7 @@
   resize: vertical;
   font-size: 14px;
   line-height: 1.7;
-  color: #243c59;
+  color: var(--ticket-text, #243c59);
 }
 .composer textarea:focus {
   box-shadow: inset 0 0 0 2px #bfdbfe;
@@ -415,7 +415,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 12px 16px;
-  border-top: 1px solid #eef2f7;
+  border-top: 1px solid var(--ticket-border, #eef2f7);
 }
 @media (min-width: 1500px) {
   .filters {

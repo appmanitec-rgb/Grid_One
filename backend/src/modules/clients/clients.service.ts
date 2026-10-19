@@ -13,6 +13,9 @@ import { UpdateClientDto } from './dto/update-client.dto';
 import { DatabaseService } from 'src/database/database.service';
 import { isValidCnpj, normalizeCnpj } from '../../common/cnpj';
 
+import { ClientListPageDto } from '../../common/list-page.dto';
+import { clientListPage } from './client-list-page';
+
 @Injectable()
 export class ClientsService {
   constructor(private readonly database: DatabaseService) {}
@@ -263,6 +266,10 @@ export class ClientsService {
 
       return createdClient;
     });
+  }
+
+  listPage(query: ClientListPageDto) {
+    return clientListPage(this.database, query);
   }
 
   findAll() {

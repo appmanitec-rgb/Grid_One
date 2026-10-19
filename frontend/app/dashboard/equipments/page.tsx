@@ -5,13 +5,11 @@ import { MetricCard as SummaryMetric, PageHeader } from "../components/Dashboard
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
-import { apiFetch, readApiErrorMessage } from "@/lib/api";
+import { useEffect, useState } from "react";
 import { commercialLabel } from "@/lib/commercial-labels";
 import { getAccessFromToken } from "@/lib/access";
-import ListPagination, {
-  useListPagination,
-} from "../components/ListPagination";
+import ListPagination from "../components/ListPagination";
+import { usePagedList } from "../components/usePagedList";
 import QuickRecordEditor from "../components/QuickRecordEditor";
 
 type EquipmentListItem = {
@@ -64,9 +62,6 @@ const CRITICALITY_STYLES: Record<string, string> = {
 };
 
 export default function EquipmentsPage() {
-  const [equipments, setEquipments] = useState<EquipmentListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [contractFilter, setContractFilter] = useState("ALL");
@@ -76,73 +71,13 @@ export default function EquipmentsPage() {
   const [access, setAccess] = useState(() => getAccessFromToken());
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<string | null>(null);
 
-  useEffect(() => {
-    setAccess(getAccessFromToken());
-    void loadEquipments();
-  }, []);
+  useEffect(() => { setAccess(getAccessFromToken()); }, []);
 
-  async function loadEquipments() {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await apiFetch("/generators", { cache: "no-store" });
-      if (!res.ok) {
-        throw new Error(
-          await readApiErrorMessage(res, "Nao foi possivel carregar equipamentos."),
-        );
-      }
-      setEquipments((await res.json()) as EquipmentListItem[]);
-    } catch (loadError: unknown) {
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Erro ao carregar equipamentos.",
-      );
-      setEquipments([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const filtered = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    return equipments.filter((item) => {
-      const contract = getPrimaryContract(item);
-      const hasContract = Boolean(contract);
-      const hasActiveContract =
-        contract?.status === "ACTIVE" || contract?.status === "RENEWAL";
-      const hasTickets = hasOpenTickets(item);
-
-      if (contractFilter === "CONTRACTED" && !hasContract) return false;
-      if (contractFilter === "NO_CONTRACT" && hasContract) return false;
-      if (contractFilter === "ACTIVE_CONTRACT" && !hasActiveContract) return false;
-      if (criticalityFilter !== "ALL" && item.criticality !== criticalityFilter) {
-        return false;
-      }
-      if (statusFilter !== "ALL" && item.operationalStatus !== statusFilter) {
-        return false;
-      }
-      if (ticketFilter === "OPEN" && !hasTickets) return false;
-      if (ticketFilter === "NONE" && hasTickets) return false;
-      if (!term) return true;
-
-      return [
-        item.code,
-        item.name,
-        item.assetTag,
-        item.serialNumber,
-        item.client?.companyName,
-        item.currentSite?.name,
-        item.model?.name,
-        item.brand,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(term);
-    });
-  }, [contractFilter, criticalityFilter, equipments, query, statusFilter, ticketFilter]);
-
+  const { items: paginatedItems, total, summary: totals, loading, error, refresh: loadEquipments, paginationProps } = usePagedList<EquipmentListItem, { total: number; critical: number; contracted: number; openTickets: number }>({
+    endpoint: "/generators/page", search: query,
+    filters: { contract: contractFilter, criticality: criticalityFilter, status: statusFilter, tickets: ticketFilter },
+    initialSummary: { total: 0, critical: 0, contracted: 0, openTickets: 0 },
+  });
   const activeFilterCount = [
     contractFilter !== "ALL",
     criticalityFilter !== "ALL",
@@ -150,24 +85,6 @@ export default function EquipmentsPage() {
     ticketFilter !== "ALL",
     Boolean(query.trim()),
   ].filter(Boolean).length;
-  const { paginatedItems, paginationProps } = useListPagination(
-    filtered,
-    [query, contractFilter, criticalityFilter, statusFilter, ticketFilter].join("|"),
-  );
-
-  const totals = useMemo(
-    () => ({
-      total: equipments.length,
-      critical: equipments.filter((item) => item.criticality === "A").length,
-      openTickets: equipments.reduce(
-        (sum, item) => sum + countOpenTickets(item),
-        0,
-      ),
-      contracted: equipments.filter((item) => getPrimaryContract(item)).length,
-    }),
-    [equipments],
-  );
-
   return (
     <div className="dashboard-page space-y-5">
       <PageHeader
@@ -266,7 +183,7 @@ export default function EquipmentsPage() {
         ) : null}
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-zinc-500">
-            {filtered.length} resultado(s)
+            {total} resultado(s)
             {activeFilterCount ? ` | ${activeFilterCount} filtro(s) ativo(s)` : ""}
           </p>
           <div className="flex items-center gap-3">
@@ -298,7 +215,7 @@ export default function EquipmentsPage() {
 
       {loading ? <State text="Carregando equipamentos..." /> : null}
       {error ? <State text={error} tone="error" /> : null}
-      {!loading && !error && filtered.length === 0 ? (
+      {!loading && !error && total === 0 ? (
         <State text="Nenhum equipamento encontrado para os filtros atuais." />
       ) : null}
 
@@ -426,7 +343,7 @@ export default function EquipmentsPage() {
         })}
       </section>
 
-      {!loading && !error && filtered.length > 0 ? (
+      {!loading && !error && total > 0 ? (
         <ListPagination {...paginationProps} />
       ) : null}
       {selectedEquipmentId ? (
@@ -559,10 +476,6 @@ function countOpenTickets(item: EquipmentListItem) {
   return (item.serviceTickets || []).filter((ticket) =>
     isOpenTicketStatus(ticket.status),
   ).length;
-}
-
-function hasOpenTickets(item: EquipmentListItem) {
-  return countOpenTickets(item) > 0;
 }
 
 function getFirstOpenTicket(item: EquipmentListItem) {

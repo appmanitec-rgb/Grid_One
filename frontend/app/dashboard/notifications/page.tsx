@@ -76,14 +76,14 @@ const PRIORITY_OPTIONS: Array<{
 ];
 
 const TONE_CARD_STYLES: Record<DashboardNotificationTone, string> = {
-  blue: "border-sky-200 bg-[linear-gradient(180deg,rgba(248,251,255,0.96),rgba(240,247,255,0.92))]",
+  blue: "border-sky-200 dashboard-tinted-surface bg-[linear-gradient(180deg,rgba(248,251,255,0.96),rgba(240,247,255,0.92))]",
   emerald:
-    "border-emerald-200 bg-[linear-gradient(180deg,rgba(247,253,250,0.96),rgba(238,251,244,0.92))]",
+    "border-emerald-200 dashboard-tinted-surface bg-[linear-gradient(180deg,rgba(247,253,250,0.96),rgba(238,251,244,0.92))]",
   amber:
-    "border-amber-200 bg-[linear-gradient(180deg,rgba(255,251,244,0.96),rgba(255,246,233,0.92))]",
-  rose: "border-rose-200 bg-[linear-gradient(180deg,rgba(255,248,249,0.96),rgba(255,239,241,0.92))]",
+    "border-amber-200 dashboard-tinted-surface bg-[linear-gradient(180deg,rgba(255,251,244,0.96),rgba(255,246,233,0.92))]",
+  rose: "border-rose-200 dashboard-tinted-surface bg-[linear-gradient(180deg,rgba(255,248,249,0.96),rgba(255,239,241,0.92))]",
   slate:
-    "border-slate-200 bg-[linear-gradient(180deg,rgba(252,253,255,0.96),rgba(245,248,252,0.92))]",
+    "border-slate-200 dashboard-tinted-surface bg-[linear-gradient(180deg,rgba(252,253,255,0.96),rgba(245,248,252,0.92))]",
 };
 
 export default function NotificationsPage() {

@@ -221,10 +221,10 @@ export function StatusBanner({
   tone?: Tone;
 }) {
   const toneClasses: Record<Tone, string> = {
-    blue: "border-sky-200 bg-[linear-gradient(135deg,#eef6ff_0%,#f8fbff_100%)] text-sky-900",
-    emerald: "border-emerald-200 bg-[linear-gradient(135deg,#edfdf4_0%,#f8fffb_100%)] text-emerald-900",
-    amber: "border-amber-200 bg-[linear-gradient(135deg,#fff5e7_0%,#fffaf3_100%)] text-amber-900",
-    rose: "border-rose-200 bg-[linear-gradient(135deg,#fff0f1_0%,#fff8f8_100%)] text-rose-900",
+    blue: "border-sky-200 dashboard-tinted-surface bg-[linear-gradient(135deg,#eef6ff_0%,#f8fbff_100%)] text-sky-900",
+    emerald: "border-emerald-200 dashboard-tinted-surface bg-[linear-gradient(135deg,#edfdf4_0%,#f8fffb_100%)] text-emerald-900",
+    amber: "border-amber-200 dashboard-tinted-surface bg-[linear-gradient(135deg,#fff5e7_0%,#fffaf3_100%)] text-amber-900",
+    rose: "border-rose-200 dashboard-tinted-surface bg-[linear-gradient(135deg,#fff0f1_0%,#fff8f8_100%)] text-rose-900",
     slate: "border-slate-200 bg-slate-100 text-slate-700",
   };
 

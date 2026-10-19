@@ -5,12 +5,16 @@ import { SelectField } from "@/app/dashboard/components/SelectField";
 import { PageHeader } from "../components/DashboardPageKit";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { getAccessFromToken } from "@/lib/access";
+import { useEffect, useState } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
+import { getAccessFromToken } from "@/lib/access";
 import QuickRecordEditor from "../components/QuickRecordEditor";
+import ListPagination from "../components/ListPagination";
+import { usePagedList } from "../components/usePagedList";
+import { ListSortHeader } from "../components/ListSortHeader";
 
 type CatalogItem = {
+  catalogGroup?: "internal" | "technicalTools" | "generatorParts" | "services";
   id: string;
   sku?: string | null;
   legacyCode?: string | null;
@@ -47,9 +51,6 @@ type CatalogGroupKey =
   | "lowStock";
 
 export default function CatalogPage() {
-  const [items, setItems] = useState<CatalogItem[]>([]);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
   const [hydrated, setHydrated] = useState(false);
   const [canCreateItem, setCanCreateItem] = useState(false);
   const [canUpdateItem, setCanUpdateItem] = useState(false);
@@ -67,43 +68,35 @@ export default function CatalogPage() {
     setHydrated(true);
   }, []);
 
-  useEffect(() => {
-    void loadItems();
-  }, []);
-
-  async function loadItems() {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await apiFetch("/catalogs", { cache: "no-store" });
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, "Falha ao carregar catalogo."));
-      setItems((await res.json()) as CatalogItem[]);
-    } catch (loadError: unknown) {
-      setError(loadError instanceof Error ? loadError.message : "Erro ao carregar catalogo.");
-    } finally {
-      setLoading(false);
-    }
+  const { items: filteredItems, total, loading, error, refresh: refreshItems, paginationProps, sort, direction, onSort, hasLoaded } = usePagedList<CatalogItem>({
+    endpoint: "/catalogs/page", filters: { group: activeGroup }, search,
+  });
+  const [summary, setSummary] = useState<CatalogSummary | null>(null);
+  const [summaryError, setSummaryError] = useState("");
+  const [summaryRevision, setSummaryRevision] = useState(0);
+  const metrics = summary ?? EMPTY_CATALOG_SUMMARY;
+  function loadItems() {
+    refreshItems();
+    setSummaryRevision((current) => current + 1);
   }
+  useEffect(() => {
+    if (!hasLoaded) return;
+    const controller = new AbortController();
+    setSummaryError("");
+    async function loadSummary() {
+      try {
+        const response = await apiFetch("/catalogs/list-summary", { cache: "no-store", signal: controller.signal });
+        if (!response.ok) throw new Error(await readApiErrorMessage(response, "Não foi possível atualizar os indicadores."));
+        const next = await response.json() as CatalogSummary;
+        if (!controller.signal.aborted) setSummary(next);
+      } catch (error) {
+        if (!controller.signal.aborted) setSummaryError(error instanceof Error ? error.message : "Não foi possível atualizar os indicadores.");
+      }
+    }
+    void loadSummary();
+    return () => controller.abort();
+  }, [hasLoaded, summaryRevision]);
 
-  const filteredItems = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return items.filter((item) => {
-      if (!matchesCatalogGroup(item, activeGroup)) return false;
-      if (!q) return true;
-      return `${item.name} ${item.sku || ""} ${item.legacyCode || ""} ${item.legacySequence || ""} ${item.radarCode || ""} ${item.manufacturerPartNumber || ""} ${(item.identifiers || []).map((identifier) => identifier.code).join(" ")} ${item.category || ""} ${item.itemClassification || ""} ${item.acquisitionOrigin || ""} ${item.storageLocation || ""} ${item.description || ""} ${item.commercialDescription || ""}`
-        .toLowerCase()
-        .includes(q);
-    });
-  }, [activeGroup, items, search]);
-
-  const metrics = useMemo(() => {
-    const parts = items.filter((item) => item.type === "PART").length;
-    const services = items.filter((item) => item.type === "SERVICE").length;
-    const lowStock = items.filter(
-      (item) => item.operationalSummary?.isLowStock,
-    ).length;
-    return { total: items.length, parts, services, lowStock };
-  }, [items]);
   const activeFilterCount = [
     Boolean(search.trim()),
     activeGroup !== "all",
@@ -145,7 +138,7 @@ export default function CatalogPage() {
           <span>{error}</span>
           <button
             type="button"
-            onClick={() => window.location.reload()}
+            onClick={loadItems}
             className="text-sm font-bold underline"
           >
             Tentar novamente
@@ -154,16 +147,20 @@ export default function CatalogPage() {
       )}
 
       <section className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-4">
-        <Metric title="Itens ativos" value={String(metrics.total)} />
-        <Metric title="Pecas" value={String(metrics.parts)} />
-        <Metric title="Servicos" value={String(metrics.services)} />
+        <Metric title="Itens ativos" value={summary ? String(metrics.total) : "—"} />
+        <Metric title="Pecas" value={summary ? String(metrics.parts) : "—"} />
+        <Metric title="Servicos" value={summary ? String(metrics.services) : "—"} />
         <Metric
           title="Baixo estoque"
-          value={String(metrics.lowStock)}
-          tone={metrics.lowStock > 0 ? "amber" : "emerald"}
+          value={summary ? String(metrics.lowStock) : "—"}
+          tone={!summary ? "slate" : metrics.lowStock > 0 ? "amber" : "emerald"}
         />
       </section>
 
+      {summaryError ? <p role="status" className="text-sm text-amber-700">
+        {summaryError}{" "}
+        <button type="button" className="font-semibold underline" onClick={() => setSummaryRevision((current) => current + 1)}>Atualizar indicadores</button>
+      </p> : null}
       <section className="mb-4 rounded-xl border border-zinc-200 bg-white p-4">
         <div className="mb-3 flex items-center gap-2">
           <label
@@ -193,16 +190,16 @@ export default function CatalogPage() {
               label="Grupo"
               value={activeGroup}
               onChange={(value) => setActiveGroup(value as CatalogGroupKey)}
-              options={buildCatalogGroups(items).map((group) => ({
+              options={buildCatalogGroups(metrics.groups).map((group) => ({
                 value: group.key,
-                label: `${group.label} (${group.count})`,
+                label: summary ? `${group.label} (${group.count})` : group.label,
               }))}
             />
           </div>
         ) : null}
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-zinc-500">
-            {filteredItems.length} resultado(s)
+            {total} resultado(s)
             {activeFilterCount
               ? ` | ${activeFilterCount} filtro(s) ativo(s)`
               : ""}
@@ -224,15 +221,15 @@ export default function CatalogPage() {
 
       <div className="bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden">
         <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
-          <table className="w-full text-left border-collapse">
+          <table data-pagination-skip="true" data-sort-skip="true" aria-busy={loading} className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-zinc-50 text-zinc-500 text-sm border-b border-zinc-200">
-                <th className="p-4 font-medium">Item</th>
-                <th className="p-4 font-medium">Descricao</th>
-                <th className="p-4 font-medium">SKU / PN</th>
-                <th className="p-4 font-medium">Tipo</th>
-                <th className="p-4 font-medium">Saldo</th>
-                <th className="p-4 font-medium">Venda sugerida</th>
+                <ListSortHeader column="name" sort={sort} direction={direction} onSort={onSort}>Item</ListSortHeader>
+                <ListSortHeader column="description" sort={sort} direction={direction} onSort={onSort}>Descricao</ListSortHeader>
+                <ListSortHeader column="sku" sort={sort} direction={direction} onSort={onSort}>SKU / PN</ListSortHeader>
+                <ListSortHeader column="type" sort={sort} direction={direction} onSort={onSort}>Tipo</ListSortHeader>
+                <ListSortHeader column="stock" sort={sort} direction={direction} onSort={onSort}>Saldo</ListSortHeader>
+                <ListSortHeader column="price" sort={sort} direction={direction} onSort={onSort}>Venda sugerida</ListSortHeader>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200">
@@ -318,6 +315,7 @@ export default function CatalogPage() {
           </table>
         </div>
       </div>
+      <ListPagination {...paginationProps} />
       {selectedItemId ? (
         <QuickRecordEditor kind="catalog" id={selectedItemId} canEdit={canUpdateItem} onClose={() => setSelectedItemId(null)} onSaved={loadItems} />
       ) : null}
@@ -379,117 +377,18 @@ function SelectFilter({
   );
 }
 
-function buildCatalogGroups(items: CatalogItem[]) {
-  return [
-    { key: "all" as const, label: "Todos", count: items.length },
-    {
-      key: "internal" as const,
-      label: "Uso interno",
-      count: items.filter((item) => classifyCatalogItem(item) === "internal")
-        .length,
-    },
-    {
-      key: "technicalTools" as const,
-      label: "Ferramentas tecnicas",
-      count: items.filter(
-        (item) => classifyCatalogItem(item) === "technicalTools",
-      ).length,
-    },
-    {
-      key: "generatorParts" as const,
-      label: "Pecas de geradores",
-      count: items.filter(
-        (item) => classifyCatalogItem(item) === "generatorParts",
-      ).length,
-    },
-    {
-      key: "services" as const,
-      label: "Servicos",
-      count: items.filter((item) => item.type === "SERVICE").length,
-    },
-    {
-      key: "lowStock" as const,
-      label: "Baixo estoque",
-      count: items.filter((item) => item.operationalSummary?.isLowStock).length,
-    },
-  ];
+
+type CatalogSummary = { total: number; parts: number; services: number; lowStock: number; groups: Record<CatalogGroupKey, number> };
+const EMPTY_CATALOG_SUMMARY: CatalogSummary = { total: 0, parts: 0, services: 0, lowStock: 0, groups: { all: 0, internal: 0, technicalTools: 0, generatorParts: 0, services: 0, lowStock: 0 } };
+function buildCatalogGroups(groups: Record<CatalogGroupKey, number>) {
+  return ([
+    ["all", "Todos"], ["internal", "Uso interno"], ["technicalTools", "Ferramentas tecnicas"],
+    ["generatorParts", "Pecas de geradores"], ["services", "Servicos"], ["lowStock", "Baixo estoque"],
+  ] as const).map(([key, label]) => ({ key, label, count: groups[key] }));
 }
-
-function matchesCatalogGroup(item: CatalogItem, group: CatalogGroupKey) {
-  if (group === "all") return true;
-  if (group === "services") return item.type === "SERVICE";
-  if (group === "lowStock") return item.operationalSummary?.isLowStock === true;
-  return classifyCatalogItem(item) === group;
+function classifyCatalogItem(item: CatalogItem) {
+  return item.catalogGroup ?? (item.type === "SERVICE" ? "services" : "generatorParts");
 }
-
-function classifyCatalogItem(
-  item: CatalogItem,
-): Exclude<CatalogGroupKey, "all" | "lowStock"> {
-  if (item.type === "SERVICE") return "services";
-
-  const haystack = [
-    item.name,
-    item.sku,
-    item.category,
-    item.description,
-    item.commercialDescription,
-    item.storageLocation,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-
-  if (matchesAny(haystack, INTERNAL_USE_TERMS)) return "internal";
-  if (matchesAny(haystack, TECHNICAL_TOOL_TERMS)) return "technicalTools";
-  return "generatorParts";
+function catalogGroupLabel(group: Exclude<CatalogGroupKey, "all" | "lowStock">) {
+  return { internal: "Uso interno", technicalTools: "Ferramenta tecnica", generatorParts: "Peca de gerador", services: "Servico" }[group];
 }
-
-function catalogGroupLabel(
-  group: Exclude<CatalogGroupKey, "all" | "lowStock">,
-) {
-  const labels = {
-    internal: "Uso interno",
-    technicalTools: "Ferramenta tecnica",
-    generatorParts: "Peca de gerador",
-    services: "Servico",
-  };
-  return labels[group];
-}
-
-function matchesAny(value: string, terms: string[]) {
-  return terms.some((term) => value.includes(term));
-}
-
-const INTERNAL_USE_TERMS = [
-  "uso interno",
-  "consumo interno",
-  "administrativo",
-  "escritorio",
-  "papel",
-  "a4",
-  "folha",
-  "fita",
-  "pilha",
-  "bateria comum",
-  "caneta",
-  "toner",
-  "limpeza",
-  "copa",
-];
-
-const TECHNICAL_TOOL_TERMS = [
-  "ferramenta",
-  "alicate",
-  "chave",
-  "multimetro",
-  "torquimetro",
-  "furadeira",
-  "parafusadeira",
-  "maleta",
-  "escada",
-  "epi",
-  "capacete",
-  "luva",
-  "oculos",
-  "protetor",
-];

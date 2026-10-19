@@ -52,7 +52,7 @@ export function DashboardKanban({
       <KanbanScrollButton direction="left" onNudge={nudgeScroll} />
       <div
         className={cx(
-          "dashboard-kanban-shell min-w-0 rounded-[30px] border border-slate-200 bg-[radial-gradient(circle_at_top,rgba(19,104,180,0.08),transparent_35%),linear-gradient(180deg,#ffffff_0%,#f7fbff_100%)] p-4 shadow-[0_32px_80px_-60px_rgba(15,31,50,0.45)]",
+          "dashboard-kanban-shell min-w-0 rounded-[30px] border border-slate-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top,rgba(19,104,180,0.08),transparent_35%),linear-gradient(180deg,#ffffff_0%,#f7fbff_100%)] p-4 shadow-[0_32px_80px_-60px_rgba(15,31,50,0.45)]",
           className,
         )}
       >

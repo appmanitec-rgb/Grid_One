@@ -26,6 +26,8 @@ import {
 import { UpsertGeneratorBaseItemsDto } from './dto/generator-base-items.dto';
 import { ServiceGroup } from '@prisma/client';
 
+import { EquipmentListPageDto } from '../../common/list-page.dto';
+
 @Controller('generators')
 @UseGuards(AuthGuard, AccessPolicyGuard)
 @RequireAccessPolicy('pages.equipments')
@@ -38,6 +40,12 @@ export class GeneratorsController {
   create(@Body() createGeneratorDto: CreateGeneratorDto, @Req() req: Request) {
     const userId = (req as any).user?.sub as string | undefined;
     return this.generatorsService.create(createGeneratorDto, userId);
+  }
+
+  @RequireAccessPolicy('pages.equipments', 'equipments.view')
+  @Get('page')
+  listPage(@Query() query: EquipmentListPageDto) {
+    return this.generatorsService.listPage(query);
   }
 
   @RequireAccessPolicy('pages.equipments', 'equipments.view')

@@ -101,7 +101,7 @@ const ACTION_TONES: Record<
 > = {
   blue: {
     shell:
-      "border-sky-200 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#eef7ff_100%)]",
+      "border-sky-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#eef7ff_100%)]",
     badge: "bg-sky-100 text-sky-800",
     accent: "bg-sky-500",
     button:
@@ -109,7 +109,7 @@ const ACTION_TONES: Record<
   },
   emerald: {
     shell:
-      "border-emerald-200 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#eefbf4_100%)]",
+      "border-emerald-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#eefbf4_100%)]",
     badge: "bg-emerald-100 text-emerald-800",
     accent: "bg-emerald-500",
     button:
@@ -117,7 +117,7 @@ const ACTION_TONES: Record<
   },
   amber: {
     shell:
-      "border-amber-200 bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.2),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff7ea_100%)]",
+      "border-amber-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.2),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff7ea_100%)]",
     badge: "bg-amber-100 text-amber-900",
     accent: "bg-amber-500",
     button:
@@ -125,7 +125,7 @@ const ACTION_TONES: Record<
   },
   rose: {
     shell:
-      "border-rose-200 bg-[radial-gradient(circle_at_top_right,rgba(244,63,94,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff2f4_100%)]",
+      "border-rose-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(244,63,94,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff2f4_100%)]",
     badge: "bg-rose-100 text-rose-800",
     accent: "bg-rose-500",
     button:
@@ -133,7 +133,7 @@ const ACTION_TONES: Record<
   },
   slate: {
     shell:
-      "border-slate-200 bg-[radial-gradient(circle_at_top_right,rgba(71,85,105,0.14),transparent_28%),linear-gradient(180deg,#ffffff_0%,#f5f7fa_100%)]",
+      "border-slate-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(71,85,105,0.14),transparent_28%),linear-gradient(180deg,#ffffff_0%,#f5f7fa_100%)]",
     badge: "bg-slate-100 text-slate-700",
     accent: "bg-slate-500",
     button:
@@ -147,63 +147,63 @@ const STAGE_STYLES: Record<
 > = {
   DRAFT: {
     shell:
-      "border-slate-200 bg-[radial-gradient(circle_at_top_right,rgba(71,85,105,0.14),transparent_28%),linear-gradient(180deg,#ffffff_0%,#f5f7f9_100%)]",
+      "border-slate-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(71,85,105,0.14),transparent_28%),linear-gradient(180deg,#ffffff_0%,#f5f7f9_100%)]",
     badge: "bg-slate-900 text-white",
     hover: "hover:border-slate-300",
     tone: "slate",
   },
   BOARD_REVIEW: {
     shell:
-      "border-amber-200 bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff8eb_100%)]",
+      "border-amber-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff8eb_100%)]",
     badge: "bg-amber-500 text-amber-950",
     hover: "hover:border-amber-300",
     tone: "amber",
   },
   REVISION_REQUIRED: {
     shell:
-      "border-rose-200 bg-[radial-gradient(circle_at_top_right,rgba(244,63,94,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff2f4_100%)]",
+      "border-rose-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(244,63,94,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff2f4_100%)]",
     badge: "bg-rose-500 text-white",
     hover: "hover:border-rose-300",
     tone: "rose",
   },
   REVISED: {
     shell:
-      "border-sky-200 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#eef7ff_100%)]",
+      "border-sky-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#eef7ff_100%)]",
     badge: "bg-sky-500 text-white",
     hover: "hover:border-sky-300",
     tone: "blue",
   },
   REJECTED: {
     shell:
-      "border-rose-200 bg-[radial-gradient(circle_at_top_right,rgba(244,63,94,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff2f4_100%)]",
+      "border-rose-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(244,63,94,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff2f4_100%)]",
     badge: "bg-rose-600 text-white",
     hover: "hover:border-rose-300",
     tone: "rose",
   },
   CLIENT_REVIEW: {
     shell:
-      "border-sky-200 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#eef7ff_100%)]",
+      "border-sky-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#eef7ff_100%)]",
     badge: "bg-sky-500 text-white",
     hover: "hover:border-sky-300",
     tone: "blue",
   },
   DISCOUNT_REVIEW: {
     shell:
-      "border-amber-200 bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.2),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff3df_100%)]",
+      "border-amber-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.2),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff3df_100%)]",
     badge: "bg-amber-500 text-amber-950",
     hover: "hover:border-amber-300",
     tone: "amber",
   },
   WON: {
     shell:
-      "border-emerald-200 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#eefbf4_100%)]",
+      "border-emerald-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#eefbf4_100%)]",
     badge: "bg-emerald-500 text-white",
     hover: "hover:border-emerald-300",
     tone: "emerald",
   },
   LOST: {
     shell:
-      "border-zinc-200 bg-[linear-gradient(180deg,#ffffff_0%,#f5f5f5_100%)]",
+      "border-zinc-200 dashboard-tinted-surface bg-[linear-gradient(180deg,#ffffff_0%,#f5f5f5_100%)]",
     badge: "bg-zinc-500 text-white",
     hover: "hover:border-zinc-300",
     tone: "slate",
@@ -1141,7 +1141,7 @@ function BoardPendingCard({
               <Link
                 key={proposal.id}
                 href={`/dashboard/proposals/${proposal.id}`}
-                className="block rounded-2xl border border-stone-200 bg-[linear-gradient(180deg,#fffdf9_0%,#ffffff_100%)] p-4 transition hover:-translate-y-0.5 hover:border-stone-300"
+                className="block rounded-2xl border border-stone-200 dashboard-tinted-surface bg-[linear-gradient(180deg,#fffdf9_0%,#ffffff_100%)] p-4 transition hover:-translate-y-0.5 hover:border-stone-300"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -1202,7 +1202,7 @@ function UpdatesFeedCard({
               <Link
                 key={update.id}
                 href={`/dashboard/proposals/${update.proposal.id}`}
-                className="block rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f7f9fb_100%)] p-4 transition hover:-translate-y-0.5 hover:border-slate-300"
+                className="block rounded-2xl border border-slate-200 dashboard-tinted-surface bg-[linear-gradient(180deg,#ffffff_0%,#f7f9fb_100%)] p-4 transition hover:-translate-y-0.5 hover:border-slate-300"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">

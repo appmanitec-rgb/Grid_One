@@ -1253,7 +1253,7 @@ export default function AccountsReceivablePage() {
                     ) : null}
 
                     {expandedId === item.id && canReceive ? (
-                      <div className="mt-4 rounded-[26px] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-4">
+                      <div className="mt-4 rounded-[26px] border border-slate-200 dashboard-tinted-surface bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-4">
                         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                           <FormField
                             label="Valor recebido"

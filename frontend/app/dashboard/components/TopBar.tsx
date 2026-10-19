@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { PROFILE_UPDATED_EVENT, PROFILE_REVISION_KEY, type CurrentProfile } from "@/lib/profile-events";
 import NotificationCenter from "./NotificationCenter";
-import type { DashboardThemeId } from "@/lib/dashboard-appearance";
+import type { DashboardColorMode, DashboardThemeId } from "@/lib/dashboard-appearance";
 import {
   clearAuthSession,
   decodeJwtPayload,
@@ -15,6 +15,8 @@ import {
 import DashboardAppearanceControl from "./DashboardAppearanceControl";
 
 type TopBarProps = {
+  colorMode: DashboardColorMode;
+  onChangeColorMode: (mode: DashboardColorMode) => void;
   appearanceTheme: DashboardThemeId;
   onChangeAppearanceTheme: (themeId: DashboardThemeId) => void;
 };
@@ -171,6 +173,8 @@ function getQuickAction(pathname: string, roleCode: string) {
 
 export default function TopBar({
   appearanceTheme,
+  colorMode,
+  onChangeColorMode,
   onChangeAppearanceTheme,
 }: TopBarProps) {
   const pathname = usePathname();
@@ -309,7 +313,7 @@ export default function TopBar({
             <p className="text-xs font-semibold text-white">{todayLabel}</p>
           </div>
 
-          <DashboardAppearanceControl
+          <DashboardAppearanceControl colorMode={colorMode} onChangeMode={onChangeColorMode}
             themeId={appearanceTheme}
             onChange={onChangeAppearanceTheme}
           />
