@@ -1,4 +1,5 @@
 "use client";
+import { getAccessFromToken, canAccessDashboardPath } from "@/lib/access";
 import { commercialLabel } from "@/lib/commercial-labels";
 
 import Link from "next/link";
@@ -23,7 +24,12 @@ import {
 type Tone = "blue" | "emerald" | "amber" | "rose" | "slate";
 type ReceivableStatus = "OPEN" | "PARTIAL" | "OVERDUE" | "PAID" | "CANCELED";
 type PaymentMethod = "PIX" | "BOLETO" | "TRANSFER" | "CASH" | "CARD" | "OTHER";
-type ReceivableSource = "CONTRACT" | "ORDER" | "SALES_ORDER" | "PROPOSAL" | "MANUAL";
+type ReceivableSource =
+  | "CONTRACT"
+  | "ORDER"
+  | "SALES_ORDER"
+  | "PROPOSAL"
+  | "MANUAL";
 
 type BankAccount = {
   id: string;
@@ -66,7 +72,11 @@ type Receivable = {
   contract?: { id: string; code?: string | null } | null;
   maintenanceOrder?: { id: string; title?: string | null } | null;
   salesOrder?: { id: string; code?: string | null } | null;
-  sourceProposal?: { id: string; code: string; downPaymentConfirmedAt?: string | null } | null;
+  sourceProposal?: {
+    id: string;
+    code: string;
+    downPaymentConfirmedAt?: string | null;
+  } | null;
   proposalPaymentStage?: string | null;
   executionBillingCategory?: "PARTS" | "SERVICES" | null;
   installmentNumber?: number | null;
@@ -310,7 +320,17 @@ export default function AccountsReceivablePage() {
     try {
       const [receivablesRes, bankAccountsRes] = await Promise.all([
         apiFetch(apiUrl("/finance/receivables"), { cache: "no-store" }),
-        apiFetch(apiUrl("/finance/bank-accounts"), { cache: "no-store" }),
+        apiFetch(
+          apiUrl(
+            canAccessDashboardPath(
+              "/dashboard/finance/bank-accounts",
+              getAccessFromToken().pages,
+            )
+              ? "/finance/bank-accounts"
+              : "/finance/bank-account-options",
+          ),
+          { cache: "no-store" },
+        ),
       ]);
 
       const failed = [
@@ -768,7 +788,10 @@ export default function AccountsReceivablePage() {
         ]}
         actions={
           <>
-            <Link href="/dashboard/finance/collections" className={SECONDARY_BUTTON}>
+            <Link
+              href="/dashboard/finance/collections"
+              className={SECONDARY_BUTTON}
+            >
               Cobrança Santander
             </Link>
             <button
@@ -820,25 +843,26 @@ export default function AccountsReceivablePage() {
                 </div>
               </div>
             </FieldBox>
-
-
           </div>
         }
       />
-<StatusBanner
-              tone={activeBankAccounts.length > 0 ? "blue" : "amber"}
-            >
-              {activeBankAccounts.length > 0
-                ? `${activeBankAccounts.length} conta(s) bancarias ativa(s) disponivel(is) para baixa.`
-                : "Nenhuma conta bancaria ativa encontrada. Cadastre ou reative uma conta/caixa antes de registrar baixas."}
-            </StatusBanner>
+      <StatusBanner tone={activeBankAccounts.length > 0 ? "blue" : "amber"}>
+        {activeBankAccounts.length > 0
+          ? `${activeBankAccounts.length} conta(s) bancarias ativa(s) disponivel(is) para baixa.`
+          : "Nenhuma conta bancaria ativa encontrada. Cadastre ou reative uma conta/caixa antes de registrar baixas."}
+      </StatusBanner>
 
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
       {successMessage ? (
         <StatusBanner tone="emerald">{successMessage}</StatusBanner>
       ) : null}
 
-      <ProposalPaymentsQueue refreshKey={receivables.map(item=>item.id+":"+item.paidAmount+":"+item.status).join("|")} onUpdated={loadData} />
+      <ProposalPaymentsQueue
+        refreshKey={receivables
+          .map((item) => item.id + ":" + item.paidAmount + ":" + item.status)
+          .join("|")}
+        onUpdated={loadData}
+      />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.75fr)_360px]">
         <SectionCard
           eyebrow="Carteira viva"
@@ -958,7 +982,19 @@ export default function AccountsReceivablePage() {
                           <DataPill tone={sourceMeta.tone}>
                             {sourceMeta.label}
                           </DataPill>
-                          {item.sourceProposal ? <Link href={"/dashboard/proposals/"+item.sourceProposal.id} className="text-xs font-semibold text-blue-700">{item.sourceProposal.code} · {item.proposalPaymentStage === "DOWN_PAYMENT" ? "Entrada" : "Parcela do saldo"}</Link> : null}
+                          {item.sourceProposal ? (
+                            <Link
+                              href={
+                                "/dashboard/proposals/" + item.sourceProposal.id
+                              }
+                              className="text-xs font-semibold text-blue-700"
+                            >
+                              {item.sourceProposal.code} ·{" "}
+                              {item.proposalPaymentStage === "DOWN_PAYMENT"
+                                ? "Entrada"
+                                : "Parcela do saldo"}
+                            </Link>
+                          ) : null}
                           {dueInDays !== null && dueInDays < 0 ? (
                             <DataPill tone="rose">{`${Math.abs(dueInDays)} dia(s) em atraso`}</DataPill>
                           ) : null}
@@ -1003,13 +1039,22 @@ export default function AccountsReceivablePage() {
                           ) : null}
                           {item.executionBillingCategory ? (
                             <span className="rounded-full bg-blue-50 px-2 py-0.5 font-semibold text-blue-800">
-                              {item.executionBillingCategory === "PARTS" ? "Peças" : "Serviços"}
-                              {item.installmentNumber && item.installmentCount ? ` · ${item.installmentNumber}/${item.installmentCount}` : ""}
+                              {item.executionBillingCategory === "PARTS"
+                                ? "Peças"
+                                : "Serviços"}
+                              {item.installmentNumber && item.installmentCount
+                                ? ` · ${item.installmentNumber}/${item.installmentCount}`
+                                : ""}
                             </span>
                           ) : null}
                           {item.salesOrder?.id ? (
-                            <Link href={`/dashboard/sales-orders?orderId=${item.salesOrder.id}`} className="font-semibold text-slate-700 underline-offset-4 hover:text-slate-950 hover:underline">
-                              Pedido {item.salesOrder.code || item.salesOrder.id.slice(0, 8)}
+                            <Link
+                              href={`/dashboard/sales-orders?orderId=${item.salesOrder.id}`}
+                              className="font-semibold text-slate-700 underline-offset-4 hover:text-slate-950 hover:underline"
+                            >
+                              Pedido{" "}
+                              {item.salesOrder.code ||
+                                item.salesOrder.id.slice(0, 8)}
                             </Link>
                           ) : null}
                           {item.costCenter?.id ? (
@@ -1509,10 +1554,14 @@ export default function AccountsReceivablePage() {
                     </p>
                     <p className="mt-1 text-sm text-slate-500">
                       {account.bankName || "Banco nao informado"}
-                      {account.type ? ` / ${commercialLabel(account.type)}` : ""}
+                      {account.type
+                        ? ` / ${commercialLabel(account.type)}`
+                        : ""}
                     </p>
                     <p className="mt-3 text-lg font-bold text-slate-950">
-                      {formatCurrency(Number(account.currentBalance || 0))}
+                      {account.currentBalance == null
+                        ? "Saldo restrito neste acesso"
+                        : formatCurrency(Number(account.currentBalance))}
                     </p>
                   </div>
                 ))

@@ -12,11 +12,15 @@ import {
   IsUrl,
   IsUUID,
   MinLength,
+  Min,
+  Max,
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { SkillLevel, UserAvailabilityStatus, UserRole } from '@prisma/client';
+import { IsAccessRules } from '../../auth/rules/access-rules.validator';
+import type { DetailedAccessRules } from '../../auth/rules/access-rules';
 import { IsProfilePhoto } from '../profile-photo.validator';
 
 export class CreateUserTechnicianProfileDto {
@@ -66,7 +70,13 @@ export class CreateUserDto {
 
   @IsNumber()
   @IsOptional()
+  @Min(0)
+  @Max(100)
   approvalDiscountLimit?: number;
+
+  @IsOptional()
+  @IsAccessRules()
+  accessRules?: DetailedAccessRules;
 
   @IsNumber()
   @IsOptional()

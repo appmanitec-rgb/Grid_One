@@ -1,3 +1,9 @@
+import { ruleActor } from '../auth/rules/commercial-access';
+import { assertPortfolio, allowedPortfolios } from '../auth/rules/access-rules';
+import {
+  proposalScope,
+  checkProposalType,
+} from '../auth/rules/commercial-access';
 import {
   ForbiddenException,
   Injectable,
@@ -296,6 +302,7 @@ export class DocumentsService {
       throw new NotFoundException('Documento de proposta nao encontrado.');
     }
 
+    await checkProposalType(this.prisma, userId, proposal.type);
     this.assertProposalAccess(actor, proposal.clientId);
     if (!DOCUMENT_READY_PROPOSAL_STATUSES.includes(proposal.status)) {
       throw new ForbiddenException(
@@ -474,6 +481,9 @@ export class DocumentsService {
 
   async getContractDocument(id: string, userId: string) {
     const actor = await this.getActorScope(userId);
+    const rulesActor = await ruleActor(this.prisma, userId);
+    if (rulesActor && rulesActor.role !== UserRole.CLIENT)
+      assertPortfolio(rulesActor, 'contracts');
     const company = await this.getCompanyProfile();
 
     const contract = await this.prisma.serviceContract.findUnique({
@@ -907,6 +917,7 @@ export class DocumentsService {
   private async loadProposalHubItems(actor: ActorScope) {
     const proposals = await this.prisma.proposal.findMany({
       where: {
+        AND: [await proposalScope(this.prisma, actor.id)],
         status: { in: DOCUMENT_READY_PROPOSAL_STATUSES },
         ...(actor.role === UserRole.CLIENT
           ? { clientId: this.requireLinkedClientId(actor) }
@@ -957,6 +968,13 @@ export class DocumentsService {
   }
 
   private async loadContractHubItems(actor: ActorScope) {
+    const rulesActor = await ruleActor(this.prisma, actor.id);
+    if (
+      rulesActor &&
+      actor.role !== UserRole.CLIENT &&
+      !allowedPortfolios(rulesActor).includes('contracts')
+    )
+      return [];
     const contracts = await this.prisma.serviceContract.findMany({
       where:
         actor.role === UserRole.CLIENT

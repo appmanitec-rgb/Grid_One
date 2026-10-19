@@ -458,6 +458,7 @@ enum ContractInvoiceStatus {
 }
 
 enum MaintenanceOrderType {
+  EMERGENCY
   PREVENTIVE
   CORRECTIVE
   INSTALLATION
@@ -832,6 +833,7 @@ model User {
   isActive              Boolean                @default(true)
   isSystemMaster        Boolean                @default(false)
   accessPolicy          Json?
+  accessRules Json?
   functionalId          String?
   documentId            String?
   profilePhotoUrl       String?
@@ -2289,6 +2291,7 @@ model SalesOpportunity {
   opportunityType   SalesOpportunityType     @default(FIELD_SERVICE)
   temperature       OpportunityTemperature   @default(WARM)
   estimatedValue    Float                    @default(0)
+  discountPercent Float @default(0)
   probabilityPercent Int?
   expectedCloseDate DateTime?
   source            String?

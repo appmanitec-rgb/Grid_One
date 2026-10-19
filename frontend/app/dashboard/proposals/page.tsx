@@ -1,4 +1,6 @@
 "use client";
+import { canUsePortfolio, canScreenAction } from "@/lib/access-rules";
+import { getAccessFromToken } from "@/lib/access";
 
 import { SelectField } from "@/app/dashboard/components/SelectField";
 import Link from "next/link";
@@ -80,6 +82,9 @@ const SECONDARY_BUTTON =
   "inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-sky-300 hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-50";
 
 export default function ProposalsPage() {
+  const [accessReady, setAccessReady] = useState(false);
+  useEffect(() => setAccessReady(true), []);
+
   const router = useRouter();
   const [proposals, setProposals] = useState<ProposalListItem[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
@@ -103,6 +108,15 @@ export default function ProposalsPage() {
   }, []);
   const isAdmin = viewerRole === "ADMIN";
   const isClient = viewerRole === "CLIENT";
+  const canCreate =
+    !isClient &&
+    getAccessFromToken().proposals.create &&
+    canScreenAction("proposals", "create");
+  const newProposalHref = canUsePortfolio("partsServices")
+    ? "/dashboard/proposals/new"
+    : canUsePortfolio("generators")
+      ? "/dashboard/proposals/new/generator"
+      : "/dashboard/proposals/new?proposalType=CONTRACT";
 
   const handleUnauthorized = useCallback(
     async (res: Response) => {
@@ -114,26 +128,35 @@ export default function ProposalsPage() {
     [router],
   );
 
-  const loadProposals = useCallback(async (clearNotice = true) => {
-    setLoading(true);
-    setError("");
-    if (clearNotice) setNotice("");
+  const loadProposals = useCallback(
+    async (clearNotice = true) => {
+      setLoading(true);
+      setError("");
+      if (clearNotice) setNotice("");
 
-    try {
-      const res = await apiFetch(apiUrl("/proposals"), { cache: "no-store" });
-      if (await handleUnauthorized(res)) return false;
-      if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, "Falha ao carregar propostas."));
+      try {
+        const res = await apiFetch(apiUrl("/proposals"), { cache: "no-store" });
+        if (await handleUnauthorized(res)) return false;
+        if (!res.ok) {
+          throw new Error(
+            await readApiErrorMessage(res, "Falha ao carregar propostas."),
+          );
+        }
+        setProposals((await res.json()) as ProposalListItem[]);
+        return true;
+      } catch (loadError: unknown) {
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Nao foi possivel carregar propostas.",
+        );
+        return false;
+      } finally {
+        setLoading(false);
       }
-      setProposals((await res.json()) as ProposalListItem[]);
-      return true;
-    } catch (loadError: unknown) {
-      setError(loadError instanceof Error ? loadError.message : "Nao foi possivel carregar propostas.");
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  }, [handleUnauthorized]);
+    },
+    [handleUnauthorized],
+  );
   useEffect(() => {
     const saved = localStorage.getItem(
       "manitec_view_proposals",
@@ -172,7 +195,9 @@ export default function ProposalsPage() {
 
   async function moveProposalToStatus(proposalId: string, nextStatus: string) {
     if (isClient) {
-      setError("O portal do cliente movimenta propostas apenas pela tela de detalhe.");
+      setError(
+        "O portal do cliente movimenta propostas apenas pela tela de detalhe.",
+      );
       setNotice("");
       return;
     }
@@ -181,7 +206,13 @@ export default function ProposalsPage() {
     const current = proposals.find((proposal) => proposal.id === proposalId);
     if (!current || current.status === nextStatus) return;
     if (!isAdmin && !canMoveForward(current.status, nextStatus)) {
-      setError("Fluxo inválido: " + statusLabel(current.status) + " → " + statusLabel(nextStatus) + ".");
+      setError(
+        "Fluxo inválido: " +
+          statusLabel(current.status) +
+          " → " +
+          statusLabel(nextStatus) +
+          ".",
+      );
       setNotice("");
       setDropTarget(null);
       setDraggingId(null);
@@ -192,9 +223,13 @@ export default function ProposalsPage() {
     setMovingId(proposalId);
     setError("");
     setNotice("");
-    setProposals((prev) => prev.map((proposal) =>
-      proposal.id === proposalId ? { ...proposal, status: nextStatus } : proposal,
-    ));
+    setProposals((prev) =>
+      prev.map((proposal) =>
+        proposal.id === proposalId
+          ? { ...proposal, status: nextStatus }
+          : proposal,
+      ),
+    );
 
     try {
       const res = await apiFetch(apiUrl("/proposals/" + proposalId), {
@@ -204,14 +239,26 @@ export default function ProposalsPage() {
       });
       if (await handleUnauthorized(res)) return;
       if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, "Falha ao mover proposta."));
+        throw new Error(
+          await readApiErrorMessage(res, "Falha ao mover proposta."),
+        );
       }
       if (await loadProposals(false)) {
-        setNotice("Proposta " + current.code + " movida para " + statusLabel(nextStatus) + ".");
+        setNotice(
+          "Proposta " +
+            current.code +
+            " movida para " +
+            statusLabel(nextStatus) +
+            ".",
+        );
       }
     } catch (moveError: unknown) {
       setProposals(snapshot);
-      setError(moveError instanceof Error ? moveError.message : "Nao foi possivel mover a proposta.");
+      setError(
+        moveError instanceof Error
+          ? moveError.message
+          : "Nao foi possivel mover a proposta.",
+      );
     } finally {
       setMovingId(null);
       setDropTarget(null);
@@ -226,10 +273,7 @@ export default function ProposalsPage() {
         return false;
       }
       const proposalStep = statusToFlowStep(proposal.status);
-      if (
-        statusFilter !== "ALL" &&
-        proposalStep !== statusFilter
-      ) {
+      if (statusFilter !== "ALL" && proposalStep !== statusFilter) {
         return false;
       }
       if (!term) return true;
@@ -250,10 +294,18 @@ export default function ProposalsPage() {
 
   const sortedProposals = useMemo(() => {
     return [...filteredProposals].sort((a, b) => {
-      if (sortBy === "VALUE_DESC") return Number(b.totalValue || 0) - Number(a.totalValue || 0);
-      if (sortBy === "VALUE_ASC") return Number(a.totalValue || 0) - Number(b.totalValue || 0);
-      if (sortBy === "CLIENT") return (a.client?.companyName || "").localeCompare(b.client?.companyName || "", "pt-BR");
-      const difference = new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+      if (sortBy === "VALUE_DESC")
+        return Number(b.totalValue || 0) - Number(a.totalValue || 0);
+      if (sortBy === "VALUE_ASC")
+        return Number(a.totalValue || 0) - Number(b.totalValue || 0);
+      if (sortBy === "CLIENT")
+        return (a.client?.companyName || "").localeCompare(
+          b.client?.companyName || "",
+          "pt-BR",
+        );
+      const difference =
+        new Date(b.createdAt || 0).getTime() -
+        new Date(a.createdAt || 0).getTime();
       return sortBy === "OLDEST" ? -difference : difference;
     });
   }, [filteredProposals, sortBy]);
@@ -263,7 +315,10 @@ export default function ProposalsPage() {
   useEffect(() => {
     setPage((current) => Math.min(current, pageCount));
   }, [pageCount]);
-  const visibleProposals = sortedProposals.slice((page - 1) * pageSize, page * pageSize);
+  const visibleProposals = sortedProposals.slice(
+    (page - 1) * pageSize,
+    page * pageSize,
+  );
 
   const categoryCounts = useMemo(
     () => ({
@@ -298,9 +353,9 @@ export default function ProposalsPage() {
     return {
       total: proposals.length,
       active: active.length,
-      activeValue: active.filter(isBrlProposal).reduce(
-        (sum, proposal) => sum + Number(proposal.totalValue || 0), 0,
-      ),
+      activeValue: active
+        .filter(isBrlProposal)
+        .reduce((sum, proposal) => sum + Number(proposal.totalValue || 0), 0),
       boardReview: proposals.filter(
         (proposal) => statusToFlowStep(proposal.status) === "BOARD_REVIEW",
       ).length,
@@ -308,17 +363,29 @@ export default function ProposalsPage() {
         (proposal) => statusToFlowStep(proposal.status) === "CLIENT_REVIEW",
       ).length,
       wonValue: proposals
-        .filter((proposal) => proposal.status === "WON" && isBrlProposal(proposal))
+        .filter(
+          (proposal) => proposal.status === "WON" && isBrlProposal(proposal),
+        )
         .reduce((sum, proposal) => sum + Number(proposal.totalValue || 0), 0),
-      foreignCount: proposals.filter((proposal) => !isBrlProposal(proposal)).length,
+      foreignCount: proposals.filter((proposal) => !isBrlProposal(proposal))
+        .length,
     };
   }, [proposals]);
   const commercialHandoffs = useMemo(
     () =>
       proposals.flatMap((proposal) => {
-        if (proposal.status === "WON" && proposal.hasDownPayment &&
-            Number(proposal.downPaymentAmount || 0) > 0 && !proposal.downPaymentConfirmedAt) {
-          return [{ proposal, action: "Aguardando confirmação da entrada pelo financeiro" }];
+        if (
+          proposal.status === "WON" &&
+          proposal.hasDownPayment &&
+          Number(proposal.downPaymentAmount || 0) > 0 &&
+          !proposal.downPaymentConfirmedAt
+        ) {
+          return [
+            {
+              proposal,
+              action: "Aguardando confirmação da entrada pelo financeiro",
+            },
+          ];
         }
         if (
           proposal.status === "WON" &&
@@ -339,6 +406,12 @@ export default function ProposalsPage() {
     [proposals],
   );
 
+  if (!accessReady)
+    return (
+      <div className="dashboard-page p-6 text-sm text-slate-500">
+        Carregando permissões...
+      </div>
+    );
   return (
     <div className="dashboard-page space-y-5">
       <PageHero
@@ -366,24 +439,39 @@ export default function ProposalsPage() {
           {
             label: "Volume no funil",
             value: formatCurrency(stats.activeValue),
-            helper: stats.foreignCount ? "Soma em BRL; propostas em outra moeda ficam fora do total." : "Soma das propostas abertas em BRL.",
+            helper: stats.foreignCount
+              ? "Soma em BRL; propostas em outra moeda ficam fora do total."
+              : "Soma das propostas abertas em BRL.",
             tone: "emerald",
           },
           {
             label: "Fechado ganho",
             value: formatCurrency(stats.wonValue),
-            helper: stats.foreignCount ? "Soma em BRL; propostas em outra moeda ficam fora do total." : "Valor das propostas ganhas em BRL.",
+            helper: stats.foreignCount
+              ? "Soma em BRL; propostas em outra moeda ficam fora do total."
+              : "Valor das propostas ganhas em BRL.",
             tone: "amber",
           },
         ]}
         actions={
           <>
-            {!isClient ? (
-              <Link href="/dashboard/proposals/new" className="inline-flex min-h-10 items-center justify-center rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-sky-700">
+            {canCreate &&
+            (canUsePortfolio("partsServices") ||
+              canUsePortfolio("generators") ||
+              canUsePortfolio("contracts")) ? (
+              <Link
+                href={newProposalHref}
+                className="inline-flex min-h-10 items-center justify-center rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-sky-700"
+              >
                 + Nova proposta
               </Link>
             ) : null}
-            <button type="button" onClick={() => void loadProposals()} disabled={loading} className={SECONDARY_BUTTON}>
+            <button
+              type="button"
+              onClick={() => void loadProposals()}
+              disabled={loading}
+              className={SECONDARY_BUTTON}
+            >
               {loading ? "Atualizando..." : "Atualizar carteira"}
             </button>
           </>
@@ -392,28 +480,126 @@ export default function ProposalsPage() {
       />
 
       {!isClient ? (
-        <section aria-label="Prioridades comerciais" className="grid gap-3 sm:grid-cols-2">
-          <button type="button" onClick={() => { setCategory("ALL"); setQuery(""); setStatusFilter("BOARD_REVIEW"); setViewMode("list"); }} className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition hover:border-sky-300 hover:shadow-md">
-            <span><span className="block text-xs font-bold uppercase tracking-[0.14em] text-sky-700">Aguardando diretoria</span><span className="mt-1 block text-sm text-slate-700">Inclui revisão de desconto</span></span>
-            <span className="text-2xl font-black text-sky-950">{stats.boardReview}</span>
+        <section
+          aria-label="Prioridades comerciais"
+          className="grid gap-3 sm:grid-cols-2"
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setCategory("ALL");
+              setQuery("");
+              setStatusFilter("BOARD_REVIEW");
+              setViewMode("list");
+            }}
+            className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition hover:border-sky-300 hover:shadow-md"
+          >
+            <span>
+              <span className="block text-xs font-bold uppercase tracking-[0.14em] text-sky-700">
+                Aguardando diretoria
+              </span>
+              <span className="mt-1 block text-sm text-slate-700">
+                Inclui revisão de desconto
+              </span>
+            </span>
+            <span className="text-2xl font-black text-sky-950">
+              {stats.boardReview}
+            </span>
           </button>
-          <button type="button" onClick={() => { setCategory("ALL"); setQuery(""); setStatusFilter("CLIENT_REVIEW"); setViewMode("list"); }} className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition hover:border-amber-300 hover:shadow-md">
-            <span><span className="block text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Aguardando cliente</span><span className="mt-1 block text-sm text-slate-700">Propostas em análise externa</span></span>
-            <span className="text-2xl font-black text-amber-950">{stats.clientReview}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setCategory("ALL");
+              setQuery("");
+              setStatusFilter("CLIENT_REVIEW");
+              setViewMode("list");
+            }}
+            className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition hover:border-amber-300 hover:shadow-md"
+          >
+            <span>
+              <span className="block text-xs font-bold uppercase tracking-[0.14em] text-amber-700">
+                Aguardando cliente
+              </span>
+              <span className="mt-1 block text-sm text-slate-700">
+                Propostas em análise externa
+              </span>
+            </span>
+            <span className="text-2xl font-black text-amber-950">
+              {stats.clientReview}
+            </span>
           </button>
         </section>
       ) : null}
 
-      {!isClient ? (
+      {canCreate ? (
         <details className="dashboard-page-context">
-        <summary><span>Nova proposta: escolher o tipo</span><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="h-4 w-4"><path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg></summary>
-        <div className="dashboard-page-context-body"><p className="mb-3 text-sm text-slate-600">Escolha o formato para iniciar uma proposta.</p><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <CreateProposalCard index="01" title="Peças e serviços" description="Manutenção, materiais e atendimento." href="/dashboard/proposals/new" />
-            <CreateProposalCard index="02" title="Gerador" description="Venda de equipamento e acessórios." href="/dashboard/proposals/new/generator" />
-            <CreateProposalCard index="03" title="Contrato" description="Cobertura e serviços recorrentes." href="/dashboard/proposals/new?proposalType=CONTRACT" />
-            <CreateProposalCard index="04" title="Proposta externa" description="Registre uma venda de origem externa." href="/dashboard/proposals/new/external" />
-          </div></div>
-      </details>
+          <summary>
+            <span>Nova proposta: escolher o tipo</span>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 20 20"
+              fill="none"
+              className="h-4 w-4"
+            >
+              <path
+                d="m5 7.5 5 5 5-5"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+            </svg>
+          </summary>
+          <div className="dashboard-page-context-body">
+            <p className="mb-3 text-sm text-slate-600">
+              Escolha o formato para iniciar uma proposta.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {canUsePortfolio("partsServices") ? (
+                <CreateProposalCard
+                  index="01"
+                  title="Peças e serviços"
+                  description="Manutenção, materiais e atendimento."
+                  href="/dashboard/proposals/new"
+                />
+              ) : null}
+              {canUsePortfolio("generators") ? (
+                <CreateProposalCard
+                  index="02"
+                  title="Gerador"
+                  description="Venda de equipamento e acessórios."
+                  href="/dashboard/proposals/new/generator"
+                />
+              ) : null}
+              {canUsePortfolio("contracts") ? (
+                <CreateProposalCard
+                  index="03"
+                  title="Contrato"
+                  description="Cobertura e serviços recorrentes."
+                  href="/dashboard/proposals/new?proposalType=CONTRACT"
+                />
+              ) : null}
+              {canUsePortfolio("generators") ||
+              canUsePortfolio("partsServices") ||
+              canUsePortfolio("contracts") ? (
+                <CreateProposalCard
+                  index="04"
+                  title="Proposta externa"
+                  description="Registre uma venda de origem externa."
+                  href="/dashboard/proposals/new/external"
+                />
+              ) : null}
+            </div>
+          </div>
+        </details>
+      ) : null}
+      {!isClient &&
+      !canUsePortfolio("generators") &&
+      !canUsePortfolio("partsServices") &&
+      !canUsePortfolio("contracts") ? (
+        <StatusBanner tone="amber">
+          Nenhuma carteira comercial foi atribuída ao seu perfil. Solicite a
+          configuração em RH, Colaboradores e acessos.
+        </StatusBanner>
       ) : null}
       {notice ? <StatusBanner tone="emerald">{notice}</StatusBanner> : null}
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
@@ -423,7 +609,11 @@ export default function ProposalsPage() {
           eyebrow="Passagem comercial"
           title="Vendas ganhas aguardando o próximo passo"
           description="Após o aceite, acompanhe a confirmação da entrada e a continuidade para o contrato ou o pós-venda."
-          actions={<DataPill tone="amber">{commercialHandoffs.length} pendente(s)</DataPill>}
+          actions={
+            <DataPill tone="amber">
+              {commercialHandoffs.length} pendente(s)
+            </DataPill>
+          }
         >
           <div className="grid gap-3 lg:grid-cols-2">
             {commercialHandoffs.slice(0, 6).map(({ proposal, action }) => (
@@ -434,9 +624,12 @@ export default function ProposalsPage() {
               >
                 <span>
                   <span className="block text-sm font-bold text-slate-900">
-                    {proposal.code} · {proposal.client?.companyName || "Cliente sem nome"}
+                    {proposal.code} ·{" "}
+                    {proposal.client?.companyName || "Cliente sem nome"}
                   </span>
-                  <span className="mt-1 block text-xs text-slate-600">{action}</span>
+                  <span className="mt-1 block text-xs text-slate-600">
+                    {action}
+                  </span>
                 </span>
                 <span className="text-xs font-bold text-amber-800 group-hover:underline">
                   Abrir proposta →
@@ -446,7 +639,8 @@ export default function ProposalsPage() {
           </div>
           {commercialHandoffs.length > 6 ? (
             <p className="mt-3 text-xs text-slate-500">
-              Mostrando as 6 mais recentes. As demais seguem identificadas na carteira abaixo.
+              Mostrando as 6 mais recentes. As demais seguem identificadas na
+              carteira abaixo.
             </p>
           ) : null}
         </SectionCard>
@@ -474,14 +668,28 @@ export default function ProposalsPage() {
         actions={
           <div className="flex w-full flex-col gap-3">
             <div className="flex flex-wrap items-center gap-2">
-              <ViewModeButton active={viewMode === "list"} onClick={() => setViewMode("list")}>Lista</ViewModeButton>
-              {!isClient ? <ViewModeButton active={viewMode === "kanban"} onClick={() => setViewMode("kanban")}>Kanban</ViewModeButton> : null}
+              <ViewModeButton
+                active={viewMode === "list"}
+                onClick={() => setViewMode("list")}
+              >
+                Lista
+              </ViewModeButton>
+              {!isClient ? (
+                <ViewModeButton
+                  active={viewMode === "kanban"}
+                  onClick={() => setViewMode("kanban")}
+                >
+                  Kanban
+                </ViewModeButton>
+              ) : null}
               <span className="ml-auto rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700">
                 {filteredProposals.length} de {proposals.length} propostas
               </span>
             </div>
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_200px_180px_auto]">
-              <label className="sr-only" htmlFor="proposal-search">Pesquisar propostas</label>
+              <label className="sr-only" htmlFor="proposal-search">
+                Pesquisar propostas
+              </label>
               <TextInput
                 id="proposal-search"
                 value={query}
@@ -489,20 +697,53 @@ export default function ProposalsPage() {
                 placeholder="Código, cliente, referência ou equipamento"
                 className="min-w-0"
               />
-              <label className="sr-only" htmlFor="proposal-status-filter">Filtrar por etapa</label>
-              <SelectField id="proposal-status-filter" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-11 min-w-0 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100">
+              <label className="sr-only" htmlFor="proposal-status-filter">
+                Filtrar por etapa
+              </label>
+              <SelectField
+                id="proposal-status-filter"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                className="h-11 min-w-0 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+              >
                 <option value="ALL">Todas as etapas</option>
-                {KANBAN_COLUMNS.map((column) => <option key={column.key} value={column.key}>{column.label}</option>)}
+                {KANBAN_COLUMNS.map((column) => (
+                  <option key={column.key} value={column.key}>
+                    {column.label}
+                  </option>
+                ))}
               </SelectField>
-              <label className="sr-only" htmlFor="proposal-sort">Ordenar propostas</label>
-              <SelectField id="proposal-sort" value={sortBy} onChange={(event) => setSortBy(event.target.value)} className="h-11 min-w-0 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100">
+              <label className="sr-only" htmlFor="proposal-sort">
+                Ordenar propostas
+              </label>
+              <SelectField
+                id="proposal-sort"
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value)}
+                className="h-11 min-w-0 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+              >
                 <option value="RECENT">Mais recentes</option>
                 <option value="OLDEST">Mais antigas</option>
                 <option value="VALUE_DESC">Maior valor</option>
                 <option value="VALUE_ASC">Menor valor</option>
                 <option value="CLIENT">Cliente A–Z</option>
               </SelectField>
-              <button type="button" onClick={() => { setQuery(""); setStatusFilter("ALL"); setSortBy("RECENT"); setCategory("ALL"); }} disabled={!query && statusFilter === "ALL" && sortBy === "RECENT" && category === "ALL"} className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  setStatusFilter("ALL");
+                  setSortBy("RECENT");
+                  setCategory("ALL");
+                }}
+                disabled={
+                  !query &&
+                  statusFilter === "ALL" &&
+                  sortBy === "RECENT" &&
+                  category === "ALL"
+                }
+                className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
                 Limpar filtros
               </button>
             </div>
@@ -510,14 +751,45 @@ export default function ProposalsPage() {
         }
       >
         <div className="mb-5 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-4">
-          <span className="mr-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Tipo</span>
-          <CategoryButton label="Todas" count={categoryCounts.ALL} active={category === "ALL"} onClick={() => setCategory("ALL")} />
-          <CategoryButton label="Geradores" count={categoryCounts.GENERATORS} active={category === "GENERATORS"} onClick={() => setCategory("GENERATORS")} />
-          <CategoryButton label="Peças e serviços" count={categoryCounts.PARTS_SERVICES} active={category === "PARTS_SERVICES"} onClick={() => setCategory("PARTS_SERVICES")} />
-          <CategoryButton label="Contratos" count={categoryCounts.CONTRACTS} active={category === "CONTRACTS"} onClick={() => setCategory("CONTRACTS")} />
+          <span className="mr-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
+            Tipo
+          </span>
+          <CategoryButton
+            label="Todas"
+            count={categoryCounts.ALL}
+            active={category === "ALL"}
+            onClick={() => setCategory("ALL")}
+          />
+          {isClient || canUsePortfolio("generators") ? (
+            <CategoryButton
+              label="Geradores"
+              count={categoryCounts.GENERATORS}
+              active={category === "GENERATORS"}
+              onClick={() => setCategory("GENERATORS")}
+            />
+          ) : null}
+          {isClient || canUsePortfolio("partsServices") ? (
+            <CategoryButton
+              label="Peças e serviços"
+              count={categoryCounts.PARTS_SERVICES}
+              active={category === "PARTS_SERVICES"}
+              onClick={() => setCategory("PARTS_SERVICES")}
+            />
+          ) : null}
+          {isClient || canUsePortfolio("contracts") ? (
+            <CategoryButton
+              label="Contratos"
+              count={categoryCounts.CONTRACTS}
+              active={category === "CONTRACTS"}
+              onClick={() => setCategory("CONTRACTS")}
+            />
+          ) : null}
         </div>
         {loading ? (
-          <div role="status" className="rounded-[24px] border border-slate-200 bg-slate-50/80 px-5 py-10 text-sm text-slate-500">
+          <div
+            role="status"
+            className="rounded-[24px] border border-slate-200 bg-slate-50/80 px-5 py-10 text-sm text-slate-500"
+          >
             Carregando propostas...
           </div>
         ) : null}
@@ -530,10 +802,27 @@ export default function ProposalsPage() {
               ))}
               {pageCount > 1 ? (
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
-                  <p className="text-sm text-slate-600">Página {page} de {pageCount} · {sortedProposals.length} propostas</p>
+                  <p className="text-sm text-slate-600">
+                    Página {page} de {pageCount} · {sortedProposals.length}{" "}
+                    propostas
+                  </p>
                   <div className="flex gap-2">
-                    <button type="button" disabled={page === 1} onClick={() => setPage((current) => current - 1)} className={SECONDARY_BUTTON}>Anterior</button>
-                    <button type="button" disabled={page === pageCount} onClick={() => setPage((current) => current + 1)} className={SECONDARY_BUTTON}>Próxima</button>
+                    <button
+                      type="button"
+                      disabled={page === 1}
+                      onClick={() => setPage((current) => current - 1)}
+                      className={SECONDARY_BUTTON}
+                    >
+                      Anterior
+                    </button>
+                    <button
+                      type="button"
+                      disabled={page === pageCount}
+                      onClick={() => setPage((current) => current + 1)}
+                      className={SECONDARY_BUTTON}
+                    >
+                      Próxima
+                    </button>
                   </div>
                 </div>
               ) : null}
@@ -552,14 +841,26 @@ export default function ProposalsPage() {
               <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500">Etapas do funil</p>
-                    <p className="mt-1 text-sm text-slate-600">Arraste um cartão para uma etapa permitida.</p>
+                    <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500">
+                      Etapas do funil
+                    </p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Arraste um cartão para uma etapa permitida.
+                    </p>
                   </div>
-                  <DataPill tone="blue">{filteredProposals.length} propostas no quadro</DataPill>
+                  <DataPill tone="blue">
+                    {filteredProposals.length} propostas no quadro
+                  </DataPill>
                 </div>
                 <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
                   {flowColumns.map((column, index) => (
-                    <KanbanStepCard key={column.key} index={index + 1} label={column.label} count={column.items.length} tone={column.tone} />
+                    <KanbanStepCard
+                      key={column.key}
+                      index={index + 1}
+                      label={column.label}
+                      count={column.items.length}
+                      tone={column.tone}
+                    />
                   ))}
                 </div>
               </div>
@@ -620,8 +921,14 @@ export default function ProposalsPage() {
                             </p>
                           </div>
                           <div className="text-right">
-                            <DataPill tone={statusTone(column.key)}>{formatCurrency(column.totalValue)} em BRL</DataPill>
-                            {column.foreignCount > 0 ? <p className="mt-1 text-[11px] font-medium text-slate-600">{column.foreignCount} em outra moeda</p> : null}
+                            <DataPill tone={statusTone(column.key)}>
+                              {formatCurrency(column.totalValue)} em BRL
+                            </DataPill>
+                            {column.foreignCount > 0 ? (
+                              <p className="mt-1 text-[11px] font-medium text-slate-600">
+                                {column.foreignCount} em outra moeda
+                              </p>
+                            ) : null}
                           </div>
                         </div>
                       </div>
@@ -698,12 +1005,32 @@ export default function ProposalsPage() {
   );
 }
 
-function CreateProposalCard({ index, title, description, href }: { index: string; title: string; description: string; href: string }) {
+function CreateProposalCard({
+  index,
+  title,
+  description,
+  href,
+}: {
+  index: string;
+  title: string;
+  description: string;
+  href: string;
+}) {
   return (
-    <Link href={href} className="group flex min-h-32 flex-col justify-between rounded-2xl border border-slate-200 bg-[linear-gradient(145deg,#f8fbff,#ffffff)] p-4 transition hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-[0_18px_36px_-28px_rgba(2,132,199,0.42)]">
+    <Link
+      href={href}
+      className="group flex min-h-32 flex-col justify-between rounded-2xl border border-slate-200 bg-[linear-gradient(145deg,#f8fbff,#ffffff)] p-4 transition hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-[0_18px_36px_-28px_rgba(2,132,199,0.42)]"
+    >
       <div className="flex items-start justify-between">
-        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-xs font-black text-sky-700 shadow-sm">{index}</span>
-        <span aria-hidden="true" className="text-lg font-bold text-sky-600 transition group-hover:translate-x-1">↗</span>
+        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-xs font-black text-sky-700 shadow-sm">
+          {index}
+        </span>
+        <span
+          aria-hidden="true"
+          className="text-lg font-bold text-sky-600 transition group-hover:translate-x-1"
+        >
+          ↗
+        </span>
       </div>
       <div>
         <h3 className="text-sm font-bold text-slate-950">{title}</h3>
@@ -752,12 +1079,22 @@ function CategoryButton({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={active
-        ? "inline-flex items-center gap-2 rounded-full border border-sky-500 bg-sky-50 px-3 py-2 text-xs font-bold text-sky-900"
-        : "inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-sky-300 hover:bg-sky-50"}
+      className={
+        active
+          ? "inline-flex items-center gap-2 rounded-full border border-sky-500 bg-sky-50 px-3 py-2 text-xs font-bold text-sky-900"
+          : "inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-sky-300 hover:bg-sky-50"
+      }
     >
       <span>{label}</span>
-      <span className={active ? "rounded-full bg-sky-600 px-2 py-0.5 text-[11px] text-white" : "rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600"}>{count}</span>
+      <span
+        className={
+          active
+            ? "rounded-full bg-sky-600 px-2 py-0.5 text-[11px] text-white"
+            : "rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600"
+        }
+      >
+        {count}
+      </span>
     </button>
   );
 }
@@ -766,46 +1103,102 @@ function ProposalPortfolioCard({ proposal }: { proposal: ProposalListItem }) {
 
   return (
     <article className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-sky-300 hover:shadow-[0_18px_42px_-30px_rgba(15,31,50,0.35)] sm:p-5">
-      <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1 bg-sky-500" />
+      <span
+        aria-hidden="true"
+        className="absolute inset-y-0 left-0 w-1 bg-sky-500"
+      />
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-start gap-3">
-          <span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-lg font-black text-sky-700">
+          <span
+            aria-hidden="true"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-lg font-black text-sky-700"
+          >
             {proposalTypeLabel(proposal.type).slice(0, 1)}
           </span>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <Link href={'/dashboard/proposals/' + proposal.id} className="dashboard-record-link text-base font-bold" title="Abrir proposta">
+              <Link
+                href={"/dashboard/proposals/" + proposal.id}
+                className="dashboard-record-link text-base font-bold"
+                title="Abrir proposta"
+              >
                 {proposal.code}
               </Link>
-              <DataPill tone={statusTone(proposal.status)}>{statusLabel(proposal.status)}</DataPill>
-              {proposal.origin === "EXTERNAL" ? <DataPill tone="amber">Externa</DataPill> : null}
+              <DataPill tone={statusTone(proposal.status)}>
+                {statusLabel(proposal.status)}
+              </DataPill>
+              {proposal.origin === "EXTERNAL" ? (
+                <DataPill tone="amber">Externa</DataPill>
+              ) : null}
             </div>
-            <p className="mt-1 truncate text-sm font-semibold text-slate-800" title={proposal.client?.companyName || ""}>
+            <p
+              className="mt-1 truncate text-sm font-semibold text-slate-800"
+              title={proposal.client?.companyName || ""}
+            >
               {proposal.client?.companyName || "Cliente não vinculado"}
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              {proposalTypeLabel(proposal.type)} · {proposalEquipmentLabel(proposal)}
+              {proposalTypeLabel(proposal.type)} ·{" "}
+              {proposalEquipmentLabel(proposal)}
             </p>
           </div>
         </div>
         <div className="flex items-end justify-between gap-4 border-t border-slate-100 pt-3 lg:flex-col lg:items-end lg:border-0 lg:pt-0">
           <div className="lg:text-right">
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Valor da proposta</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+              Valor da proposta
+            </p>
             <p className="mt-1 text-xl font-bold text-slate-950">
-              {formatCurrency(Number(proposal.totalValue || 0), proposal.externalCurrency || "BRL")}
+              {formatCurrency(
+                Number(proposal.totalValue || 0),
+                proposal.externalCurrency || "BRL",
+              )}
             </p>
           </div>
-          <Link href={'/dashboard/proposals/' + proposal.id} className="inline-flex shrink-0 items-center rounded-xl bg-sky-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-sky-700">
-            Abrir proposta <span aria-hidden="true" className="ml-2">→</span>
+          <Link
+            href={"/dashboard/proposals/" + proposal.id}
+            className="inline-flex shrink-0 items-center rounded-xl bg-sky-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-sky-700"
+          >
+            Abrir proposta{" "}
+            <span aria-hidden="true" className="ml-2">
+              →
+            </span>
           </Link>
         </div>
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-slate-100 pt-3 text-xs text-slate-600">
-        <span><strong className="font-semibold text-slate-800">Etapa:</strong> {stepLabel(step)}</span>
-        {proposal.createdAt ? <span><strong className="font-semibold text-slate-800">Criada:</strong> {formatDate(proposal.createdAt)}</span> : null}
-        {proposal.externalReference ? <span><strong className="font-semibold text-slate-800">Referência:</strong> {proposal.externalReference}</span> : null}
-        {proposal.type === "CONTRACT" && proposal.status === "WON" && !proposal.generatedContract ? <span className="font-semibold text-amber-700">Contrato pendente</span> : null}
-        {proposal.type === "GENERATOR_SALE" && proposal.status === "WON" && !proposal.postSaleGeneratorId ? <span className="font-semibold text-amber-700">Pós-venda pendente</span> : null}
+        <span>
+          <strong className="font-semibold text-slate-800">Etapa:</strong>{" "}
+          {stepLabel(step)}
+        </span>
+        {proposal.createdAt ? (
+          <span>
+            <strong className="font-semibold text-slate-800">Criada:</strong>{" "}
+            {formatDate(proposal.createdAt)}
+          </span>
+        ) : null}
+        {proposal.externalReference ? (
+          <span>
+            <strong className="font-semibold text-slate-800">
+              Referência:
+            </strong>{" "}
+            {proposal.externalReference}
+          </span>
+        ) : null}
+        {proposal.type === "CONTRACT" &&
+        proposal.status === "WON" &&
+        !proposal.generatedContract ? (
+          <span className="font-semibold text-amber-700">
+            Contrato pendente
+          </span>
+        ) : null}
+        {proposal.type === "GENERATOR_SALE" &&
+        proposal.status === "WON" &&
+        !proposal.postSaleGeneratorId ? (
+          <span className="font-semibold text-amber-700">
+            Pós-venda pendente
+          </span>
+        ) : null}
       </div>
     </article>
   );
@@ -860,7 +1253,12 @@ function KanbanProposalCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <Link href={`/dashboard/proposals/${proposal.id}`} draggable={false} className="dashboard-record-link text-sm font-bold" title="Abrir proposta">
+          <Link
+            href={`/dashboard/proposals/${proposal.id}`}
+            draggable={false}
+            className="dashboard-record-link text-sm font-bold"
+            title="Abrir proposta"
+          >
             {proposal.code}
           </Link>
           <p className="mt-1 text-sm text-slate-700">
@@ -930,16 +1328,19 @@ function buildFlowColumns(proposals: ProposalListItem[]): FlowColumnSummary[] {
     return {
       ...column,
       items,
-      totalValue: items.filter(isBrlProposal).reduce(
-        (sum, proposal) => sum + Number(proposal.totalValue || 0), 0,
-      ),
+      totalValue: items
+        .filter(isBrlProposal)
+        .reduce((sum, proposal) => sum + Number(proposal.totalValue || 0), 0),
       foreignCount: items.filter((proposal) => !isBrlProposal(proposal)).length,
     };
   });
 }
 
 function isBrlProposal(proposal: ProposalListItem) {
-  return !proposal.externalCurrency || proposal.externalCurrency.trim().toUpperCase() === "BRL";
+  return (
+    !proposal.externalCurrency ||
+    proposal.externalCurrency.trim().toUpperCase() === "BRL"
+  );
 }
 function proposalCategory(type: string): ProposalCategory {
   if (type === "GENERATOR_SALE") return "GENERATORS";
@@ -959,7 +1360,8 @@ function proposalEquipmentLabel(proposal: ProposalListItem) {
   if (proposal.commercialGenerator?.model) {
     const model = proposal.commercialGenerator.model.trim();
     const manufacturer = proposal.commercialGenerator.manufacturer?.trim();
-    return manufacturer && !model.toLowerCase().startsWith(manufacturer.toLowerCase())
+    return manufacturer &&
+      !model.toLowerCase().startsWith(manufacturer.toLowerCase())
       ? manufacturer + " " + model
       : model;
   }
@@ -983,7 +1385,9 @@ function statusTone(status: string): Tone {
 
 function formatDate(value: string) {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "Data indisponível" : date.toLocaleDateString("pt-BR");
+  return Number.isNaN(date.getTime())
+    ? "Data indisponível"
+    : date.toLocaleDateString("pt-BR");
 }
 
 function formatCurrency(value: number, currency = "BRL") {
@@ -995,6 +1399,13 @@ function formatCurrency(value: number, currency = "BRL") {
       maximumFractionDigits: 2,
     }).format(amount);
   } catch {
-    return amount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + currency;
+    return (
+      amount.toLocaleString("pt-BR", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }) +
+      " " +
+      currency
+    );
   }
 }

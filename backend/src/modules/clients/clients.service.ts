@@ -1,3 +1,5 @@
+import { proposalScope, ruleActor } from '../auth/rules/commercial-access';
+import { allowedPortfolios } from '../auth/rules/access-rules';
 import {
   BadRequestException,
   ConflictException,
@@ -399,14 +401,18 @@ export class ClientsService {
     });
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, actorUserId?: string) {
     const client = await this.database.client.findUnique({
       where: { id },
       include: {
         addresses: true,
         contacts: true,
         _count: {
-          select: { proposals: true },
+          select: {
+            proposals: {
+              where: await proposalScope(this.database, actorUserId),
+            },
+          },
         },
         generators: {
           include: {
@@ -445,6 +451,13 @@ export class ClientsService {
           take: 200,
         },
         contracts: {
+          where:
+            (await ruleActor(this.database, actorUserId)) &&
+            !allowedPortfolios(
+              (await ruleActor(this.database, actorUserId))!,
+            ).includes('contracts')
+              ? { id: { in: [] } }
+              : {},
           include: {
             createdByUser: {
               select: { id: true, name: true, email: true },
@@ -462,6 +475,7 @@ export class ClientsService {
           orderBy: { createdAt: 'desc' },
         },
         proposals: {
+          where: await proposalScope(this.database, actorUserId),
           include: {
             user: {
               select: { id: true, name: true, email: true, role: true },

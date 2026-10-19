@@ -1,3 +1,4 @@
+import { CommercialScopeGuard } from '../auth/rules/commercial-scope.guard';
 import {
   BadRequestException,
   Body,
@@ -29,7 +30,7 @@ import { ConvertGeneratorPostSaleDto } from './dto/convert-generator-post-sale.d
 import { ProposalsService } from './proposals.service';
 
 @Controller('proposals')
-@UseGuards(AuthGuard, AccessPolicyGuard)
+@UseGuards(AuthGuard, AccessPolicyGuard, CommercialScopeGuard)
 @RequireAccessPolicy('proposals.view')
 export class ProposalsController {
   constructor(private readonly proposalsService: ProposalsService) {}

@@ -1,4 +1,8 @@
 import {
+  checkProposalType,
+  checkDiscount,
+} from '../auth/rules/commercial-access';
+import {
   BadRequestException,
   ForbiddenException,
   Injectable,
@@ -198,6 +202,27 @@ export class ApprovalsService {
       }
     }
 
+    if (approval.entityType === 'PROPOSAL') {
+      const proposal = await this.prisma.proposal.findUnique({
+        where: { id: approval.entityId },
+        select: { type: true },
+      });
+      if (proposal)
+        await checkProposalType(this.prisma, actorUserId, proposal.type);
+      if (
+        status === ApprovalStatus.APPROVED &&
+        approval.type === ApprovalType.BUDGET_DISCOUNT
+      ) {
+        const payload = approval.requestPayload as {
+          discountPercent?: number;
+        } | null;
+        await checkDiscount(
+          this.prisma,
+          actorUserId,
+          Number(payload?.discountPercent || 0),
+        );
+      }
+    }
     const isCatalogPricingApproval =
       approval.type === ApprovalType.CATALOG_PRICING &&
       approval.entityType === 'CATALOG_ITEM' &&

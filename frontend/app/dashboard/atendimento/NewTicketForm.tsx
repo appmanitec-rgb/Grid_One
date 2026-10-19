@@ -1,4 +1,5 @@
 "use client";
+import { canCreateOrderType, getDetailedAccess } from "@/lib/access-rules";
 
 import { SelectField } from "@/app/dashboard/components/SelectField";
 import { type FormEvent, useEffect, useRef, useState } from "react";
@@ -61,8 +62,13 @@ export default function NewTicketForm({
   onCreated: (ticket: ServiceTicket) => void;
   onClose: () => void;
 }) {
+  const isTechnician = getDetailedAccess().role === "TECHNICIAN";
+  const canOpenEmergency = canCreateOrderType("EMERGENCY");
   const [form, setForm] = useState({
     ...initialForm,
+    category: (isTechnician
+      ? "EMERGENCY"
+      : initialForm.category) as TicketCategory,
     clientId: initialClientId,
     generatorId: initialGeneratorId,
   });
@@ -222,7 +228,8 @@ export default function NewTicketForm({
         >
           <label className={styles.field}>
             Cliente
-            <SelectField searchable
+            <SelectField
+              searchable
               id="ticket-client"
               value={form.clientId}
               onChange={(event) => chooseClient(event.target.value)}
@@ -241,7 +248,8 @@ export default function NewTicketForm({
           </label>
           <label className={styles.field}>
             Equipamento
-            <SelectField searchable
+            <SelectField
+              searchable
               value={form.generatorId}
               onChange={(event) => change("generatorId", event.target.value)}
               disabled={loading || !form.clientId}
@@ -285,11 +293,13 @@ export default function NewTicketForm({
                 }));
               }}
             >
-              {Object.entries(TICKET_CATEGORY_LABELS).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
+              {Object.entries(TICKET_CATEGORY_LABELS)
+                .filter(([key]) => !isTechnician || key === "EMERGENCY")
+                .map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
             </SelectField>
           </label>
           <label className={styles.field}>
@@ -310,7 +320,8 @@ export default function NewTicketForm({
           {canAssign ? (
             <label className={styles.field}>
               Responsável
-              <SelectField searchable
+              <SelectField
+                searchable
                 value={form.assignedToUserId}
                 onChange={(event) =>
                   change("assignedToUserId", event.target.value)
@@ -380,8 +391,13 @@ export default function NewTicketForm({
           </p>
           <button
             className={PRIMARY_BUTTON}
+            title={
+              isTechnician && !canOpenEmergency
+                ? "A abertura de emergência exige um plantão ativo cadastrado."
+                : undefined
+            }
             type="submit"
-            disabled={saving || loading}
+            disabled={saving || loading || (isTechnician && !canOpenEmergency)}
           >
             {saving ? "Criando chamado..." : "Criar chamado"}
           </button>

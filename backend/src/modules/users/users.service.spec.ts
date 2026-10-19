@@ -59,6 +59,70 @@ describe('UsersService', () => {
     service = module.get<UsersService>(UsersService);
   });
 
+  it.each([UserRole.FINANCE, UserRole.HR, UserRole.SALES])(
+    'requires security permission to provision an internal %s login',
+    async (role) => {
+      prisma.user.findUnique.mockResolvedValue({
+        role: UserRole.MANAGER,
+        isSystemMaster: false,
+        accessPolicy: { users: { manage: true, manageSecurity: false } },
+      });
+      await expect(
+        service.create(
+          {
+            name: 'Conta delegada',
+            email: 'delegada@manitec.test',
+            password: 'TemporaryPassword!2026',
+            role,
+          },
+          'delegated',
+        ),
+      ).rejects.toMatchObject({ status: 403 });
+      expect(prisma.user.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([{ email: 'changed@manitec.test' }, { isActive: true }])(
+    'requires security permission for login changes: %s',
+    async (patch) => {
+      prisma.user.findUnique
+        .mockResolvedValueOnce({
+          id: 'target',
+          email: 'old@manitec.test',
+          role: UserRole.SALES,
+          isActive: false,
+          isSystemMaster: false,
+        })
+        .mockResolvedValueOnce({
+          role: UserRole.MANAGER,
+          isSystemMaster: false,
+          accessPolicy: { users: { manage: true, manageSecurity: false } },
+        });
+      await expect(
+        service.update('target', patch, 'delegated'),
+      ).rejects.toMatchObject({ status: 403 });
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    },
+  );
+
+  it('prevents a delegated account from deleting an administrator', async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: 'admin',
+        role: UserRole.ADMIN,
+        isSystemMaster: false,
+      })
+      .mockResolvedValueOnce({
+        role: UserRole.MANAGER,
+        isSystemMaster: false,
+        accessPolicy: { users: { manage: true, manageSecurity: false } },
+      });
+    await expect(service.remove('admin', 'delegated')).rejects.toMatchObject({
+      status: 403,
+    });
+    expect(auditLogsService.record).not.toHaveBeenCalled();
+  });
+
   it('should be defined', () => {
     expect(service).toBeDefined();
   });

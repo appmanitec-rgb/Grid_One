@@ -446,7 +446,7 @@ export class AuthService {
       return issue(tx);
     });
   }
-  private issueAccessToken(params: {
+  private async issueAccessToken(params: {
     id: string;
     email: string;
     name: string;
@@ -457,7 +457,13 @@ export class AuthService {
     credentialVersion?: string;
     mfaSetupRequired: boolean;
   }) {
+    const restrictions = await this.database.user.findUnique({
+      where: { id: params.id },
+      select: { accessRules: true, approvalDiscountLimit: true },
+    });
     const payload = {
+      accessRules: restrictions?.accessRules,
+      approvalDiscountLimit: restrictions?.approvalDiscountLimit,
       sub: params.id,
       email: params.email,
       name: params.name,

@@ -1,3 +1,5 @@
+import { ACCESS_SCREENS } from "./access-screens";
+import { detailedPages } from "./access-rules";
 import { decodeJwtPayload, getStoredAccessToken } from "./auth-session";
 
 export type AccessPolicy = {
@@ -167,76 +169,20 @@ export type AccessPolicy = {
 
 export type AccessPages = AccessPolicy["pages"];
 
-type AccessRouteRule = {
-  prefix: string;
-  permission: keyof AccessPages;
-};
-
 type AccessPolicyOverrides = {
   [Section in keyof AccessPolicy]?: Partial<AccessPolicy[Section]>;
 };
 
-const ACCESS_ROUTE_RULES: AccessRouteRule[] = [
-  { prefix: "/dashboard/developer", permission: "studio" },
-  { prefix: "/dashboard/management", permission: "usersControl" },
-  { prefix: "/dashboard/automation", permission: "usersControl" },
-  { prefix: "/dashboard/documents", permission: "dashboard" },
-  { prefix: "/dashboard/deliveries", permission: "dashboard" },
-  { prefix: "/dashboard/notifications", permission: "dashboard" },
-  { prefix: "/dashboard/team", permission: "dashboard" },
-  { prefix: "/dashboard/reports", permission: "dashboard" },
-  { prefix: "/dashboard/monitoring", permission: "orders" },
-  { prefix: "/dashboard/sites", permission: "clients" },
-  { prefix: "/dashboard/inventory", permission: "inventory" },
-  { prefix: "/dashboard/purchase-orders", permission: "inventory" },
-  { prefix: "/dashboard/finance", permission: "finance" },
-  { prefix: "/dashboard/hr", permission: "people" },
-  { prefix: "/dashboard/billing", permission: "finance" },
-  { prefix: "/dashboard/costs", permission: "finance" },
-  { prefix: "/dashboard/company-settings", permission: "usersControl" },
-  { prefix: "/dashboard/profile", permission: "dashboard" },
-  { prefix: "/dashboard/tecnico", permission: "technicianPortal" },
-  { prefix: "/dashboard/atendimento", permission: "tickets" },
-  { prefix: "/dashboard/relatorios-tecnicos", permission: "serviceReports" },
-  { prefix: "/dashboard/dispatch", permission: "orders" },
-  { prefix: "/dashboard/operation", permission: "orders" },
-  { prefix: "/dashboard/technicians", permission: "orders" },
-  { prefix: "/dashboard/opportunities", permission: "proposals" },
-  { prefix: "/dashboard/commercial-inspections", permission: "proposals" },
-  { prefix: "/dashboard/proposals", permission: "proposals" },
-  { prefix: "/dashboard/orders", permission: "orders" },
-  { prefix: "/dashboard/contracts", permission: "contracts" },
-  { prefix: "/dashboard/catalog", permission: "catalog" },
-  { prefix: "/dashboard/suppliers", permission: "inventory" },
-  { prefix: "/dashboard/clients", permission: "clients" },
-  { prefix: "/dashboard/equipments", permission: "equipments" },
-  { prefix: "/dashboard/control", permission: "usersControl" },
-];
+const ACCESS_ROUTE_RULES = [
+  ...ACCESS_SCREENS,
+  { key: "usersControl", path: "/dashboard/control", parent: "usersControl" },
+].sort((a, b) => b.path.length - a.path.length);
 
 export function getDefaultDashboardPath(access: AccessPolicy): string {
-  const pages = access.pages;
-
-  if (pages.dashboard) return "/dashboard";
-  if (pages.people || access.users.manageCertifications) {
-    return "/dashboard/hr/documentation";
-  }
-  if (pages.technicianPortal) return "/dashboard/tecnico";
-  if (pages.orders) return "/dashboard/orders";
-  if (pages.serviceReports) return "/dashboard/relatorios-tecnicos";
-  if (pages.tickets) return "/dashboard/atendimento";
-  if (pages.proposals) return "/dashboard/proposals";
-  if (pages.contracts) return "/dashboard/contracts";
-  if (pages.clients) return "/dashboard/clients";
-  if (pages.equipments) return "/dashboard/equipments";
-  if (pages.catalog) return "/dashboard/catalog";
-  if (pages.inventory) return "/dashboard/inventory";
-  if (pages.finance) return "/dashboard/finance/cash-flow";
-  if (pages.studio || access.studio.access) return "/dashboard/developer/data";
-  if (pages.usersControl || access.users.manage) {
-    return "/dashboard/management/users";
-  }
-
-  return "/dashboard/profile";
+  return (
+    ACCESS_SCREENS.find((s) => canAccessDashboardPath(s.path, access.pages))
+      ?.path || "/dashboard/profile"
+  );
 }
 
 const EMPTY_ACCESS_POLICY: AccessPolicy = {
@@ -828,13 +774,46 @@ export function getAccessFromToken(): AccessPolicy {
   const payload = decodeToken();
   if (!payload) return defaultAccessByRole("NORMAL");
   if (payload.isSystemMaster || payload.role === "ADMIN") {
-    return defaultAccessByRole("ADMIN");
+    const access = defaultAccessByRole("ADMIN");
+    return { ...access, pages: detailedPages(access, undefined, true) };
   }
 
   const defaults = defaultAccessByRole(payload.role || "NORMAL");
   const custom =
     (payload.accessPolicy as AccessPolicyOverrides | undefined) || {};
-  return mergeAccessPolicy(defaults, custom);
+  const access = mergeAccessPolicy(defaults, custom);
+  const pages = detailedPages(
+    access,
+    payload.accessRules,
+    false,
+    payload.role === "CLIENT",
+  );
+  const screen = ACCESS_SCREENS.slice()
+    .sort((a, b) => b.path.length - a.path.length)
+    .find(
+      (s) =>
+        typeof window !== "undefined" &&
+        (window.location.pathname === s.path ||
+          window.location.pathname.startsWith(s.path + "/")),
+    );
+  const rule = screen
+    ? (
+        payload.accessRules as {
+          screens?: Record<
+            string,
+            { view: boolean; actions: Record<string, boolean> }
+          >;
+        }
+      )?.screens?.[screen.key]
+    : null;
+  if (screen && rule) {
+    const section = { ...access[screen.section] } as Record<string, boolean>;
+    for (const key of Object.keys(section))
+      if (key !== "view")
+        section[key] = section[key] && rule.view && rule.actions[key] === true;
+    Object.assign(access, { [screen.section]: section });
+  }
+  return { ...access, pages };
 }
 
 export function canAccessDashboardPath(
@@ -843,18 +822,13 @@ export function canAccessDashboardPath(
 ): boolean {
   if (!pathname.startsWith("/dashboard")) return true;
   if (pathname === "/dashboard/profile") return true;
-  if (pathname === "/dashboard") return pages.dashboard;
-  if (pathname === "/dashboard/sales-orders" || pathname.startsWith("/dashboard/sales-orders/")) {
-    return pages.proposals || pages.inventory || pages.finance;
-  }
-
-  for (const rule of ACCESS_ROUTE_RULES) {
-    if (pathname === rule.prefix || pathname.startsWith(`${rule.prefix}/`)) {
-      return pages[rule.permission];
-    }
-  }
-
-  return pages.dashboard;
+  if (pathname.startsWith("/dashboard/client-portal")) return pages.dashboard;
+  const rule = ACCESS_ROUTE_RULES.find(
+    (s) => pathname === s.path || pathname.startsWith(s.path + "/"),
+  );
+  if (!rule) return false;
+  const values = pages as Record<string, boolean>;
+  return values[rule.key] ?? values[rule.parent] ?? false;
 }
 
 function policy(overrides: AccessPolicyOverrides): AccessPolicy {

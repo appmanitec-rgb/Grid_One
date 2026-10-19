@@ -1,4 +1,8 @@
-﻿import {
+import {
+  canReadBankBalances,
+  type RuleActor,
+} from '../auth/rules/access-rules';
+import {
   Body,
   Controller,
   Get,
@@ -281,6 +285,17 @@ export class FinanceController {
   }
 
   @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.view')
+  @Get('bank-account-options')
+  bankAccountOptions(@Req() req: Request) {
+    const actor = req['user'] as RuleActor & {
+      accessPolicy?: { pages?: { finance?: boolean } };
+    };
+    return this.financeService.listBankAccountOptions(
+      canReadBankBalances(actor, actor.accessPolicy?.pages?.finance === true),
+    );
+  }
+
   @RequireAccessPolicy('finance.view')
   @Get('bank-accounts')
   bankAccounts() {

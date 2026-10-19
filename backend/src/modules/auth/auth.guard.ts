@@ -71,6 +71,8 @@ export class AuthGuard implements CanActivate {
         passwordHash: true,
         isSystemMaster: true,
         accessPolicy: true,
+        accessRules: true,
+        approvalDiscountLimit: true,
         linkedClientId: true,
         linkedClient: { select: { portalEnabled: true } },
       },
@@ -120,6 +122,8 @@ export class AuthGuard implements CanActivate {
     request['user'] = {
       ...payload,
       role: user.role,
+      accessRules: user.accessRules,
+      approvalDiscountLimit: user.approvalDiscountLimit,
       isSystemMaster: user.isSystemMaster,
       linkedClientId: user.linkedClientId,
       accessPolicy: user.isSystemMaster

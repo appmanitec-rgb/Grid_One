@@ -86,8 +86,8 @@ export default function DashboardLayout({
         const access = getAccessFromToken();
         setVisiblePages({
           ...(access.pages as VisiblePages),
-          usersControl: access.pages.usersControl || access.users.manage,
-          studio: access.pages.studio || access.studio.access,
+          usersControl: access.pages.usersControl,
+          studio: access.pages.studio,
         });
         setAccessReady(true);
       } catch {
@@ -153,8 +153,8 @@ export default function DashboardLayout({
         const access = getAccessFromToken();
         setVisiblePages({
           ...(access.pages as VisiblePages),
-          usersControl: access.pages.usersControl || access.users.manage,
-          studio: access.pages.studio || access.studio.access,
+          usersControl: access.pages.usersControl,
+          studio: access.pages.studio,
         });
       } catch {
         clearAuthSession();
@@ -241,7 +241,10 @@ export default function DashboardLayout({
         label: "Pedidos de venda",
         mobileLabel: "Pedidos",
         icon: "PV",
-        enabled: visiblePages.proposals || visiblePages.inventory || visiblePages.finance,
+        enabled:
+          visiblePages.proposals ||
+          visiblePages.inventory ||
+          visiblePages.finance,
       },
       {
         href: "/dashboard/orders",
@@ -357,7 +360,11 @@ export default function DashboardLayout({
     saveStoredDashboardTheme(nextTheme);
   }
 
-  if (!accessReady || currentRole === "CLIENT" || !canAccessDashboardPath(pathname, visiblePages)) {
+  if (
+    !accessReady ||
+    currentRole === "CLIENT" ||
+    !canAccessDashboardPath(pathname, visiblePages)
+  ) {
     return (
       <div
         className="flex min-h-screen items-center justify-center px-6 text-sm font-semibold text-zinc-500"
@@ -393,26 +400,33 @@ export default function DashboardLayout({
         </main>
       </div>
 
-      <nav aria-label="Atalhos rápidos" className="glass-surface fixed inset-x-4 bottom-3 z-30 flex min-w-0 gap-2 rounded-[24px] p-2 md:hidden">
-        <MobileNavigation pathname={pathname} access={visiblePages} onLogout={logout} />
+      <nav
+        aria-label="Atalhos rápidos"
+        className="glass-surface fixed inset-x-4 bottom-3 z-30 flex min-w-0 gap-2 rounded-[24px] p-2 md:hidden"
+      >
+        <MobileNavigation
+          pathname={pathname}
+          access={visiblePages}
+          onLogout={logout}
+        />
         <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto">
-        {allowedItems.map((item) => {
-          const active = pathname === item.href;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`min-w-[92px] rounded-2xl px-2 py-2 text-center text-[11px] font-semibold ${
-                active
-                  ? "bg-slate-950 text-white shadow-[0_16px_28px_-22px_rgba(15,31,50,0.65)]"
-                  : "bg-slate-100/90 text-slate-600"
-              }`}
-              aria-label={item.label}
-            >
-              {item.mobileLabel}
-            </Link>
-          );
-        })}
+          {allowedItems.map((item) => {
+            const active = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`min-w-[92px] rounded-2xl px-2 py-2 text-center text-[11px] font-semibold ${
+                  active
+                    ? "bg-slate-950 text-white shadow-[0_16px_28px_-22px_rgba(15,31,50,0.65)]"
+                    : "bg-slate-100/90 text-slate-600"
+                }`}
+                aria-label={item.label}
+              >
+                {item.mobileLabel}
+              </Link>
+            );
+          })}
         </div>
       </nav>
     </div>

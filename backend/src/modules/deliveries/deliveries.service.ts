@@ -1,3 +1,5 @@
+import { proposalScope, ruleActor } from '../auth/rules/commercial-access';
+import { allowedPortfolios } from '../auth/rules/access-rules';
 import {
   BadRequestException,
   ForbiddenException,
@@ -464,13 +466,43 @@ export class DeliveriesService {
 
   async getHistory(actorUserId: string) {
     const actor = await this.getActorScope(actorUserId);
+    const rulesActor = await ruleActor(this.prisma, actorUserId);
+    const proposalIds =
+      actor.role === UserRole.CLIENT
+        ? []
+        : (
+            await this.prisma.proposal.findMany({
+              where: await proposalScope(this.prisma, actorUserId),
+              select: { id: true },
+            })
+          ).map((p) => p.id);
+    const canSeeContracts =
+      !rulesActor || allowedPortfolios(rulesActor).includes('contracts');
     const deliveries = await this.prisma.documentDelivery.findMany({
       where:
         actor.role === UserRole.CLIENT
           ? {
               clientId: this.requireLinkedClientId(actor),
             }
-          : undefined,
+          : {
+              OR: [
+                {
+                  documentType: {
+                    notIn: [
+                      DeliveryDocumentType.PROPOSAL,
+                      DeliveryDocumentType.CONTRACT,
+                    ],
+                  },
+                },
+                {
+                  documentType: DeliveryDocumentType.PROPOSAL,
+                  documentId: { in: proposalIds },
+                },
+                ...(canSeeContracts
+                  ? [{ documentType: DeliveryDocumentType.CONTRACT }]
+                  : []),
+              ],
+            },
       include: {
         shareToken: true,
         createdByUser: {

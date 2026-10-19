@@ -1,3 +1,4 @@
+import { ruleActor, checkOrderCreation } from '../auth/rules/commercial-access';
 import {
   BadRequestException,
   ForbiddenException,
@@ -398,6 +399,14 @@ export class TicketsService {
     actorUserId: string | undefined,
     metadata: RequestMetadata,
   ) {
+    const actor = await ruleActor(this.prisma, actorUserId);
+    if (actor?.role === 'TECHNICIAN') {
+      if (dto.category !== 'EMERGENCY')
+        throw new ForbiddenException(
+          'Técnicos podem abrir somente atendimentos emergenciais durante o plantão.',
+        );
+      await checkOrderCreation(this.prisma, actorUserId, 'EMERGENCY');
+    }
     const priority =
       dto.priority ?? this.defaultPriorityForCategory(dto.category);
     return this.prisma.$transaction(async (tx) => {
@@ -845,7 +854,10 @@ export class TicketsService {
                 '',
                 ticket.description,
               ].join('\n'),
-            type: MaintenanceOrderType.CORRECTIVE,
+            type:
+              ticket.category === 'EMERGENCY'
+                ? MaintenanceOrderType.EMERGENCY
+                : MaintenanceOrderType.CORRECTIVE,
             status: OrderStatus.OPEN,
             priority: this.mapTicketPriorityToOrderPriority(ticket.priority),
             generatorId,

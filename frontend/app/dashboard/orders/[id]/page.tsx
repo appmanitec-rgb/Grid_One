@@ -507,7 +507,8 @@ export default function OrderDetailPage() {
               : []),
             {
               label: "Arquivos e envio da O.S.",
-              description: "Consultar resumo, baixar DOCX e compartilhar com o cliente.",
+              description:
+                "Consultar resumo, baixar DOCX e compartilhar com o cliente.",
               href: `/dashboard/documents/orders/${order.id}`,
               badge: "Documento",
               tone: "slate" as const,
@@ -965,6 +966,7 @@ function orderTypeLabel(type?: string | null) {
   const labels: Record<string, string> = {
     PREVENTIVE: "Preventiva",
     CORRECTIVE: "Corretiva",
+    EMERGENCY: "Atendimento emergencial",
     INSTALLATION: "Instalacao",
     DEMOBILIZATION: "Desmobilizacao",
     REFUELING: "Abastecimento",

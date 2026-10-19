@@ -1,11 +1,16 @@
 "use client";
+import { canUsePortfolio } from "@/lib/access-rules";
 
 import { SelectField } from "@/app/dashboard/components/SelectField";
 import Link from "next/link";
 import PaymentPlanEditor from "../../PaymentPlanEditor";
 import { type ProposalPaymentPlan } from "@/lib/proposal-payment-plan";
 import { commercialLabel, freightLabel } from "@/lib/commercial-labels";
-import { ProposalSteps, ProposalFinancialDock, focusProposalStep } from "../../../components/ProposalFormFlow";
+import {
+  ProposalSteps,
+  ProposalFinancialDock,
+  focusProposalStep,
+} from "../../../components/ProposalFormFlow";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
@@ -117,6 +122,9 @@ const INPUT_CLASS =
 const DRAFT_KEY = "manitec_generator_proposal_draft_v1";
 
 export default function GeneratorProposalWizardPage() {
+  const [accessReady, setAccessReady] = useState(false);
+  useEffect(() => setAccessReady(true), []);
+
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -156,7 +164,9 @@ export default function GeneratorProposalWizardPage() {
   const [calculating, setCalculating] = useState(false);
   const [selectedGenerator, setSelectedGenerator] =
     useState<CommercialGeneratorOption | null>(null);
-  const [manualCatalog, setManualCatalog] = useState<CommercialGeneratorOption[]>([]);
+  const [manualCatalog, setManualCatalog] = useState<
+    CommercialGeneratorOption[]
+  >([]);
   const [manualSearch, setManualSearch] = useState("");
 
   const [generatorQuantity, setGeneratorQuantity] = useState("1");
@@ -170,7 +180,9 @@ export default function GeneratorProposalWizardPage() {
 
   const [paymentTerms, setPaymentTerms] = useState<ControlOption[]>([]);
   const [paymentTerm, setPaymentTerm] = useState("");
-  const [paymentPlan, setPaymentPlan] = useState<ProposalPaymentPlan | null>(null);
+  const [paymentPlan, setPaymentPlan] = useState<ProposalPaymentPlan | null>(
+    null,
+  );
   const [freight, setFreight] = useState("FOB");
   const [deliveryLeadTimeDays, setDeliveryLeadTimeDays] = useState("");
   const [validUntil, setValidUntil] = useState("");
@@ -199,9 +211,12 @@ export default function GeneratorProposalWizardPage() {
         if (!cancelled) setPaymentTerms(controls.PAYMENT_TERM || []);
 
         if (opportunityId) {
-          const response = await apiFetch(`/crm/opportunities/${opportunityId}`, {
-            cache: "no-store",
-          });
+          const response = await apiFetch(
+            `/crm/opportunities/${opportunityId}`,
+            {
+              cache: "no-store",
+            },
+          );
           if (!response.ok) {
             throw new Error(
               await readApiErrorMessage(
@@ -260,7 +275,10 @@ export default function GeneratorProposalWizardPage() {
         .then(async (response) => {
           if (!response.ok) {
             throw new Error(
-              await readApiErrorMessage(response, "Não foi possível buscar clientes."),
+              await readApiErrorMessage(
+                response,
+                "Não foi possível buscar clientes.",
+              ),
             );
           }
           return response.json() as Promise<ClientOption[]>;
@@ -272,7 +290,9 @@ export default function GeneratorProposalWizardPage() {
           if (!active) return;
           setClients([]);
           setClientLookupError(
-            cause instanceof Error ? cause.message : "Não foi possível buscar clientes.",
+            cause instanceof Error
+              ? cause.message
+              : "Não foi possível buscar clientes.",
           );
         })
         .finally(() => {
@@ -302,7 +322,10 @@ export default function GeneratorProposalWizardPage() {
         .then(async (response) => {
           if (!response.ok) {
             throw new Error(
-              await readApiErrorMessage(response, "Não foi possível buscar vendedores."),
+              await readApiErrorMessage(
+                response,
+                "Não foi possível buscar vendedores.",
+              ),
             );
           }
           return response.json() as Promise<SellerOption[]>;
@@ -314,7 +337,9 @@ export default function GeneratorProposalWizardPage() {
           if (!active) return;
           setSellers([]);
           setSellerLookupError(
-            cause instanceof Error ? cause.message : "Não foi possível buscar vendedores.",
+            cause instanceof Error
+              ? cause.message
+              : "Não foi possível buscar vendedores.",
           );
         })
         .finally(() => {
@@ -376,17 +401,26 @@ export default function GeneratorProposalWizardPage() {
     try {
       const draft = JSON.parse(stored) as Record<string, unknown>;
       if (typeof draft.clientId === "string") setClientId(draft.clientId);
-      if (typeof draft.clientSearch === "string") setClientSearch(draft.clientSearch);
+      if (typeof draft.clientSearch === "string")
+        setClientSearch(draft.clientSearch);
       if (typeof draft.sellerId === "string") setSellerId(draft.sellerId);
-      if (typeof draft.sellerSearch === "string") setSellerSearch(draft.sellerSearch);
+      if (typeof draft.sellerSearch === "string")
+        setSellerSearch(draft.sellerSearch);
       if (typeof draft.power === "string") setPower(draft.power);
       if (typeof draft.powerUnit === "string") setPowerUnit(draft.powerUnit);
       if (typeof draft.voltage === "string") setVoltage(draft.voltage);
-      if (typeof draft.phaseConfiguration === "string") setPhaseConfiguration(draft.phaseConfiguration);
+      if (typeof draft.phaseConfiguration === "string")
+        setPhaseConfiguration(draft.phaseConfiguration);
       if (typeof draft.loadType === "string") setLoadType(draft.loadType);
-      if (typeof draft.application === "string") setApplication(draft.application);
-      if (draft.selectedGenerator && typeof draft.selectedGenerator === "object") {
-        setSelectedGenerator(draft.selectedGenerator as CommercialGeneratorOption);
+      if (typeof draft.application === "string")
+        setApplication(draft.application);
+      if (
+        draft.selectedGenerator &&
+        typeof draft.selectedGenerator === "object"
+      ) {
+        setSelectedGenerator(
+          draft.selectedGenerator as CommercialGeneratorOption,
+        );
       }
       setNotice("Rascunho local recuperado.");
     } catch {
@@ -444,7 +478,10 @@ export default function GeneratorProposalWizardPage() {
       });
       if (!response.ok) {
         throw new Error(
-          await readApiErrorMessage(response, "Falha ao calcular recomendacao."),
+          await readApiErrorMessage(
+            response,
+            "Falha ao calcular recomendacao.",
+          ),
         );
       }
       const result = (await response.json()) as RecommendationResult;
@@ -472,7 +509,9 @@ export default function GeneratorProposalWizardPage() {
 
   function updateAdditionalItem(id: string, patch: Partial<AdditionalItem>) {
     setAdditionalItems((current) =>
-      current.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)),
+      current.map((entry) =>
+        entry.id === id ? { ...entry, ...patch } : entry,
+      ),
     );
   }
 
@@ -489,7 +528,12 @@ export default function GeneratorProposalWizardPage() {
     if (targetStep === 3 && Number(generatorQuantity) < 1) {
       return "A quantidade de geradores deve ser maior que zero.";
     }
-    if (targetStep === 4 && includeInstallation && !installationNotes.trim() && !inspectionId) {
+    if (
+      targetStep === 4 &&
+      includeInstallation &&
+      !installationNotes.trim() &&
+      !inspectionId
+    ) {
       return "Selecione uma vistoria ou informe os dados basicos da instalacao.";
     }
     if (targetStep === 5 && !paymentTerm) {
@@ -551,16 +595,28 @@ export default function GeneratorProposalWizardPage() {
           type: "GENERATOR_SALE",
           sizingSnapshot: recommendation ?? {
             source: "MANUAL_SELECTION",
-            input: { power, powerUnit, voltage, phaseConfiguration, loadType, application },
+            input: {
+              power,
+              powerUnit,
+              voltage,
+              phaseConfiguration,
+              loadType,
+              application,
+            },
           },
-          scope: buildScope(selectedGenerator, includeInstallation, installationNotes, selectedInspection),
+          scope: buildScope(
+            selectedGenerator,
+            includeInstallation,
+            installationNotes,
+            selectedInspection,
+          ),
           freight,
           validUntil: validUntil || undefined,
           paymentTerm,
           paymentPlan: paymentPlan || undefined,
           deliveryLeadTimeDays: deliveryLeadTimeDays
             ? Number(deliveryLeadTimeDays)
-            : selectedGenerator.leadTimeDays ?? undefined,
+            : (selectedGenerator.leadTimeDays ?? undefined),
           internalNotes: internalNotes || undefined,
           externalNotes: externalNotes || undefined,
           discount: discountValue,
@@ -576,7 +632,10 @@ export default function GeneratorProposalWizardPage() {
       });
       if (!response.ok) {
         throw new Error(
-          await readApiErrorMessage(response, "Falha ao criar proposta de gerador."),
+          await readApiErrorMessage(
+            response,
+            "Falha ao criar proposta de gerador.",
+          ),
         );
       }
       const created = (await response.json()) as { id: string };
@@ -593,6 +652,20 @@ export default function GeneratorProposalWizardPage() {
     }
   }
 
+  if (!accessReady)
+    return (
+      <div className="dashboard-page p-6 text-sm text-slate-500">
+        Carregando permissões...
+      </div>
+    );
+  if (!canUsePortfolio("generators"))
+    return (
+      <div className="dashboard-page p-6">
+        <StatusBanner tone="rose">
+          Seu departamento não possui acesso a propostas de geradores.
+        </StatusBanner>
+      </div>
+    );
   return (
     <div className="dashboard-page proposal-flow-page space-y-5">
       <PageHero
@@ -601,27 +674,71 @@ export default function GeneratorProposalWizardPage() {
         description="Assistente comercial para dimensionar, selecionar e configurar um gerador Generac sem misturar equipamentos instalados no cliente."
         actions={
           <>
-            <Link href="/dashboard/proposals" className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
+            <Link
+              href="/dashboard/proposals"
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+            >
               Voltar para propostas
             </Link>
-            <button type="button" onClick={saveDraft} className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-semibold text-sky-800">
+            <button
+              type="button"
+              onClick={saveDraft}
+              className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-semibold text-sky-800"
+            >
               Salvar rascunho local
             </button>
           </>
         }
       />
 
-<ProposalSteps steps={STEPS.map((title,index) => ({title,description: ["Cliente e vendedor","Potência e aplicação","Modelo recomendado","Quantidade e acessórios","Instalação e vistoria","Pagamento e despesas","Conferência final"][index]}))} current={step} onChange={(index) => { for (let target = 0; target < index; target += 1) { const issue = validateStep(target); if (issue) { setError(issue); setStep(target); focusProposalStep(); return; } } setError(""); setStep(index); focusProposalStep(); }} />
+      <ProposalSteps
+        steps={STEPS.map((title, index) => ({
+          title,
+          description: [
+            "Cliente e vendedor",
+            "Potência e aplicação",
+            "Modelo recomendado",
+            "Quantidade e acessórios",
+            "Instalação e vistoria",
+            "Pagamento e despesas",
+            "Conferência final",
+          ][index],
+        }))}
+        current={step}
+        onChange={(index) => {
+          for (let target = 0; target < index; target += 1) {
+            const issue = validateStep(target);
+            if (issue) {
+              setError(issue);
+              setStep(target);
+              focusProposalStep();
+              return;
+            }
+          }
+          setError("");
+          setStep(index);
+          focusProposalStep();
+        }}
+      />
       {notice ? <StatusBanner tone="emerald">{notice}</StatusBanner> : null}
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
-      {loading ? <StatusBanner>Carregando dados do assistente...</StatusBanner> : null}
+      {loading ? (
+        <StatusBanner>Carregando dados do assistente...</StatusBanner>
+      ) : null}
 
       {!loading && step === 0 ? (
-        <SectionCard title="Cliente e responsavel comercial" description="A oportunidade de venda preenche automaticamente estes dados quando estiver vinculada.">
+        <SectionCard
+          title="Cliente e responsavel comercial"
+          description="A oportunidade de venda preenche automaticamente estes dados quando estiver vinculada."
+        >
           {linkedOpportunity ? (
             <div className="mb-5 rounded-2xl border border-sky-200 bg-sky-50 p-4">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-700">Oportunidade vinculada</p>
-              <p className="mt-2 font-bold text-slate-950">{linkedOpportunity.title}</p>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-700">
+                Oportunidade vinculada
+              </p>
+              <p className="mt-2 font-bold text-slate-950">
+                {linkedOpportunity.title}
+              </p>
             </div>
           ) : null}
           <div className="grid gap-5 md:grid-cols-2">
@@ -645,7 +762,11 @@ export default function GeneratorProposalWizardPage() {
                 <LookupOption
                   key={client.id}
                   title={client.companyName}
-                  helper={[client.tradeName, client.cnpj].filter(Boolean).join(" · ") || "Cliente"}
+                  helper={
+                    [client.tradeName, client.cnpj]
+                      .filter(Boolean)
+                      .join(" · ") || "Cliente"
+                  }
                   onClick={() => {
                     setClientId(client.id);
                     setClientSearch(client.companyName);
@@ -688,51 +809,203 @@ export default function GeneratorProposalWizardPage() {
       ) : null}
 
       {!loading && step === 1 ? (
-        <SectionCard title="Necessidade e pre-dimensionamento" description="Informe os dados conhecidos. A recomendacao continua sendo comercial e preliminar.">
+        <SectionCard
+          title="Necessidade e pre-dimensionamento"
+          description="Informe os dados conhecidos. A recomendacao continua sendo comercial e preliminar."
+        >
           <div className="grid gap-4 md:grid-cols-4">
-            <Field label="Potencia / pico"><input className={INPUT_CLASS} type="number" min="0" value={power} onChange={(event) => setPower(event.target.value)} /></Field>
-            <Field label="Unidade"><Select value={powerUnit} onChange={setPowerUnit} options={[["W", "W"], ["KW", "kW"], ["KVA", "kVA"]]} /></Field>
-            <Field label="Tensao"><input className={INPUT_CLASS} value={voltage} onChange={(event) => setVoltage(event.target.value)} placeholder="220 V" /></Field>
-            <Field label="Ligacao"><Select value={phaseConfiguration} onChange={setPhaseConfiguration} options={[["MONOPHASE", "Monofasico"], ["TWO_PHASE", "Bifasico"], ["THREE_PHASE", "Trifasico"]]} /></Field>
-            <Field label="Frequencia"><Select value={frequencyHz} onChange={setFrequencyHz} options={[["60", "60 Hz"], ["50", "50 Hz"]]} /></Field>
-            <Field label="Tipo de carga"><Select value={loadType} onChange={setLoadType} options={LOAD_OPTIONS} /></Field>
-            <Field label="Aplicacao"><Select value={application} onChange={setApplication} options={[["STANDBY", "Emergencia / Stand-by"], ["PRIME", "Prime"], ["CONTINUOUS", "Continuo"]]} /></Field>
-            <Field label="Local"><Select value={installationLocation} onChange={setInstallationLocation} options={[["INDOOR", "Interno"], ["OUTDOOR", "Externo"]]} /></Field>
-            <Field label="Combustivel"><Select value={fuelPreference} onChange={setFuelPreference} options={[["ANY", "Indiferente"], ["NATURAL_GAS", "Gas natural"], ["LPG", "GLP"], ["DIESEL", "Diesel"]]} /></Field>
-            <Field label="Construcao"><Select value={constructionPreference} onChange={setConstructionPreference} options={[["ANY", "Indiferente"], ["OPEN", "Aberto"], ["CANOPIED", "Carenado"], ["SOUND_ATTENUATED", "Carenado / Silenciado"]]} /></Field>
-            <Field label="Prioridade"><Select value={priority} onChange={setPriority} options={PRIORITY_OPTIONS} /></Field>
-            <Field label="Fator de potencia (opcional)"><input className={INPUT_CLASS} type="number" min="0.01" max="1" step="0.01" value={powerFactor} onChange={(event) => setPowerFactor(event.target.value)} placeholder="Usar politica do Studio" /></Field>
+            <Field label="Potencia / pico">
+              <input
+                className={INPUT_CLASS}
+                type="number"
+                min="0"
+                value={power}
+                onChange={(event) => setPower(event.target.value)}
+              />
+            </Field>
+            <Field label="Unidade">
+              <Select
+                value={powerUnit}
+                onChange={setPowerUnit}
+                options={[
+                  ["W", "W"],
+                  ["KW", "kW"],
+                  ["KVA", "kVA"],
+                ]}
+              />
+            </Field>
+            <Field label="Tensao">
+              <input
+                className={INPUT_CLASS}
+                value={voltage}
+                onChange={(event) => setVoltage(event.target.value)}
+                placeholder="220 V"
+              />
+            </Field>
+            <Field label="Ligacao">
+              <Select
+                value={phaseConfiguration}
+                onChange={setPhaseConfiguration}
+                options={[
+                  ["MONOPHASE", "Monofasico"],
+                  ["TWO_PHASE", "Bifasico"],
+                  ["THREE_PHASE", "Trifasico"],
+                ]}
+              />
+            </Field>
+            <Field label="Frequencia">
+              <Select
+                value={frequencyHz}
+                onChange={setFrequencyHz}
+                options={[
+                  ["60", "60 Hz"],
+                  ["50", "50 Hz"],
+                ]}
+              />
+            </Field>
+            <Field label="Tipo de carga">
+              <Select
+                value={loadType}
+                onChange={setLoadType}
+                options={LOAD_OPTIONS}
+              />
+            </Field>
+            <Field label="Aplicacao">
+              <Select
+                value={application}
+                onChange={setApplication}
+                options={[
+                  ["STANDBY", "Emergencia / Stand-by"],
+                  ["PRIME", "Prime"],
+                  ["CONTINUOUS", "Continuo"],
+                ]}
+              />
+            </Field>
+            <Field label="Local">
+              <Select
+                value={installationLocation}
+                onChange={setInstallationLocation}
+                options={[
+                  ["INDOOR", "Interno"],
+                  ["OUTDOOR", "Externo"],
+                ]}
+              />
+            </Field>
+            <Field label="Combustivel">
+              <Select
+                value={fuelPreference}
+                onChange={setFuelPreference}
+                options={[
+                  ["ANY", "Indiferente"],
+                  ["NATURAL_GAS", "Gas natural"],
+                  ["LPG", "GLP"],
+                  ["DIESEL", "Diesel"],
+                ]}
+              />
+            </Field>
+            <Field label="Construcao">
+              <Select
+                value={constructionPreference}
+                onChange={setConstructionPreference}
+                options={[
+                  ["ANY", "Indiferente"],
+                  ["OPEN", "Aberto"],
+                  ["CANOPIED", "Carenado"],
+                  ["SOUND_ATTENUATED", "Carenado / Silenciado"],
+                ]}
+              />
+            </Field>
+            <Field label="Prioridade">
+              <Select
+                value={priority}
+                onChange={setPriority}
+                options={PRIORITY_OPTIONS}
+              />
+            </Field>
+            <Field label="Fator de potencia (opcional)">
+              <input
+                className={INPUT_CLASS}
+                type="number"
+                min="0.01"
+                max="1"
+                step="0.01"
+                value={powerFactor}
+                onChange={(event) => setPowerFactor(event.target.value)}
+                placeholder="Usar politica do Studio"
+              />
+            </Field>
           </div>
-          <button type="button" onClick={() => void calculateRecommendation()} disabled={calculating} className="mt-6 rounded-xl bg-sky-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">
+          <button
+            type="button"
+            onClick={() => void calculateRecommendation()}
+            disabled={calculating}
+            className="mt-6 rounded-xl bg-sky-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
+          >
             {calculating ? "Calculando..." : "Calcular recomendacao"}
           </button>
         </SectionCard>
       ) : null}
 
       {!loading && step === 2 ? (
-        <SectionCard title="Gerador Generac" description="Use a recomendacao, compare alternativas ou selecione manualmente.">
+        <SectionCard
+          title="Gerador Generac"
+          description="Use a recomendacao, compare alternativas ou selecione manualmente."
+        >
           {recommendation ? (
             <div className="mb-5 grid gap-3 md:grid-cols-4">
-              <Summary label="Carga normalizada" value={`${recommendation.calculation.requestedPowerKw} kW`} />
-              <Summary label="Margem aplicada" value={`${recommendation.calculation.marginPercent}%`} />
-              <Summary label="Potencia requerida" value={`${recommendation.calculation.requiredPowerKw} kW`} />
-              <Summary label="Politica" value={`${recommendation.policy.name} v${recommendation.policy.version}`} />
+              <Summary
+                label="Carga normalizada"
+                value={`${recommendation.calculation.requestedPowerKw} kW`}
+              />
+              <Summary
+                label="Margem aplicada"
+                value={`${recommendation.calculation.marginPercent}%`}
+              />
+              <Summary
+                label="Potencia requerida"
+                value={`${recommendation.calculation.requiredPowerKw} kW`}
+              />
+              <Summary
+                label="Politica"
+                value={`${recommendation.policy.name} v${recommendation.policy.version}`}
+              />
             </div>
           ) : null}
           {recommendation?.requiresEngineeringReview ? (
-            <StatusBanner tone="amber">Validacao tecnica recomendada: {recommendation.engineeringReviewReasons.join(" ")}</StatusBanner>
+            <StatusBanner tone="amber">
+              Validacao tecnica recomendada:{" "}
+              {recommendation.engineeringReviewReasons.join(" ")}
+            </StatusBanner>
           ) : null}
           <div className="mt-4 grid gap-4 lg:grid-cols-3">
             {(recommendation?.candidates || []).map((candidate) => (
-              <GeneratorCard key={candidate.id} generator={candidate} selected={selectedGenerator?.id === candidate.id} onSelect={() => setSelectedGenerator(candidate)} />
+              <GeneratorCard
+                key={candidate.id}
+                generator={candidate}
+                selected={selectedGenerator?.id === candidate.id}
+                onSelect={() => setSelectedGenerator(candidate)}
+              />
             ))}
           </div>
           <div className="mt-6 border-t border-slate-200 pt-5">
-            <label className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Escolher manualmente</label>
-            <input className={INPUT_CLASS} value={manualSearch} onChange={(event) => setManualSearch(event.target.value)} placeholder="Buscar codigo, linha ou modelo" />
+            <label className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+              Escolher manualmente
+            </label>
+            <input
+              className={INPUT_CLASS}
+              value={manualSearch}
+              onChange={(event) => setManualSearch(event.target.value)}
+              placeholder="Buscar codigo, linha ou modelo"
+            />
             <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {manualCatalog.slice(0, 10).map((generator) => (
-                <GeneratorCard key={generator.id} generator={generator} selected={selectedGenerator?.id === generator.id} onSelect={() => setSelectedGenerator(generator)} compact />
+                <GeneratorCard
+                  key={generator.id}
+                  generator={generator}
+                  selected={selectedGenerator?.id === generator.id}
+                  onSelect={() => setSelectedGenerator(generator)}
+                  compact
+                />
               ))}
             </div>
           </div>
@@ -740,63 +1013,240 @@ export default function GeneratorProposalWizardPage() {
       ) : null}
 
       {!loading && step === 3 ? (
-        <SectionCard title="Configuracao da venda" description="Confirme quantidade e acrescente servicos ou itens comerciais.">
+        <SectionCard
+          title="Configuracao da venda"
+          description="Confirme quantidade e acrescente servicos ou itens comerciais."
+        >
           <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
-            <p className="font-bold text-slate-950">Generac {selectedGenerator?.model}</p>
+            <p className="font-bold text-slate-950">
+              Generac {selectedGenerator?.model}
+            </p>
             <div className="mt-3 grid gap-3 md:grid-cols-3">
-              <Field label="Quantidade"><input className={INPUT_CLASS} type="number" min="1" value={generatorQuantity} onChange={(event) => setGeneratorQuantity(event.target.value)} /></Field>
-              <Summary label="Unitario" value={money(selectedGenerator?.commercialPrice || 0)} />
-              <Summary label="Total do gerador" value={money(Number(generatorQuantity || 0) * Number(selectedGenerator?.commercialPrice || 0))} />
+              <Field label="Quantidade">
+                <input
+                  className={INPUT_CLASS}
+                  type="number"
+                  min="1"
+                  value={generatorQuantity}
+                  onChange={(event) => setGeneratorQuantity(event.target.value)}
+                />
+              </Field>
+              <Summary
+                label="Unitario"
+                value={money(selectedGenerator?.commercialPrice || 0)}
+              />
+              <Summary
+                label="Total do gerador"
+                value={money(
+                  Number(generatorQuantity || 0) *
+                    Number(selectedGenerator?.commercialPrice || 0),
+                )}
+              />
             </div>
           </div>
           <div className="mt-5 space-y-3">
             {additionalItems.map((entry) => (
-              <div key={entry.id} className="grid gap-3 rounded-2xl border border-slate-200 p-4 md:grid-cols-[auto_1fr_120px_180px] md:items-end">
-                <input type="checkbox" checked={entry.enabled} onChange={(event) => updateAdditionalItem(entry.id, { enabled: event.target.checked })} />
-                <Field label="Item / servico"><input className={INPUT_CLASS} value={entry.description} onChange={(event) => updateAdditionalItem(entry.id, { description: event.target.value })} /></Field>
-                <Field label="Quantidade"><input className={INPUT_CLASS} type="number" min="1" value={entry.quantity} onChange={(event) => updateAdditionalItem(entry.id, { quantity: event.target.value })} /></Field>
-                <Field label="Valor unitario"><input className={INPUT_CLASS} type="number" min="0" value={entry.unitPrice} onChange={(event) => updateAdditionalItem(entry.id, { unitPrice: event.target.value })} /></Field>
+              <div
+                key={entry.id}
+                className="grid gap-3 rounded-2xl border border-slate-200 p-4 md:grid-cols-[auto_1fr_120px_180px] md:items-end"
+              >
+                <input
+                  type="checkbox"
+                  checked={entry.enabled}
+                  onChange={(event) =>
+                    updateAdditionalItem(entry.id, {
+                      enabled: event.target.checked,
+                    })
+                  }
+                />
+                <Field label="Item / servico">
+                  <input
+                    className={INPUT_CLASS}
+                    value={entry.description}
+                    onChange={(event) =>
+                      updateAdditionalItem(entry.id, {
+                        description: event.target.value,
+                      })
+                    }
+                  />
+                </Field>
+                <Field label="Quantidade">
+                  <input
+                    className={INPUT_CLASS}
+                    type="number"
+                    min="1"
+                    value={entry.quantity}
+                    onChange={(event) =>
+                      updateAdditionalItem(entry.id, {
+                        quantity: event.target.value,
+                      })
+                    }
+                  />
+                </Field>
+                <Field label="Valor unitario">
+                  <input
+                    className={INPUT_CLASS}
+                    type="number"
+                    min="0"
+                    value={entry.unitPrice}
+                    onChange={(event) =>
+                      updateAdditionalItem(entry.id, {
+                        unitPrice: event.target.value,
+                      })
+                    }
+                  />
+                </Field>
               </div>
             ))}
           </div>
-          <button type="button" onClick={addAdditionalItem} className="mt-4 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Adicionar outro item</button>
+          <button
+            type="button"
+            onClick={addAdditionalItem}
+            className="mt-4 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
+          >
+            Adicionar outro item
+          </button>
         </SectionCard>
       ) : null}
 
       {!loading && step === 4 ? (
-        <SectionCard title="Instalacao e vistoria" description="A instalacao e opcional e pode aproveitar uma vistoria da oportunidade.">
+        <SectionCard
+          title="Instalacao e vistoria"
+          description="A instalacao e opcional e pode aproveitar uma vistoria da oportunidade."
+        >
           <label className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 font-semibold text-slate-800">
-            <input type="checkbox" checked={includeInstallation} onChange={(event) => setIncludeInstallation(event.target.checked)} />
+            <input
+              type="checkbox"
+              checked={includeInstallation}
+              onChange={(event) => setIncludeInstallation(event.target.checked)}
+            />
             Incluir instalacao nesta proposta
           </label>
           {includeInstallation ? (
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <Field label="Vistoria comercial">
-                <SelectField className={INPUT_CLASS} value={inspectionId} onChange={(event) => setInspectionId(event.target.value)}>
+                <SelectField
+                  className={INPUT_CLASS}
+                  value={inspectionId}
+                  onChange={(event) => setInspectionId(event.target.value)}
+                >
                   <option value="">Sem vistoria vinculada</option>
-                  {(linkedOpportunity?.inspections || []).map((inspection) => <option key={inspection.id} value={inspection.id}>{inspection.code} · {commercialLabel(inspection.status)}</option>)}
+                  {(linkedOpportunity?.inspections || []).map((inspection) => (
+                    <option key={inspection.id} value={inspection.id}>
+                      {inspection.code} · {commercialLabel(inspection.status)}
+                    </option>
+                  ))}
                 </SelectField>
               </Field>
               <Field label="Dados complementares">
-                <textarea className={INPUT_CLASS} rows={5} value={installationNotes} onChange={(event) => setInstallationNotes(event.target.value)} placeholder="Acesso, infraestrutura, tubulacao, icamento e observacoes." />
+                <textarea
+                  className={INPUT_CLASS}
+                  rows={5}
+                  value={installationNotes}
+                  onChange={(event) => setInstallationNotes(event.target.value)}
+                  placeholder="Acesso, infraestrutura, tubulacao, icamento e observacoes."
+                />
               </Field>
-              {selectedInspection ? <div className="md:col-span-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">Importado de {selectedInspection.code}: {selectedInspection.requiredPowerKva ? `${selectedInspection.requiredPowerKva} kVA; ` : ""}{selectedInspection.voltage ? `${selectedInspection.voltage}; ` : ""}{selectedInspection.qtaDistanceMeters ? `QTA a ${selectedInspection.qtaDistanceMeters} m; ` : ""}{selectedInspection.needsMunck ? "necessita Munck. " : ""}{selectedInspection.technicalNotes || selectedInspection.accessNotes || "Sem observacoes adicionais."}</div> : null}
+              {selectedInspection ? (
+                <div className="md:col-span-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+                  Importado de {selectedInspection.code}:{" "}
+                  {selectedInspection.requiredPowerKva
+                    ? `${selectedInspection.requiredPowerKva} kVA; `
+                    : ""}
+                  {selectedInspection.voltage
+                    ? `${selectedInspection.voltage}; `
+                    : ""}
+                  {selectedInspection.qtaDistanceMeters
+                    ? `QTA a ${selectedInspection.qtaDistanceMeters} m; `
+                    : ""}
+                  {selectedInspection.needsMunck ? "necessita Munck. " : ""}
+                  {selectedInspection.technicalNotes ||
+                    selectedInspection.accessNotes ||
+                    "Sem observacoes adicionais."}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </SectionCard>
       ) : null}
 
       {!loading && step === 5 ? (
-        <SectionCard title="Condicoes comerciais" description="Defina somente as excecoes; os dados do equipamento vieram do Studio.">
+        <SectionCard
+          title="Condicoes comerciais"
+          description="Defina somente as excecoes; os dados do equipamento vieram do Studio."
+        >
           <div className="grid gap-4 md:grid-cols-3">
-            <div className="md:col-span-3"><PaymentPlanEditor value={paymentPlan} onChange={setPaymentPlan} paymentTerm={paymentTerm} onTermChange={setPaymentTerm} total={total} options={paymentTerms} /></div>
-            <Field label="Frete"><Select value={freight} onChange={setFreight} options={[["FOB", freightLabel("FOB")], ["CIF", freightLabel("CIF")], ["SEM_FRETE", "Sem frete"]]} /></Field>
-            <Field label="Prazo de entrega (dias)"><input className={INPUT_CLASS} type="number" min="0" value={deliveryLeadTimeDays} onChange={(event) => setDeliveryLeadTimeDays(event.target.value)} placeholder={String(selectedGenerator?.leadTimeDays ?? "Sob consulta")} /></Field>
-            <Field label="Validade"><input className={INPUT_CLASS} type="date" value={validUntil} onChange={(event) => setValidUntil(event.target.value)} /></Field>
-            <Field label="Desconto geral %"><input className={INPUT_CLASS} type="number" min="0" max="100" step="0.01" value={discountPercent} onChange={(event) => setDiscountPercent(event.target.value)} /></Field>
+            <div className="md:col-span-3">
+              <PaymentPlanEditor
+                value={paymentPlan}
+                onChange={setPaymentPlan}
+                paymentTerm={paymentTerm}
+                onTermChange={setPaymentTerm}
+                total={total}
+                options={paymentTerms}
+              />
+            </div>
+            <Field label="Frete">
+              <Select
+                value={freight}
+                onChange={setFreight}
+                options={[
+                  ["FOB", freightLabel("FOB")],
+                  ["CIF", freightLabel("CIF")],
+                  ["SEM_FRETE", "Sem frete"],
+                ]}
+              />
+            </Field>
+            <Field label="Prazo de entrega (dias)">
+              <input
+                className={INPUT_CLASS}
+                type="number"
+                min="0"
+                value={deliveryLeadTimeDays}
+                onChange={(event) =>
+                  setDeliveryLeadTimeDays(event.target.value)
+                }
+                placeholder={String(
+                  selectedGenerator?.leadTimeDays ?? "Sob consulta",
+                )}
+              />
+            </Field>
+            <Field label="Validade">
+              <input
+                className={INPUT_CLASS}
+                type="date"
+                value={validUntil}
+                onChange={(event) => setValidUntil(event.target.value)}
+              />
+            </Field>
+            <Field label="Desconto geral %">
+              <input
+                className={INPUT_CLASS}
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={discountPercent}
+                onChange={(event) => setDiscountPercent(event.target.value)}
+              />
+            </Field>
             <Summary label="Valor final" value={money(total)} />
-            <Field label="Observacoes para o cliente"><textarea className={INPUT_CLASS} rows={4} value={externalNotes} onChange={(event) => setExternalNotes(event.target.value)} /></Field>
-            <Field label="Observacoes internas"><textarea className={INPUT_CLASS} rows={4} value={internalNotes} onChange={(event) => setInternalNotes(event.target.value)} /></Field>
+            <Field label="Observacoes para o cliente">
+              <textarea
+                className={INPUT_CLASS}
+                rows={4}
+                value={externalNotes}
+                onChange={(event) => setExternalNotes(event.target.value)}
+              />
+            </Field>
+            <Field label="Observacoes internas">
+              <textarea
+                className={INPUT_CLASS}
+                rows={4}
+                value={internalNotes}
+                onChange={(event) => setInternalNotes(event.target.value)}
+              />
+            </Field>
           </div>
           <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <input
@@ -827,41 +1277,122 @@ export default function GeneratorProposalWizardPage() {
       ) : null}
 
       {!loading && step === 6 ? (
-        <SectionCard title="Revisao da proposta" description="Confira os dados antes de criar o rascunho oficial da proposta.">
+        <SectionCard
+          title="Revisao da proposta"
+          description="Confira os dados antes de criar o rascunho oficial da proposta."
+        >
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <Summary label="Cliente" value={clientSearch} />
-            <Summary label="Necessidade" value={`${power} ${powerUnit} / ${voltage}`} />
-            <Summary label="Equipamento" value={`Generac ${selectedGenerator?.model}`} />
+            <Summary
+              label="Necessidade"
+              value={`${power} ${powerUnit} / ${voltage}`}
+            />
+            <Summary
+              label="Equipamento"
+              value={`Generac ${selectedGenerator?.model}`}
+            />
             <Summary label="Quantidade" value={generatorQuantity} />
-            <Summary label="Instalacao" value={includeInstallation ? "Incluida" : "Nao incluida"} />
+            <Summary
+              label="Instalacao"
+              value={includeInstallation ? "Incluida" : "Nao incluida"}
+            />
             <Summary label="Pagamento" value={commercialLabel(paymentTerm)} />
-            <Summary label="Prazo" value={deliveryLeadTimeDays || String(selectedGenerator?.leadTimeDays ?? "Sob consulta")} />
-            <Summary label="Despesas operacionais" value={money(expensesTotal)} />
+            <Summary
+              label="Prazo"
+              value={
+                deliveryLeadTimeDays ||
+                String(selectedGenerator?.leadTimeDays ?? "Sob consulta")
+              }
+            />
+            <Summary
+              label="Despesas operacionais"
+              value={money(expensesTotal)}
+            />
             <Summary label="Valor final" value={money(total)} />
           </div>
-          {recommendation?.requiresEngineeringReview ? <div className="mt-5"><StatusBanner tone="amber">A proposta sera criada em rascunho com recomendacao de validacao tecnica.</StatusBanner></div> : null}
+          {recommendation?.requiresEngineeringReview ? (
+            <div className="mt-5">
+              <StatusBanner tone="amber">
+                A proposta sera criada em rascunho com recomendacao de validacao
+                tecnica.
+              </StatusBanner>
+            </div>
+          ) : null}
         </SectionCard>
       ) : null}
 
-      {!loading ? <ProposalFinancialDock
-        lines={[{label: "Equipamento e itens", value: itemsSubtotal}, {label: "Despesas", value: expensesTotal}, {label: "Desconto", value: discountValue, negative: true}]}
-        total={total} payment={commercialLabel(paymentTerm,"Pagamento a definir")} current={step} steps={STEPS.length}
-        onBack={() => {setError(""); setStep(current => Math.max(0,current-1)); focusProposalStep();}} onNext={nextStep}
-        onSave={() => void submitProposal()} saving={submitting} saveLabel="Finalizar e criar rascunho"
-      /> : null}
+      {!loading ? (
+        <ProposalFinancialDock
+          lines={[
+            { label: "Equipamento e itens", value: itemsSubtotal },
+            { label: "Despesas", value: expensesTotal },
+            { label: "Desconto", value: discountValue, negative: true },
+          ]}
+          total={total}
+          payment={commercialLabel(paymentTerm, "Pagamento a definir")}
+          current={step}
+          steps={STEPS.length}
+          onBack={() => {
+            setError("");
+            setStep((current) => Math.max(0, current - 1));
+            focusProposalStep();
+          }}
+          onNext={nextStep}
+          onSave={() => void submitProposal()}
+          saving={submitting}
+          saveLabel="Finalizar e criar rascunho"
+        />
+      ) : null}
     </div>
   );
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
-  return <label className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">{label}{children}</label>;
+  return (
+    <label className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+      {label}
+      {children}
+    </label>
+  );
 }
 
-function Select({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[][] }) {
-  return <SelectField className={INPUT_CLASS} value={value} onChange={(event) => onChange(event.target.value)}>{options.map(([optionValue, label]) => <option key={optionValue} value={optionValue}>{label}</option>)}</SelectField>;
+function Select({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: string[][];
+}) {
+  return (
+    <SelectField
+      className={INPUT_CLASS}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      {options.map(([optionValue, label]) => (
+        <option key={optionValue} value={optionValue}>
+          {label}
+        </option>
+      ))}
+    </SelectField>
+  );
 }
 
-function LookupField({ label, value, locked, open, loading, error, hasResults, emptyText, onChange, onOpenChange, children }: {
+function LookupField({
+  label,
+  value,
+  locked,
+  open,
+  loading,
+  error,
+  hasResults,
+  emptyText,
+  onChange,
+  onOpenChange,
+  children,
+}: {
   label: string;
   value: string;
   locked: boolean;
@@ -874,7 +1405,8 @@ function LookupField({ label, value, locked, open, loading, error, hasResults, e
   onOpenChange: (open: boolean) => void;
   children: ReactNode;
 }) {
-  const listId = label === "Cliente" ? "proposal-client-results" : "proposal-seller-results";
+  const listId =
+    label === "Cliente" ? "proposal-client-results" : "proposal-seller-results";
   return (
     <div
       onBlur={(event) => {
@@ -883,7 +1415,12 @@ function LookupField({ label, value, locked, open, loading, error, hasResults, e
         }
       }}
     >
-      <label htmlFor={listId + "-input"} className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">{label}</label>
+      <label
+        htmlFor={listId + "-input"}
+        className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500"
+      >
+        {label}
+      </label>
       <input
         id={listId + "-input"}
         className={INPUT_CLASS}
@@ -900,15 +1437,28 @@ function LookupField({ label, value, locked, open, loading, error, hasResults, e
           if (event.key === "Escape") onOpenChange(false);
         }}
         onChange={(event) => onChange(event.target.value)}
-        placeholder={label === "Cliente" ? "Busque por nome, fantasia ou CNPJ" : "Busque o vendedor"}
+        placeholder={
+          label === "Cliente"
+            ? "Busque por nome, fantasia ou CNPJ"
+            : "Busque o vendedor"
+        }
       />
       {open && !locked ? (
-        <div id={listId} role="listbox" aria-label={`Resultados de ${label.toLowerCase()}`} className="mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div
+          id={listId}
+          role="listbox"
+          aria-label={`Resultados de ${label.toLowerCase()}`}
+          className="mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-sm"
+        >
           {loading ? (
-            <p className="px-4 py-3 text-sm text-slate-500">Buscando {label.toLowerCase()}...</p>
+            <p className="px-4 py-3 text-sm text-slate-500">
+              Buscando {label.toLowerCase()}...
+            </p>
           ) : error ? (
             <p className="px-4 py-3 text-sm text-rose-700">{error}</p>
-          ) : hasResults ? children : (
+          ) : hasResults ? (
+            children
+          ) : (
             <p className="px-4 py-3 text-sm text-slate-500">{emptyText}</p>
           )}
         </div>
@@ -917,42 +1467,159 @@ function LookupField({ label, value, locked, open, loading, error, hasResults, e
   );
 }
 
-function LookupOption({ title, helper, onClick }: { title: string; helper: string; onClick: () => void }) {
-  return <button type="button" role="option" aria-selected={false} onClick={onClick} className="block w-full border-b border-slate-100 px-4 py-3 text-left hover:bg-sky-50 focus:bg-sky-50 last:border-0"><span className="block text-sm font-semibold text-slate-900">{title}</span><span className="block text-xs text-slate-500">{helper}</span></button>;
+function LookupOption({
+  title,
+  helper,
+  onClick,
+}: {
+  title: string;
+  helper: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="option"
+      aria-selected={false}
+      onClick={onClick}
+      className="block w-full border-b border-slate-100 px-4 py-3 text-left hover:bg-sky-50 focus:bg-sky-50 last:border-0"
+    >
+      <span className="block text-sm font-semibold text-slate-900">
+        {title}
+      </span>
+      <span className="block text-xs text-slate-500">{helper}</span>
+    </button>
+  );
 }
 
-function GeneratorCard({ generator, selected, onSelect, compact = false }: { generator: CommercialGeneratorOption; selected: boolean; onSelect: () => void; compact?: boolean }) {
-  return <article className={`rounded-2xl border p-4 ${selected ? "border-sky-500 bg-sky-50 ring-2 ring-sky-100" : "border-slate-200 bg-white"}`}><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.14em] text-sky-700">{generator.classification === "RECOMMENDED" ? "Recomendado" : generator.internalCode}</p><p className="mt-1 font-bold text-slate-950">Generac {generator.model}</p></div>{selected ? <DataPill tone="emerald">Selecionado</DataPill> : null}</div><div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600"><span>{generator.capacityKw ?? generator.standbyPowerKw ?? "-"} kW</span><span>{commercialLabel(generator.fuelType)}</span><span>{commercialLabel(generator.construction)}</span><span>{commercialLabel(generator.availability)}</span></div>{!compact && generator.reservePercent !== undefined ? <p className="mt-3 text-sm font-semibold text-slate-700">Reserva estimada: {generator.reservePercent}%</p> : null}<p className="mt-3 text-lg font-bold text-slate-950">{money(generator.commercialPrice)}</p>{!compact && generator.reasons?.length ? <ul className="mt-3 space-y-1 text-xs text-emerald-800">{generator.reasons.map((reason) => <li key={reason}>✓ {reason}</li>)}</ul> : null}{!compact && generator.warnings?.length ? <ul className="mt-2 space-y-1 text-xs text-amber-800">{generator.warnings.map((warning) => <li key={warning}>⚠ {warning}</li>)}</ul> : null}<button type="button" onClick={onSelect} className="mt-4 w-full rounded-xl bg-slate-950 px-3 py-2 text-sm font-bold text-white">Selecionar</button></article>;
+function GeneratorCard({
+  generator,
+  selected,
+  onSelect,
+  compact = false,
+}: {
+  generator: CommercialGeneratorOption;
+  selected: boolean;
+  onSelect: () => void;
+  compact?: boolean;
+}) {
+  return (
+    <article
+      className={`rounded-2xl border p-4 ${selected ? "border-sky-500 bg-sky-50 ring-2 ring-sky-100" : "border-slate-200 bg-white"}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-sky-700">
+            {generator.classification === "RECOMMENDED"
+              ? "Recomendado"
+              : generator.internalCode}
+          </p>
+          <p className="mt-1 font-bold text-slate-950">
+            Generac {generator.model}
+          </p>
+        </div>
+        {selected ? <DataPill tone="emerald">Selecionado</DataPill> : null}
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
+        <span>
+          {generator.capacityKw ?? generator.standbyPowerKw ?? "-"} kW
+        </span>
+        <span>{commercialLabel(generator.fuelType)}</span>
+        <span>{commercialLabel(generator.construction)}</span>
+        <span>{commercialLabel(generator.availability)}</span>
+      </div>
+      {!compact && generator.reservePercent !== undefined ? (
+        <p className="mt-3 text-sm font-semibold text-slate-700">
+          Reserva estimada: {generator.reservePercent}%
+        </p>
+      ) : null}
+      <p className="mt-3 text-lg font-bold text-slate-950">
+        {money(generator.commercialPrice)}
+      </p>
+      {!compact && generator.reasons?.length ? (
+        <ul className="mt-3 space-y-1 text-xs text-emerald-800">
+          {generator.reasons.map((reason) => (
+            <li key={reason}>✓ {reason}</li>
+          ))}
+        </ul>
+      ) : null}
+      {!compact && generator.warnings?.length ? (
+        <ul className="mt-2 space-y-1 text-xs text-amber-800">
+          {generator.warnings.map((warning) => (
+            <li key={warning}>⚠ {warning}</li>
+          ))}
+        </ul>
+      ) : null}
+      <button
+        type="button"
+        onClick={onSelect}
+        className="mt-4 w-full rounded-xl bg-slate-950 px-3 py-2 text-sm font-bold text-white"
+      >
+        Selecionar
+      </button>
+    </article>
+  );
 }
 
 function Summary({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{label}</p><p className="mt-2 break-words text-sm font-bold text-slate-950">{value || "Nao informado"}</p></div>;
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </p>
+      <p className="mt-2 break-words text-sm font-bold text-slate-950">
+        {value || "Nao informado"}
+      </p>
+    </div>
+  );
 }
 
-function item(description: string, id = `${Date.now()}-${Math.random()}`): AdditionalItem {
+function item(
+  description: string,
+  id = `${Date.now()}-${Math.random()}`,
+): AdditionalItem {
   return { id, description, quantity: "1", unitPrice: "0", enabled: false };
 }
 
-function buildScope(generator: CommercialGeneratorOption, includeInstallation: boolean, notes: string, inspection: InspectionOption | null) {
-  const lines = [`Fornecimento de gerador Generac ${generator.model} (${generator.internalCode}).`];
-  if (includeInstallation) lines.push("Inclui instalacao conforme dados comerciais informados.");
-  if (inspection) lines.push(`Vistoria comercial vinculada: ${inspection.code}.`);
+function buildScope(
+  generator: CommercialGeneratorOption,
+  includeInstallation: boolean,
+  notes: string,
+  inspection: InspectionOption | null,
+) {
+  const lines = [
+    `Fornecimento de gerador Generac ${generator.model} (${generator.internalCode}).`,
+  ];
+  if (includeInstallation)
+    lines.push("Inclui instalacao conforme dados comerciais informados.");
+  if (inspection)
+    lines.push(`Vistoria comercial vinculada: ${inspection.code}.`);
   if (notes.trim()) lines.push(`Observacoes da instalacao: ${notes.trim()}`);
   return lines.join("\n");
 }
 
 function money(value: number) {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value || 0));
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(Number(value || 0));
 }
 
 const LOAD_OPTIONS = [
-  ["RESISTIVE", "Resistiva"], ["MOTORS", "Motores"], ["PUMPS", "Bombas"],
-  ["AIR_CONDITIONING", "Ar-condicionado"], ["ELEVATORS", "Elevadores"],
-  ["IT_ELECTRONICS", "TI / Eletronica"], ["MIXED", "Mista"], ["UNKNOWN", "Nao informado"],
+  ["RESISTIVE", "Resistiva"],
+  ["MOTORS", "Motores"],
+  ["PUMPS", "Bombas"],
+  ["AIR_CONDITIONING", "Ar-condicionado"],
+  ["ELEVATORS", "Elevadores"],
+  ["IT_ELECTRONICS", "TI / Eletronica"],
+  ["MIXED", "Mista"],
+  ["UNKNOWN", "Nao informado"],
 ];
 
 const PRIORITY_OPTIONS = [
-  ["BEST_SIZING", "Melhor dimensionamento"], ["LOWEST_PRICE", "Menor preco"],
-  ["SHORTEST_LEAD_TIME", "Menor prazo"], ["AVAILABILITY", "Disponibilidade / estoque"],
+  ["BEST_SIZING", "Melhor dimensionamento"],
+  ["LOWEST_PRICE", "Menor preco"],
+  ["SHORTEST_LEAD_TIME", "Menor prazo"],
+  ["AVAILABILITY", "Disponibilidade / estoque"],
   ["HIGHEST_POWER_RESERVE", "Maior reserva de potencia"],
 ];

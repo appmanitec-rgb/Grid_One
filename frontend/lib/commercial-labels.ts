@@ -184,12 +184,20 @@ const LABELS: Record<string, string> = {
   CREATE_FROM_CONTRACT_RECEIVABLE: "Criada a partir de cobrança de contrato",
 };
 
-export function commercialLabel(value?: string | null, empty = "Não informado"): string {
+export function commercialLabel(
+  value?: string | null,
+  empty = "Não informado",
+): string {
   if (!value?.trim()) return empty;
   const original = value.trim();
-  const key = original.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[\s-]+/g, "_");
+  const key = original
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_");
   if (LABELS[key]) return LABELS[key];
-  if (key.startsWith("STATUS_")) return "Status alterado para " + commercialLabel(key.slice(7));
+  if (key.startsWith("STATUS_"))
+    return "Status alterado para " + commercialLabel(key.slice(7));
   const days = key.match(/^(\d+)_DIAS$/);
   if (days) return `${days[1]} dias`;
   // Custom names remain intact. Unknown enum keys have readable separators.
@@ -208,6 +216,13 @@ export function freightLabel(value?: string | null) {
 }
 
 export function paymentMethodLabel(value: string) {
-  const methods: Record<string, string> = { PIX: "PIX", BOLETO: "Boleto", TRANSFER: "Transferência", CASH: "Dinheiro", CARD: "Cartão", OTHER: "Outro" };
+  const methods: Record<string, string> = {
+    PIX: "PIX",
+    BOLETO: "Boleto",
+    TRANSFER: "Transferência",
+    CASH: "Dinheiro",
+    CARD: "Cartão",
+    OTHER: "Outro",
+  };
   return methods[value] || commercialLabel(value);
 }

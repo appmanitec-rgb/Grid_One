@@ -78,11 +78,16 @@ export default function OrdersPage() {
     setError("");
 
     try {
-      const res = await apiFetch(apiUrl("/maintenance-orders"), { cache: "no-store" });
+      const res = await apiFetch(apiUrl("/maintenance-orders"), {
+        cache: "no-store",
+      });
       if (await handleUnauthorized(res)) return;
       if (!res.ok) {
         throw new Error(
-          await readApiErrorMessage(res, "Nao foi possivel carregar as ordens."),
+          await readApiErrorMessage(
+            res,
+            "Nao foi possivel carregar as ordens.",
+          ),
         );
       }
       setOrders((await res.json()) as OrderListItem[]);
@@ -117,7 +122,9 @@ export default function OrdersPage() {
         order.title.toLowerCase().includes(term) ||
         (order.description || "").toLowerCase().includes(term) ||
         (order.generator?.name || "").toLowerCase().includes(term) ||
-        (order.generator?.client?.companyName || "").toLowerCase().includes(term) ||
+        (order.generator?.client?.companyName || "")
+          .toLowerCase()
+          .includes(term) ||
         (order.contract?.code || "").toLowerCase().includes(term)
       );
     });
@@ -182,7 +189,11 @@ export default function OrdersPage() {
         ]}
         actions={
           <>
-            <button type="button" onClick={() => void loadOrders()} className={SECONDARY_BUTTON}>
+            <button
+              type="button"
+              onClick={() => void loadOrders()}
+              className={SECONDARY_BUTTON}
+            >
               Atualizar fila
             </button>
             <Link href="/dashboard/dispatch" className={PRIMARY_BUTTON}>
@@ -197,7 +208,8 @@ export default function OrdersPage() {
                 Resumo da fila
               </p>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Veja as ordens urgentes e a cobertura por contrato para decidir o próximo atendimento.
+                Veja as ordens urgentes e a cobertura por contrato para decidir
+                o próximo atendimento.
               </p>
             </div>
             <QueuePulse
@@ -279,21 +291,41 @@ function OrderCard({ order }: { order: OrderListItem }) {
     order.status === "OPEN" ||
     order.priority === "URGENT" ||
     order.priority === "HIGH";
-  const siteName = order.site?.name || order.generator?.currentSite?.name || "-";
+  const siteName =
+    order.site?.name || order.generator?.currentSite?.name || "-";
 
   return (
     <article className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white px-5 py-5 shadow-sm transition hover:border-sky-300 hover:shadow-md">
-      <span aria-hidden="true" className={needsAttention ? "absolute inset-y-0 left-0 w-1 bg-amber-400" : "absolute inset-y-0 left-0 w-1 bg-sky-500"} />
+      <span
+        aria-hidden="true"
+        className={
+          needsAttention
+            ? "absolute inset-y-0 left-0 w-1 bg-amber-400"
+            : "absolute inset-y-0 left-0 w-1 bg-sky-500"
+        }
+      />
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Link href={`/dashboard/orders/${order.id}`} className="dashboard-record-link text-lg font-bold" title="Abrir ordem de serviço">
+            <Link
+              href={`/dashboard/orders/${order.id}`}
+              className="dashboard-record-link text-lg font-bold"
+              title="Abrir ordem de serviço"
+            >
               {order.title}
             </Link>
-            <DataPill tone={orderStatusTone(order.status)}>{orderStatusLabel(order.status)}</DataPill>
-            <DataPill tone={priorityTone(order.priority)}>{priorityLabel(order.priority)}</DataPill>
-            {order.contract ? <DataPill tone="blue">{order.contract.code}</DataPill> : null}
-            {needsAttention ? <DataPill tone="amber">Pede atencao</DataPill> : null}
+            <DataPill tone={orderStatusTone(order.status)}>
+              {orderStatusLabel(order.status)}
+            </DataPill>
+            <DataPill tone={priorityTone(order.priority)}>
+              {priorityLabel(order.priority)}
+            </DataPill>
+            {order.contract ? (
+              <DataPill tone="blue">{order.contract.code}</DataPill>
+            ) : null}
+            {needsAttention ? (
+              <DataPill tone="amber">Pede atencao</DataPill>
+            ) : null}
           </div>
 
           <p className="max-w-3xl text-sm leading-6 text-slate-600">
@@ -302,7 +334,10 @@ function OrderCard({ order }: { order: OrderListItem }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Link href={`/dashboard/orders/${order.id}`} className={PRIMARY_BUTTON}>
+          <Link
+            href={`/dashboard/orders/${order.id}`}
+            className={PRIMARY_BUTTON}
+          >
             Abrir O.S.
           </Link>
           {order.contract ? (
@@ -341,7 +376,9 @@ function OrderCard({ order }: { order: OrderListItem }) {
         />
         <OrderInfo
           label="Execucao"
-          value={order.scheduledTo ? formatDateTime(order.scheduledTo) : "Sem agenda"}
+          value={
+            order.scheduledTo ? formatDateTime(order.scheduledTo) : "Sem agenda"
+          }
           helper={
             order.materials && order.materials.length > 0
               ? `${order.materials.length} material(is) reservado(s).`
@@ -352,8 +389,12 @@ function OrderCard({ order }: { order: OrderListItem }) {
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        {order.type ? <DataPill tone="slate">{orderTypeLabel(order.type)}</DataPill> : null}
-        {order.customerReport ? <DataPill tone="emerald">Relatorio registrado</DataPill> : null}
+        {order.type ? (
+          <DataPill tone="slate">{orderTypeLabel(order.type)}</DataPill>
+        ) : null}
+        {order.customerReport ? (
+          <DataPill tone="emerald">Relatorio registrado</DataPill>
+        ) : null}
         {!order.customerReport && order.status === "IN_PROGRESS" ? (
           <DataPill tone="amber">Relatorio pendente</DataPill>
         ) : null}
@@ -448,6 +489,7 @@ function orderTypeLabel(type: string) {
   const labels: Record<string, string> = {
     PREVENTIVE: "Preventiva",
     CORRECTIVE: "Corretiva",
+    EMERGENCY: "Atendimento emergencial",
     INSTALLATION: "Instalacao",
     DEMOBILIZATION: "Desmobilizacao",
     REFUELING: "Abastecimento",

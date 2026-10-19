@@ -1,3 +1,4 @@
+import { CommercialScopeGuard } from '../auth/rules/commercial-scope.guard';
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../../database/database.module';
 import { ApprovalsModule } from '../approvals/approvals.module';
@@ -14,6 +15,6 @@ import { ProposalsService } from './proposals.service';
     FileStorageModule,
   ],
   controllers: [ProposalsController],
-  providers: [ProposalsService],
+  providers: [CommercialScopeGuard, ProposalsService],
 })
 export class ProposalsModule {}

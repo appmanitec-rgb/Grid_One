@@ -1756,6 +1756,20 @@ export class FinanceService {
     return { updatedOverdue: updated.count };
   }
 
+  listBankAccountOptions(includeBalance = false) {
+    return this.prisma.bankAccount.findMany({
+      select: {
+        id: true,
+        name: true,
+        bankName: true,
+        type: true,
+        isActive: true,
+        currentBalance: includeBalance,
+      },
+      orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
+    });
+  }
+
   listBankAccounts() {
     return this.prisma.bankAccount.findMany({
       orderBy: [{ isActive: 'desc' }, { name: 'asc' }],

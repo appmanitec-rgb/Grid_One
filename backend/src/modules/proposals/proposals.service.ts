@@ -1,3 +1,13 @@
+import { assertPortfolio } from '../auth/rules/access-rules';
+import {
+  portfolioForProposal,
+  portfolioForPipeline,
+} from '../auth/rules/access-rules';
+import {
+  proposalScope,
+  checkProposalType,
+  checkProposalPricing,
+} from '../auth/rules/commercial-access';
 import {
   BadRequestException,
   ConflictException,
@@ -129,6 +139,7 @@ export class ProposalsService {
 
   async create(createProposalDto: CreateProposalDto, actorUserId?: string) {
     await this.assertInternalActor(actorUserId);
+    await checkProposalType(this.prisma, actorUserId, createProposalDto.type);
     const origin = createProposalDto.origin ?? ProposalOrigin.MANITEC;
 
     if (
@@ -173,6 +184,14 @@ export class ProposalsService {
         );
       }
 
+      if (
+        linkedOpportunity &&
+        portfolioForProposal(createProposalDto.type) !==
+          portfolioForPipeline(linkedOpportunity.pipeline)
+      )
+        throw new BadRequestException(
+          'A proposta deve pertencer à mesma carteira da oportunidade.',
+        );
       await this.assertCommercialEligibility(
         tx,
         createProposalDto.clientId,
@@ -236,7 +255,7 @@ export class ProposalsService {
           'Informe um vendedor comercial para a proposta.',
         );
       }
-      await this.assertProposalSeller(tx, sellerUserId);
+      await this.assertProposalSeller(tx, sellerUserId, createProposalDto.type);
 
       const normalizedItems = await this.prepareProposalItems(
         tx,
@@ -291,6 +310,13 @@ export class ProposalsService {
             : 'O desconto nao pode superar o subtotal de pecas e servicos quando as despesas operacionais estiverem protegidas.',
         );
       }
+      await checkProposalPricing(
+        this.prisma,
+        actorUserId,
+        normalizedItems,
+        discountValue,
+        createProposalDto.commercialGeneratorId,
+      );
       const calculatedTotal = this.roundCurrency(subtotal - discountValue);
       if (createProposalDto.paymentPlan) {
         const payment = resolvePaymentPlan(
@@ -852,7 +878,7 @@ export class ProposalsService {
 
     if (!actorUserId)
       throw new BadRequestException('Usuario solicitante nao identificado.');
-    if (discountPercent <= 0) {
+    if (!Number.isFinite(discountPercent) || discountPercent <= 0) {
       throw new BadRequestException(
         'Percentual de desconto deve ser maior que zero.',
       );
@@ -866,12 +892,17 @@ export class ProposalsService {
       select: {
         id: true,
         approvalDiscountLimit: true,
+        role: true,
+        isSystemMaster: true,
       },
     });
     if (!actor)
       throw new BadRequestException('Usuario solicitante nao encontrado.');
 
-    const approvalLimit = Number(actor.approvalDiscountLimit ?? 7);
+    const approvalLimit =
+      actor.role === UserRole.ADMIN || actor.isSystemMaster
+        ? 100
+        : Number(actor.approvalDiscountLimit ?? 0);
     const requiresApproval = discountPercent > approvalLimit;
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -1356,7 +1387,7 @@ export class ProposalsService {
       where:
         scope?.role === UserRole.CLIENT
           ? { clientId: this.requireLinkedClientId(scope) }
-          : undefined,
+          : await proposalScope(this.prisma, actorUserId),
       include: {
         items: true,
         client: true,
@@ -1385,10 +1416,24 @@ export class ProposalsService {
 
   async findOne(id: string, actorUserId?: string) {
     const proposal = await this.prisma.proposal.findUnique({
-      where: { id },
+      where: { id, AND: [await proposalScope(this.prisma, actorUserId)] },
       include: {
         items: {
-          include: { catalogItem: true },
+          include: {
+            catalogItem: {
+              select: {
+                id: true,
+                name: true,
+                sku: true,
+                type: true,
+                unit: true,
+                basePrice: true,
+                description: true,
+                commercialDescription: true,
+                manufacturerPartNumber: true,
+              },
+            },
+          },
         },
         client: true,
         generator: true,
@@ -1927,6 +1972,13 @@ export class ProposalsService {
             'O desconto nao pode superar o subtotal elegivel da proposta.',
           );
         }
+        await checkProposalPricing(
+          this.prisma,
+          actorUserId,
+          normalizedItems,
+          discountValue,
+          current.commercialGeneratorId,
+        );
         const calculatedTotal = this.roundCurrency(subtotal - discountValue);
         if (editDto.paymentPlan) {
           const payment = resolvePaymentPlan(
@@ -2768,16 +2820,26 @@ export class ProposalsService {
   private async assertProposalSeller(
     tx: Prisma.TransactionClient,
     userId: string,
+    type?: string,
   ) {
     const seller = await tx.user.findFirst({
-      where: { id: userId, role: UserRole.SALES, isActive: true },
-      select: { id: true },
+      where: {
+        id: userId,
+        role: { in: [UserRole.SALES, UserRole.MANAGER, UserRole.ADMIN] },
+        isActive: true,
+      },
+      select: { id: true, role: true, isSystemMaster: true, accessRules: true },
     });
     if (!seller) {
       throw new BadRequestException(
-        'Vendedor da proposta deve ser um usuario comercial ativo.',
+        'O responsável pela proposta deve ser um usuário comercial ou gestor ativo.',
       );
     }
+    if (seller.role && type)
+      assertPortfolio(
+        { ...seller, sub: seller.id },
+        portfolioForProposal(type),
+      );
   }
 
   private async assertGeneratorBelongsToClient(

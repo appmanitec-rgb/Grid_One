@@ -1,0 +1,70 @@
+export function screenForApi(path: string): string | undefined {
+  const p = path.replace(/^\/api(?=\/)/, '').replace(/\?.*$/, '');
+  if (
+    /^\/users\/(me|presence)(\/|$)/.test(p) ||
+    /\/(lookup|generator-lookup|create-options|equipment-options|sellers|bank-account-options)$/.test(
+      p,
+    )
+  )
+    return undefined;
+  const rules: Array<[RegExp, string]> = [
+    [/^\/crm\/inspections/, 'inspections'],
+    [/^\/crm\//, 'opportunities'],
+    [/^\/contracts\/(renew|.*renewal)/, 'renewals'],
+    [/^\/contracts/, 'contracts'],
+    [/^\/proposals/, 'proposals'],
+    [/^\/maintenance-orders/, 'orders'],
+    [/^\/operations\/downtimes/, 'downtimes'],
+    [/^\/operations\/warranties/, 'warranties'],
+    [/^\/finance\/receivables|^\/finance\/execution-billing/, 'receivables'],
+    [/^\/finance\/payables/, 'payables'],
+    [/^\/finance\/cash-flow/, 'cashFlow'],
+    [/^\/finance\/bank-movements/, 'bankMovements'],
+    [/^\/finance\/reconcil/, 'reconciliation'],
+    [/^\/finance\/bank-accounts/, 'bankAccounts'],
+    [/^\/finance\/cost-centers/, 'costCenters'],
+    [/^\/finance\/collections/, 'collections'],
+    [/^\/finance\/fiscal-documents/, 'fiscalDocuments'],
+    [/^\/hr-admin\/collaborators/, 'hrCollaborators'],
+    [/^\/hr-admin\/commission/, 'hrCommissions'],
+    [/^\/hr-admin\/fleet/, 'hrFleet'],
+    [/^\/hr-admin\/time/, 'hrTime'],
+    [/^\/hr-admin\/(assets|epis|tools)/, 'hrTools'],
+    [/^\/hr-admin\/(documents|certifications)/, 'hrDocumentation'],
+    [
+      /^\/users\/(certifications|specialties)(\/|$)|^\/users\/[^/]+\/(certifications|specialties)(\/|$)/,
+      'hrDocumentation',
+    ],
+    [/^\/users(?:\/|$)/, 'usersControl'],
+    [/^\/catalogs/, 'catalog'],
+    [/^\/clients/, 'clients'],
+    [/^\/sites/, 'sites'],
+    [/^\/generators\/models/, 'equipmentModels'],
+    [/^\/generators/, 'equipments'],
+    [/^\/technicians/, 'technicians'],
+    [/^\/commercial-sizing/, 'proposals'],
+    [/^\/operational-costs/, 'costs'],
+    [/^\/studio\/document-editor/, 'studioDocuments'],
+    [/^\/studio\/history/, 'studioHistory'],
+    [/^\/studio\/utilization/, 'studioUtilization'],
+    [/^\/studio/, 'studioData'],
+    [/^\/purchase-orders/, 'purchases'],
+    [/^\/suppliers/, 'suppliers'],
+    [/^\/inventory/, 'inventory'],
+    [/^\/sales-orders/, 'salesOrders'],
+    [/^\/automation/, 'automation'],
+    [/^\/company-settings/, 'companySettings'],
+    [/^\/reports/, 'reports'],
+    [/^\/documents\/proposals/, 'proposals'],
+    [/^\/documents\/contracts/, 'contracts'],
+    [/^\/documents\/orders/, 'orders'],
+    [/^\/documents/, 'documents'],
+    [/^\/deliveries/, 'deliveries'],
+    [/^\/team/, 'team'],
+    [/^\/tickets/, 'tickets'],
+    [/^\/service-reports/, 'serviceReports'],
+    [/^\/technician\//, 'technicianPortal'],
+    [/^\/telemetry/, 'monitoring'],
+  ];
+  return rules.find(([regex]) => regex.test(p))?.[1];
+}

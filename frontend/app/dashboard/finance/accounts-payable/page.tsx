@@ -1,4 +1,5 @@
 "use client";
+import { getAccessFromToken, canAccessDashboardPath } from "@/lib/access";
 import { commercialLabel } from "@/lib/commercial-labels";
 
 import Link from "next/link";
@@ -301,7 +302,17 @@ export default function AccountsPayablePage() {
     try {
       const [payablesRes, bankAccountsRes] = await Promise.all([
         apiFetch(apiUrl("/finance/payables"), { cache: "no-store" }),
-        apiFetch(apiUrl("/finance/bank-accounts"), { cache: "no-store" }),
+        apiFetch(
+          apiUrl(
+            canAccessDashboardPath(
+              "/dashboard/finance/bank-accounts",
+              getAccessFromToken().pages,
+            )
+              ? "/finance/bank-accounts"
+              : "/finance/bank-account-options",
+          ),
+          { cache: "no-store" },
+        ),
       ]);
 
       const failed = [
@@ -689,18 +700,14 @@ export default function AccountsPayablePage() {
                 </div>
               </div>
             </FieldBox>
-
-
           </div>
         }
       />
-<StatusBanner
-              tone={activeBankAccounts.length > 0 ? "blue" : "amber"}
-            >
-              {activeBankAccounts.length > 0
-                ? `${activeBankAccounts.length} conta(s) bancarias ativa(s) prontas para registrar a saida do pagamento.`
-                : "Nenhuma conta bancaria ativa encontrada. Cadastre ou reative uma conta/caixa antes de registrar pagamentos."}
-            </StatusBanner>
+      <StatusBanner tone={activeBankAccounts.length > 0 ? "blue" : "amber"}>
+        {activeBankAccounts.length > 0
+          ? `${activeBankAccounts.length} conta(s) bancarias ativa(s) prontas para registrar a saida do pagamento.`
+          : "Nenhuma conta bancaria ativa encontrada. Cadastre ou reative uma conta/caixa antes de registrar pagamentos."}
+      </StatusBanner>
 
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
       {successMessage ? (
@@ -1395,10 +1402,14 @@ export default function AccountsPayablePage() {
                     </p>
                     <p className="mt-1 text-sm text-slate-500">
                       {account.bankName || "Banco nao informado"}
-                      {account.type ? ` / ${commercialLabel(account.type)}` : ""}
+                      {account.type
+                        ? ` / ${commercialLabel(account.type)}`
+                        : ""}
                     </p>
                     <p className="mt-3 text-lg font-bold text-slate-950">
-                      {formatCurrency(Number(account.currentBalance || 0))}
+                      {account.currentBalance == null
+                        ? "Saldo restrito neste acesso"
+                        : formatCurrency(Number(account.currentBalance))}
                     </p>
                   </div>
                 ))

@@ -1,3 +1,4 @@
+import { checkOrderCreation } from '../auth/rules/commercial-access';
 import {
   BadRequestException,
   ForbiddenException,
@@ -56,6 +57,11 @@ export class MaintenanceOrdersService {
     dto: CreateMaintenanceOrderDto,
     actorUserId?: string,
   ) {
+    await checkOrderCreation(
+      this.prisma,
+      actorUserId,
+      dto.type || 'CORRECTIVE',
+    );
     const generator = await this.ensureGeneratorAndSite(
       tx,
       dto.generatorId,
@@ -254,6 +260,7 @@ export class MaintenanceOrdersService {
     dto: UpdateMaintenanceOrderDto,
     actorUserId?: string,
   ) {
+    if (dto.type) await checkOrderCreation(this.prisma, actorUserId, dto.type);
     const actor = await this.assertInternalActor(actorUserId);
     const current = await this.prisma.maintenanceOrder.findUnique({
       where: { id },

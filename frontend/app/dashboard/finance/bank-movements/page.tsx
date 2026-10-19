@@ -1,4 +1,5 @@
 "use client";
+import { getAccessFromToken, canAccessDashboardPath } from "@/lib/access";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -183,7 +184,17 @@ export default function BankMovementsPage() {
 
     try {
       const [accountsRes, movementsRes, periodsRes] = await Promise.all([
-        apiFetch(apiUrl("/finance/bank-accounts"), { cache: "no-store" }),
+        apiFetch(
+          apiUrl(
+            canAccessDashboardPath(
+              "/dashboard/finance/bank-accounts",
+              getAccessFromToken().pages,
+            )
+              ? "/finance/bank-accounts"
+              : "/finance/bank-account-options",
+          ),
+          { cache: "no-store" },
+        ),
         apiFetch(apiUrl(`/finance/bank-movements${buildQuery(filters)}`), {
           cache: "no-store",
         }),
@@ -554,7 +565,12 @@ export default function BankMovementsPage() {
             description="Ajuste os filtros ou registre uma baixa/pagamento."
           />
         ) : (
-          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
+          <div
+            className="overflow-x-auto"
+            tabIndex={0}
+            role="region"
+            aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas."
+          >
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
                 <tr>

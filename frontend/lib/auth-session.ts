@@ -15,6 +15,8 @@ export type AuthTokenPayload = {
   linkedClientId?: string | null;
   exp?: number;
   accessPolicy?: unknown;
+  accessRules?: unknown;
+  approvalDiscountLimit?: number | null;
   isSystemMaster?: boolean;
   mfaSetupRequired?: boolean;
 };
@@ -43,9 +45,9 @@ function decodeBase64UrlValue(value: string) {
   return new TextDecoder().decode(bytes);
 }
 
-export function decodeJwtPayload<T extends Record<string, unknown> = AuthTokenPayload>(
-  token: string,
-) {
+export function decodeJwtPayload<
+  T extends Record<string, unknown> = AuthTokenPayload,
+>(token: string) {
   try {
     const payloadBase64 = token.split(".")[1];
     if (!payloadBase64) {
@@ -138,7 +140,10 @@ export function persistAuthenticatedSession(session: PersistedAuthSession) {
   }
 
   if (session.refresh_token_expires_at) {
-    localStorage.setItem(REFRESH_EXPIRES_AT_KEY, session.refresh_token_expires_at);
+    localStorage.setItem(
+      REFRESH_EXPIRES_AT_KEY,
+      session.refresh_token_expires_at,
+    );
   } else {
     localStorage.removeItem(REFRESH_EXPIRES_AT_KEY);
   }
@@ -150,7 +155,10 @@ export function persistAuthenticatedSession(session: PersistedAuthSession) {
   }
 }
 
-function isTokenExpiringSoon(token: string, withinSeconds = TOKEN_REFRESH_WINDOW_SECONDS) {
+function isTokenExpiringSoon(
+  token: string,
+  withinSeconds = TOKEN_REFRESH_WINDOW_SECONDS,
+) {
   const payload = decodeJwtPayload<AuthTokenPayload>(token);
   if (!payload?.exp) {
     return true;
@@ -216,7 +224,10 @@ export async function refreshAccessSession() {
 
   const initialRefreshToken = getStoredRefreshToken();
   const refresh = async () => {
-    if (initialRefreshToken && getStoredRefreshToken() !== initialRefreshToken) {
+    if (
+      initialRefreshToken &&
+      getStoredRefreshToken() !== initialRefreshToken
+    ) {
       return Boolean(getStoredAccessToken());
     }
     return runRefreshRequest();
@@ -231,9 +242,11 @@ export async function refreshAccessSession() {
     }
     return await refresh();
   };
-  refreshPromise = synchronizedRefresh().catch(() => false).finally(() => {
-    refreshPromise = null;
-  });
+  refreshPromise = synchronizedRefresh()
+    .catch(() => false)
+    .finally(() => {
+      refreshPromise = null;
+    });
 
   return refreshPromise;
 }
@@ -257,5 +270,7 @@ export async function ensureValidSession() {
   }
 
   const refreshed = await refreshAccessSession();
-  return refreshed || Boolean(getStoredAccessToken() && getStoredRefreshToken());
+  return (
+    refreshed || Boolean(getStoredAccessToken() && getStoredRefreshToken())
+  );
 }

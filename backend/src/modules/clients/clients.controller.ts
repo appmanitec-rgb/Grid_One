@@ -128,8 +128,11 @@ export class ClientsController {
 
   @RequireAccessPolicy('clients.view')
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.clientsService.findOne(id);
+  findOne(@Param('id') id: string, @Req() req: Request) {
+    return this.clientsService.findOne(
+      id,
+      (req['user'] as { sub: string }).sub,
+    );
   }
 
   @RequireAccessPolicy('clients.update')

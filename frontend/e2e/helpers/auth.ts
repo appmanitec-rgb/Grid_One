@@ -129,7 +129,9 @@ export async function apiRequest<T>(
   const response = await apiRequestRaw(token, path, options);
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`${options.method ?? "GET"} ${path} falhou: ${response.status} ${text}`);
+    throw new Error(
+      `${options.method ?? "GET"} ${path} falhou: ${response.status} ${text}`,
+    );
   }
   return (await response.json()) as T;
 }
@@ -204,15 +206,21 @@ async function requestApiLogin(account: E2eAccount) {
   if (account.internal) {
     payload.mfaCode = generateTotp();
   }
-  return apiRequest<LoginResponse>(undefined, account.internal ? "/auth/login" : "/auth/client-login", {
-    method: "POST",
-    body: payload,
-    timeoutMs: 60_000,
-  });
+  return apiRequest<LoginResponse>(
+    undefined,
+    account.internal ? "/auth/login" : "/auth/client-login",
+    {
+      method: "POST",
+      body: payload,
+      timeoutMs: 60_000,
+    },
+  );
 }
 
 export async function apiLogin(account: E2eAccount) {
-  const cached = apiLoginPromises.get(account.key);
+  const accountCacheKey =
+    account.key + ":" + account.email.trim().toLowerCase();
+  const cached = apiLoginPromises.get(accountCacheKey);
   if (cached) return cached;
 
   const loginPromise = (async () => {
@@ -223,11 +231,11 @@ export async function apiLogin(account: E2eAccount) {
       return requestApiLogin(account);
     }
   })().catch((error) => {
-    apiLoginPromises.delete(account.key);
+    apiLoginPromises.delete(accountCacheKey);
     throw error;
   });
 
-  apiLoginPromises.set(account.key, loginPromise);
+  apiLoginPromises.set(accountCacheKey, loginPromise);
   return loginPromise;
 }
 
@@ -239,11 +247,21 @@ export async function loginByUi(page: Page, account: E2eAccount) {
   await expect(emailInput).toBeVisible();
   await expect(passwordInput).toBeVisible();
   await fillLoginFields(emailInput, passwordInput, account);
-  await page.getByRole("button", { name: account.internal ? /acessar o GridOne/i : /entrar no portal/i }).click();
+  await page
+    .getByRole("button", {
+      name: account.internal ? /acessar o GridOne/i : /entrar no portal/i,
+    })
+    .click();
 
   if (account.internal) {
     const challenge = page.locator("#mfa-challenge-code");
-    await expect.poll(async () => (await challenge.isVisible()) || new RegExp(account.expectedStartPath).test(page.url())).toBeTruthy();
+    await expect
+      .poll(
+        async () =>
+          (await challenge.isVisible()) ||
+          new RegExp(account.expectedStartPath).test(page.url()),
+      )
+      .toBeTruthy();
     if (await challenge.isVisible()) {
       await challenge.fill(generateTotp());
       await page.getByRole("button", { name: /validar c[oó]digo/i }).click();
@@ -297,7 +315,8 @@ async function loadE2eEntityData(): Promise<E2eEntityData> {
     ),
     otherTechnicianOrderId: findEntityId(
       orders,
-      (row) => row.title === "OS DEMO - Atendimento Cliente B tecnico secundario",
+      (row) =>
+        row.title === "OS DEMO - Atendimento Cliente B tecnico secundario",
       "OS de outro tecnico",
     ),
     serviceReportAId: findEntityId(

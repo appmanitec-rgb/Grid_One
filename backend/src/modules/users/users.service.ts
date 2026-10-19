@@ -1,3 +1,4 @@
+import { assertScreen } from '../auth/rules/access-rules';
 import {
   BadRequestException,
   ForbiddenException,
@@ -42,6 +43,7 @@ const userPublicSelect = {
   isActive: true,
   isSystemMaster: true,
   accessPolicy: true,
+  accessRules: true,
   department: true,
   branch: true,
   approvalDiscountLimit: true,
@@ -72,7 +74,6 @@ const userPublicSelect = {
 } as const;
 
 const sensitiveUserFields = [
-  'approvalDiscountLimit',
   'hourCost',
   'salesTargetMonthly',
   'kpiTargetJson',
@@ -90,6 +91,12 @@ export class UsersService {
   ) {}
 
   async create(createUserDto: CreateUserDto, actorUserId?: string) {
+    if (
+      createUserDto.role !== UserRole.CLIENT ||
+      createUserDto.accessRules !== undefined ||
+      createUserDto.approvalDiscountLimit !== undefined
+    )
+      await this.assertCanManageSecurity(actorUserId);
     const normalizedEmail = normalizeEmail(createUserDto.email);
     const technicianProfile = this.prepareTechnicianProfile(createUserDto);
     const userExists = await this.prisma.user.findFirst({
@@ -171,7 +178,7 @@ export class UsersService {
     delete userData.technicianProfile;
 
     const createData: Prisma.UserUncheckedCreateInput = {
-      ...(userData as Omit<
+      ...(userData as unknown as Omit<
         CreateUserDto,
         'password' | 'accessPolicy' | 'role' | 'managerId' | 'technicianProfile'
       >),
@@ -370,6 +377,11 @@ export class UsersService {
   }
 
   async update(id: string, updateUserDto: UpdateUserDto, actorUserId?: string) {
+    if (
+      updateUserDto.accessRules !== undefined ||
+      updateUserDto.approvalDiscountLimit !== undefined
+    )
+      await this.assertCanManageSecurity(actorUserId);
     const { password, accessPolicy, role, portalPermissions, ...updateData } =
       updateUserDto;
     const currentUser = await this.prisma.user.findUnique({
@@ -391,6 +403,16 @@ export class UsersService {
     }
     if (currentUser.isSystemMaster) {
       throw new ForbiddenException('Usuario master nao pode ser editado.');
+    }
+
+    if (
+      (updateUserDto.email !== undefined &&
+        normalizeEmail(updateUserDto.email) !==
+          normalizeEmail(currentUser.email)) ||
+      (!currentUser.isActive && updateData.isActive === true) ||
+      (currentUser.role === UserRole.ADMIN && updateData.isActive === false)
+    ) {
+      await this.assertCanManageSecurity(actorUserId);
     }
 
     const targetRole = role ?? currentUser.role;
@@ -477,6 +499,12 @@ export class UsersService {
         : {}),
     };
 
+    if (
+      role &&
+      role !== currentUser.role &&
+      updateUserDto.accessRules === undefined
+    )
+      dataToUpdate.accessRules = Prisma.DbNull;
     if (password) {
       await this.assertCanManageSecurity(actorUserId);
       dataToUpdate.passwordHash = await bcrypt.hash(password, 12);
@@ -549,13 +577,17 @@ export class UsersService {
   async remove(id: string, actorUserId?: string) {
     const currentUser = await this.prisma.user.findUnique({
       where: { id },
-      select: { id: true, isSystemMaster: true },
+      select: { id: true, isSystemMaster: true, role: true },
     });
     if (!currentUser) {
       throw new BadRequestException('Usuario nao encontrado.');
     }
     if (currentUser.isSystemMaster) {
       throw new ForbiddenException('Usuario master nao pode ser excluido.');
+    }
+
+    if (currentUser.role === UserRole.ADMIN) {
+      await this.assertCanManageSecurity(actorUserId);
     }
 
     await this.auditLogsService.record({
@@ -1310,8 +1342,15 @@ export class UsersService {
     if (!actorUserId) return;
     const actor = await this.prisma.user.findUnique({
       where: { id: actorUserId },
-      select: { role: true, isSystemMaster: true, accessPolicy: true },
+      select: {
+        role: true,
+        isSystemMaster: true,
+        accessPolicy: true,
+        accessRules: true,
+      },
     });
+    if (actor)
+      assertScreen({ ...actor, sub: actorUserId }, 'usersControl', permission);
     const userAccess = actor
       ? effectiveAccessPolicy(actor.role, actor.accessPolicy).users
       : null;

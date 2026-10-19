@@ -1,10 +1,21 @@
 "use client";
+import { canUsePortfolio, getDetailedAccess } from "@/lib/access-rules";
 
 import { SelectField } from "@/app/dashboard/components/SelectField";
-import { MetricCard as SummaryMetric, PageHeader } from "../components/DashboardPageKit";
+import {
+  MetricCard as SummaryMetric,
+  PageHeader,
+} from "../components/DashboardPageKit";
 
 import Link from "next/link";
-import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  FormEvent,
+  ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
 
 const STAGE_ORDER = [
@@ -128,7 +139,12 @@ type Opportunity = {
   estimatedValue: number;
   expectedCloseDate?: string | null;
   probabilityPercent?: number | null;
-  crmActivities?: Array<{ id: string; type: string; subject: string; dueAt: string | null }>;
+  crmActivities?: Array<{
+    id: string;
+    type: string;
+    subject: string;
+    dueAt: string | null;
+  }>;
   lossReason?: LossReason | null;
   lossReasonDetail?: string | null;
   client: { id: string; companyName: string; tradeName?: string | null };
@@ -155,10 +171,18 @@ type Forecast = {
   weightedAmount: number;
   unscheduled: number;
   overdue: number;
-  months: Array<{ month: string; count: number; amount: number; weightedAmount: number }>;
+  months: Array<{
+    month: string;
+    count: number;
+    amount: number;
+    weightedAmount: number;
+  }>;
 };
 
-const forecastCurrency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const forecastCurrency = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
 
 type ClientOption = {
   id: string;
@@ -177,6 +201,19 @@ type Collaborator = {
 };
 
 export default function OpportunitiesPage() {
+  const [accessReady, setAccessReady] = useState(false);
+  useEffect(() => setAccessReady(true), []);
+
+  const permittedPipelines = PIPELINE_ORDER.filter((p) =>
+    canUsePortfolio(
+      p === "COMMERCIAL_01_GENERATORS"
+        ? "generators"
+        : p === "COMMERCIAL_02_CONTRACTS"
+          ? "contracts"
+          : "partsServices",
+    ),
+  );
+  const [discountPercent, setDiscountPercent] = useState("0");
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [pipeline, setPipeline] = useState<PipelineRow[]>([]);
   const [forecast, setForecast] = useState<Forecast | null>(null);
@@ -193,10 +230,13 @@ export default function OpportunitiesPage() {
   const [clientId, setClientId] = useState("");
   const [assignedSellerId, setAssignedSellerId] = useState("");
   const [formPipeline, setFormPipeline] = useState<CommercialPipeline>(
-    "COMMERCIAL_03_PARTS_SERVICES",
+    permittedPipelines[0] || "COMMERCIAL_03_PARTS_SERVICES",
   );
-  const [opportunityType, setOpportunityType] =
-    useState<OpportunityType>("FIELD_SERVICE");
+  const [opportunityType, setOpportunityType] = useState<OpportunityType>(
+    TYPES_BY_PIPELINE[
+      permittedPipelines[0] || "COMMERCIAL_03_PARTS_SERVICES"
+    ][0],
+  );
   const [clientSearch, setClientSearch] = useState("");
   const [sellerSearch, setSellerSearch] = useState("");
   const [clientLookupOpen, setClientLookupOpen] = useState(false);
@@ -316,7 +356,9 @@ export default function OpportunitiesPage() {
   }, [formPipeline, sellerSearch]);
 
   useEffect(() => {
-    const opportunityIdFromUrl = new URLSearchParams(window.location.search).get("opportunityId");
+    const opportunityIdFromUrl = new URLSearchParams(
+      window.location.search,
+    ).get("opportunityId");
     if (opportunityIdFromUrl) {
       setHighlightedOpportunityId(opportunityIdFromUrl);
     }
@@ -365,6 +407,7 @@ export default function OpportunitiesPage() {
           opportunityType,
           temperature,
           estimatedValue: estimatedValue ? Number(estimatedValue) : 0,
+          discountPercent: Number(discountPercent),
           expectedCloseDate: expectedCloseDate || undefined,
         }),
       });
@@ -384,6 +427,7 @@ export default function OpportunitiesPage() {
       setOpportunityType("FIELD_SERVICE");
       setTemperature("WARM");
       setEstimatedValue("");
+      setDiscountPercent("0");
       setExpectedCloseDate("");
       await loadAll();
       setMessage("Oportunidade criada com sucesso.");
@@ -537,7 +581,9 @@ export default function OpportunitiesPage() {
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, "Falha ao atualizar fase."));
+        throw new Error(
+          await readApiErrorMessage(res, "Falha ao atualizar fase."),
+        );
       }
 
       await loadAll();
@@ -553,31 +599,39 @@ export default function OpportunitiesPage() {
     }
   }
 
+  if (!accessReady)
+    return (
+      <div className="dashboard-page p-6 text-sm text-slate-500">
+        Carregando permissões...
+      </div>
+    );
   return (
     <div className="dashboard-page space-y-5">
       <PageHeader
         eyebrow="Comercial"
         title="Funil de Vendas"
         description="Kanban comercial com fases, valores, responsáveis e próximos passos."
-
       />
-<div className="dashboard-metrics-grid">
-            <MiniMetric label="Oportunidades" value={String(opportunities.length)} />
-            <MiniMetric
-              label="Pipeline"
-              value={`R$ ${pipeline
-                .reduce((sum, row) => sum + Number(row.estimatedValue || 0), 0)
-                .toLocaleString("pt-BR")}`}
-            />
-            <MiniMetric
-              label="Abertas"
-              value={String(
-                opportunities.filter(
-                  (item) => !["WON", "LOST"].includes(item.stage),
-                ).length,
-              )}
-            />
-          </div>
+      <div className="dashboard-metrics-grid">
+        <MiniMetric
+          label="Oportunidades"
+          value={String(opportunities.length)}
+        />
+        <MiniMetric
+          label="Pipeline"
+          value={`R$ ${pipeline
+            .reduce((sum, row) => sum + Number(row.estimatedValue || 0), 0)
+            .toLocaleString("pt-BR")}`}
+        />
+        <MiniMetric
+          label="Abertas"
+          value={String(
+            opportunities.filter(
+              (item) => !["WON", "LOST"].includes(item.stage),
+            ).length,
+          )}
+        />
+      </div>
 
       {message ? (
         <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
@@ -597,7 +651,7 @@ export default function OpportunitiesPage() {
             label="Todos"
             onClick={() => setActivePipeline("ALL")}
           />
-          {PIPELINE_ORDER.map((pipelineOption) => (
+          {permittedPipelines.map((pipelineOption) => (
             <PipelineFilterButton
               key={pipelineOption}
               active={activePipeline === pipelineOption}
@@ -610,25 +664,70 @@ export default function OpportunitiesPage() {
 
       <section className="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div><p className="text-xs font-bold uppercase tracking-widest text-blue-600">Previsão comercial</p><h2 className="text-lg font-bold text-slate-900">Vendas previstas por mês</h2></div>
-          <p className="text-xs text-slate-600">Valor ponderado pela probabilidade da etapa ou da oportunidade.</p>
-        </div>
-        {forecast ? <>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <MiniMetric label="Oportunidades abertas" value={String(forecast.count)} />
-            <MiniMetric label="Valor em aberto" value={forecastCurrency.format(forecast.amount)} />
-            <MiniMetric label="Previsão ponderada" value={forecastCurrency.format(forecast.weightedAmount)} />
-            <MiniMetric label="Sem data / vencidas" value={`${forecast.unscheduled} / ${forecast.overdue}`} />
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-blue-600">
+              Previsão comercial
+            </p>
+            <h2 className="text-lg font-bold text-slate-900">
+              Vendas previstas por mês
+            </h2>
           </div>
-          <div className="mt-4 overflow-x-auto"><div className="flex min-w-max gap-3">
-            {forecast.months.map((row) => <div key={row.month} className="min-w-44 rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs font-bold uppercase text-slate-500">{new Date(`${row.month}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}</p>
-              <p className="mt-1 text-lg font-bold text-slate-900">{forecastCurrency.format(row.weightedAmount)}</p>
-              <p className="text-xs text-slate-600">{row.count} oportunidade(s) · {forecastCurrency.format(row.amount)} bruto</p>
-            </div>)}
-            {!forecast.months.length ? <p className="text-sm text-slate-500">Informe uma data prevista nas oportunidades para distribuir a previsão por mês.</p> : null}
-          </div></div>
-        </> : null}
+          <p className="text-xs text-slate-600">
+            Valor ponderado pela probabilidade da etapa ou da oportunidade.
+          </p>
+        </div>
+        {forecast ? (
+          <>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <MiniMetric
+                label="Oportunidades abertas"
+                value={String(forecast.count)}
+              />
+              <MiniMetric
+                label="Valor em aberto"
+                value={forecastCurrency.format(forecast.amount)}
+              />
+              <MiniMetric
+                label="Previsão ponderada"
+                value={forecastCurrency.format(forecast.weightedAmount)}
+              />
+              <MiniMetric
+                label="Sem data / vencidas"
+                value={`${forecast.unscheduled} / ${forecast.overdue}`}
+              />
+            </div>
+            <div className="mt-4 overflow-x-auto">
+              <div className="flex min-w-max gap-3">
+                {forecast.months.map((row) => (
+                  <div
+                    key={row.month}
+                    className="min-w-44 rounded-xl border border-slate-200 bg-slate-50 p-3"
+                  >
+                    <p className="text-xs font-bold uppercase text-slate-500">
+                      {new Date(`${row.month}-01T12:00:00`).toLocaleDateString(
+                        "pt-BR",
+                        { month: "long", year: "numeric" },
+                      )}
+                    </p>
+                    <p className="mt-1 text-lg font-bold text-slate-900">
+                      {forecastCurrency.format(row.weightedAmount)}
+                    </p>
+                    <p className="text-xs text-slate-600">
+                      {row.count} oportunidade(s) ·{" "}
+                      {forecastCurrency.format(row.amount)} bruto
+                    </p>
+                  </div>
+                ))}
+                {!forecast.months.length ? (
+                  <p className="text-sm text-slate-500">
+                    Informe uma data prevista nas oportunidades para distribuir
+                    a previsão por mês.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </>
+        ) : null}
       </section>
 
       <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
@@ -644,7 +743,8 @@ export default function OpportunitiesPage() {
             className="rounded-lg border border-zinc-300 px-3 py-2 text-sm md:col-span-2"
             required
           />
-          <SelectField searchable
+          <SelectField
+            searchable
             value={formPipeline}
             onChange={(event) => {
               const nextPipeline = event.target.value as CommercialPipeline;
@@ -655,7 +755,7 @@ export default function OpportunitiesPage() {
             }}
             className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
           >
-            {PIPELINE_ORDER.map((pipelineOption) => (
+            {permittedPipelines.map((pipelineOption) => (
               <option key={pipelineOption} value={pipelineOption}>
                 {PIPELINE_LABEL[pipelineOption]}
               </option>
@@ -751,7 +851,10 @@ export default function OpportunitiesPage() {
               <QuickInput
                 value={quickClient.tradeName}
                 onChange={(value) =>
-                  setQuickClient((current) => ({ ...current, tradeName: value }))
+                  setQuickClient((current) => ({
+                    ...current,
+                    tradeName: value,
+                  }))
                 }
                 placeholder="Nome fantasia"
               />
@@ -874,7 +977,9 @@ export default function OpportunitiesPage() {
           </div>
           <SelectField
             value={temperature}
-            onChange={(event) => setTemperature(event.target.value as Temperature)}
+            onChange={(event) =>
+              setTemperature(event.target.value as Temperature)
+            }
             className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
           >
             <option value="HOT">Quente</option>
@@ -890,6 +995,26 @@ export default function OpportunitiesPage() {
             placeholder="Valor estimado"
             className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
           />
+          <label className="text-xs font-medium text-slate-600">
+            Desconto (%) · alçada{" "}
+            {getDetailedAccess().unrestricted
+              ? "administrativa"
+              : getDetailedAccess().discountLimit + "%"}
+            <input
+              aria-label="Desconto da oportunidade (%)"
+              type="number"
+              min="0"
+              max={
+                getDetailedAccess().unrestricted
+                  ? 100
+                  : getDetailedAccess().discountLimit
+              }
+              step="0.01"
+              value={discountPercent}
+              onChange={(e) => setDiscountPercent(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            />
+          </label>
           <input
             value={expectedCloseDate}
             onChange={(event) => setExpectedCloseDate(event.target.value)}
@@ -910,14 +1035,19 @@ export default function OpportunitiesPage() {
         {STAGE_ORDER.map((stage) => {
           const row = pipelineMap.get(stage);
           return (
-            <article key={stage} className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
+            <article
+              key={stage}
+              className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm"
+            >
               <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-500">
                 {STAGE_LABEL[stage]}
               </p>
               <p className="mt-1 text-lg font-black text-zinc-900">
                 R$ {Number(row?.estimatedValue || 0).toLocaleString("pt-BR")}
               </p>
-              <p className="text-xs text-zinc-500">{row?.count || 0} oportunidades</p>
+              <p className="text-xs text-zinc-500">
+                {row?.count || 0} oportunidades
+              </p>
             </article>
           );
         })}
@@ -931,10 +1061,16 @@ export default function OpportunitiesPage() {
         ) : null}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
           {STAGE_ORDER.map((stage) => (
-            <div key={stage} className="min-h-[18rem] rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-              <h2 className="mb-2 text-sm font-bold text-zinc-800">{STAGE_LABEL[stage]}</h2>
+            <div
+              key={stage}
+              className="min-h-[18rem] rounded-xl border border-zinc-200 bg-zinc-50 p-3"
+            >
+              <h2 className="mb-2 text-sm font-bold text-zinc-800">
+                {STAGE_LABEL[stage]}
+              </h2>
               <div className="space-y-2">
-                {opportunities.filter((item) => item.stage === stage).length === 0 && !loading ? (
+                {opportunities.filter((item) => item.stage === stage).length ===
+                  0 && !loading ? (
                   <div className="rounded-lg border border-dashed border-zinc-300 bg-white/80 px-3 py-4 text-sm text-zinc-500">
                     Nenhuma oportunidade nesta etapa.
                   </div>
@@ -950,7 +1086,12 @@ export default function OpportunitiesPage() {
                           : "border-zinc-200"
                       }`}
                     >
-                      <Link href={`/dashboard/opportunities/${item.id}`} className="text-sm font-bold text-blue-700 hover:underline">{item.title}</Link>
+                      <Link
+                        href={`/dashboard/opportunities/${item.id}`}
+                        className="text-sm font-bold text-blue-700 hover:underline"
+                      >
+                        {item.title}
+                      </Link>
                       <div className="mt-2 flex flex-wrap gap-1">
                         <span className="rounded-full bg-indigo-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-indigo-700">
                           {PIPELINE_LABEL[item.pipeline]}
@@ -969,12 +1110,26 @@ export default function OpportunitiesPage() {
                         Temperatura: {TEMPERATURE_LABEL[item.temperature]}
                       </p>
                       <p className="mt-2 text-sm font-semibold text-zinc-800">
-                        R$ {Number(item.estimatedValue || 0).toLocaleString("pt-BR")}
+                        R${" "}
+                        {Number(item.estimatedValue || 0).toLocaleString(
+                          "pt-BR",
+                        )}
                       </p>
-                      {item.crmActivities?.[0] ? <Link href={`/dashboard/opportunities/${item.id}`} className={`mt-2 block rounded-lg px-2 py-1.5 text-xs ${item.crmActivities[0].dueAt && new Date(item.crmActivities[0].dueAt) < new Date() ? "bg-rose-50 text-rose-800" : "bg-blue-50 text-blue-800"}`}>
-                        <strong>Próxima ação:</strong> {item.crmActivities[0].subject}<br />
-                        {item.crmActivities[0].dueAt ? new Date(item.crmActivities[0].dueAt).toLocaleString("pt-BR") : "Sem prazo"}
-                      </Link> : null}
+                      {item.crmActivities?.[0] ? (
+                        <Link
+                          href={`/dashboard/opportunities/${item.id}`}
+                          className={`mt-2 block rounded-lg px-2 py-1.5 text-xs ${item.crmActivities[0].dueAt && new Date(item.crmActivities[0].dueAt) < new Date() ? "bg-rose-50 text-rose-800" : "bg-blue-50 text-blue-800"}`}
+                        >
+                          <strong>Próxima ação:</strong>{" "}
+                          {item.crmActivities[0].subject}
+                          <br />
+                          {item.crmActivities[0].dueAt
+                            ? new Date(
+                                item.crmActivities[0].dueAt,
+                              ).toLocaleString("pt-BR")
+                            : "Sem prazo"}
+                        </Link>
+                      ) : null}
                       <div className="mt-2 flex flex-wrap gap-2">
                         <span className="rounded-full bg-zinc-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-600">
                           {(item.inspections || []).length} vistoria(s)
@@ -985,13 +1140,17 @@ export default function OpportunitiesPage() {
                       </div>
                       {item.proposals?.[0] ? (
                         <p className="mt-2 text-xs text-zinc-500">
-                          Última proposta: {item.proposals[0].code} | {PROPOSAL_STATUS_LABEL[item.proposals[0].status] || item.proposals[0].status}
+                          Última proposta: {item.proposals[0].code} |{" "}
+                          {PROPOSAL_STATUS_LABEL[item.proposals[0].status] ||
+                            item.proposals[0].status}
                         </p>
                       ) : null}
                       {item.lossReason ? (
                         <p className="mt-1 text-xs font-semibold text-amber-700">
                           Motivo: {LOSS_REASON_LABEL[item.lossReason]}
-                          {item.lossReasonDetail ? ` - ${item.lossReasonDetail}` : ""}
+                          {item.lossReasonDetail
+                            ? ` - ${item.lossReasonDetail}`
+                            : ""}
                         </p>
                       ) : null}
                       <div className="mt-3 flex flex-wrap gap-2">
@@ -999,7 +1158,9 @@ export default function OpportunitiesPage() {
                           href={proposalHrefForOpportunity(item)}
                           className="inline-flex rounded-md bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-sky-500"
                         >
-                          {(item.proposals || []).length > 0 ? "Nova proposta vinculada" : "Gerar proposta"}
+                          {(item.proposals || []).length > 0
+                            ? "Nova proposta vinculada"
+                            : "Gerar proposta"}
                         </Link>
                         {item.proposals?.[0] ? (
                           <Link
@@ -1014,7 +1175,10 @@ export default function OpportunitiesPage() {
                         value={item.stage}
                         disabled={changingStageId === item.id}
                         onChange={(event) =>
-                          void handleStageChange(item, event.target.value as Stage)
+                          void handleStageChange(
+                            item,
+                            event.target.value as Stage,
+                          )
                         }
                         className="mt-3 w-full rounded-md border border-zinc-300 px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-60"
                       >
@@ -1091,7 +1255,9 @@ function LookupPanel({
   emptyLabel: string;
   loading: boolean;
 }) {
-  const hasItems = Array.isArray(children) ? children.length > 0 : Boolean(children);
+  const hasItems = Array.isArray(children)
+    ? children.length > 0
+    : Boolean(children);
 
   return (
     <div className="absolute left-0 right-0 top-[calc(100%+0.25rem)] z-30 max-h-64 overflow-auto rounded-lg border border-zinc-200 bg-white py-1 shadow-lg">

@@ -67,6 +67,12 @@ export class CreateOpportunityDto {
   @IsOptional()
   estimatedValue?: number;
 
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  @IsOptional()
+  discountPercent?: number;
+
   @IsInt()
   @Min(0)
   @Max(100)

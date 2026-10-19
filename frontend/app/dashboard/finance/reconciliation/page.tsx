@@ -1,4 +1,5 @@
 "use client";
+import { getAccessFromToken, canAccessDashboardPath } from "@/lib/access";
 import { commercialLabel } from "@/lib/commercial-labels";
 
 import { useRouter } from "next/navigation";
@@ -316,9 +317,19 @@ export default function BankReconciliationPage() {
 
   const loadAccounts = useCallback(async () => {
     const [response, profilesResponse] = await Promise.all([
-      apiFetch(apiUrl("/finance/bank-accounts"), {
-        cache: "no-store",
-      }),
+      apiFetch(
+        apiUrl(
+          canAccessDashboardPath(
+            "/dashboard/finance/bank-accounts",
+            getAccessFromToken().pages,
+          )
+            ? "/finance/bank-accounts"
+            : "/finance/bank-account-options",
+        ),
+        {
+          cache: "no-store",
+        },
+      ),
       apiFetch(apiUrl("/finance/bank-import-profiles"), {
         cache: "no-store",
       }),
@@ -350,23 +361,25 @@ export default function BankReconciliationPage() {
       );
       const [importsRes, reportRes, movementsRes, closingsRes] =
         await Promise.all([
-        apiFetch(
-          apiUrl(`/finance/bank-accounts/${selectedBankAccountId}/statements`),
-          { cache: "no-store" },
-        ),
-        apiFetch(apiUrl(`/finance/reconciliation/report?${periodQuery}`), {
-          cache: "no-store",
-        }),
-        apiFetch(apiUrl(`/finance/bank-movements?${periodQuery}`), {
-          cache: "no-store",
-        }),
-        apiFetch(
-          apiUrl(
-            `/finance/bank-reconciliation-closings?bankAccountId=${selectedBankAccountId}`,
+          apiFetch(
+            apiUrl(
+              `/finance/bank-accounts/${selectedBankAccountId}/statements`,
+            ),
+            { cache: "no-store" },
           ),
-          { cache: "no-store" },
-        ),
-      ]);
+          apiFetch(apiUrl(`/finance/reconciliation/report?${periodQuery}`), {
+            cache: "no-store",
+          }),
+          apiFetch(apiUrl(`/finance/bank-movements?${periodQuery}`), {
+            cache: "no-store",
+          }),
+          apiFetch(
+            apiUrl(
+              `/finance/bank-reconciliation-closings?bankAccountId=${selectedBankAccountId}`,
+            ),
+            { cache: "no-store" },
+          ),
+        ]);
 
       await readOrThrow(importsRes, "Nao foi possivel carregar extratos.");
       await readOrThrow(reportRes, "Nao foi possivel carregar conciliacao.");
@@ -378,16 +391,16 @@ export default function BankReconciliationPage() {
 
       const [nextImports, nextReport, movementPayload, nextClosings] =
         (await Promise.all([
-        importsRes.json(),
-        reportRes.json(),
-        movementsRes.json(),
-        closingsRes.json(),
-      ])) as [
-        BankStatementImport[],
-        ReconciliationReport,
-        { entries: BankMovement[] },
-        BankReconciliationClosing[],
-      ];
+          importsRes.json(),
+          reportRes.json(),
+          movementsRes.json(),
+          closingsRes.json(),
+        ])) as [
+          BankStatementImport[],
+          ReconciliationReport,
+          { entries: BankMovement[] },
+          BankReconciliationClosing[],
+        ];
 
       setStatementImports(nextImports);
       setReport(nextReport);
@@ -517,7 +530,8 @@ export default function BankReconciliationPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             dateWindowDays: 2,
-            profileId: selectedImport?.profileId || selectedProfileId || undefined,
+            profileId:
+              selectedImport?.profileId || selectedProfileId || undefined,
           }),
         },
       );
@@ -1090,7 +1104,12 @@ export default function BankReconciliationPage() {
             description="O extrato selecionado ainda não retornou entradas."
           />
         ) : (
-          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
+          <div
+            className="overflow-x-auto"
+            tabIndex={0}
+            role="region"
+            aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas."
+          >
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
                 <tr>

@@ -1,4 +1,5 @@
 "use client";
+import { getAccessFromToken, canAccessDashboardPath } from "@/lib/access";
 import { commercialLabel } from "@/lib/commercial-labels";
 
 import Link from "next/link";
@@ -135,7 +136,17 @@ export default function CashFlowPage() {
           apiFetch(apiUrl("/finance/cash-flow/projection?days=90"), {
             cache: "no-store",
           }),
-          apiFetch(apiUrl("/finance/bank-accounts"), { cache: "no-store" }),
+          apiFetch(
+            apiUrl(
+              canAccessDashboardPath(
+                "/dashboard/finance/bank-accounts",
+                getAccessFromToken().pages,
+              )
+                ? "/finance/bank-accounts"
+                : "/finance/bank-account-options",
+            ),
+            { cache: "no-store" },
+          ),
           apiFetch(apiUrl("/finance/receivables"), { cache: "no-store" }),
           apiFetch(apiUrl("/finance/payables"), { cache: "no-store" }),
         ]);
@@ -334,16 +345,14 @@ export default function CashFlowPage() {
                 </div>
               </div>
             </FieldBox>
-
-
           </div>
         }
       />
-<StatusBanner tone={firstNegativeProjection ? "rose" : "blue"}>
-              {firstNegativeProjection
-                ? `Atencao: o caixa projeta saldo negativo em ${firstNegativeProjection.horizonDays} dias se nada mudar no ritmo atual.`
-                : "A carteira atual nao aponta saldo negativo nos horizontes analisados."}
-            </StatusBanner>
+      <StatusBanner tone={firstNegativeProjection ? "rose" : "blue"}>
+        {firstNegativeProjection
+          ? `Atencao: o caixa projeta saldo negativo em ${firstNegativeProjection.horizonDays} dias se nada mudar no ritmo atual.`
+          : "A carteira atual nao aponta saldo negativo nos horizontes analisados."}
+      </StatusBanner>
 
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
 
@@ -659,7 +668,9 @@ export default function CashFlowPage() {
                           </p>
                           <p className="mt-1 text-sm text-slate-500">
                             {account.bankName || "Banco nao informado"}
-                            {account.type ? ` / ${commercialLabel(account.type)}` : ""}
+                            {account.type
+                              ? ` / ${commercialLabel(account.type)}`
+                              : ""}
                           </p>
                         </div>
                         <DataPill
