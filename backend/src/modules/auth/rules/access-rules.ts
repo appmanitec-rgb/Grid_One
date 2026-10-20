@@ -15,6 +15,7 @@ export type ScreenRule = { view: boolean; actions: Record<string, boolean> };
 export type OnCallShift = { startsAt: string; endsAt: string };
 export type DetailedAccessRules = {
   version: 1;
+  profileId?: string;
   screens: Record<string, ScreenRule>;
   commercial: Record<Portfolio, boolean>;
   orderTypes: Record<OrderCreationType, boolean>;
@@ -49,6 +50,9 @@ export function readRules(value: unknown): DetailedAccessRules {
   }
   return {
     version: 1,
+    ...(typeof source.profileId === 'string'
+      ? { profileId: source.profileId }
+      : {}),
     screens,
     commercial: Object.fromEntries(
       PORTFOLIOS.map((p) => [p, source.commercial?.[p] === true]),

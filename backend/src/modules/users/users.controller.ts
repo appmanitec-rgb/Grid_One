@@ -22,6 +22,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
 import { UpdateUserSpecialtyDto } from './dto/update-user-specialty.dto';
 import { UserPresencePingDto } from './dto/user-presence-ping.dto';
+import { listAccessProfiles } from './access-profiles';
 import { UsersService } from './users.service';
 
 @Controller('users')
@@ -109,6 +110,12 @@ export class UsersController {
   @Get()
   findAll() {
     return this.usersService.findAll();
+  }
+
+  @RequireAccessPolicy('users.manage')
+  @Get('access-profiles')
+  getAccessProfiles() {
+    return listAccessProfiles();
   }
 
   @RequireAccessPolicy('users.manage')

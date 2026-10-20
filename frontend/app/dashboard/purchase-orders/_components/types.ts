@@ -1,0 +1,313 @@
+export type Amount = string | number;
+export type Choice = {
+  id: string;
+  label: string;
+  name?: string;
+  sku?: string;
+  unit?: string;
+  type?: string;
+  quantity?: Amount;
+  clientId?: string;
+  generatorId?: string;
+  serialNumber?: string;
+  specification?: string;
+  neededAt?: string;
+};
+export type Allocation = {
+  fulfilledQty?: Amount;
+  id?: string;
+  origin: string;
+  quantity: Amount;
+  clientId?: string;
+  orderId?: string;
+  contractId?: string;
+  generatorId?: string;
+  serialNumber?: string;
+  salesOrderId?: string;
+  warrantyId?: string;
+  costCenterId?: string;
+  warehouseId?: string;
+};
+export type RequestItem = {
+  quoteSources?: Array<{
+    id: string;
+    quoteItem: { quote: { id: string; code: string; status: string } };
+  }>;
+  id?: string;
+  catalogItemId?: string;
+  catalogItem?: { id: string; name: string; sku: string; type: string };
+  description: string;
+  specification?: string;
+  originalReference?: string;
+  quantity: Amount;
+  fulfilledQty?: Amount;
+  unit: string;
+  neededAt?: string;
+  notes?: string;
+  allocations: Allocation[];
+};
+export type Attachment = { id: string; fileName: string; sizeBytes: number };
+export type Event = {
+  id: string;
+  action: string;
+  createdAt: string;
+  reason?: string;
+  actorUser?: { name: string };
+};
+export type PurchaseRequest = {
+  _count?: { items: number };
+  id: string;
+  code: string;
+  requestKey: string;
+  requester?: { name: string };
+  department: string;
+  origin: string;
+  priority: string;
+  justification: string;
+  neededAt?: string;
+  notes?: string;
+  status: string;
+  items: RequestItem[];
+  attachments?: Attachment[];
+  history?: Event[];
+  analysis?: Array<{
+    itemId: string;
+    physicalQty: number;
+    reservedQty: number;
+    availableQty: number;
+    inboundQty: number;
+    projectedQty?: number;
+    unassignedInboundQty?: number;
+    duplicates: Array<{ request: { id: string; code: string } }>;
+    descriptive?: boolean;
+  }>;
+};
+export type OfferItem = {
+  id: string;
+  quoteItemId: string;
+  catalogItemId?: string;
+  description: string;
+  reference?: string;
+  manufacturer?: string;
+  quantity: Amount;
+  unit: string;
+  unitPrice: Amount;
+  discountPercent: Amount;
+  taxAmount: Amount;
+  freightShare: Amount;
+  otherExpenses: Amount;
+  totalAmount: Amount;
+  compatibility: string;
+  technicalReason?: string;
+  available: boolean;
+};
+export type Offer = {
+  attachments?: Attachment[];
+  id: string;
+  supplierId: string;
+  supplier: {
+    id: string;
+    companyName: string;
+    qualityScore?: number | null;
+    punctualityScore?: number | null;
+  };
+  version: number;
+  round: number;
+  validUntil: string;
+  paymentTerm: string;
+  deliveryDays: number;
+  expectedAt?: string;
+  warranty?: string;
+  notes?: string;
+  negotiatedContract?: string;
+  freightAmount: Amount;
+  freightAllocation: string;
+  items: OfferItem[];
+};
+export type Selection = {
+  id: string;
+  quoteItemId: string;
+  offerItemId: string;
+  justification: string;
+  exceptionReason?: string;
+  fulfillmentMode: string;
+  offerItem: OfferItem & { offer: Offer };
+};
+export type QuoteItem = {
+  id: string;
+  description: string;
+  specification?: string;
+  unit: string;
+  quantity: Amount;
+  neededAt?: string;
+  sources: Array<{
+    id: string;
+    quantity: Amount;
+    requestItem: RequestItem & {
+      id: string;
+      requestId: string;
+      request: PurchaseRequest;
+    };
+  }>;
+  selection?: Selection;
+};
+export type Pricing = {
+  quoteItemId: string;
+  net: string;
+  tax: string;
+  freight: string;
+  other: string;
+  total: string;
+};
+export type Quote = {
+  id: string;
+  code: string;
+  title: string;
+  status: string;
+  round: number;
+  revision: number;
+  notes?: string;
+  items: QuoteItem[];
+  offers: Offer[];
+  invitations: Array<{
+    id: string;
+    supplierId: string;
+    supplier: { companyName: string };
+    status: string;
+    round: number;
+    notes?: string;
+  }>;
+  orders: Array<{
+    id: string;
+    code: string;
+    status: string;
+    totalAmount: Amount;
+  }>;
+  attachments?: Attachment[];
+  history?: Event[];
+  approvals?: Approval[];
+  selectedPricing?: Pricing[];
+  approvalSnapshot?: { prices: Pricing[]; total: string };
+};
+export type Approval = {
+  id: string;
+  entityId: string;
+  status: string;
+  decisionNote?: string;
+  createdAt: string;
+  approverUser?: { name: string };
+  requesterUser?: { name: string };
+  requestPayload?: {
+    quoteCode?: string;
+    title?: string;
+    total: string;
+    prices: Pricing[];
+    selections: Selection[];
+  };
+};
+export type Rule = {
+  id?: string;
+  name: string;
+  active: boolean;
+  minAmount: Amount;
+  maxAmount?: Amount;
+  department?: string;
+  origin?: string;
+  priority?: string;
+  costCenterId?: string;
+  itemType?: string;
+  minimumOffers: number;
+  approverUserId: string;
+};
+export type OrderItem = {
+  id: string;
+  catalogItemId: string;
+  catalogItem: { name: string; sku?: string; type: string };
+  quantity: number;
+  receivedQty: number;
+  unitPrice: number;
+  landedUnitCost?: Amount;
+  fulfillmentMode: string;
+  procurementSelection?: Selection & { quoteItem: QuoteItem };
+};
+export type Payable = {
+  id: string;
+  amount: number;
+  paidAmount: number;
+  status: string;
+  dueDate: string;
+};
+export type Invoice = {
+  schedule: Array<{ dueDate: string; amount: number }>;
+  issueDate: string;
+  accessKey?: string;
+  justification?: string;
+  id: string;
+  number: string;
+  series: string;
+  kind: string;
+  status: string;
+  amount: Amount;
+  advanceApplied: Amount;
+  evidence: string;
+  lines: Array<{ orderItemId: string; quantity: number; amount: number }>;
+  installments: Array<{
+    id: string;
+    number: number;
+    amount: Amount;
+    dueDate: string;
+    payable: Payable;
+  }>;
+};
+export type Order = {
+  receipts: Array<{
+    id: string;
+    receivedAt: string;
+    notes?: string;
+    warehouse?: { name: string };
+  }>;
+  id: string;
+  code: string;
+  workflowVersion: number;
+  status: string;
+  totalAmount: number;
+  totalProductsAmount: number;
+  taxAmount: number;
+  freightAmount: number;
+  otherExpenses: number;
+  paymentTerm?: string;
+  expectedDate?: string;
+  supplier: { companyName: string };
+  items: OrderItem[];
+  procurementQuote?: { id: string; code: string };
+  dispatchEvidence?: { method: string; evidence: string; at: string };
+  confirmationEvidence?: { evidence: string; at: string };
+  confirmedAt?: string;
+  closedAt?: string;
+  commitment?: { amount: Amount; recognizedAmount: Amount; status: string };
+  procurementReceipts: Array<{
+    id: string;
+    receivedAt: string;
+    receivedById: string;
+    fiscalReference?: string;
+    notes?: string;
+    warehouse?: { name: string };
+    items: Array<{
+      orderItemId: string;
+      allocations?: Array<{
+        allocationId: string;
+        requestItemId: string;
+        quoteSourceId: string;
+        quantity: string;
+      }>;
+      acceptedQty: Amount;
+      rejectedQty: Amount;
+      divergence?: string;
+      serialNumbers: string[];
+    }>;
+  }>;
+  procurementInvoices: Invoice[];
+  payableEntries: Payable[];
+  attachments?: Attachment[];
+  history?: Event[];
+};

@@ -48,11 +48,16 @@ export class PurchaseOrdersController {
 
   @RequireAccessPolicy('purchaseOrders.view')
   @Patch(':id/status')
-  updateStatus(
+  async updateStatus(
     @Req() req: Request,
     @Param('id') id: string,
     @Body() dto: UpdatePurchaseOrderStatusDto,
   ) {
+    const current = await this.purchaseOrdersService.findOne(id);
+    if (current.workflowVersion === 2)
+      throw new BadRequestException(
+        'Use as ações de acompanhamento do pedido de compras.',
+      );
     const parsed = dto.status as PurchaseOrderStatus;
     if (!Object.values(PurchaseOrderStatus).includes(parsed)) {
       throw new BadRequestException('Status de pedido invalido.');
@@ -67,11 +72,16 @@ export class PurchaseOrdersController {
 
   @RequireAccessPolicy('purchaseOrders.receive')
   @Post(':id/receive')
-  receive(
+  async receive(
     @Req() req: Request,
     @Param('id') id: string,
     @Body() dto: ReceivePurchaseOrderDto,
   ) {
+    const current = await this.purchaseOrdersService.findOne(id);
+    if (current.workflowVersion === 2)
+      throw new BadRequestException(
+        'Use a conferência detalhada de recebimento deste pedido.',
+      );
     return this.purchaseOrdersService.receive(id, dto, this.extractUserId(req));
   }
 

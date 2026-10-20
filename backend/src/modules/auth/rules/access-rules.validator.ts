@@ -1,4 +1,5 @@
 import { registerDecorator, ValidationOptions } from 'class-validator';
+import { ACCESS_PROFILE_IDS } from '../../users/access-profiles';
 import { ACCESS_SCREENS } from './access-screens';
 import { ORDER_TYPES, PORTFOLIOS } from './access-rules';
 function record(value: unknown): value is Record<string, unknown> {
@@ -28,12 +29,18 @@ export function IsAccessRules(options?: ValidationOptions) {
               (k) =>
                 ![
                   'version',
+                  'profileId',
                   'screens',
                   'commercial',
                   'orderTypes',
                   'onCallShifts',
                 ].includes(k),
             )
+          )
+            return false;
+          if (
+            value.profileId !== undefined &&
+            !ACCESS_PROFILE_IDS.some((id) => id === value.profileId)
           )
             return false;
           for (const [key, screen] of Object.entries(value.screens)) {

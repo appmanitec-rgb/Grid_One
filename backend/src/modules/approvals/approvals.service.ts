@@ -1,3 +1,4 @@
+import { ProcurementService } from '../purchase-orders/procurement.service';
 import {
   checkProposalType,
   checkDiscount,
@@ -6,6 +7,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Optional,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -38,6 +40,7 @@ export class ApprovalsService {
   constructor(
     private readonly prisma: DatabaseService,
     private readonly auditLogsService: AuditLogsService,
+    @Optional() private readonly purchasing?: ProcurementService,
   ) {}
 
   async listPending(actorUserId: string) {
@@ -171,6 +174,28 @@ export class ApprovalsService {
       where: { id },
     });
     if (!approval) throw new NotFoundException('Solicitacao nao encontrada.');
+    if (approval.type === ApprovalType.PURCHASE_QUOTATION) {
+      if (!this.purchasing)
+        throw new BadRequestException('Serviço de compras indisponível.');
+      const current = await this.prisma.user.findUniqueOrThrow({
+        where: { id: actorUserId },
+      });
+      return this.purchasing.decide(
+        id,
+        {
+          sub: current.id,
+          role: current.role,
+          isSystemMaster: current.isSystemMaster,
+          accessPolicy: effectiveAccessPolicy(
+            current.role,
+            current.accessPolicy,
+          ),
+          accessRules: current.accessRules,
+        },
+        status,
+        decisionNote,
+      );
+    }
     if (approval.status !== ApprovalStatus.PENDING) {
       throw new BadRequestException('Solicitacao ja decidida.');
     }

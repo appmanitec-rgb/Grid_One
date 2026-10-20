@@ -7,7 +7,13 @@ export function screenForApi(path: string): string | undefined {
     )
   )
     return undefined;
+  if (/^\/purchasing\/status$/.test(p)) return undefined;
   const rules: Array<[RegExp, string]> = [
+    [/^\/purchasing\/requests|^\/purchasing\/options/, 'purchaseRequests'],
+    [/^\/purchasing\/quotes/, 'purchaseQuotations'],
+    [/^\/purchasing\/approvals/, 'purchasingApprovals'],
+    [/^\/purchasing\/(settings|rules)/, 'purchasingSettings'],
+    [/^\/purchasing\/orders/, 'purchases'],
     [/^\/crm\/inspections/, 'inspections'],
     [/^\/crm\//, 'opportunities'],
     [/^\/contracts\/(renew|.*renewal)/, 'renewals'],

@@ -272,6 +272,10 @@ export default function AccountsPayablePage() {
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [linkedContext, setLinkedContext] = useState<{
+    orderId?: string;
+    payableId?: string;
+  }>({});
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<
     PayableStatus | "ALL" | "ACTIVE"
@@ -285,6 +289,16 @@ export default function AccountsPayablePage() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const orderId = params.get("purchaseOrderId") || undefined,
+      payableId = params.get("payableId") || undefined;
+    if (orderId || payableId) {
+      setLinkedContext({ orderId, payableId });
+      setStatusFilter("ALL");
+      if (payableId) setExpandedId(payableId);
+    }
+  }, []);
   const handleUnauthorized = useCallback(
     async (response: Response) => {
       if (response.status !== 401) return false;
@@ -404,18 +418,32 @@ export default function AccountsPayablePage() {
   const dueSoon = useMemo(() => {
     return sortPayables(
       payables.filter((item) => {
+        if (linkedContext.payableId && item.id !== linkedContext.payableId)
+          return false;
+        if (
+          linkedContext.orderId &&
+          item.purchaseOrder?.id !== linkedContext.orderId
+        )
+          return false;
         if (item.status === "PAID" || item.status === "CANCELED") return false;
         const days = getDaysUntilDue(item.dueDate);
         return days !== null && days <= 7;
       }),
     ).slice(0, 5);
-  }, [payables]);
+  }, [payables, linkedContext]);
 
   const filteredPayables = useMemo(() => {
     const term = search.trim().toLowerCase();
 
     return sortPayables(
       payables.filter((item) => {
+        if (linkedContext.payableId && item.id !== linkedContext.payableId)
+          return false;
+        if (
+          linkedContext.orderId &&
+          item.purchaseOrder?.id !== linkedContext.orderId
+        )
+          return false;
         if (statusFilter === "ACTIVE") {
           if (item.status === "PAID" || item.status === "CANCELED")
             return false;
@@ -435,7 +463,14 @@ export default function AccountsPayablePage() {
         return describePayable(item).includes(term);
       }),
     );
-  }, [categoryFilter, payables, search, sourceFilter, statusFilter]);
+  }, [
+    categoryFilter,
+    payables,
+    search,
+    sourceFilter,
+    statusFilter,
+    linkedContext,
+  ]);
 
   function updateDraft(payableId: string, patch: Partial<PaymentDraft>) {
     setDrafts((previous) => ({
@@ -779,6 +814,29 @@ export default function AccountsPayablePage() {
             </FormField>
           </div>
 
+          {linkedContext.orderId || linkedContext.payableId ? (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-slate-700">
+              <p>Títulos vinculados à compra selecionada.</p>
+              <button
+                type="button"
+                className="font-semibold text-blue-700 underline"
+                onClick={() => {
+                  setLinkedContext({});
+                  const params = new URLSearchParams(window.location.search);
+                  params.delete("purchaseOrderId");
+                  params.delete("payableId");
+                  window.history.replaceState(
+                    null,
+                    "",
+                    window.location.pathname +
+                      (params.size ? "?" + params.toString() : ""),
+                  );
+                }}
+              >
+                Mostrar todos os títulos
+              </button>
+            </div>
+          ) : null}
           <div className="mt-4 flex flex-wrap gap-2">
             <DataPill tone="blue">
               {filteredPayables.length} titulo(s) na visao atual
@@ -877,7 +935,10 @@ export default function AccountsPayablePage() {
                         <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-500">
                           {item.purchaseOrder?.id ? (
                             <Link
-                              href="/dashboard/purchase-orders"
+                              href={
+                                "/dashboard/purchase-orders/" +
+                                item.purchaseOrder.id
+                              }
                               className="font-semibold text-slate-700 underline-offset-4 hover:text-slate-950 hover:underline"
                             >
                               Pedido{" "}

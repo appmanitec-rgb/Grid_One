@@ -8,7 +8,11 @@ import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { commercialLabel } from "@/lib/commercial-labels";
 
-type Supplier = { id: string; companyName: string; paymentTerm?: string | null };
+type Supplier = {
+  id: string;
+  companyName: string;
+  paymentTerm?: string | null;
+};
 type Warehouse = { id: string; code: string; name: string };
 
 type DraftItem = {
@@ -17,7 +21,11 @@ type DraftItem = {
   catalogItemId: string;
   item: string;
   suggestedQty: number;
-  supplierSuggestion: { supplierId: string; supplierName: string; supplierPrice?: number | null } | null;
+  supplierSuggestion: {
+    supplierId: string;
+    supplierName: string;
+    supplierPrice?: number | null;
+  } | null;
 };
 
 type PurchaseOrderItem = {
@@ -27,13 +35,25 @@ type PurchaseOrderItem = {
   receivedQty: number;
   unitPrice: number;
   totalPrice: number;
-  catalogItem: { id: string; name: string; sku?: string | null; manufacturerPartNumber?: string | null };
+  catalogItem: {
+    id: string;
+    name: string;
+    sku?: string | null;
+    manufacturerPartNumber?: string | null;
+  };
 };
 
 type PurchaseOrder = {
+  workflowVersion?: number;
   id: string;
   code: string;
-  status: "DRAFT" | "SENT" | "APPROVED" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CANCELED";
+  status:
+    | "DRAFT"
+    | "SENT"
+    | "APPROVED"
+    | "PARTIALLY_RECEIVED"
+    | "RECEIVED"
+    | "CANCELED";
   supplier: { id: string; companyName: string };
   expectedDate?: string | null;
   totalAmount: number;
@@ -95,7 +115,9 @@ export default function PurchaseOrdersPage() {
         current.includes(draftKey) ? current : [...current, draftKey],
       );
     }
-    setMessage("Reposicao importada do estoque. Confira fornecedor, prazo e crie o pedido.");
+    setMessage(
+      "Reposicao importada do estoque. Confira fornecedor, prazo e crie o pedido.",
+    );
     setPrefillApplied(true);
   }, [prefillApplied]);
 
@@ -105,7 +127,9 @@ export default function PurchaseOrdersPage() {
       return;
     }
 
-    const draftItems = drafts.filter((item) => selectedDrafts.includes(`${item.warehouseId}:${item.catalogItemId}`));
+    const draftItems = drafts.filter((item) =>
+      selectedDrafts.includes(`${item.warehouseId}:${item.catalogItemId}`),
+    );
     if (draftItems.length === 0) {
       setMessage("Itens de reposicao invalidos.");
       return;
@@ -145,7 +169,10 @@ export default function PurchaseOrdersPage() {
     await loadData();
   }
 
-  async function updateStatus(orderId: string, status: PurchaseOrder["status"]) {
+  async function updateStatus(
+    orderId: string,
+    status: PurchaseOrder["status"],
+  ) {
     const res = await apiFetch(`/purchase-orders/${orderId}/status`, {
       method: "PATCH",
       headers: {
@@ -203,7 +230,10 @@ export default function PurchaseOrdersPage() {
   }
 
   const draftsBySupplier = useMemo(() => {
-    return drafts.filter((item) => !supplierId || item.supplierSuggestion?.supplierId === supplierId);
+    return drafts.filter(
+      (item) =>
+        !supplierId || item.supplierSuggestion?.supplierId === supplierId,
+    );
   }, [drafts, supplierId]);
 
   return (
@@ -214,96 +244,216 @@ export default function PurchaseOrdersPage() {
         description="Prepare compras, acompanhe fornecedores e registre recebimentos."
       />
 
+      <div className="flex flex-wrap gap-2">
+        <Link
+          className="rounded-xl border border-blue-300 px-4 py-2 text-sm font-semibold text-blue-700"
+          href="/dashboard/purchase-orders/requests"
+        >
+          Solicitações de compra
+        </Link>
+        <Link
+          className="rounded-xl border border-blue-300 px-4 py-2 text-sm font-semibold text-blue-700"
+          href="/dashboard/purchase-orders/quotations"
+        >
+          Cotações e comparativo
+        </Link>
+      </div>
       <section className="rounded-xl border border-zinc-200 bg-white p-4 space-y-3">
-        <h2 className="text-lg font-bold text-zinc-800">Novo Pedido (a partir da reposicao sugerida)</h2>
+        <h2 className="text-lg font-bold text-zinc-800">
+          Novo Pedido (a partir da reposicao sugerida)
+        </h2>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-          <SelectField searchable aria-label="Fornecedor do pedido" value={supplierId} onChange={(event) => setSupplierId(event.target.value)} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm">
+          <SelectField
+            searchable
+            aria-label="Fornecedor do pedido"
+            value={supplierId}
+            onChange={(event) => setSupplierId(event.target.value)}
+            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+          >
             <option value="">Fornecedor</option>
             {suppliers.map((supplier) => (
-              <option key={supplier.id} value={supplier.id}>{supplier.companyName}</option>
+              <option key={supplier.id} value={supplier.id}>
+                {supplier.companyName}
+              </option>
             ))}
           </SelectField>
 
-          <input aria-label="Data prevista do pedido" type="date" value={expectedDate} onChange={(event) => setExpectedDate(event.target.value)} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
-          <input aria-label="Condição de pagamento" value={paymentTerm} onChange={(event) => setPaymentTerm(event.target.value)} placeholder="Prazo (30/60/90)" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
-          <input aria-label="Observações do pedido" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Observacoes" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
+          <input
+            aria-label="Data prevista do pedido"
+            type="date"
+            value={expectedDate}
+            onChange={(event) => setExpectedDate(event.target.value)}
+            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+          />
+          <input
+            aria-label="Condição de pagamento"
+            value={paymentTerm}
+            onChange={(event) => setPaymentTerm(event.target.value)}
+            placeholder="Prazo (30/60/90)"
+            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+          />
+          <input
+            aria-label="Observações do pedido"
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            placeholder="Observacoes"
+            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+          />
         </div>
 
         <div className="rounded-lg border border-zinc-200 p-3">
-          <p className="mb-2 text-sm font-semibold text-zinc-700">Itens sugeridos para compra</p>
+          <p className="mb-2 text-sm font-semibold text-zinc-700">
+            Itens sugeridos para compra
+          </p>
           <div className="grid grid-cols-1 gap-1 md:grid-cols-2">
             {draftsBySupplier.map((item) => {
               const key = `${item.warehouseId}:${item.catalogItemId}`;
               return (
-                <label key={key} className="flex items-center gap-2 text-sm text-zinc-700">
+                <label
+                  key={key}
+                  className="flex items-center gap-2 text-sm text-zinc-700"
+                >
                   <input
                     type="checkbox"
                     checked={selectedDrafts.includes(key)}
                     onChange={(event) => {
-                      if (event.target.checked) setSelectedDrafts((prev) => [...prev, key]);
-                      else setSelectedDrafts((prev) => prev.filter((id) => id !== key));
+                      if (event.target.checked)
+                        setSelectedDrafts((prev) => [...prev, key]);
+                      else
+                        setSelectedDrafts((prev) =>
+                          prev.filter((id) => id !== key),
+                        );
                     }}
                   />
-                  <span>{item.item} ({item.suggestedQty}) - {item.supplierSuggestion?.supplierName || "Sem sugestao"}</span>
+                  <span>
+                    {item.item} ({item.suggestedQty}) -{" "}
+                    {item.supplierSuggestion?.supplierName || "Sem sugestao"}
+                  </span>
                 </label>
               );
             })}
           </div>
         </div>
 
-        <button type="button" onClick={() => void createPurchaseOrder()} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500">Criar pedido</button>
+        <button
+          type="button"
+          onClick={() => void createPurchaseOrder()}
+          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
+        >
+          Criar pedido
+        </button>
         {message ? <p className="text-sm text-zinc-600">{message}</p> : null}
       </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-4 space-y-3">
         <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-          <label htmlFor="purchase-receive-warehouse" className="text-sm font-semibold text-zinc-700">Almoxarifado para recebimento</label>
-          <SelectField id="purchase-receive-warehouse" value={receiveWarehouseId} onChange={(event) => setReceiveWarehouseId(event.target.value)} className="rounded border border-zinc-300 px-2 py-1 text-xs">
+          <label
+            htmlFor="purchase-receive-warehouse"
+            className="text-sm font-semibold text-zinc-700"
+          >
+            Almoxarifado para recebimento
+          </label>
+          <SelectField
+            id="purchase-receive-warehouse"
+            value={receiveWarehouseId}
+            onChange={(event) => setReceiveWarehouseId(event.target.value)}
+            className="rounded border border-zinc-300 px-2 py-1 text-xs"
+          >
             {warehouses.map((wh) => (
-              <option key={wh.id} value={wh.id}>{wh.code} - {wh.name}</option>
+              <option key={wh.id} value={wh.id}>
+                {wh.code} - {wh.name}
+              </option>
             ))}
           </SelectField>
         </div>
 
         {orders.length === 0 ? (
-          <p className="text-sm text-zinc-500">Nenhum pedido de compra encontrado.</p>
+          <p className="text-sm text-zinc-500">
+            Nenhum pedido de compra encontrado.
+          </p>
         ) : (
           <div className="space-y-2">
             {orders.map((order) => (
-              <article key={order.id} className="rounded-lg border border-zinc-200 p-3">
+              <article
+                key={order.id}
+                className="rounded-lg border border-zinc-200 p-3"
+              >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="text-sm font-bold text-zinc-800">
-                      {order.code} -{" "}
-                      <Link href={`/dashboard/suppliers/${order.supplier.id}`} className="text-blue-700 hover:underline">
+                      <Link
+                        href={"/dashboard/purchase-orders/" + order.id}
+                        className="text-blue-700 hover:underline"
+                      >
+                        {order.code}
+                      </Link>{" "}
+                      -{" "}
+                      <Link
+                        href={`/dashboard/suppliers/${order.supplier.id}`}
+                        className="text-blue-700 hover:underline"
+                      >
                         {order.supplier.companyName}
                       </Link>
                     </p>
-                    <p className="text-xs text-zinc-500">Situação: {commercialLabel(order.status)} | Total: {formatPurchaseCurrency(order.totalAmount)}</p>
+                    <p className="text-xs text-zinc-500">
+                      Situação: {commercialLabel(order.status)} | Total:{" "}
+                      {formatPurchaseCurrency(order.totalAmount)}
+                    </p>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <SelectField aria-label={`Status do pedido ${order.code}`} value={order.status} onChange={(event) => void updateStatus(order.id, event.target.value as PurchaseOrder["status"])} className="rounded border border-zinc-300 px-2 py-1 text-xs">
-                      <option value="DRAFT">Rascunho</option>
-                      <option value="SENT">Enviado</option>
-                      <option value="APPROVED">Aprovado</option>
-                      <option value="PARTIALLY_RECEIVED">Parcial</option>
-                      <option value="RECEIVED">Recebido</option>
-                      <option value="CANCELED">Cancelado</option>
-                    </SelectField>
-
-                    <button type="button" onClick={() => void receiveOrder(order)} className="rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">Receber saldo</button>
+                    {order.workflowVersion === 2 ? (
+                      <Link
+                        href={"/dashboard/purchase-orders/" + order.id}
+                        className="rounded-xl border border-blue-300 px-3 py-2 text-sm font-semibold text-blue-700"
+                      >
+                        Acompanhar / conferir
+                      </Link>
+                    ) : (
+                      <>
+                        {" "}
+                        <SelectField
+                          aria-label={`Status do pedido ${order.code}`}
+                          value={order.status}
+                          onChange={(event) =>
+                            void updateStatus(
+                              order.id,
+                              event.target.value as PurchaseOrder["status"],
+                            )
+                          }
+                          className="rounded border border-zinc-300 px-2 py-1 text-xs"
+                        >
+                          <option value="DRAFT">Rascunho</option>
+                          <option value="SENT">Enviado</option>
+                          <option value="APPROVED">Aprovado</option>
+                          <option value="PARTIALLY_RECEIVED">Parcial</option>
+                          <option value="RECEIVED">Recebido</option>
+                          <option value="CANCELED">Cancelado</option>
+                        </SelectField>
+                        <button
+                          type="button"
+                          onClick={() => void receiveOrder(order)}
+                          className="rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                        >
+                          Receber saldo
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
 
                 <ul className="mt-2 list-disc pl-5 text-sm text-zinc-700">
                   {order.items.map((item) => (
                     <li key={item.id}>
-                      <Link href={`/dashboard/catalog/${item.catalogItem.id}`} className="font-semibold text-blue-700 hover:underline">
+                      <Link
+                        href={`/dashboard/catalog/${item.catalogItem.id}`}
+                        className="font-semibold text-blue-700 hover:underline"
+                      >
                         {item.catalogItem.name}
                       </Link>
                       {" - "}
-                      {item.receivedQty}/{item.quantity} ({formatPurchaseCurrency(item.unitPrice)})
+                      {item.receivedQty}/{item.quantity} (
+                      {formatPurchaseCurrency(item.unitPrice)})
                     </li>
                   ))}
                 </ul>
@@ -317,5 +467,8 @@ export default function PurchaseOrdersPage() {
 }
 
 function formatPurchaseCurrency(value: number | null | undefined) {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value || 0));
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(Number(value || 0));
 }

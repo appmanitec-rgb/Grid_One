@@ -3,6 +3,7 @@ import type { AccessPolicy } from "./access";
 import { decodeJwtPayload, getStoredAccessToken } from "./auth-session";
 export type DetailedAccessRules = {
   version: 1;
+  profileId?: string;
   screens: Record<string, { view: boolean; actions: Record<string, boolean> }>;
   commercial: {
     generators: boolean;

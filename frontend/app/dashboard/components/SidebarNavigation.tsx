@@ -37,13 +37,26 @@ type NavItem = {
   href?: string;
   enabled?: boolean;
   soon?: boolean;
-  badgeKey?: "proposalsQueue" | "ordersOpen" | "contractsAttention" | "teamUnread";
+  badgeKey?:
+    | "proposalsQueue"
+    | "ordersOpen"
+    | "contractsAttention"
+    | "teamUnread";
 };
 
 type NavSection = {
   id: string;
   title: string;
-  icon: "overview" | "crm" | "ops" | "assets" | "stock" | "finance" | "people" | "hr" | "studio";
+  icon:
+    | "overview"
+    | "crm"
+    | "ops"
+    | "assets"
+    | "stock"
+    | "finance"
+    | "people"
+    | "hr"
+    | "studio";
   items: NavItem[];
 };
 
@@ -274,6 +287,30 @@ export const MAIN_SECTIONS: NavSection[] = [
         enabled: true,
       },
       {
+        key: "purchaseRequests",
+        label: "Solicitações de compra",
+        href: "/dashboard/purchase-orders/requests",
+        enabled: true,
+      },
+      {
+        key: "purchaseQuotations",
+        label: "Cotações e comparativo",
+        href: "/dashboard/purchase-orders/quotations",
+        enabled: true,
+      },
+      {
+        key: "purchasingApprovals",
+        label: "Aprovações de compras",
+        href: "/dashboard/purchase-orders/approvals",
+        enabled: true,
+      },
+      {
+        key: "purchasingSettings",
+        label: "Regras de compras",
+        href: "/dashboard/purchase-orders/settings",
+        enabled: true,
+      },
+      {
         key: "stock_purchase",
         label: "Compras",
         href: "/dashboard/purchase-orders",
@@ -353,7 +390,12 @@ export const MAIN_SECTIONS: NavSection[] = [
     title: "Recursos Humanos",
     icon: "hr",
     items: [
-      { key: "hr_collaborators", label: "Colaboradores e acessos", href: "/dashboard/hr/collaborators", enabled: true },
+      {
+        key: "hr_collaborators",
+        label: "Colaboradores e acessos",
+        href: "/dashboard/hr/collaborators",
+        enabled: true,
+      },
       {
         key: "hr_documentation",
         label: "Documentação",
@@ -477,7 +519,10 @@ export default function SidebarNavigation({
   const [isHovered, setIsHovered] = useState(false);
   const [hasKeyboardFocus, setHasKeyboardFocus] = useState(false);
   const [isTouchNavigation, setIsTouchNavigation] = useState(false);
-  const [sectionChoice, setSectionChoice] = useState<{ pathname: string; id: string | null } | null>(null);
+  const [sectionChoice, setSectionChoice] = useState<{
+    pathname: string;
+    id: string | null;
+  } | null>(null);
   const collapsed = !(isHovered || hasKeyboardFocus || isTouchNavigation);
   const [favoriteKeys, setFavoriteKeys] = useState<string[]>([]);
   const [userRole, setUserRole] = useState("NORMAL");
@@ -606,9 +651,12 @@ export default function SidebarNavigation({
         }
 
         if (teamRes.status === "fulfilled" && teamRes.value.ok) {
-          const channels = (await teamRes.value.json()) as Array<{ unreadCount?: number }>;
+          const channels = (await teamRes.value.json()) as Array<{
+            unreadCount?: number;
+          }>;
           next.teamUnread = channels.reduce(
-            (sum, channel) => sum + Math.max(0, Number(channel.unreadCount) || 0),
+            (sum, channel) =>
+              sum + Math.max(0, Number(channel.unreadCount) || 0),
             0,
           );
         }
@@ -635,19 +683,30 @@ export default function SidebarNavigation({
     return favoriteKeys.map((key) => map.get(key)).filter(Boolean) as NavItem[];
   }, [favoriteKeys, allAllowedItems]);
 
-  const activeSectionId = filteredSections.find(section =>
-    section.items.some(item => isItemActive(pathname, item.href)),
-  )?.id || null;
-  const openSectionId = sectionChoice?.pathname === pathname ? sectionChoice.id : activeSectionId;
+  const activeSectionId =
+    filteredSections.find((section) =>
+      section.items.some((item) => isItemActive(pathname, item.href)),
+    )?.id || null;
+  const openSectionId =
+    sectionChoice?.pathname === pathname ? sectionChoice.id : activeSectionId;
 
-  const toggleSection = useCallback((sectionId: string) => {
-    setSectionChoice({ pathname, id: openSectionId === sectionId ? null : sectionId });
-  }, [pathname, openSectionId]);
+  const toggleSection = useCallback(
+    (sectionId: string) => {
+      setSectionChoice({
+        pathname,
+        id: openSectionId === sectionId ? null : sectionId,
+      });
+    },
+    [pathname, openSectionId],
+  );
 
-  const selectRailSection = useCallback((sectionId: string) => {
-    setIsHovered(true);
-    setSectionChoice({ pathname, id: sectionId });
-  }, [pathname]);
+  const selectRailSection = useCallback(
+    (sectionId: string) => {
+      setIsHovered(true);
+      setSectionChoice({ pathname, id: sectionId });
+    },
+    [pathname],
+  );
 
   const toggleFavorite = useCallback((itemKey: string) => {
     setFavoriteKeys((prev) => {
@@ -663,21 +722,65 @@ export default function SidebarNavigation({
       data-touch={isTouchNavigation}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      onFocusCapture={event => { if (event.target.matches(":focus-visible")) setHasKeyboardFocus(true); }}
-      onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) setHasKeyboardFocus(false); }}
-      onPointerDownCapture={event => { if (event.pointerType === "mouse") setHasKeyboardFocus(false); }}
+      onFocusCapture={(event) => {
+        if (event.target.matches(":focus-visible")) setHasKeyboardFocus(true);
+      }}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget))
+          setHasKeyboardFocus(false);
+      }}
+      onPointerDownCapture={(event) => {
+        if (event.pointerType === "mouse") setHasKeyboardFocus(false);
+      }}
       className="dashboard-sidebar relative z-30 hidden shrink-0 flex-col border-r border-white/10 md:flex"
     >
       <div className="dashboard-sidebar-brand flex shrink-0 items-center justify-center border-b border-white/10 px-3">
-        <Link href="/dashboard" aria-label="Manitec — página inicial" className="flex h-11 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white px-2 shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-sky-300">
-          <Image src="/brand/manitec-logo-transparent.png" alt="Manitec" width={160} height={44} loading="eager" className="h-auto w-10 object-contain" />
+        <Link
+          href="/dashboard"
+          aria-label="Manitec — página inicial"
+          className="flex h-11 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white px-2 shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+        >
+          <Image
+            src="/brand/manitec-logo-transparent.png"
+            alt="Manitec"
+            width={160}
+            height={44}
+            loading="eager"
+            className="h-auto w-10 object-contain"
+          />
         </Link>
       </div>
-      <div aria-hidden={!collapsed} inert={!collapsed} className="dashboard-sidebar-rail flex min-h-0 flex-1 flex-col">
-        <SidebarRail sections={filteredSections} pathname={pathname} counters={counters} access={access} onSelect={selectRailSection} onLogout={onLogout} />
+      <div
+        aria-hidden={!collapsed}
+        inert={!collapsed}
+        className="dashboard-sidebar-rail flex min-h-0 flex-1 flex-col"
+      >
+        <SidebarRail
+          sections={filteredSections}
+          pathname={pathname}
+          counters={counters}
+          access={access}
+          onSelect={selectRailSection}
+          onLogout={onLogout}
+        />
       </div>
-      <div className="dashboard-sidebar-drawer" aria-hidden={collapsed} inert={collapsed}>
-        <SidebarPanel sections={filteredSections} favoriteItems={favoriteItems} favoriteKeys={favoriteKeys} pathname={pathname} openSectionId={openSectionId} counters={counters} access={access} onToggleSection={toggleSection} onToggleFavorite={toggleFavorite} onLogout={onLogout} />
+      <div
+        className="dashboard-sidebar-drawer"
+        aria-hidden={collapsed}
+        inert={collapsed}
+      >
+        <SidebarPanel
+          sections={filteredSections}
+          favoriteItems={favoriteItems}
+          favoriteKeys={favoriteKeys}
+          pathname={pathname}
+          openSectionId={openSectionId}
+          counters={counters}
+          access={access}
+          onToggleSection={toggleSection}
+          onToggleFavorite={toggleFavorite}
+          onLogout={onLogout}
+        />
       </div>
     </aside>
   );
@@ -691,70 +794,278 @@ type SidebarMenuProps = {
   onLogout: () => void;
 };
 
-const SidebarRail = memo(function SidebarRail({ sections, pathname, counters, access, onSelect, onLogout }: SidebarMenuProps & { onSelect: (sectionId: string) => void }) {
-  return <>
-    <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overflow-x-hidden px-2 py-3">
-      {sections.map(section => {
-        const active = section.items.some(item => isItemActive(pathname, item.href));
-        const count = getSectionBadgeValue(section, counters);
-        return <button key={section.id} type="button" aria-label={section.title} aria-expanded={false} title={section.title} onClick={() => onSelect(section.id)} className="dashboard-sidebar-toggle relative mx-auto flex h-11 w-12 items-center justify-center rounded-xl border border-white/10 text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300">
-          <span className={"inline-flex h-9 w-9 items-center justify-center rounded-xl " + (active ? "dashboard-accent-surface text-white" : "bg-white/[0.08]")}><SidebarIcon icon={section.icon} /></span>
-          {count > 0 ? <span aria-hidden="true" className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-white px-1 text-[9px] font-bold text-slate-900">{count > 9 ? "9+" : count}</span> : null}
-        </button>;
-      })}
-    </div>
-    <div className="dashboard-sidebar-footer shrink-0 border-t border-white/10 px-2 py-3">
-      {ADMIN_ITEMS.filter(item => isItemAllowed(item.href, access)).map(item => <Link key={item.key} href={item.href || "/dashboard/profile"} title={item.label} aria-label={item.label} className={"mx-auto flex h-10 w-12 items-center justify-center rounded-xl border " + (isItemActive(pathname, item.href) ? "dashboard-accent-surface text-white" : "border-white/10 bg-white/[0.05] text-slate-100")}><SidebarIcon icon="overview" /></Link>)}
-      <button type="button" onClick={onLogout} className="mt-3 w-full rounded-xl border border-red-300/60 bg-red-500/10 px-2 py-2 text-xs font-semibold text-red-100 hover:bg-red-500/18">Sair</button>
-    </div>
-  </>;
+const SidebarRail = memo(function SidebarRail({
+  sections,
+  pathname,
+  counters,
+  access,
+  onSelect,
+  onLogout,
+}: SidebarMenuProps & { onSelect: (sectionId: string) => void }) {
+  return (
+    <>
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overflow-x-hidden px-2 py-3">
+        {sections.map((section) => {
+          const active = section.items.some((item) =>
+            isItemActive(pathname, item.href),
+          );
+          const count = getSectionBadgeValue(section, counters);
+          return (
+            <button
+              key={section.id}
+              type="button"
+              aria-label={section.title}
+              aria-expanded={false}
+              title={section.title}
+              onClick={() => onSelect(section.id)}
+              className="dashboard-sidebar-toggle relative mx-auto flex h-11 w-12 items-center justify-center rounded-xl border border-white/10 text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+            >
+              <span
+                className={
+                  "inline-flex h-9 w-9 items-center justify-center rounded-xl " +
+                  (active
+                    ? "dashboard-accent-surface text-white"
+                    : "bg-white/[0.08]")
+                }
+              >
+                <SidebarIcon icon={section.icon} />
+              </span>
+              {count > 0 ? (
+                <span
+                  aria-hidden="true"
+                  className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-white px-1 text-[9px] font-bold text-slate-900"
+                >
+                  {count > 9 ? "9+" : count}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+      <div className="dashboard-sidebar-footer shrink-0 border-t border-white/10 px-2 py-3">
+        {ADMIN_ITEMS.filter((item) => isItemAllowed(item.href, access)).map(
+          (item) => (
+            <Link
+              key={item.key}
+              href={item.href || "/dashboard/profile"}
+              title={item.label}
+              aria-label={item.label}
+              className={
+                "mx-auto flex h-10 w-12 items-center justify-center rounded-xl border " +
+                (isItemActive(pathname, item.href)
+                  ? "dashboard-accent-surface text-white"
+                  : "border-white/10 bg-white/[0.05] text-slate-100")
+              }
+            >
+              <SidebarIcon icon="overview" />
+            </Link>
+          ),
+        )}
+        <button
+          type="button"
+          onClick={onLogout}
+          className="mt-3 w-full rounded-xl border border-red-300/60 bg-red-500/10 px-2 py-2 text-xs font-semibold text-red-100 hover:bg-red-500/18"
+        >
+          Sair
+        </button>
+      </div>
+    </>
+  );
 });
 
-const SidebarPanel = memo(function SidebarPanel({ sections, favoriteItems, favoriteKeys, pathname, openSectionId, counters, access, onToggleSection, onToggleFavorite, onLogout }: SidebarMenuProps & {
+const SidebarPanel = memo(function SidebarPanel({
+  sections,
+  favoriteItems,
+  favoriteKeys,
+  pathname,
+  openSectionId,
+  counters,
+  access,
+  onToggleSection,
+  onToggleFavorite,
+  onLogout,
+}: SidebarMenuProps & {
   favoriteItems: NavItem[];
   favoriteKeys: string[];
   openSectionId: string | null;
   onToggleSection: (sectionId: string) => void;
   onToggleFavorite: (itemKey: string) => void;
 }) {
-  return <>
-    <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-3">
-      {favoriteItems.length > 0 ? <section className="dashboard-sidebar-panel mb-3 rounded-2xl border border-white/10 p-2.5">
-        <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-300">Atalhos</p>
-        <div className="space-y-1">{favoriteItems.map(item => <Link key={item.key} href={item.href || "/dashboard"} className={"flex items-center justify-between rounded-xl border px-3 py-2.5 text-sm " + (isItemActive(pathname, item.href) ? "dashboard-accent-surface text-white" : "border-white/10 bg-white/[0.06] text-slate-100 hover:bg-white/[0.09]")}><span className="truncate">{item.label}</span><span className="text-amber-300" aria-hidden="true">★</span></Link>)}</div>
-      </section> : null}
-      {sections.map(section => {
-        const active = section.items.some(item => isItemActive(pathname, item.href));
-        const open = openSectionId === section.id;
-        return <div key={section.id} className="dashboard-sidebar-panel mb-2 rounded-2xl border border-white/10">
-          <button type="button" onClick={() => onToggleSection(section.id)} aria-label={section.title} aria-expanded={open} aria-controls={"sidebar-section-" + section.id} className="flex h-12 w-full items-center justify-between rounded-2xl px-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-300">
-            <span className="flex min-w-0 items-center gap-3"><span className={"inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl " + (active ? "dashboard-accent-surface text-white" : "bg-white/[0.08] text-slate-100")}><SidebarIcon icon={section.icon} /></span><span className="truncate text-sm font-bold text-slate-100">{section.title}</span></span>
-            <span className="flex shrink-0 items-center gap-2"><span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-200">{section.items.length}</span><span aria-hidden="true" className={"text-xs font-bold text-slate-400 " + (open ? "" : "-rotate-90")} >⌄</span></span>
-          </button>
-          <div id={"sidebar-section-" + section.id} hidden={!open} className="px-2 pb-2">
-            <div className="space-y-1">{section.items.map(item => {
-              const itemActive = isItemActive(pathname, item.href);
-              const count = item.badgeKey ? counters[item.badgeKey] : 0;
-              const favorite = favoriteKeys.includes(item.key);
-              return <div key={item.key} className="group flex items-center gap-1">
-                <Link href={item.href || "/dashboard"} aria-current={itemActive ? "page" : undefined} className={"flex min-w-0 flex-1 items-center justify-between rounded-xl border px-3 py-2.5 text-sm " + (itemActive ? "dashboard-accent-surface font-semibold text-white" : "border-white/10 bg-white/[0.05] text-slate-100 hover:bg-white/[0.08]")}>
+  return (
+    <>
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-3">
+        {favoriteItems.length > 0 ? (
+          <section className="dashboard-sidebar-panel mb-3 rounded-2xl border border-white/10 p-2.5">
+            <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-300">
+              Atalhos
+            </p>
+            <div className="space-y-1">
+              {favoriteItems.map((item) => (
+                <Link
+                  key={item.key}
+                  href={item.href || "/dashboard"}
+                  className={
+                    "flex items-center justify-between rounded-xl border px-3 py-2.5 text-sm " +
+                    (isItemActive(pathname, item.href)
+                      ? "dashboard-accent-surface text-white"
+                      : "border-white/10 bg-white/[0.06] text-slate-100 hover:bg-white/[0.09]")
+                  }
+                >
                   <span className="truncate">{item.label}</span>
-                  {count > 0 && !item.soon ? <span className="ml-2 shrink-0 rounded-full bg-white/85 px-1.5 py-0.5 text-[10px] font-bold text-slate-900">{count}</span> : null}
-                  {item.soon ? <span className="ml-2 rounded bg-white/12 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-100">Em breve</span> : null}
+                  <span className="text-amber-300" aria-hidden="true">
+                    ★
+                  </span>
                 </Link>
-                <button type="button" onClick={() => onToggleFavorite(item.key)} aria-label={(favorite ? "Remover dos favoritos: " : "Adicionar aos favoritos: ") + item.label} title={favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"} className={"rounded-lg border px-1.5 py-1.5 text-xs " + (favorite ? "border-amber-300 bg-amber-300/20 text-amber-200" : "border-white/10 bg-white/[0.04] text-slate-300 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-amber-200")}>{favorite ? "★" : "☆"}</button>
-              </div>;
-            })}</div>
-          </div>
-        </div>;
-      })}
-    </div>
-    <div className="dashboard-sidebar-footer shrink-0 border-t border-white/10 p-3">
-      <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-300">Conta</p>
-      {ADMIN_ITEMS.filter(item => isItemAllowed(item.href, access)).map(item => <Link key={item.key} href={item.href || "/dashboard/profile"} className={"flex items-center rounded-xl border px-3 py-2.5 text-sm " + (isItemActive(pathname, item.href) ? "dashboard-accent-surface font-semibold text-white" : "border-white/10 bg-white/[0.05] text-slate-100 hover:border-white/16")}>{item.label}</Link>)}
-      <button type="button" onClick={onLogout} className="mt-3 w-full rounded-xl border border-red-300/60 bg-red-500/10 px-3 py-2.5 text-sm font-semibold text-red-100 hover:bg-red-500/18">Encerrar sessão</button>
-    </div>
-  </>;
+              ))}
+            </div>
+          </section>
+        ) : null}
+        {sections.map((section) => {
+          const active = section.items.some((item) =>
+            isItemActive(pathname, item.href),
+          );
+          const open = openSectionId === section.id;
+          return (
+            <div
+              key={section.id}
+              className="dashboard-sidebar-panel mb-2 rounded-2xl border border-white/10"
+            >
+              <button
+                type="button"
+                onClick={() => onToggleSection(section.id)}
+                aria-label={section.title}
+                aria-expanded={open}
+                aria-controls={"sidebar-section-" + section.id}
+                className="flex h-12 w-full items-center justify-between rounded-2xl px-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-300"
+              >
+                <span className="flex min-w-0 items-center gap-3">
+                  <span
+                    className={
+                      "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl " +
+                      (active
+                        ? "dashboard-accent-surface text-white"
+                        : "bg-white/[0.08] text-slate-100")
+                    }
+                  >
+                    <SidebarIcon icon={section.icon} />
+                  </span>
+                  <span className="truncate text-sm font-bold text-slate-100">
+                    {section.title}
+                  </span>
+                </span>
+                <span className="flex shrink-0 items-center gap-2">
+                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-200">
+                    {section.items.length}
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className={
+                      "text-xs font-bold text-slate-400 " +
+                      (open ? "" : "-rotate-90")
+                    }
+                  >
+                    ⌄
+                  </span>
+                </span>
+              </button>
+              <div
+                id={"sidebar-section-" + section.id}
+                hidden={!open}
+                className="px-2 pb-2"
+              >
+                <div className="space-y-1">
+                  {section.items.map((item) => {
+                    const itemActive = isItemActive(pathname, item.href);
+                    const count = item.badgeKey ? counters[item.badgeKey] : 0;
+                    const favorite = favoriteKeys.includes(item.key);
+                    return (
+                      <div
+                        key={item.key}
+                        className="group flex items-center gap-1"
+                      >
+                        <Link
+                          href={item.href || "/dashboard"}
+                          aria-current={itemActive ? "page" : undefined}
+                          className={
+                            "flex min-w-0 flex-1 items-center justify-between rounded-xl border px-3 py-2.5 text-sm " +
+                            (itemActive
+                              ? "dashboard-accent-surface font-semibold text-white"
+                              : "border-white/10 bg-white/[0.05] text-slate-100 hover:bg-white/[0.08]")
+                          }
+                        >
+                          <span className="truncate">{item.label}</span>
+                          {count > 0 && !item.soon ? (
+                            <span className="ml-2 shrink-0 rounded-full bg-white/85 px-1.5 py-0.5 text-[10px] font-bold text-slate-900">
+                              {count}
+                            </span>
+                          ) : null}
+                          {item.soon ? (
+                            <span className="ml-2 rounded bg-white/12 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-100">
+                              Em breve
+                            </span>
+                          ) : null}
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => onToggleFavorite(item.key)}
+                          aria-label={
+                            (favorite
+                              ? "Remover dos favoritos: "
+                              : "Adicionar aos favoritos: ") + item.label
+                          }
+                          title={
+                            favorite
+                              ? "Remover dos favoritos"
+                              : "Adicionar aos favoritos"
+                          }
+                          className={
+                            "rounded-lg border px-1.5 py-1.5 text-xs " +
+                            (favorite
+                              ? "border-amber-300 bg-amber-300/20 text-amber-200"
+                              : "border-white/10 bg-white/[0.04] text-slate-300 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-amber-200")
+                          }
+                        >
+                          {favorite ? "★" : "☆"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="dashboard-sidebar-footer shrink-0 border-t border-white/10 p-3">
+        <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-300">
+          Conta
+        </p>
+        {ADMIN_ITEMS.filter((item) => isItemAllowed(item.href, access)).map(
+          (item) => (
+            <Link
+              key={item.key}
+              href={item.href || "/dashboard/profile"}
+              className={
+                "flex items-center rounded-xl border px-3 py-2.5 text-sm " +
+                (isItemActive(pathname, item.href)
+                  ? "dashboard-accent-surface font-semibold text-white"
+                  : "border-white/10 bg-white/[0.05] text-slate-100 hover:border-white/16")
+              }
+            >
+              {item.label}
+            </Link>
+          ),
+        )}
+        <button
+          type="button"
+          onClick={onLogout}
+          className="mt-3 w-full rounded-xl border border-red-300/60 bg-red-500/10 px-3 py-2.5 text-sm font-semibold text-red-100 hover:bg-red-500/18"
+        >
+          Encerrar sessão
+        </button>
+      </div>
+    </>
+  );
 });
 
 function isItemActive(pathname: string, href?: string) {

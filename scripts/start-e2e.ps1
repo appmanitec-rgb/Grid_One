@@ -1,11 +1,11 @@
-param([switch]$ProductionBuild)
+param([switch]$ProductionBuild, [ValidateSet('dist', 'dist-prp')][string]$BackendBuildDirectory = 'dist')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $backendRoot = Join-Path $projectRoot 'backend'
 $frontendRoot = Join-Path $projectRoot 'frontend'
 $logRoot = Join-Path $projectRoot 'runtime-logs'
 $pidFile = Join-Path $logRoot 'e2e-server-pids.json'
-$backendEntry = Join-Path $backendRoot 'dist\src\main.js'
+$backendEntry = Join-Path $backendRoot (Join-Path $BackendBuildDirectory 'src\main.js')
 $frontendEntry = Join-Path $frontendRoot 'node_modules\next\dist\bin\next'
 foreach ($entry in @($backendEntry, $frontendEntry)) { if (-not (Test-Path -LiteralPath $entry)) { throw "Artefato ausente: $entry. Compile antes de iniciar os testes." } }
 if ($ProductionBuild -and -not (Test-Path -LiteralPath (Join-Path $frontendRoot '.next-e2e/BUILD_ID'))) { throw 'Build E2E de producao ausente.' }
@@ -41,6 +41,7 @@ $env:NODE_ENV = 'test'
 $env:AUTOMATION_ENABLED = 'false'
 $env:EXTERNAL_DELIVERIES_DISABLED = 'true'
 $env:PORT = '3100'
+$env:NODE_PATH = Join-Path $backendRoot $BackendBuildDirectory
 $env:CORS_ORIGINS = 'http://127.0.0.1:3101,http://localhost:3101'
 $env:APP_BASE_URL = 'http://127.0.0.1:3101'
 $env:FRONTEND_URL = 'http://127.0.0.1:3101'

@@ -4,3 +4,7 @@
 /backend/backups/
 *.pid
 *.pid.lock
+
+/backend/runtime-prp/
+
+/backend/dist-prp/

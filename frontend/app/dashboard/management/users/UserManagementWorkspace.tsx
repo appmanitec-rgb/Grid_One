@@ -1,5 +1,10 @@
 "use client";
 import DetailedPermissionsEditor from "./DetailedPermissionsEditor";
+import AccessProfileSelector from "./AccessProfileSelector";
+import {
+  accessProfileChanges,
+  type UserAccessProfile,
+} from "@/lib/access-profiles";
 import { emptyRules, type DetailedAccessRules } from "@/lib/access-rules";
 
 import Link from "next/link";
@@ -126,7 +131,8 @@ type PendingApprovalRow = {
     | "BUDGET_DISCOUNT"
     | "GENERATOR_PROPOSAL"
     | "RVT_SIGNOFF"
-    | "CATALOG_PRICING";
+    | "CATALOG_PRICING"
+    | "PURCHASE_QUOTATION";
   entityType: string;
   entityId: string;
   createdAt: string;
@@ -168,6 +174,7 @@ type UserCertificationRow = {
 };
 
 type NewUserForm = {
+  accessProfile: UserAccessProfile | null;
   name: string;
   email: string;
   password: string;
@@ -205,6 +212,7 @@ type PermissionSectionSetter = <Section extends keyof AccessPolicy>(
 ) => void;
 
 const EMPTY_NEW_USER: NewUserForm = {
+  accessProfile: null,
   name: "",
   email: "",
   password: "",
@@ -284,6 +292,7 @@ const APPROVAL_LABELS: Record<PendingApprovalRow["type"], string> = {
   GENERATOR_PROPOSAL: "Proposta de gerador",
   RVT_SIGNOFF: "Aprovacao tecnica",
   CATALOG_PRICING: "Formacao de preco",
+  PURCHASE_QUOTATION: "Cotação de compra",
 };
 const AUDIT_LABELS: Record<AuditDomain, string> = {
   USERS: "Usuarios",
@@ -1290,7 +1299,14 @@ export function UserManagementWorkspace({
             }
           : {}),
         ...(canManageSecurity
-          ? { accessPolicy: defaultAccessByRole(newUser.role) }
+          ? {
+              accessPolicy:
+                newUser.accessProfile?.accessPolicy ??
+                defaultAccessByRole(newUser.role),
+              ...(newUser.accessProfile
+                ? { accessRules: newUser.accessProfile.accessRules }
+                : {}),
+            }
           : {}),
       };
 
@@ -2499,6 +2515,28 @@ function ProvisioningCard({
               />
             </FormField>
           ) : null}
+          <div className="md:col-span-2">
+            <AccessProfileSelector
+              value={newUser.accessProfile?.id ?? ""}
+              disabled={!canManageSecurity}
+              onSelect={(profile) =>
+                onChange((prev) => ({
+                  ...prev,
+                  accessProfile: profile ? structuredClone(profile) : null,
+                  ...(profile
+                    ? {
+                        role: profile.role,
+                        department: profile.department,
+                        approvalDiscountLimit: String(
+                          profile.approvalDiscountLimit,
+                        ),
+                        linkedClientId: "",
+                      }
+                    : {}),
+                }))
+              }
+            />
+          </div>
           <FormField label="Cargo">
             <SelectInput
               value={newUser.role}
@@ -2506,6 +2544,7 @@ function ProvisioningCard({
                 onChange((prev) => ({
                   ...prev,
                   role: event.target.value as UserRole,
+                  accessProfile: null,
                   linkedClientId:
                     event.target.value === "CLIENT" ? prev.linkedClientId : "",
                   technicianCpf:
@@ -2701,8 +2740,8 @@ function ProvisioningCard({
         )}
 
         <InlineMessage>
-          O perfil recebe as permissoes padrao do cargo escolhido e pode ser
-          refinado na coluna de edicao.
+          O perfil por área preenche as permissões do colaborador. Você pode
+          ajustar telas e ações na seção Permissões após criar a conta.
         </InlineMessage>
 
         <div className="flex flex-wrap gap-3">
@@ -2841,7 +2880,9 @@ function GovernanceRadar({
                             : row.type === "RVT_SIGNOFF"
                               ? viewerAccess.maintenanceOrders
                                   .approveVisitReport
-                              : viewerAccess.finance.update
+                              : row.type === "PURCHASE_QUOTATION"
+                                ? viewerAccess.purchaseOrders.approve
+                                : viewerAccess.finance.update
                       ) ? (
                         <>
                           {row.type === "GENERATOR_PROPOSAL" ? (
@@ -3388,22 +3429,22 @@ function UserPermissionsPanel({
     (total, section) => total + Object.values(section).filter(Boolean).length,
     0,
   );
-  const originalPolicy = selectedUser
+  const savedUser = filteredUsers.find((user) => user.id === selectedUserId);
+  const originalPolicy = savedUser
     ? normalizeEditableAccessPolicy(
-        selectedUser.accessPolicy || defaultAccessByRole(selectedUser.role),
-        selectedUser.role,
+        savedUser.accessPolicy || defaultAccessByRole(savedUser.role),
+        savedUser.role,
       )
     : null;
   const hasChanges = Boolean(
     originalPolicy &&
     (JSON.stringify(originalPolicy) !== JSON.stringify(policy) ||
       JSON.stringify(selectedUser?.accessRules) !==
-        JSON.stringify(
-          filteredUsers.find((u) => u.id === selectedUserId)?.accessRules,
-        ) ||
+        JSON.stringify(savedUser?.accessRules) ||
       selectedUser?.approvalDiscountLimit !==
-        filteredUsers.find((u) => u.id === selectedUserId)
-          ?.approvalDiscountLimit),
+        savedUser?.approvalDiscountLimit ||
+      selectedUser?.role !== savedUser?.role ||
+      selectedUser?.department !== savedUser?.department),
   );
 
   return (
@@ -3584,6 +3625,26 @@ function UserPermissionsPanel({
             title="Abas e ações por departamento"
             description="Escolha uma área, revise as telas que pode visualizar e depois as ações permitidas. Salve para aplicar à conta."
           >
+            <AccessProfileSelector
+              value={selectedUser.accessRules?.profileId ?? ""}
+              disabled={
+                isLoading ||
+                saving ||
+                isSelectedMaster ||
+                selectedUser.role === "ADMIN" ||
+                !canManageSecurity
+              }
+              onSelect={(profile) => {
+                const changes = accessProfileChanges(profile, selectedUser);
+                onUpdateUser(changes);
+                if (changes.accessPolicy) onPolicyChange(changes.accessPolicy);
+              }}
+            />
+            {selectedUser.role === "ADMIN" ? (
+              <p className="mt-2 text-xs text-slate-500">
+                Administradores mantêm acesso total.
+              </p>
+            ) : null}
             <DetailedPermissionsEditor
               key={selectedUser.id}
               value={selectedUser.accessRules}
@@ -4198,6 +4259,22 @@ function UserEditorCard({
               disabled={isSelectedMaster || !canManageSecurity}
             />
           </FormField>
+          <div className="md:col-span-2">
+            <AccessProfileSelector
+              value={selectedUser.accessRules?.profileId ?? ""}
+              disabled={
+                saving ||
+                isSelectedMaster ||
+                selectedUser.role === "ADMIN" ||
+                !canManageSecurity
+              }
+              onSelect={(profile) => {
+                const changes = accessProfileChanges(profile, selectedUser);
+                onUpdateSelectedUser(changes);
+                if (changes.accessPolicy) onPolicyChange(changes.accessPolicy);
+              }}
+            />
+          </div>
           <FormField label="Cargo">
             <SelectInput
               value={selectedUser.role}
