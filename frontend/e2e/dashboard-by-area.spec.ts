@@ -7,6 +7,7 @@ import type { UserAccessProfile } from "../lib/access-profiles";
 import type { DashboardOverview } from "../lib/dashboard-overview";
 let admin: string, supplies: string, finance: string, assistant: string;
 const users: string[] = [];
+const tokens: Record<string, string> = {};
 let fixture: {
   suffix: string;
   product: { id: string };
@@ -32,7 +33,15 @@ test.beforeAll(async () => {
     admin,
     "/users/access-profiles",
   );
-  for (const id of ["SUPPLIES", "FINANCE", "ADMIN_ASSISTANT"]) {
+  for (const id of [
+    "SUPPLIES",
+    "FINANCE",
+    "ADMIN_ASSISTANT",
+    "HR",
+    "PURCHASING",
+    "PLANNING",
+    "TECHNICIAN",
+  ]) {
     const p = profiles.find((p) => p.id === id)!,
       account = {
         ...accounts.hr,
@@ -47,16 +56,34 @@ test.beforeAll(async () => {
         email: account.email,
         password: account.password,
         role: p.role,
+        ...(id === "TECHNICIAN"
+          ? {
+              technicianProfile: {
+                cpf: String(parseInt(fixture.suffix, 16)).padStart(11, "0"),
+                phone: "11999990000",
+                skills: [],
+              },
+            }
+          : {}),
         department: p.department,
         accessPolicy: p.accessPolicy,
         accessRules: p.accessRules,
       },
     });
     users.push(user.id);
+    if (id === "HR")
+      await apiRequest(admin, "/users/" + user.id + "/certifications", {
+        method: "POST",
+        body: {
+          code: "DASH-EXPIRED-" + fixture.suffix,
+          validUntil: "2020-01-01T00:00:00.000Z",
+        },
+      });
     const token = (await apiLogin(account)).access_token;
+    tokens[id] = token;
     if (id === "SUPPLIES") supplies = token;
     else if (id === "FINANCE") finance = token;
-    else assistant = token;
+    else if (id === "ADMIN_ASSISTANT") assistant = token;
   }
 });
 test.afterAll(async () => {
@@ -236,4 +263,98 @@ test("busca de produtos e pesquisavel, limitada a dez e nao inclui servicos ou c
   expect(
     (await apiRequestRaw(assistant, "/dashboard/product-options")).status,
   ).toBe(403);
+});
+
+test("RH e assistente acompanham documentos sem expor salarios ou anexos privados", async () => {
+  for (const id of ["HR", "ADMIN_ASSISTANT"]) {
+    const data = await apiRequest<DashboardOverview>(
+      tokens[id],
+      "/dashboard/overview",
+    );
+    expect(
+      data.metrics.find((m) => m.id === "documents-expired")?.value,
+    ).toBeGreaterThan(0);
+    expect(
+      data.sections
+        .find((s) => s.id === "documents")
+        ?.items.some((i) => i.status === "EXPIRED"),
+    ).toBe(true);
+    expect(JSON.stringify(data)).not.toMatch(
+      /hourCost|salary|signedTermUrl|metadata|documentId|passwordHash/,
+    );
+  }
+  const hr = await apiRequest<DashboardOverview>(
+    tokens.HR,
+    "/dashboard/overview",
+  );
+  expect(hr.metrics.map((m) => m.id)).toEqual(
+    expect.arrayContaining([
+      "documents-expired",
+      "documents-expiring",
+      "time-review",
+      "fleet-unavailable",
+      "commissions-pending",
+    ]),
+  );
+  expect(hr.sections.some((s) => s.id === "payables")).toBe(false);
+});
+
+test("Compras recebe negociacoes e Planejamento recebe programacao", async () => {
+  const purchasing = await apiRequest<DashboardOverview>(
+    tokens.PURCHASING,
+    "/dashboard/overview",
+  );
+  expect(purchasing.metrics.map((m) => m.id)).toEqual(
+    expect.arrayContaining(["quotes", "quotes-approval", "purchase-drafts"]),
+  );
+  expect(
+    purchasing.sections.some(
+      (s) => s.id === "payables" || s.id === "documents",
+    ),
+  ).toBe(false);
+  const planning = await apiRequest<DashboardOverview>(
+    tokens.PLANNING,
+    "/dashboard/overview",
+  );
+  expect(planning.metrics.map((m) => m.id)).toEqual(
+    expect.arrayContaining([
+      "orders-unassigned",
+      "orders-unscheduled",
+      "orders-today",
+      "tickets-overdue",
+      "reports-pending",
+    ]),
+  );
+  expect(
+    planning.sections.some((s) => s.id === "payables" || s.id === "documents"),
+  ).toBe(false);
+});
+
+test("Tecnico sem atribuicoes nao recebe trabalho de outros nem acesso a RH ou financeiro", async () => {
+  const data = await apiRequest<DashboardOverview>(
+    tokens.TECHNICIAN,
+    "/dashboard/overview",
+  );
+  for (const id of [
+    "orders",
+    "orders-today",
+    "orders-overdue",
+    "tickets-active",
+    "tickets-overdue",
+    "reports-pending",
+  ])
+    expect(data.metrics.find((m) => m.id === id)?.value).toBe(0);
+  expect(
+    data.metrics.some((m) =>
+      [
+        "payables",
+        "receivables",
+        "documents-expired",
+        "orders-unassigned",
+      ].includes(m.id),
+    ),
+  ).toBe(false);
+  expect(data.sections.find((s) => s.id === "tickets")?.href).toBe(
+    "/dashboard/tecnico",
+  );
 });

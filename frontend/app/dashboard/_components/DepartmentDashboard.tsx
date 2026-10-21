@@ -18,6 +18,25 @@ const primary =
 const input =
   "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900";
 const labels: Record<string, string> = {
+  OVERDUE: "Vencido",
+  PARTIAL: "Parcial",
+  UNRECONCILED: "Sem conciliar",
+  IN_REVIEW: "Em revisão",
+  WORK: "Trabalho",
+  TRANSIT: "Deslocamento",
+  PAUSE: "Pausa",
+  MAINTENANCE: "Em manutenção",
+  BLOCKED: "Bloqueado",
+  PREPARATION: "Em preparação",
+  CONSULTING: "Consultando fornecedores",
+  OFFERS_RECEIVED: "Ofertas recebidas",
+  AWAITING_APPROVAL: "Aguardando aprovação",
+  TRIAGE: "Triagem",
+  WAITING_CUSTOMER: "Aguardando cliente",
+  WAITING_INTERNAL: "Aguardando equipe",
+  SCHEDULED: "Programado",
+  CONVERTING_TO_ORDER: "Gerando O.S.",
+
   SENT: "Enviado",
   APPROVED: "Aprovado",
   PARTIALLY_RECEIVED: "Recebido parcialmente",
@@ -26,13 +45,13 @@ const labels: Record<string, string> = {
   EXPIRED: "Vencido",
   EXPIRING: "A vencer",
   DRAFT: "Rascunho",
-  AWAITING_ANALYSIS: "Aguardando an\u00e1lise",
+  AWAITING_ANALYSIS: "Aguardando análise",
   ANALYZED: "Analisada",
-  IN_QUOTATION: "Em cota\u00e7\u00e3o",
+  IN_QUOTATION: "Em cotação",
   PARTIALLY_FULFILLED: "Parcialmente atendida",
   OPEN: "Aberta",
   IN_PROGRESS: "Em andamento",
-  REVISION: "Em revis\u00e3o",
+  REVISION: "Em revisão",
 };
 const displayDate = (date: string) =>
   date.slice(0, 10).split("-").reverse().join("/");
@@ -97,7 +116,7 @@ function ValidityForm({ onSaved }: { onSaved: () => void }) {
               .slice(0, 10)
               .map((r) => ({
                 value: r.id,
-                label: (r.sku ? r.sku + " \u00b7 " : "") + r.name,
+                label: (r.sku ? r.sku + " · " : "") + r.name,
               })),
           );
           setError("");
@@ -133,7 +152,7 @@ function ValidityForm({ onSaved }: { onSaved: () => void }) {
         throw Error(
           await readApiErrorMessage(
             response,
-            "N\u00e3o foi poss\u00edvel registrar a validade.",
+            "Não foi possível registrar a validade.",
           ),
         );
       setLot("");
@@ -154,7 +173,7 @@ function ValidityForm({ onSaved }: { onSaved: () => void }) {
       <div className="mt-4 space-y-4">
         <p className="text-xs text-slate-500">
           Informe o lote que deseja acompanhar. Este controle registra a
-          validade e n\u00e3o movimenta estoque.
+          validade e não movimenta estoque.
         </p>
         {error ? <InlineMessage tone="warning">{error}</InlineMessage> : null}
         <Field label="Produto">
@@ -168,9 +187,12 @@ function ValidityForm({ onSaved }: { onSaved: () => void }) {
               loading={looking}
               onSearch={setQuery}
               onSelect={(value) =>
-                setSelected(choices.find((c) => c.value === value) || (selected?.value === value ? selected : undefined))
+                setSelected(
+                  choices.find((c) => c.value === value) ||
+                    (selected?.value === value ? selected : undefined),
+                )
               }
-              placeholder="Pesquisar produto ou c\u00f3digo"
+              placeholder="Pesquisar produto ou código"
               className={input}
             />
           )}
@@ -199,7 +221,7 @@ function ValidityForm({ onSaved }: { onSaved: () => void }) {
             )}
           </Field>
         </div>
-        <Field label="Observa\u00e7\u00e3o">
+        <Field label="Observação">
           {(id) => (
             <input
               id={id}
@@ -242,10 +264,7 @@ export default function DepartmentDashboard({
       const response = await apiFetch(path, { method: "PATCH" });
       if (!response.ok)
         throw Error(
-          await readApiErrorMessage(
-            response,
-            "A a\u00e7\u00e3o n\u00e3o foi conclu\u00edda.",
-          ),
+          await readApiErrorMessage(response, "A ação não foi concluída."),
         );
       onRefresh();
     } catch (e) {
@@ -266,7 +285,7 @@ export default function DepartmentDashboard({
               ? "Indicadores dos departamentos"
               : "Atividades da área comercial"
           }
-          description="Indicadores das \u00e1reas autorizadas na vis\u00e3o gerencial."
+          description="Indicadores das áreas autorizadas na visão gerencial."
           actions={
             <button
               className={secondary}
@@ -295,7 +314,7 @@ export default function DepartmentDashboard({
           }
           meta={
             <>
-              Atualizado \u00e0s{" "}
+              Atualizado às{" "}
               {new Date(data.generatedAt).toLocaleTimeString("pt-BR", {
                 hour: "2-digit",
                 minute: "2-digit",
@@ -333,8 +352,8 @@ export default function DepartmentDashboard({
       </div>
       {!data.metrics.length ? (
         <InlineMessage>
-          Seu painel mostra as \u00e1reas liberadas para o seu usu\u00e1rio.
-          Utilize os atalhos dispon\u00edveis para acompanhar suas atividades.
+          Seu painel mostra as áreas liberadas para o seu usuário. Utilize os
+          atalhos disponíveis para acompanhar suas atividades.
         </InlineMessage>
       ) : null}
       <div className="grid items-start gap-5 xl:grid-cols-2">
@@ -350,7 +369,7 @@ export default function DepartmentDashboard({
                 </DataPill>
                 {section.href ? (
                   <Link href={section.href} className={secondary}>
-                    Abrir \u00e1rea
+                    Abrir área
                   </Link>
                 ) : null}
               </div>
@@ -382,7 +401,7 @@ export default function DepartmentDashboard({
                     {item.status ? (
                       <DataPill
                         tone={
-                          item.status === "EXPIRED"
+                          item.status === "EXPIRED" || item.status === "OVERDUE"
                             ? "rose"
                             : item.status === "RESERVED"
                               ? "emerald"
@@ -395,9 +414,15 @@ export default function DepartmentDashboard({
                   </div>
                   {item.dueAt ? (
                     <p className="mt-2 text-xs text-slate-500">
-                      {["product-validity", "epis"].includes(section.id)
+                      {["product-validity", "epis", "documents"].includes(
+                        section.id,
+                      )
                         ? "Validade: "
-                        : "Prazo: "}
+                        : ["time", "reconciliation", "invoices"].includes(
+                              section.id,
+                            )
+                          ? "Data: "
+                          : "Prazo: "}
                       {displayDate(item.dueAt)}
                     </p>
                   ) : null}
@@ -415,7 +440,7 @@ export default function DepartmentDashboard({
                     >
                       {busy === item.id
                         ? "Confirmando..."
-                        : "Confirmar separa\u00e7\u00e3o"}
+                        : "Confirmar separação"}
                     </button>
                   ) : null}
                   {section.id === "product-validity" &&
@@ -427,7 +452,7 @@ export default function DepartmentDashboard({
                         void act(
                           "/dashboard/product-validities/" + item.id + "/close",
                           item.id,
-                          "Encerrar o acompanhamento deste lote? O saldo de estoque ser\u00e1 mantido.",
+                          "Encerrar o acompanhamento deste lote? O saldo de estoque será mantido.",
                         )
                       }
                     >
@@ -444,8 +469,7 @@ export default function DepartmentDashboard({
             </div>
             {section.items.length >= 5 ? (
               <p className="mt-3 text-xs text-slate-500">
-                Exibindo at\u00e9 5 pend\u00eancias para priorizar o
-                atendimento.
+                Exibindo até 5 pendências para priorizar o atendimento.
               </p>
             ) : null}
             {section.notice ? (
@@ -461,8 +485,8 @@ export default function DepartmentDashboard({
       </div>
       {data.shortcuts.length ? (
         <SectionCard
-          title="Atalhos da sua \u00e1rea"
-          description="Acessos de acordo com as suas permiss\u00f5es."
+          title="Atalhos da sua área"
+          description="Acessos de acordo com as suas permissões."
         >
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {data.shortcuts.map((shortcut) => (
@@ -473,7 +497,7 @@ export default function DepartmentDashboard({
               >
                 {shortcut.label}{" "}
                 <span aria-hidden="true" className="float-right">
-                  \u2192
+                  →
                 </span>
               </Link>
             ))}

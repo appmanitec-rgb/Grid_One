@@ -10,41 +10,12 @@ import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import {
   assertScreen,
   unrestricted,
-  type RuleActor,
   readRules,
 } from '../auth/rules/access-rules';
 import { ACCESS_SCREENS } from '../auth/rules/access-screens';
-import type { AccessPolicy } from '../users/access-policy';
 import { ProductValidityDto } from './product-validity.dto';
-type Actor = RuleActor & { accessPolicy?: AccessPolicy };
-type Tone = 'blue' | 'emerald' | 'amber' | 'rose' | 'slate';
-type Item = {
-  id: string;
-  title: string;
-  subtitle?: string;
-  href?: string;
-  status?: string;
-  dueAt?: Date | null;
-  tone?: Tone;
-};
-type Metric = {
-  id: string;
-  label: string;
-  value: number;
-  helper: string;
-  href?: string;
-  tone: Tone;
-};
-type Section = {
-  id: string;
-  title: string;
-  description: string;
-  total: number;
-  items: Item[];
-  href?: string;
-  emptyMessage: string;
-  notice?: string;
-};
+import type { Actor, Tone, Metric, Section } from './dashboard.types';
+import { departmentInsights } from './department-insights';
 const normalize = (value: string) =>
   value
     .normalize('NFD')
@@ -90,7 +61,9 @@ export class DashboardService {
       | undefined;
     return (
       policy?.pages?.[config.parent] === true &&
-      policy?.[config.section]?.[action] === true
+      policy?.[action === 'manageCertifications' ? 'users' : config.section]?.[
+        action
+      ] === true
     );
   }
   private require(actor: Actor, screen: string, action = 'view') {
@@ -521,6 +494,7 @@ export class DashboardService {
           const staff =
             this.can(actor, 'purchaseRequests', 'analyze') ||
             this.can(actor, 'purchaseQuotations', 'quote') ||
+            this.can(actor, 'purchasingApprovals', 'approve') ||
             unrestricted(actor);
           const where: Prisma.ProcurementRequestWhereInput = {
             ...(!staff ? { requesterId: actor.sub } : {}),
@@ -574,23 +548,11 @@ export class DashboardService {
           });
         })(),
       );
-    if (this.can(actor, 'purchaseQuotations'))
-      tasks.push(
-        (async () => {
-          const total = await this.db.procurementQuote.count({
-            where: { status: { notIn: ['ORDERED', 'CANCELED'] } },
-          });
-          add(
-            'quotes',
-            'Cota\u00e7\u00f5es em andamento',
-            total,
-            'Negocia\u00e7\u00f5es e aprova\u00e7\u00f5es pendentes',
-            paths.quotes,
-            'blue',
-          );
-        })(),
-      );
-    if (!operational && orders && audience === 'DEPARTMENT')
+    const fieldWork =
+      user.role === 'TECHNICIAN' ||
+      readRules(actor.accessRules).profileId === 'PLANNING' ||
+      /planejamento|operacao/.test(normalize(user.department || ''));
+    if (!operational && orders && fieldWork && audience === 'DEPARTMENT')
       tasks.push(
         (async () => {
           const where: Prisma.MaintenanceOrderWhereInput = {
@@ -643,93 +605,97 @@ export class DashboardService {
           });
         })(),
       );
-    for (const [screen, model, label] of [
-      ['payables', 'accountsPayable', 'Contas a pagar'],
-      ['receivables', 'accountsReceivable', 'Contas a receber'],
-    ] as const) {
-      if (
-        this.can(actor, screen) &&
-        (audience === 'DEPARTMENT' || audience === 'EXECUTIVE')
-      )
-        tasks.push(
-          (async () => {
-            const count =
-              model === 'accountsPayable'
-                ? await this.db.accountsPayable.count({
-                    where: { status: { notIn: ['PAID', 'CANCELED'] } },
-                  })
-                : await this.db.accountsReceivable.count({
-                    where: { status: { notIn: ['PAID', 'CANCELED'] } },
-                  });
-            add(
-              screen,
-              label,
-              count,
-              'T\u00edtulos ainda em aberto',
-              '/dashboard/finance/' +
-                (screen === 'payables'
-                  ? 'accounts-payable'
-                  : 'accounts-receivable'),
-              'blue',
-            );
-          })(),
+    tasks.push(
+      (async () => {
+        const extra = await departmentInsights(
+          this.db,
+          actor,
+          (screen, action) => this.can(actor, screen, action),
+          { today, until, executive: audience === 'EXECUTIVE', fieldWork },
         );
-    }
-    if (
-      this.can(actor, 'hrCollaborators') &&
-      ['HR', 'NORMAL'].includes(user.role)
-    )
-      tasks.push(
-        (async () => {
-          const total = await this.db.user.count({
-            where: { isActive: true, role: { notIn: ['CLIENT', 'AUDITOR'] } },
-          });
-          add(
-            'collaborators',
-            'Colaboradores ativos',
-            total,
-            'Cadastros internos ativos',
-            '/dashboard/hr/collaborators',
-            'blue',
-          );
-        })(),
-      );
+        metrics.push(...extra.metrics);
+        sections.push(...extra.sections);
+      })(),
+    );
     await Promise.all(tasks);
-    const order = [
-      'purchases',
-      'separation',
-      'late-purchases',
-      'low-stock',
-      'products-expiry',
-      'epis',
-      'requests',
-      'quotes',
-    ];
+    const order =
+      audience === 'SUPPLIES'
+        ? [
+            'purchases',
+            'separation',
+            'late-purchases',
+            'low-stock',
+            'products-expiry',
+            'epis',
+            'requests',
+            'quotes',
+            'quotes-approval',
+            'purchase-drafts',
+          ]
+        : [
+            'documents-expired',
+            'documents-expiring',
+            'documents-missing',
+            'collaborators',
+            'time-review',
+            'epis',
+            'fleet-unavailable',
+            'commissions-pending',
+            'payables-overdue',
+            'receivables-overdue',
+            'payables-week',
+            'receivables-week',
+            'payables',
+            'receivables',
+            'unreconciled',
+            'invoices-review',
+            'orders-today',
+            'orders-overdue',
+            'orders-unassigned',
+            'orders-unscheduled',
+            'orders',
+            'tickets-active',
+            'tickets-overdue',
+            'reports-pending',
+            'requests',
+            'quotes',
+            'quotes-approval',
+            'purchase-drafts',
+            'purchases',
+            'separation',
+            'late-purchases',
+            'low-stock',
+            'products-expiry',
+          ];
     metrics.sort(
       (a, b) =>
         (order.indexOf(a.id) < 0 ? 99 : order.indexOf(a.id)) -
         (order.indexOf(b.id) < 0 ? 99 : order.indexOf(b.id)),
     );
+    const sectionOrder = [
+      'documents',
+      'payables',
+      'receivables',
+      'programming',
+      'orders',
+      'tickets',
+      'reports',
+      'separation',
+      'purchases',
+      'quotes',
+      'stock',
+      'product-validity',
+      'epis',
+      'requests',
+      'time',
+      'reconciliation',
+      'invoices',
+      'fleet',
+    ];
     sections.sort(
       (a, b) =>
-        [
-          'separation',
-          'purchases',
-          'stock',
-          'product-validity',
-          'epis',
-          'requests',
-          'orders',
-        ].indexOf(a.id) -
-        [
-          'separation',
-          'purchases',
-          'stock',
-          'product-validity',
-          'epis',
-          'requests',
-          'orders',
-        ].indexOf(b.id),
+        (sectionOrder.indexOf(a.id) < 0 ? 99 : sectionOrder.indexOf(a.id)) -
+        (sectionOrder.indexOf(b.id) < 0 ? 99 : sectionOrder.indexOf(b.id)),
     );
     const shortcuts = [
       ['purchaseRequests', 'Solicita\u00e7\u00f5es de compra', paths.requests],
@@ -746,6 +712,21 @@ export class DashboardService {
         '/dashboard/finance/accounts-receivable',
       ],
       ['hrCollaborators', 'Colaboradores', '/dashboard/hr/collaborators'],
+      [
+        'hrDocumentation',
+        'Documentos e certifica\u00e7\u00f5es',
+        '/dashboard/hr/documentation',
+      ],
+      ['hrTime', 'Banco de horas', '/dashboard/hr/time-tracking'],
+      ['hrFleet', 'Frota', '/dashboard/hr/fleet'],
+      ['dispatch', 'Programa\u00e7\u00e3o', '/dashboard/dispatch'],
+      ['tickets', 'Central de atendimento', '/dashboard/atendimento'],
+      ['serviceReports', 'Laudos', '/dashboard/relatorios-tecnicos'],
+      [
+        'reconciliation',
+        'Concilia\u00e7\u00e3o',
+        '/dashboard/finance/reconciliation',
+      ],
       ['technicianPortal', 'Portal t\u00e9cnico', '/dashboard/tecnico'],
     ]
       .filter(([s]) => this.can(actor, s))

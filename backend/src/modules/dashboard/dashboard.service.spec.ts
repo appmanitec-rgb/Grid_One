@@ -36,6 +36,14 @@ function fixture(role = 'SUPPLIES', department = 'Suprimentos') {
     hrAssetAssignment: empty(),
     procurementRequest: empty(),
     procurementQuote: empty(),
+    userCertification: empty(),
+    timeEntry: empty(),
+    fleetVehicle: empty(),
+    commissionEntry: empty(),
+    bankMovement: empty(),
+    procurementInvoice: empty(),
+    serviceTicket: empty(),
+    serviceReport: empty(),
     accountsPayable: empty(),
     accountsReceivable: empty(),
     $executeRaw: jest.fn().mockResolvedValue(1),
@@ -169,6 +177,124 @@ describe('dashboard por usuario', () => {
       service.separate('m', preset('ADMIN_ASSISTANT')),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(db.maintenanceOrderMaterial.update).not.toHaveBeenCalled();
+  });
+  it('RH acompanha documentos vencidos e proximos do vencimento sem consultar financeiro', async () => {
+    const { db, service } = fixture('HR', 'Recursos Humanos');
+    db.userCertification.count
+      .mockResolvedValueOnce(2)
+      .mockResolvedValueOnce(3);
+    db.userCertification.findMany.mockResolvedValue([
+      {
+        id: 'cert',
+        code: 'NR-10',
+        validUntil: new Date('2020-01-01'),
+        user: { name: 'Colaborador' },
+      },
+    ]);
+    const data = await service.overview(preset('HR'));
+    expect(data.metrics.find((m) => m.id === 'documents-expired')?.value).toBe(
+      2,
+    );
+    expect(data.metrics.find((m) => m.id === 'documents-expiring')?.value).toBe(
+      3,
+    );
+    expect(
+      data.sections.find((s) => s.id === 'documents')?.items[0].status,
+    ).toBe('EXPIRED');
+    expect(db.userCertification.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          user: { isActive: true, role: { notIn: ['CLIENT', 'AUDITOR'] } },
+        }),
+        take: 5,
+      }),
+    );
+    expect(db.accountsPayable.count).not.toHaveBeenCalled();
+    expect(db.maintenanceOrder.count).not.toHaveBeenCalled();
+  });
+  it('negar documentacao impede consultas mesmo no departamento RH', async () => {
+    const { db, service } = fixture('HR', 'RH'),
+      actor = preset('HR');
+    actor.accessRules.screens.hrDocumentation = { view: false, actions: {} };
+    const data = await service.overview(actor);
+    expect(db.userCertification.count).not.toHaveBeenCalled();
+    expect(data.sections.some((s) => s.id === 'documents')).toBe(false);
+  });
+  it('Financeiro recebe agenda, conciliacao e notas sem dados de RH ou operacao', async () => {
+    const { db, service } = fixture('FINANCE', 'Financeiro');
+    db.accountsPayable.count
+      .mockResolvedValueOnce(8)
+      .mockResolvedValueOnce(2)
+      .mockResolvedValueOnce(4);
+    const data = await service.overview(preset('FINANCE'));
+    expect(data.metrics.find((m) => m.id === 'payables')?.value).toBe(8);
+    expect(data.metrics.find((m) => m.id === 'payables-overdue')?.value).toBe(
+      2,
+    );
+    expect(data.metrics.find((m) => m.id === 'payables-week')?.value).toBe(4);
+    expect(db.bankMovement.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { status: 'POSTED', reconciledAt: null },
+        take: 5,
+      }),
+    );
+    expect(db.procurementInvoice.count).toHaveBeenCalled();
+    expect(db.userCertification.count).not.toHaveBeenCalled();
+    expect(db.maintenanceOrder.count).not.toHaveBeenCalled();
+  });
+  it('assistente combina RH e agenda financeira sem ganhar conciliacao ou validacao de notas', async () => {
+    const { db, service } = fixture('NORMAL', 'Assistente administrativo');
+    const data = await service.overview(preset('ADMIN_ASSISTANT'));
+    expect(data.sections.map((s) => s.id)).toEqual(
+      expect.arrayContaining(['documents', 'time', 'payables', 'receivables']),
+    );
+    expect(db.bankMovement.count).not.toHaveBeenCalled();
+    expect(db.procurementInvoice.count).not.toHaveBeenCalled();
+    expect(data.canSeparate).toBe(false);
+  });
+  it('Planejamento acompanha distribuicao, agenda e chamados', async () => {
+    const { db, service } = fixture('NORMAL', 'Planejamento');
+    const data = await service.overview(preset('PLANNING'));
+    expect(data.metrics.map((m) => m.id)).toEqual(
+      expect.arrayContaining([
+        'orders-unassigned',
+        'orders-unscheduled',
+        'orders-today',
+        'tickets-overdue',
+        'reports-pending',
+      ]),
+    );
+    expect(db.maintenanceOrder.count).toHaveBeenCalledWith({
+      where: expect.objectContaining({ technicianId: null }),
+    });
+    expect(db.accountsPayable.count).not.toHaveBeenCalled();
+  });
+  it('filtra todos os resumos tecnicos pelo proprio usuario', async () => {
+    const { db, service } = fixture('TECHNICIAN', 'Tecnico');
+    const data = await service.overview(preset('TECHNICIAN'));
+    expect(db.serviceReport.count).toHaveBeenCalledWith({
+      where: expect.objectContaining({ technician: { userId: 'actor' } }),
+    });
+    expect(db.serviceTicket.count).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        AND: expect.arrayContaining([
+          expect.objectContaining({
+            OR: expect.arrayContaining([{ assignedToUserId: 'actor' }]),
+          }),
+        ]),
+      }),
+    });
+    expect(data.metrics.some((m) => m.id === 'orders-unassigned')).toBe(false);
+    expect(db.userCertification.count).not.toHaveBeenCalled();
+  });
+  it('Compras acompanha cotacoes e rascunhos sem receber filas financeiras', async () => {
+    const { db, service } = fixture('SUPPLIES', 'Compras');
+    const data = await service.overview(preset('PURCHASING'));
+    expect(data.sections.some((s) => s.id === 'quotes')).toBe(true);
+    expect(data.metrics.map((m) => m.id)).toEqual(
+      expect.arrayContaining(['quotes', 'quotes-approval', 'purchase-drafts']),
+    );
+    expect(db.accountsPayable.count).not.toHaveBeenCalled();
   });
   it('visao gerencial agrega os departamentos permitidos', async () => {
     const { db, service } = fixture('ADMIN', 'Administracao');

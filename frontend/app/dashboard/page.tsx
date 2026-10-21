@@ -24,7 +24,7 @@ export default function DashboardPage() {
           throw Error(
             await readApiErrorMessage(
               response,
-              "N\u00e3o foi poss\u00edvel carregar o painel da sua \u00e1rea.",
+              "Não foi possível carregar o painel da sua área.",
             ),
           );
         return response.json() as Promise<DashboardOverview>;
@@ -62,7 +62,7 @@ export default function DashboardPage() {
       <div className="dashboard-page space-y-5">
         <PageHeader
           title="Meu painel"
-          description="Indicadores da sua \u00e1rea e das telas liberadas para o seu usu\u00e1rio."
+          description="Indicadores da sua área e das telas liberadas para o seu usuário."
         />
         {error ? (
           <InlineMessage tone="warning">
@@ -73,7 +73,7 @@ export default function DashboardPage() {
           </InlineMessage>
         ) : (
           <p role="status" className="text-sm text-slate-500">
-            Carregando painel da sua \u00e1rea...
+            Carregando painel da sua área...
           </p>
         )}
       </div>
