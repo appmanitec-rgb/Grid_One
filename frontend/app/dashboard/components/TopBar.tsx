@@ -26,7 +26,7 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/dashboard/documents": { title: "Central Documental", subtitle: "Versões prontas para imprimir, salvar em PDF e compartilhar." },
   "/dashboard/deliveries": { title: "Histórico de Envios", subtitle: "Rastreamento de compartilhamentos, abertura do link e falhas." },
   "/dashboard/notifications": { title: "Central de Alertas", subtitle: "Aprovações, operação, comercial e financeiro em uma fila única." },
-  "/dashboard": { title: "Gestão e Operações", subtitle: "KPIs executivos, pipeline comercial e execução técnica." },
+  "/dashboard": { title: "Meu painel", subtitle: "Indicadores e atividades de acordo com sua área e permissões." },
   "/dashboard/opportunities": { title: "Funil de Vendas", subtitle: "Pipeline por fase, temperatura e previsão de receita." },
   "/dashboard/commercial-inspections": { title: "Vistorias Comerciais", subtitle: "Checklists técnicos e mídias para dimensionamento." },
   "/dashboard/proposals": { title: "Central de Propostas", subtitle: "Controle completo por fase e revisões." },

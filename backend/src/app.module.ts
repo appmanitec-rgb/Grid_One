@@ -1,3 +1,4 @@
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
@@ -56,6 +57,7 @@ import { SalesOrdersModule } from './modules/sales-orders/sales-orders.module';
       },
     ]),
     DatabaseModule,
+    DashboardModule,
     UsersModule,
     AuthModule,
     TechniciansModule,

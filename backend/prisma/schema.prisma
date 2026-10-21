@@ -3370,6 +3370,7 @@ model MaintenanceOrderMaterial {
   quantity      Float
   unitCost      Float?
   reservedAt    DateTime?
+  separatedAt DateTime?
   appliedAt     DateTime?
   createdAt     DateTime         @default(now())
 
