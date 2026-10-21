@@ -1,6 +1,19 @@
 # Compras e Suprimentos — entrega do PRP
 
-## Situação
+## Atualização de 21/10/2026 — ativo no ambiente local
+
+Após autorização explícita do usuário, a migração 20261020170000_procurement_workflow_v2 foi aplicada em gridone_db e a versão operacional foi compilada e reiniciada nas portas 3000/3001. Compras está habilitado (enabled=true; configured=true).
+
+- Backup completo do PostgreSQL verificado com pg_restore e SHA-256; arquivos, documentos, configuração e artefatos anteriores preservados localmente.
+- Comparação antes/depois da migração: 59.642 registros de 132 tabelas mantiveram os mesmos hashes, sem divergências.
+- Build de produção aprovado para API e interface. Verificações autenticadas de solicitações, cotações, aprovações, regras, pedidos, Financeiro e proxy da interface retornaram HTTP 200. As quatro novas páginas também retornaram HTTP 200.
+- A ativação foi registrada pela API com o administrador existente. Os quatro usuários foram preservados e nenhuma compra de teste foi criada na base operacional. As permissões individuais existentes permaneceram como cadastradas.
+- Acesso para testar: http://localhost:3001/dashboard/purchase-orders/requests. As alçadas nominais continuam configuráveis; na ausência de regra específica, o fluxo exige aprovação administrativa.
+- A verificação atual refere-se ao ambiente local; disponibilidade pela internet não foi verificada. O navegador integrado estava indisponível nesta sessão; foram feitas conferências HTTP autenticadas, além dos testes de navegador já aprovados na base isolada.
+
+Evidências privadas: runtime-logs/procurement-deployment-current.json e o diretório de implantação nele indicado. Os backups e credenciais permanecem fora do Git.
+
+## Situação na entrega do código (20/10/2026)
 
 Implementação no código com ativação controlada. Migração e testes executados exclusivamente em gridone_e2e, API 3100 e interface 3101. A base operacional gridone_db e os servidores 3000/3001 não receberam esta versão.
 
