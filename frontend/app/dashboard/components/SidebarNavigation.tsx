@@ -395,7 +395,7 @@ const SidebarRail = memo(function SidebarRail({
 }: SidebarMenuProps & { onSelect: (sectionId: string) => void }) {
   return (
     <>
-      <div className="dashboard-nav-scroll min-h-0 flex-1 space-y-1 overflow-y-auto overflow-x-hidden px-2 py-3">
+      <div className="dashboard-sidebar-rail-list flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden px-2 py-3">
         {sections.map((section) => {
           const active = section.items.some((item) =>
             isItemActive(pathname, item.href),
