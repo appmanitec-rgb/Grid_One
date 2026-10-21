@@ -41,3 +41,11 @@ Seis verificacoes do catalogo cobrem destinos reais, chaves e rotas unicas, dist
 Ativo em 21/10/2026: 12 areas e 58 rotinas. Build de producao concluido com 95 paginas. Somente o processo da interface foi reiniciado; API, banco, usuarios e permissoes permaneceram em execucao sem alteracao. O build anterior da interface foi preservado para recuperacao.
 
 Painel, central do almoxarifado, pedidos de compra e faturamento responderam HTTP 200. A conferencia autenticada de Administrador e Suprimentos confirmou o contexto existente da API e do proxy. Evidencias privadas em runtime-logs/menu-deployment-current.json. Atualize com Ctrl+F5 para carregar o novo menu.
+
+## Refinamento visual do menu
+
+Icones compartilhados e padronizados em NavigationIcon.tsx, areas inativas neutras, destaque contido da area/tela ativa, tipografia e contraste revistos, arvore de rotinas com menos contornos, favoritos discretos e rodape compacto. A busca, as doze areas, as 58 rotinas e os favoritos foram preservados. O menu movel usa a mesma linguagem visual e cores vinculadas diretamente ao tema ativo. Os subtitulos de grupo aparecem quando ajudam a distinguir mais de uma categoria. A expansao lateral mantem a largura fixa e a animacao anterior por transformacao/opacidade; movimento reduzido continua respeitado.
+
+Tipos e lint conferidos; as seis verificacoes existentes do catalogo de navegacao passaram novamente. O contraste calculado dos textos principais usados no menu lateral ficou acima de 5:1 contra a extremidade mais clara do fundo. O navegador integrado estava indisponivel, portanto esta sessao nao incluiu inspecao visual automatizada.
+
+Acabamento visual ativo localmente em 21/10/2026. Build das 95 paginas aprovado e interface reiniciada mantendo o processo da API. Painel, almoxarifado, propostas e perfil responderam HTTP 200; consultas autenticadas de Administrador e Suprimentos e o proxy permaneceram funcionais. Nenhuma migracao ou alteracao de dados/permissoes. Evidencias privadas em runtime-logs/menu-visual-deployment-current.json.

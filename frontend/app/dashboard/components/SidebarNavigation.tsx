@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { NavigationIcon as SidebarIcon } from "./NavigationIcon";
 import {
   MAIN_SECTIONS,
   navigationContext,
@@ -91,7 +92,7 @@ const CLIENT_SECTIONS: NavSection[] = [
 const ADMIN_ITEMS: NavItem[] = [
   {
     key: "admin_profile",
-    label: "Meu Perfil",
+    label: "Meu perfil",
     href: "/dashboard/profile",
     enabled: true,
   },
@@ -394,7 +395,7 @@ const SidebarRail = memo(function SidebarRail({
 }: SidebarMenuProps & { onSelect: (sectionId: string) => void }) {
   return (
     <>
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overflow-x-hidden px-2 py-3">
+      <div className="dashboard-nav-scroll min-h-0 flex-1 space-y-1 overflow-y-auto overflow-x-hidden px-2 py-3">
         {sections.map((section) => {
           const active = section.items.some((item) =>
             isItemActive(pathname, item.href),
@@ -434,12 +435,15 @@ const SidebarRail = memo(function SidebarRail({
           );
         })}
       </div>
-      <div className="dashboard-sidebar-footer shrink-0 border-t border-white/10 px-2 py-3">
+      <div className="dashboard-sidebar-footer dashboard-account-rail shrink-0 border-t border-white/10 px-2 py-3">
         {ADMIN_ITEMS.filter((item) => isItemAllowed(item.href, access)).map(
           (item) => (
             <Link
               key={item.key}
               href={item.href || "/dashboard/profile"}
+              aria-current={
+                isItemActive(pathname, item.href) ? "page" : undefined
+              }
               title={item.label}
               aria-label={item.label}
               className={
@@ -449,16 +453,19 @@ const SidebarRail = memo(function SidebarRail({
                   : "border-white/10 bg-white/[0.05] text-slate-100")
               }
             >
-              <SidebarIcon icon="overview" />
+              <SidebarIcon icon="profile" />
             </Link>
           ),
         )}
         <button
           type="button"
           onClick={onLogout}
-          className="mt-3 w-full rounded-xl border border-red-300/60 bg-red-500/10 px-2 py-2 text-xs font-semibold text-red-100 hover:bg-red-500/18"
+          title="Sair"
+          aria-label="Sair"
+          className="dashboard-logout-rail mt-2 flex h-10 w-full items-center justify-center rounded-xl text-slate-400"
         >
-          Sair
+          <SidebarIcon icon="logout" />
+          <span className="sr-only">Sair</span>
         </button>
       </div>
     </>
@@ -488,10 +495,13 @@ const SidebarPanel = memo(function SidebarPanel({
   const results = searchNavigation(sections, query);
   return (
     <>
-      <div className="dashboard-menu-search shrink-0 px-3 pb-2 pt-4">
-        <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-          Navegação por área
-        </p>
+      <div className="dashboard-menu-search shrink-0 px-4 pb-3 pt-4">
+        <div className="dashboard-menu-caption">
+          <span>Navegação</span>
+          <span className="dashboard-menu-area-count">
+            {sections.length} áreas
+          </span>
+        </div>
         <div className="relative">
           <svg
             aria-hidden="true"
@@ -522,7 +532,7 @@ const SidebarPanel = memo(function SidebarPanel({
       </div>
       <nav
         aria-label="Áreas e rotinas"
-        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-2"
+        className="dashboard-nav-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3 pt-1"
       >
         {query.trim() ? (
           <div aria-live="polite" className="space-y-1">
@@ -561,20 +571,21 @@ const SidebarPanel = memo(function SidebarPanel({
           </div>
         ) : null}
         {!query.trim() && favoriteItems.length > 0 ? (
-          <section className="dashboard-sidebar-panel mb-3 rounded-2xl border border-white/10 p-2.5">
-            <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-300">
-              Atalhos
-            </p>
+          <section className="dashboard-nav-favorites mb-3 px-1 pb-3">
+            <p className="dashboard-nav-eyebrow">Favoritos</p>
             <div className="space-y-1">
               {favoriteItems.map((item) => (
                 <Link
                   key={item.key}
                   href={item.href || "/dashboard"}
+                  aria-current={
+                    isItemActive(pathname, item.href) ? "page" : undefined
+                  }
                   className={
-                    "flex items-center justify-between rounded-xl border px-3 py-2.5 text-sm " +
+                    "dashboard-nav-favorite flex items-center justify-between rounded-lg px-3 py-2 text-[13px] " +
                     (isItemActive(pathname, item.href)
-                      ? "dashboard-accent-surface text-white"
-                      : "border-white/10 bg-white/[0.06] text-slate-100 hover:bg-white/[0.09]")
+                      ? "dashboard-nav-selected text-white"
+                      : "text-slate-300 hover:text-white")
                   }
                 >
                   <span className="min-w-0 break-words leading-5">
@@ -608,7 +619,7 @@ const SidebarPanel = memo(function SidebarPanel({
                   title={section.description}
                   aria-expanded={open}
                   aria-controls={"sidebar-section-" + section.id}
-                  className="dashboard-nav-heading flex min-h-12 w-full items-center justify-between gap-2 rounded-xl px-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-300"
+                  className="dashboard-nav-heading flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-300"
                 >
                   <span className="flex min-w-0 items-center gap-2.5">
                     <span
@@ -632,15 +643,18 @@ const SidebarPanel = memo(function SidebarPanel({
                     >
                       {section.items.length}
                     </span>
-                    <span
+                    <svg
                       aria-hidden="true"
-                      className={
-                        "text-xs font-bold text-slate-400 " +
-                        (open ? "" : "-rotate-90")
-                      }
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="dashboard-nav-chevron h-3.5 w-3.5"
                     >
-                      ⌄
-                    </span>
+                      <path d="m9 5 7 7-7 7" />
+                    </svg>
                   </span>
                 </button>
                 <div
@@ -648,7 +662,7 @@ const SidebarPanel = memo(function SidebarPanel({
                   hidden={!open}
                   className="px-1 pb-2"
                 >
-                  <div className="dashboard-nav-children ml-5 border-l border-white/10 pl-2">
+                  <div className="dashboard-nav-children ml-6 border-l border-white/10 pl-2">
                     {section.items.map((item, index) => {
                       const itemActive = isItemActive(pathname, item.href);
                       const count = item.badgeKey ? counters[item.badgeKey] : 0;
@@ -658,10 +672,12 @@ const SidebarPanel = memo(function SidebarPanel({
                           key={item.key}
                           className="group flex flex-wrap items-center gap-1"
                         >
-                          {item.group &&
+                          {new Set(section.items.map((i) => i.group)).size >
+                            1 &&
+                          item.group &&
                           (index === 0 ||
                             section.items[index - 1].group !== item.group) ? (
-                            <p className="w-full px-2 pb-1 pt-3 text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-400">
+                            <p className="dashboard-nav-eyebrow w-full px-2 pb-1 pt-3">
                               {item.group}
                             </p>
                           ) : null}
@@ -671,7 +687,7 @@ const SidebarPanel = memo(function SidebarPanel({
                             className={
                               "dashboard-nav-link flex min-w-0 flex-1 items-center justify-between rounded-lg border border-transparent px-2.5 py-2 text-[13px] " +
                               (itemActive
-                                ? "dashboard-accent-surface font-semibold text-white"
+                                ? "dashboard-nav-selected font-semibold text-white"
                                 : "text-slate-300 hover:bg-white/[0.06] hover:text-white")
                             }
                           >
@@ -679,7 +695,7 @@ const SidebarPanel = memo(function SidebarPanel({
                               {item.label}
                             </span>
                             {count > 0 && !item.soon ? (
-                              <span className="ml-2 shrink-0 rounded-full bg-white/85 px-1.5 py-0.5 text-[10px] font-bold text-slate-900">
+                              <span className="dashboard-nav-badge ml-2 shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold">
                                 {count}
                               </span>
                             ) : null}
@@ -692,6 +708,7 @@ const SidebarPanel = memo(function SidebarPanel({
                           <button
                             type="button"
                             onClick={() => onToggleFavorite(item.key)}
+                            aria-pressed={favorite}
                             aria-label={
                               (favorite
                                 ? "Remover dos favoritos: "
@@ -703,10 +720,10 @@ const SidebarPanel = memo(function SidebarPanel({
                                 : "Adicionar aos favoritos"
                             }
                             className={
-                              "rounded-lg border px-1.5 py-1.5 text-xs " +
+                              "dashboard-favorite-toggle rounded-lg p-1.5 text-xs " +
                               (favorite
-                                ? "border-amber-300 bg-amber-300/20 text-amber-200"
-                                : "border-white/10 bg-white/[0.04] text-slate-300 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-amber-200")
+                                ? "text-amber-200"
+                                : "text-slate-400 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:text-amber-200")
                             }
                           >
                             {favorite ? "★" : "☆"}
@@ -720,39 +737,52 @@ const SidebarPanel = memo(function SidebarPanel({
             );
           })}
       </nav>
-      <div className="dashboard-sidebar-footer shrink-0 border-t border-white/10 p-3">
-        <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-300">
-          Conta
-        </p>
+      <div className="dashboard-sidebar-footer dashboard-account-panel shrink-0 border-t border-white/10 p-3">
         {ADMIN_ITEMS.filter((item) => isItemAllowed(item.href, access)).map(
           (item) => (
             <Link
               key={item.key}
               href={item.href || "/dashboard/profile"}
+              aria-current={
+                isItemActive(pathname, item.href) ? "page" : undefined
+              }
               className={
-                "flex items-center rounded-xl border px-3 py-2.5 text-sm " +
+                "dashboard-account-link flex items-center gap-3 rounded-xl px-2 py-2 text-sm " +
                 (isItemActive(pathname, item.href)
-                  ? "dashboard-accent-surface font-semibold text-white"
-                  : "border-white/10 bg-white/[0.05] text-slate-100 hover:border-white/16")
+                  ? "dashboard-nav-selected font-semibold text-white"
+                  : "text-slate-200")
               }
             >
-              {item.label}
+              <span className="dashboard-account-avatar">
+                <SidebarIcon icon="profile" />
+              </span>
+              <span>
+                <span className="block text-[13px] font-semibold">
+                  {item.label}
+                </span>
+                <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
+                  Conta e preferências
+                </span>
+              </span>
             </Link>
           ),
         )}
         <button
           type="button"
           onClick={onLogout}
-          className="mt-3 w-full rounded-xl border border-red-300/60 bg-red-500/10 px-3 py-2.5 text-sm font-semibold text-red-100 hover:bg-red-500/18"
+          className="dashboard-logout-link mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-xs font-medium text-slate-400"
         >
-          Encerrar sessão
+          <SidebarIcon icon="logout" /> Encerrar sessão
         </button>
       </div>
     </>
   );
 });
 
-const isItemActive = isNavigationItemActive;
+const isItemActive = (pathname: string, href?: string) =>
+  href === "/dashboard/profile"
+    ? pathname === href
+    : isNavigationItemActive(pathname, href);
 
 function getSectionBadgeValue(section: NavSection, counters: SidebarCounters) {
   return [
@@ -765,192 +795,4 @@ function getSectionBadgeValue(section: NavSection, counters: SidebarCounters) {
 function isItemAllowed(href: string | undefined, access: SidebarAccess) {
   if (!href) return true;
   return canAccessDashboardPath(href, access);
-}
-
-function SidebarIcon({ icon }: { icon: NavSection["icon"] }) {
-  const common = "h-4 w-4";
-  switch (icon) {
-    case "planning":
-      return (
-        <svg
-          viewBox="0 0 24 24"
-          className={common}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <rect x="3" y="5" width="18" height="16" rx="2" />
-          <path d="M7 3v4m10-4v4M3 11h18m-13 4h2m4 0h2m-8 3h2" />
-        </svg>
-      );
-    case "warehouse":
-      return (
-        <svg
-          viewBox="0 0 24 24"
-          className={common}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="m3 10 9-7 9 7v11H3zM3 10h18M8 21v-7h8v7m-4-7v7" />
-        </svg>
-      );
-    case "contracts":
-      return (
-        <svg
-          viewBox="0 0 24 24"
-          className={common}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 12h8m-8 4h5" />
-        </svg>
-      );
-    case "admin":
-      return (
-        <svg
-          viewBox="0 0 24 24"
-          className={common}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7z" />
-          <path d="m8 12 3 3 5-6" />
-        </svg>
-      );
-    case "overview":
-      return (
-        <svg
-          viewBox="0 0 24 24"
-          className={common}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-        >
-          <path d="M3 13h8V3H3zM13 21h8v-6h-8zM13 11h8V3h-8zM3 21h8v-6H3z" />
-        </svg>
-      );
-    case "crm":
-      return (
-        <svg
-          viewBox="0 0 24 24"
-          className={common}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-        >
-          <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-          <circle cx="8.5" cy="7" r="4" />
-          <path d="M20 8v6M23 11h-6" />
-        </svg>
-      );
-    case "ops":
-      return (
-        <svg
-          viewBox="0 0 24 24"
-          className={common}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-        >
-          <path d="M14.7 6.3a1 1 0 0 0-1.4-1.4l-8 8a1 1 0 0 0 1.4 1.4z" />
-          <path d="M18.4 2.6a3 3 0 1 1 3 3L14 13l-3-3z" />
-          <path d="M8 14l3 3-2 5-3-3z" />
-        </svg>
-      );
-    case "assets":
-      return (
-        <svg
-          viewBox="0 0 24 24"
-          className={common}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-        >
-          <rect x="3" y="6" width="18" height="12" rx="2" />
-          <path d="M7 6V4h10v2M7 18v2h10v-2" />
-        </svg>
-      );
-    case "stock":
-      return (
-        <svg
-          viewBox="0 0 24 24"
-          className={common}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-        >
-          <path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-          <path d="M3.3 7 12 12l8.7-5M12 22V12" />
-        </svg>
-      );
-    case "finance":
-      return (
-        <svg
-          viewBox="0 0 24 24"
-          className={common}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-        >
-          <path d="M12 1v22M17 5H9a4 4 0 0 0 0 8h6a4 4 0 0 1 0 8H7" />
-        </svg>
-      );
-    case "people":
-      return (
-        <svg
-          viewBox="0 0 24 24"
-          className={common}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-        >
-          <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-          <circle cx="8.5" cy="7" r="4" />
-          <path d="M20 8v6M17 11h6" />
-        </svg>
-      );
-    case "hr":
-      return (
-        <svg
-          viewBox="0 0 24 24"
-          className={common}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-        >
-          <path d="M8 6h13" />
-          <path d="M8 12h13" />
-          <path d="M8 18h13" />
-          <path d="M3 6h.01" />
-          <path d="M3 12h.01" />
-          <path d="M3 18h.01" />
-        </svg>
-      );
-    case "studio":
-      return (
-        <svg
-          viewBox="0 0 24 24"
-          className={common}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-        >
-          <path d="M4 4h16v16H4z" />
-          <path d="M8 8h8M8 12h5M8 16h8" />
-        </svg>
-      );
-    default:
-      return null;
-  }
 }

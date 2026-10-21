@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { NavigationIcon } from "./NavigationIcon";
 import { useEffect, useRef, useState } from "react";
 import { canAccessDashboardPath } from "@/lib/access";
 import {
@@ -89,14 +90,14 @@ export default function MobileNavigation({
         className="mobile-navigation-dialog"
       >
         <div className="flex h-full min-h-0 flex-col bg-white">
-          <header className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+          <header className="dashboard-mobile-menu-header flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
             <div>
               <p className="text-xs font-semibold text-blue-700">
                 Manitec GridOne
               </p>
               <h2
                 id="mobile-navigation-title"
-                className="mt-1 text-lg font-bold text-slate-950"
+                className="mt-1 text-xl font-bold text-slate-950"
               >
                 Áreas e rotinas
               </h2>
@@ -110,7 +111,7 @@ export default function MobileNavigation({
               ×
             </button>
           </header>
-          <div className="px-5 pt-4">
+          <div className="dashboard-mobile-menu-search px-5 pb-1 pt-4">
             <label htmlFor="mobile-menu-search" className="sr-only">
               Pesquisar menus
             </label>
@@ -132,7 +133,7 @@ export default function MobileNavigation({
           </div>
           <nav
             aria-label="Menu completo"
-            className="min-h-0 flex-1 space-y-2 overflow-y-auto p-5"
+            className="dashboard-mobile-menu-scroll min-h-0 flex-1 space-y-2 overflow-y-auto px-4 pb-5 pt-3"
           >
             {query.trim() ? (
               <div aria-live="polite">
@@ -174,7 +175,11 @@ export default function MobileNavigation({
               sections.map((section) => (
                 <section
                   key={section.id}
-                  className="overflow-hidden rounded-xl border border-slate-200"
+                  data-area={section.id}
+                  data-active={section.items.some((i) =>
+                    isNavigationItemActive(pathname, i.href),
+                  )}
+                  className="dashboard-mobile-area dashboard-nav-section overflow-hidden rounded-xl border border-slate-200"
                 >
                   <h3>
                     <button
@@ -184,32 +189,44 @@ export default function MobileNavigation({
                       onClick={() =>
                         setExpanded(expanded === section.id ? null : section.id)
                       }
-                      className="flex min-h-14 w-full items-center justify-between gap-3 px-4 text-left"
+                      className="dashboard-mobile-heading flex min-h-16 w-full items-center justify-between gap-3 px-3 py-2 text-left"
                     >
-                      <span>
-                        <span className="block text-sm font-bold text-slate-800">
-                          {section.title}
+                      <span className="flex min-w-0 items-center gap-3">
+                        <span className="dashboard-nav-icon flex h-9 w-9 shrink-0 items-center justify-center rounded-xl">
+                          <NavigationIcon icon={section.icon} />
                         </span>
-                        <span className="mt-0.5 block text-[11px] font-normal text-slate-500">
-                          {section.description}
+                        <span className="min-w-0">
+                          <span className="block text-sm font-bold text-slate-800">
+                            {section.title}
+                          </span>
+                          <span className="mt-0.5 block truncate text-[11px] font-normal text-slate-500">
+                            {section.description}
+                          </span>
                         </span>
                       </span>
-                      <span
+                      <svg
                         aria-hidden="true"
-                        className="text-sm text-slate-400"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="dashboard-mobile-chevron h-4 w-4 shrink-0"
                       >
-                        {expanded === section.id ? "−" : "+"}
-                      </span>
+                        <path d="m9 5 7 7-7 7" />
+                      </svg>
                     </button>
                   </h3>
                   <div
                     id={"mobile-area-" + section.id}
                     hidden={expanded !== section.id}
-                    className="border-t border-slate-100 px-3 pb-2"
+                    className="dashboard-mobile-routines border-t border-slate-100 px-3 pb-2"
                   >
                     {section.items.map((item, index) => (
                       <div key={item.key}>
-                        {item.group &&
+                        {new Set(section.items.map((i) => i.group)).size > 1 &&
+                        item.group &&
                         (index === 0 ||
                           section.items[index - 1].group !== item.group) ? (
                           <p className="px-2 pb-1 pt-3 text-[10px] font-bold uppercase tracking-wide text-slate-500">
@@ -239,7 +256,7 @@ export default function MobileNavigation({
               ))
             )}
           </nav>
-          <footer className="flex gap-2 border-t border-slate-200 p-4">
+          <footer className="dashboard-mobile-menu-footer flex gap-2 border-t border-slate-200 p-4">
             <Link
               href="/dashboard/profile"
               onClick={close}
