@@ -1,6 +1,15 @@
 "use client";
 
 import Image from "next/image";
+import {
+  MAIN_SECTIONS,
+  navigationContext,
+  isNavigationItemActive,
+  searchNavigation,
+  type NavItem,
+  type NavSection,
+} from "@/lib/dashboard-navigation";
+export { MAIN_SECTIONS } from "@/lib/dashboard-navigation";
 import Link from "next/link";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { canAccessDashboardPath } from "@/lib/access";
@@ -31,435 +40,12 @@ type SidebarNavigationProps = {
   onLogout: () => void;
 };
 
-type NavItem = {
-  key: string;
-  label: string;
-  href?: string;
-  enabled?: boolean;
-  soon?: boolean;
-  badgeKey?:
-    | "proposalsQueue"
-    | "ordersOpen"
-    | "contractsAttention"
-    | "teamUnread";
-};
-
-type NavSection = {
-  id: string;
-  title: string;
-  icon:
-    | "overview"
-    | "crm"
-    | "ops"
-    | "assets"
-    | "stock"
-    | "finance"
-    | "people"
-    | "hr"
-    | "studio";
-  items: NavItem[];
-};
-
 type SidebarCounters = {
   proposalsQueue: number;
   ordersOpen: number;
   contractsAttention: number;
   teamUnread: number;
 };
-
-export const MAIN_SECTIONS: NavSection[] = [
-  {
-    id: "overview",
-    title: "Painel",
-    icon: "overview",
-    items: [
-      {
-        key: "overview_dash",
-        label: "Dashboard",
-        href: "/dashboard",
-        enabled: true,
-      },
-      {
-        key: "overview_team",
-        label: "Equipe · Feed e chat",
-        href: "/dashboard/team",
-        enabled: true,
-        badgeKey: "teamUnread",
-      },
-      {
-        key: "overview_documents",
-        label: "Documentos",
-        href: "/dashboard/documents",
-        enabled: true,
-      },
-      {
-        key: "overview_deliveries",
-        label: "Envios",
-        href: "/dashboard/deliveries",
-        enabled: true,
-      },
-      {
-        key: "overview_alerts",
-        label: "Alertas",
-        href: "/dashboard/notifications",
-        enabled: true,
-      },
-      {
-        key: "overview_reports",
-        label: "Relatórios",
-        href: "/dashboard/reports",
-        enabled: true,
-      },
-      {
-        key: "overview_management",
-        label: "Gestão",
-        href: "/dashboard/management/users",
-        enabled: true,
-      },
-      {
-        key: "overview_automation",
-        label: "Automação",
-        href: "/dashboard/automation",
-        enabled: true,
-      },
-      {
-        key: "overview_company",
-        label: "Empresa",
-        href: "/dashboard/company-settings",
-        enabled: true,
-      },
-    ],
-  },
-  {
-    id: "crm",
-    title: "Comercial",
-    icon: "crm",
-    items: [
-      {
-        key: "crm_funnel",
-        label: "Oportunidades",
-        href: "/dashboard/opportunities",
-        enabled: true,
-      },
-      {
-        key: "crm_clients",
-        label: "Clientes",
-        href: "/dashboard/clients",
-        enabled: true,
-      },
-      {
-        key: "crm_surveys",
-        label: "Vistorias Comerciais",
-        href: "/dashboard/commercial-inspections",
-        enabled: true,
-      },
-      {
-        key: "crm_proposals",
-        label: "Propostas",
-        href: "/dashboard/proposals",
-        enabled: true,
-        badgeKey: "proposalsQueue",
-      },
-      {
-        key: "crm_contracts",
-        label: "Contratos",
-        href: "/dashboard/contracts",
-        enabled: true,
-        badgeKey: "contractsAttention",
-      },
-      {
-        key: "crm_contract_renewals",
-        label: "Renovações",
-        href: "/dashboard/contracts/renewals",
-        enabled: true,
-        badgeKey: "contractsAttention",
-      },
-    ],
-  },
-  {
-    id: "ops",
-    title: "Operação",
-    icon: "ops",
-    items: [
-      {
-        key: "ops_orders",
-        label: "Ordens",
-        href: "/dashboard/orders",
-        enabled: true,
-        badgeKey: "ordersOpen",
-      },
-      {
-        key: "ops_downtimes",
-        label: "Máquinas paradas",
-        href: "/dashboard/operation/downtimes",
-        enabled: true,
-      },
-      {
-        key: "ops_warranties",
-        label: "Garantias",
-        href: "/dashboard/operation/warranties",
-        enabled: true,
-      },
-      {
-        key: "ops_field",
-        label: "Campo",
-        href: "/dashboard/tecnico",
-        enabled: true,
-      },
-      {
-        key: "ops_tickets",
-        label: "Atendimento",
-        href: "/dashboard/atendimento",
-        enabled: true,
-      },
-      {
-        key: "ops_service_reports",
-        label: "Laudos",
-        href: "/dashboard/relatorios-tecnicos",
-        enabled: true,
-      },
-      {
-        key: "ops_dispatch",
-        label: "Programação",
-        href: "/dashboard/dispatch",
-        enabled: true,
-      },
-      {
-        key: "ops_team",
-        label: "Técnicos",
-        href: "/dashboard/technicians",
-        enabled: true,
-      },
-      {
-        key: "ops_auvo",
-        label: "Monitoramento",
-        href: "/dashboard/monitoring",
-        enabled: true,
-      },
-    ],
-  },
-  {
-    id: "assets",
-    title: "Ativos",
-    icon: "assets",
-    items: [
-      {
-        key: "assets_generators",
-        label: "Equipamentos",
-        href: "/dashboard/equipments",
-        enabled: true,
-      },
-      {
-        key: "assets_models",
-        label: "Modelos",
-        href: "/dashboard/equipments/models",
-        enabled: true,
-      },
-      {
-        key: "assets_sites",
-        label: "Locais",
-        href: "/dashboard/sites",
-        enabled: true,
-      },
-    ],
-  },
-  {
-    id: "stock",
-    title: "Suprimentos",
-    icon: "stock",
-    items: [
-      {
-        key: "stock_catalog",
-        label: "Catálogo",
-        href: "/dashboard/catalog",
-        enabled: true,
-      },
-      {
-        key: "stock_inventory",
-        label: "Estoque",
-        href: "/dashboard/inventory",
-        enabled: true,
-      },
-      {
-        key: "stock_sales_orders",
-        label: "Pedidos de venda",
-        href: "/dashboard/sales-orders",
-        enabled: true,
-      },
-      {
-        key: "purchaseRequests",
-        label: "Solicitações de compra",
-        href: "/dashboard/purchase-orders/requests",
-        enabled: true,
-      },
-      {
-        key: "purchaseQuotations",
-        label: "Cotações e comparativo",
-        href: "/dashboard/purchase-orders/quotations",
-        enabled: true,
-      },
-      {
-        key: "purchasingApprovals",
-        label: "Aprovações de compras",
-        href: "/dashboard/purchase-orders/approvals",
-        enabled: true,
-      },
-      {
-        key: "purchasingSettings",
-        label: "Regras de compras",
-        href: "/dashboard/purchase-orders/settings",
-        enabled: true,
-      },
-      {
-        key: "stock_purchase",
-        label: "Compras",
-        href: "/dashboard/purchase-orders",
-        enabled: true,
-      },
-      {
-        key: "stock_suppliers",
-        label: "Fornecedores",
-        href: "/dashboard/suppliers",
-        enabled: true,
-      },
-    ],
-  },
-  {
-    id: "finance",
-    title: "Financeiro",
-    icon: "finance",
-    items: [
-      {
-        key: "finance_receivable",
-        label: "Contas a Receber",
-        href: "/dashboard/finance/accounts-receivable",
-        enabled: true,
-      },
-      {
-        key: "finance_collections",
-        label: "Cobrança Santander",
-        href: "/dashboard/finance/collections",
-        enabled: true,
-      },
-      {
-        key: "finance_fiscal_documents",
-        label: "Notas Fiscais",
-        href: "/dashboard/finance/fiscal-documents",
-        enabled: true,
-      },
-      {
-        key: "finance_payable",
-        label: "Contas a Pagar",
-        href: "/dashboard/finance/accounts-payable",
-        enabled: true,
-      },
-      {
-        key: "finance_cashflow",
-        label: "Fluxo de Caixa",
-        href: "/dashboard/finance/cash-flow",
-        enabled: true,
-      },
-      {
-        key: "finance_statement",
-        label: "Extrato Financeiro",
-        href: "/dashboard/finance/bank-movements",
-        enabled: true,
-      },
-      {
-        key: "finance_reconciliation",
-        label: "Conciliação Bancária",
-        href: "/dashboard/finance/reconciliation",
-        enabled: true,
-      },
-      {
-        key: "finance_banks",
-        label: "Contas Bancárias & Caixas",
-        href: "/dashboard/finance/bank-accounts",
-        enabled: true,
-      },
-      {
-        key: "finance_dre",
-        label: "Centros de Custo (DRE)",
-        href: "/dashboard/finance/cost-centers",
-        enabled: true,
-      },
-    ],
-  },
-  {
-    id: "hr",
-    title: "Recursos Humanos",
-    icon: "hr",
-    items: [
-      {
-        key: "hr_collaborators",
-        label: "Colaboradores e acessos",
-        href: "/dashboard/hr/collaborators",
-        enabled: true,
-      },
-      {
-        key: "hr_documentation",
-        label: "Documentação",
-        href: "/dashboard/hr/documentation",
-        enabled: true,
-      },
-      {
-        key: "hr_epi_tools",
-        label: "EPIs e Ferramentas",
-        href: "/dashboard/hr/epis-tools",
-        enabled: true,
-      },
-      {
-        key: "hr_timesheet",
-        label: "Banco de Horas",
-        href: "/dashboard/hr/time-tracking",
-        enabled: true,
-      },
-      {
-        key: "hr_commissions",
-        label: "Comissões",
-        href: "/dashboard/hr/commissions",
-        enabled: true,
-      },
-      {
-        key: "hr_fleet",
-        label: "Frota",
-        href: "/dashboard/hr/fleet",
-        enabled: true,
-      },
-    ],
-  },
-  {
-    id: "studio",
-    title: "Manitec Studio",
-    icon: "studio",
-    items: [
-      {
-        key: "studio_data",
-        label: "Dados",
-        href: "/dashboard/developer/data",
-        enabled: true,
-      },
-      {
-        key: "studio_document_editor",
-        label: "Editor de documentos",
-        href: "/dashboard/developer/document-editor",
-        enabled: true,
-      },
-      {
-        key: "studio_history",
-        label: "Historico",
-        href: "/dashboard/developer/history",
-        enabled: true,
-      },
-      {
-        key: "studio_utilization",
-        label: "Utilizacao",
-        href: "/dashboard/developer/utilization",
-        enabled: true,
-      },
-    ],
-  },
-];
 
 const CLIENT_SECTIONS: NavSection[] = [
   {
@@ -537,14 +123,8 @@ export default function SidebarNavigation({
     () =>
       (userRole === "CLIENT" ? CLIENT_SECTIONS : MAIN_SECTIONS)
         .map((section) => {
-          const dynamicTitle =
-            section.id === "overview" && access.usersControl
-              ? "Painel & Acesso"
-              : section.title;
-
           return {
             ...section,
-            title: dynamicTitle,
             items: section.items.filter((item) =>
               isItemAllowed(item.href, access),
             ),
@@ -608,16 +188,19 @@ export default function SidebarNavigation({
       try {
         const [proposalsRes, ordersRes, contractsRes, teamRes] =
           await Promise.allSettled([
-            apiFetch("/proposals", { cache: "no-store" }),
-            userRole === "CLIENT"
-              ? Promise.resolve(new Response("[]", { status: 204 }))
-              : apiFetch("/maintenance-orders", { cache: "no-store" }),
-            userRole === "CLIENT"
-              ? Promise.resolve(new Response("[]", { status: 204 }))
-              : apiFetch("/contracts", { cache: "no-store" }),
-            userRole === "CLIENT"
-              ? Promise.resolve(new Response("[]", { status: 204 }))
-              : apiFetch("/team/channels", { cache: "no-store" }),
+            isItemAllowed("/dashboard/proposals", access)
+              ? apiFetch("/proposals", { cache: "no-store" })
+              : Promise.resolve(new Response(null, { status: 204 })),
+            userRole !== "CLIENT" && isItemAllowed("/dashboard/orders", access)
+              ? apiFetch("/maintenance-orders", { cache: "no-store" })
+              : Promise.resolve(new Response(null, { status: 204 })),
+            userRole !== "CLIENT" &&
+            isItemAllowed("/dashboard/contracts", access)
+              ? apiFetch("/contracts", { cache: "no-store" })
+              : Promise.resolve(new Response(null, { status: 204 })),
+            userRole !== "CLIENT" && isItemAllowed("/dashboard/team", access)
+              ? apiFetch("/team/channels", { cache: "no-store" })
+              : Promise.resolve(new Response(null, { status: 204 })),
           ]);
 
         const next: SidebarCounters = {
@@ -627,7 +210,10 @@ export default function SidebarNavigation({
           teamUnread: 0,
         };
 
-        if (proposalsRes.status === "fulfilled" && proposalsRes.value.ok) {
+        if (
+          proposalsRes.status === "fulfilled" &&
+          proposalsRes.value.status === 200
+        ) {
           const proposals = await proposalsRes.value.json();
           next.proposalsQueue = (proposals || []).filter((p: any) =>
             userRole === "CLIENT"
@@ -636,21 +222,27 @@ export default function SidebarNavigation({
           ).length;
         }
 
-        if (ordersRes.status === "fulfilled" && ordersRes.value.ok) {
+        if (
+          ordersRes.status === "fulfilled" &&
+          ordersRes.value.status === 200
+        ) {
           const orders = await ordersRes.value.json();
           next.ordersOpen = (orders || []).filter(
             (o: any) => o.status === "OPEN" || o.status === "IN_PROGRESS",
           ).length;
         }
 
-        if (contractsRes.status === "fulfilled" && contractsRes.value.ok) {
+        if (
+          contractsRes.status === "fulfilled" &&
+          contractsRes.value.status === 200
+        ) {
           const contracts = await contractsRes.value.json();
           next.contractsAttention = (contracts || []).filter(
             (c: any) => c.status === "SUSPENDED" || c.status === "RENEWAL",
           ).length;
         }
 
-        if (teamRes.status === "fulfilled" && teamRes.value.ok) {
+        if (teamRes.status === "fulfilled" && teamRes.value.status === 200) {
           const channels = (await teamRes.value.json()) as Array<{
             unreadCount?: number;
           }>;
@@ -676,7 +268,7 @@ export default function SidebarNavigation({
       mounted = false;
       clearInterval(interval);
     };
-  }, [userRole]);
+  }, [userRole, access]);
 
   const favoriteItems = useMemo(() => {
     const map = new Map(allAllowedItems.map((item) => [item.key, item]));
@@ -684,9 +276,7 @@ export default function SidebarNavigation({
   }, [favoriteKeys, allAllowedItems]);
 
   const activeSectionId =
-    filteredSections.find((section) =>
-      section.items.some((item) => isItemActive(pathname, item.href)),
-    )?.id || null;
+    navigationContext(pathname, filteredSections)?.section.id || null;
   const openSectionId =
     sectionChoice?.pathname === pathname ? sectionChoice.id : activeSectionId;
 
@@ -813,16 +403,18 @@ const SidebarRail = memo(function SidebarRail({
           return (
             <button
               key={section.id}
+              data-area={section.id}
+              data-active={active}
               type="button"
               aria-label={section.title}
               aria-expanded={false}
               title={section.title}
               onClick={() => onSelect(section.id)}
-              className="dashboard-sidebar-toggle relative mx-auto flex h-11 w-12 items-center justify-center rounded-xl border border-white/10 text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+              className="dashboard-nav-section dashboard-sidebar-toggle relative mx-auto flex h-11 w-12 items-center justify-center rounded-xl border border-white/10 text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
             >
               <span
                 className={
-                  "inline-flex h-9 w-9 items-center justify-center rounded-xl " +
+                  "dashboard-nav-icon inline-flex h-9 w-9 items-center justify-center rounded-xl " +
                   (active
                     ? "dashboard-accent-surface text-white"
                     : "bg-white/[0.08]")
@@ -891,10 +483,84 @@ const SidebarPanel = memo(function SidebarPanel({
   onToggleSection: (sectionId: string) => void;
   onToggleFavorite: (itemKey: string) => void;
 }) {
+  const [search, setSearch] = useState({ pathname, value: "" });
+  const query = search.pathname === pathname ? search.value : "";
+  const results = searchNavigation(sections, query);
   return (
     <>
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-3">
-        {favoriteItems.length > 0 ? (
+      <div className="dashboard-menu-search shrink-0 px-3 pb-2 pt-4">
+        <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+          Navegação por área
+        </p>
+        <div className="relative">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400"
+          >
+            <circle cx="10.5" cy="10.5" r="6.5" />
+            <path d="m16 16 4 4" />
+          </svg>
+          <input
+            aria-label="Pesquisar no menu"
+            type="search"
+            value={query}
+            onChange={(e) => setSearch({ pathname, value: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setSearch({ pathname, value: "" });
+              }
+            }}
+            placeholder="Pesquisar uma rotina..."
+            className="dashboard-menu-search-input h-10 w-full rounded-xl border border-white/10 bg-white/[0.05] pl-9 pr-3 text-xs text-slate-100 outline-none placeholder:text-slate-400 focus:border-sky-300/60 focus:ring-2 focus:ring-sky-300/10"
+          />
+        </div>
+      </div>
+      <nav
+        aria-label="Áreas e rotinas"
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-2"
+      >
+        {query.trim() ? (
+          <div aria-live="polite" className="space-y-1">
+            <p className="px-2 py-2 text-xs text-slate-400">
+              {results.total
+                ? results.total + " rotina(s) encontrada(s)"
+                : "Nenhuma rotina encontrada."}
+              {results.total > 10 ? " Mostrando 10; refine a busca." : ""}
+            </p>
+            {results.items.map(({ section, item }) => (
+              <Link
+                key={item.key}
+                href={item.href!}
+                aria-current={
+                  isItemActive(pathname, item.href) ? "page" : undefined
+                }
+                className="dashboard-menu-result block rounded-xl border border-white/10 px-3 py-3 text-slate-100 hover:bg-white/[0.07]"
+              >
+                <span className="block text-[10px] text-slate-400">
+                  {section.title} · {item.group}
+                </span>
+                <span className="mt-1 block text-sm font-semibold">
+                  {item.label}
+                </span>
+              </Link>
+            ))}
+            {!results.total ? (
+              <button
+                type="button"
+                onClick={() => setSearch({ pathname, value: "" })}
+                className="px-2 py-3 text-xs font-semibold text-sky-300"
+              >
+                Limpar busca e ver áreas
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {!query.trim() && favoriteItems.length > 0 ? (
           <section className="dashboard-sidebar-panel mb-3 rounded-2xl border border-white/10 p-2.5">
             <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-300">
               Atalhos
@@ -911,7 +577,9 @@ const SidebarPanel = memo(function SidebarPanel({
                       : "border-white/10 bg-white/[0.06] text-slate-100 hover:bg-white/[0.09]")
                   }
                 >
-                  <span className="truncate">{item.label}</span>
+                  <span className="min-w-0 break-words leading-5">
+                    {item.label}
+                  </span>
                   <span className="text-amber-300" aria-hidden="true">
                     ★
                   </span>
@@ -920,122 +588,138 @@ const SidebarPanel = memo(function SidebarPanel({
             </div>
           </section>
         ) : null}
-        {sections.map((section) => {
-          const active = section.items.some((item) =>
-            isItemActive(pathname, item.href),
-          );
-          const open = openSectionId === section.id;
-          return (
-            <div
-              key={section.id}
-              className="dashboard-sidebar-panel mb-2 rounded-2xl border border-white/10"
-            >
-              <button
-                type="button"
-                onClick={() => onToggleSection(section.id)}
-                aria-label={section.title}
-                aria-expanded={open}
-                aria-controls={"sidebar-section-" + section.id}
-                className="flex h-12 w-full items-center justify-between rounded-2xl px-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-300"
-              >
-                <span className="flex min-w-0 items-center gap-3">
-                  <span
-                    className={
-                      "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl " +
-                      (active
-                        ? "dashboard-accent-surface text-white"
-                        : "bg-white/[0.08] text-slate-100")
-                    }
-                  >
-                    <SidebarIcon icon={section.icon} />
-                  </span>
-                  <span className="truncate text-sm font-bold text-slate-100">
-                    {section.title}
-                  </span>
-                </span>
-                <span className="flex shrink-0 items-center gap-2">
-                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-200">
-                    {section.items.length}
-                  </span>
-                  <span
-                    aria-hidden="true"
-                    className={
-                      "text-xs font-bold text-slate-400 " +
-                      (open ? "" : "-rotate-90")
-                    }
-                  >
-                    ⌄
-                  </span>
-                </span>
-              </button>
+        {!query.trim() &&
+          sections.map((section) => {
+            const active = section.items.some((item) =>
+              isItemActive(pathname, item.href),
+            );
+            const open = openSectionId === section.id;
+            return (
               <div
-                id={"sidebar-section-" + section.id}
-                hidden={!open}
-                className="px-2 pb-2"
+                key={section.id}
+                data-area={section.id}
+                data-active={active}
+                className="dashboard-nav-section mb-1 rounded-xl"
               >
-                <div className="space-y-1">
-                  {section.items.map((item) => {
-                    const itemActive = isItemActive(pathname, item.href);
-                    const count = item.badgeKey ? counters[item.badgeKey] : 0;
-                    const favorite = favoriteKeys.includes(item.key);
-                    return (
-                      <div
-                        key={item.key}
-                        className="group flex items-center gap-1"
-                      >
-                        <Link
-                          href={item.href || "/dashboard"}
-                          aria-current={itemActive ? "page" : undefined}
-                          className={
-                            "flex min-w-0 flex-1 items-center justify-between rounded-xl border px-3 py-2.5 text-sm " +
-                            (itemActive
-                              ? "dashboard-accent-surface font-semibold text-white"
-                              : "border-white/10 bg-white/[0.05] text-slate-100 hover:bg-white/[0.08]")
-                          }
+                <button
+                  type="button"
+                  onClick={() => onToggleSection(section.id)}
+                  aria-label={section.title}
+                  title={section.description}
+                  aria-expanded={open}
+                  aria-controls={"sidebar-section-" + section.id}
+                  className="dashboard-nav-heading flex min-h-12 w-full items-center justify-between gap-2 rounded-xl px-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-300"
+                >
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    <span
+                      className={
+                        "dashboard-nav-icon inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg " +
+                        (active
+                          ? "dashboard-accent-surface text-white"
+                          : "bg-white/[0.08] text-slate-100")
+                      }
+                    >
+                      <SidebarIcon icon={section.icon} />
+                    </span>
+                    <span className="truncate text-[13px] font-semibold text-slate-100">
+                      {section.title}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <span
+                      title={section.items.length + " rotinas disponíveis"}
+                      className="text-[10px] font-medium tabular-nums text-slate-400"
+                    >
+                      {section.items.length}
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className={
+                        "text-xs font-bold text-slate-400 " +
+                        (open ? "" : "-rotate-90")
+                      }
+                    >
+                      ⌄
+                    </span>
+                  </span>
+                </button>
+                <div
+                  id={"sidebar-section-" + section.id}
+                  hidden={!open}
+                  className="px-1 pb-2"
+                >
+                  <div className="dashboard-nav-children ml-5 border-l border-white/10 pl-2">
+                    {section.items.map((item, index) => {
+                      const itemActive = isItemActive(pathname, item.href);
+                      const count = item.badgeKey ? counters[item.badgeKey] : 0;
+                      const favorite = favoriteKeys.includes(item.key);
+                      return (
+                        <div
+                          key={item.key}
+                          className="group flex flex-wrap items-center gap-1"
                         >
-                          <span className="truncate">{item.label}</span>
-                          {count > 0 && !item.soon ? (
-                            <span className="ml-2 shrink-0 rounded-full bg-white/85 px-1.5 py-0.5 text-[10px] font-bold text-slate-900">
-                              {count}
-                            </span>
+                          {item.group &&
+                          (index === 0 ||
+                            section.items[index - 1].group !== item.group) ? (
+                            <p className="w-full px-2 pb-1 pt-3 text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-400">
+                              {item.group}
+                            </p>
                           ) : null}
-                          {item.soon ? (
-                            <span className="ml-2 rounded bg-white/12 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-100">
-                              Em breve
+                          <Link
+                            href={item.href || "/dashboard"}
+                            aria-current={itemActive ? "page" : undefined}
+                            className={
+                              "dashboard-nav-link flex min-w-0 flex-1 items-center justify-between rounded-lg border border-transparent px-2.5 py-2 text-[13px] " +
+                              (itemActive
+                                ? "dashboard-accent-surface font-semibold text-white"
+                                : "text-slate-300 hover:bg-white/[0.06] hover:text-white")
+                            }
+                          >
+                            <span className="min-w-0 break-words leading-5">
+                              {item.label}
                             </span>
-                          ) : null}
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={() => onToggleFavorite(item.key)}
-                          aria-label={
-                            (favorite
-                              ? "Remover dos favoritos: "
-                              : "Adicionar aos favoritos: ") + item.label
-                          }
-                          title={
-                            favorite
-                              ? "Remover dos favoritos"
-                              : "Adicionar aos favoritos"
-                          }
-                          className={
-                            "rounded-lg border px-1.5 py-1.5 text-xs " +
-                            (favorite
-                              ? "border-amber-300 bg-amber-300/20 text-amber-200"
-                              : "border-white/10 bg-white/[0.04] text-slate-300 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-amber-200")
-                          }
-                        >
-                          {favorite ? "★" : "☆"}
-                        </button>
-                      </div>
-                    );
-                  })}
+                            {count > 0 && !item.soon ? (
+                              <span className="ml-2 shrink-0 rounded-full bg-white/85 px-1.5 py-0.5 text-[10px] font-bold text-slate-900">
+                                {count}
+                              </span>
+                            ) : null}
+                            {item.soon ? (
+                              <span className="ml-2 rounded bg-white/12 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-100">
+                                Em breve
+                              </span>
+                            ) : null}
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => onToggleFavorite(item.key)}
+                            aria-label={
+                              (favorite
+                                ? "Remover dos favoritos: "
+                                : "Adicionar aos favoritos: ") + item.label
+                            }
+                            title={
+                              favorite
+                                ? "Remover dos favoritos"
+                                : "Adicionar aos favoritos"
+                            }
+                            className={
+                              "rounded-lg border px-1.5 py-1.5 text-xs " +
+                              (favorite
+                                ? "border-amber-300 bg-amber-300/20 text-amber-200"
+                                : "border-white/10 bg-white/[0.04] text-slate-300 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-amber-200")
+                            }
+                          >
+                            {favorite ? "★" : "☆"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+      </nav>
       <div className="dashboard-sidebar-footer shrink-0 border-t border-white/10 p-3">
         <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-300">
           Conta
@@ -1068,17 +752,14 @@ const SidebarPanel = memo(function SidebarPanel({
   );
 });
 
-function isItemActive(pathname: string, href?: string) {
-  if (!href) return false;
-  if (href === "/dashboard") return pathname === href;
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
+const isItemActive = isNavigationItemActive;
 
 function getSectionBadgeValue(section: NavSection, counters: SidebarCounters) {
-  return section.items.reduce((sum, item) => {
-    if (!item.badgeKey) return sum;
-    return sum + counters[item.badgeKey];
-  }, 0);
+  return [
+    ...new Set(
+      section.items.flatMap((item) => (item.badgeKey ? [item.badgeKey] : [])),
+    ),
+  ].reduce((sum, key) => sum + counters[key], 0);
 }
 
 function isItemAllowed(href: string | undefined, access: SidebarAccess) {
@@ -1089,6 +770,64 @@ function isItemAllowed(href: string | undefined, access: SidebarAccess) {
 function SidebarIcon({ icon }: { icon: NavSection["icon"] }) {
   const common = "h-4 w-4";
   switch (icon) {
+    case "planning":
+      return (
+        <svg
+          viewBox="0 0 24 24"
+          className={common}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <rect x="3" y="5" width="18" height="16" rx="2" />
+          <path d="M7 3v4m10-4v4M3 11h18m-13 4h2m4 0h2m-8 3h2" />
+        </svg>
+      );
+    case "warehouse":
+      return (
+        <svg
+          viewBox="0 0 24 24"
+          className={common}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="m3 10 9-7 9 7v11H3zM3 10h18M8 21v-7h8v7m-4-7v7" />
+        </svg>
+      );
+    case "contracts":
+      return (
+        <svg
+          viewBox="0 0 24 24"
+          className={common}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 12h8m-8 4h5" />
+        </svg>
+      );
+    case "admin":
+      return (
+        <svg
+          viewBox="0 0 24 24"
+          className={common}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7z" />
+          <path d="m8 12 3 3 5-6" />
+        </svg>
+      );
     case "overview":
       return (
         <svg

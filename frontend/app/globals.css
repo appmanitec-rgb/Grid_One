@@ -1276,3 +1276,33 @@ tbody tr:hover .dashboard-sticky-actions {
 @media (prefers-reduced-motion: reduce) {
   .dashboard-sidebar, .dashboard-sidebar-drawer, .dashboard-sidebar-rail { transition: none; }
 }
+
+
+/* Module hierarchy: flat routines, clear ownership, no layout animation on hover. */
+.dashboard-nav-section { --nav-color: #94a3b8; }
+.dashboard-nav-section[data-area="overview"] { --nav-color: #93c5fd; }
+.dashboard-nav-section[data-area="crm"] { --nav-color: #60a5fa; }
+.dashboard-nav-section[data-area="contracts"] { --nav-color: #c4b5fd; }
+.dashboard-nav-section[data-area="planning"] { --nav-color: #67e8f9; }
+.dashboard-nav-section[data-area="ops"] { --nav-color: #a5b4fc; }
+.dashboard-nav-section[data-area="assets"] { --nav-color: #cbd5e1; }
+.dashboard-nav-section[data-area="supplies"] { --nav-color: #6ee7b7; }
+.dashboard-nav-section[data-area="warehouse"] { --nav-color: #fcd34d; }
+.dashboard-nav-section[data-area="finance"] { --nav-color: #5eead4; }
+.dashboard-nav-section[data-area="hr"] { --nav-color: #f9a8d4; }
+.dashboard-nav-section[data-area="admin"] { --nav-color: #cbd5e1; }
+.dashboard-nav-section[data-area="studio"] { --nav-color: #d8b4fe; }
+.dashboard-nav-icon {
+  color: var(--nav-color) !important;
+  background: color-mix(in srgb, var(--nav-color) 12%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--nav-color) 18%, transparent);
+}
+.dashboard-nav-heading { transition: background-color 120ms ease; }
+.dashboard-nav-heading:hover { background: rgba(255,255,255,.055); }
+.dashboard-nav-section[data-active="true"] > .dashboard-nav-heading { background: rgba(255,255,255,.065); }
+.dashboard-nav-link[aria-current="page"] { box-shadow: inset 2px 0 0 var(--nav-color); }
+.dashboard-menu-search-input { color-scheme: dark; }
+.dashboard-menu-result:focus-visible { outline: 2px solid #7dd3fc; outline-offset: 2px; }
+
+.dashboard-nav-section[data-active="true"] .dashboard-nav-icon { background: color-mix(in srgb, var(--nav-color) 23%, transparent) !important; }
+.dashboard-sidebar-toggle[data-active="true"] { border-color: color-mix(in srgb, var(--nav-color) 40%, transparent) !important; }
