@@ -26,6 +26,7 @@ compatível, sem substituir o cliente que a versão anterior usa. Ver
 | Revisão dos arquivos preparados para o Git | Nenhum arquivo de ambiente, artefato operacional privado, chave privada ou token foi encontrado pela varredura específica. Não substitui uma auditoria de segurança completa. |
 | Proxy no build novo | `/api/:path*` aponta para `http://127.0.0.1:3000/:path*`. |
 | Backup principal | Dump PostgreSQL em formato custom, validado por `pg_restore --list`, com tamanho e SHA-256 registrados no manifesto local. |
+| Conferência após ativação | **26 testes aprovados** na interface 3001, usando fixtures; oito verificações HTTP reais aprovadas, leitura dos cinco modelos novos pelo cliente Prisma e nenhuma migração pendente ou com falha. |
 
 Logs completos permanecem em `runtime-logs/publicacao-20261106/`. Documentos
 gerados em `output/`, capturas em `docs/evidencias/`, configurações, backups e
@@ -48,24 +49,52 @@ interna **3000 em 127.0.0.1**. A interface principal respondeu HTTP 200. O acess
 do usuário é `http://localhost:3001`; a porta 3000 continua sendo o serviço interno
 necessário à aplicação, e não outra interface de usuário.
 
-**A ativação da release nova no principal ainda depende de autorização explícita.**
-A revisão automática bloqueou o comando que interromperia os serviços principais
-e migraria a base, citando a instrução anterior para não ativar em produção.
-Esse comando não foi executado. O principal continua com os artefatos anteriores;
-não foram aplicadas migrações, seeds, cópias da base de testes ou alterações de
-usuários nesta tarefa.
+**Release ativada no principal em 06/11/2026, após autorização explícita do usuário
+para integrar o PR #1, atualizar a base e ativar na porta 3001.** O PR foi integrado
+à `main` pelo commit `47b0dd4e4dd34a33b900e915a27f19ce6588001e`. A árvore desse commit
+foi comparada à do código testado `c1c7ffaadc2bf0cb2c2309ad99df74bd29dc0632`: conteúdos
+idênticos. A restrição anterior de ativação foi resolvida por essa autorização.
 
-As três migrações pendentes, revisadas antes da solicitação de autorização, são:
+As três migrações autorizadas foram aplicadas com sucesso:
 
 - `20261023190000_proposal_editing_drafts`: rascunhos de edição.
 - `20261028180000_commercial_workspace`: snapshots documentais, estimativas,
   modelos e passagem de responsabilidade comercial.
 - `20261028190000_commercial_scope_indexes`: índices de consulta.
 
-São aditivas. A ativação preparada prevê novo backup com os serviços parados,
-comparação por contagem e hash das tabelas existentes antes/depois, migração,
-preflight e inicialização da release na 3001. Os artefatos anteriores permanecem
-disponíveis para retorno do código, sem restauração automática do banco.
+Com os serviços principais parados, foi gerado e verificado um novo backup de
+6.704.173 bytes, com SHA-256 no manifesto privado. A coleta anterior à migração
+ocorreu às 15:40:52 e a posterior às 15:41:27, horário de São Paulo.
+
+A comparação por contagem e hash confirmou **154 tabelas de dados existentes
+integralmente preservadas**, incluindo usuários, permissões, propostas e documentos.
+A tabela de histórico `_prisma_migrations` recebeu os registros das migrações.
+Foram criadas cinco tabelas: `proposal_editing_drafts`, `proposal_document_snapshots`,
+`commercial_proposal_estimates`, `commercial_content_templates` e
+`commercial_handoff_tasks`. Não houve cópia da base de testes, seed ou atribuição
+de permissões aos usuários reais.
+
+O preflight foi aprovado. API e interface responderam HTTP 200 após o reinício,
+com a release `.next-release-20261106` / `dist-release-20261106` e seu cliente Prisma
+separado. O smoke real confirmou banco e storage configurados em produção,
+proteção dos endpoints comerciais com HTTP 401 para requisições sem autenticação,
+leitura das novas estruturas e zero migrações pendentes ou com falha.
+
+Os 26 testes posteriores percorreram menu, permissões, login da equipe e cliente,
+responsividade e recuperação da proposta na 3001, com APIs interceptadas. Não
+criaram registros comerciais no principal. Os logs operacionais também registraram
+consultas autenticadas bem-sucedidas após a troca; esse uso corrente do principal
+não faz parte da comparação de integridade feita com os serviços parados.
+
+O proxy registrou recusas de conexão durante a inicialização da API, na janela
+de interrupção autorizada. Não houve novas entradas nesse log após 15:41:57 na
+conferência seguinte; os checks de saúde e a navegação posteriores passaram. O
+stderr do backend permaneceu vazio nessa rodada. Isso não equivale a resolver os
+erros transitórios de proxy mencionados nos relatórios anteriores.
+
+Os artefatos anteriores permanecem disponíveis para retorno do código, sem
+restauração automática do banco. Configuração da release e PIDs ativos ficam em
+`runtime-logs/active-release.json` e `runtime-logs/server-pids.json`.
 
 ## Limites mantidos
 
