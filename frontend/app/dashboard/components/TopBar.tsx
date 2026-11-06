@@ -1,10 +1,20 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
+import { navigationContext } from "@/lib/dashboard-navigation";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { fetchDashboardNotificationInbox } from "@/lib/dashboard-notifications";
-import type { DashboardThemeId } from "@/lib/dashboard-appearance";
+import { apiFetch } from "@/lib/api";
+import {
+  PROFILE_UPDATED_EVENT,
+  PROFILE_REVISION_KEY,
+  type CurrentProfile,
+} from "@/lib/profile-events";
+import NotificationCenter from "./NotificationCenter";
+import type {
+  DashboardColorMode,
+  DashboardThemeId,
+} from "@/lib/dashboard-appearance";
 import {
   clearAuthSession,
   decodeJwtPayload,
@@ -13,79 +23,261 @@ import {
 import DashboardAppearanceControl from "./DashboardAppearanceControl";
 
 type TopBarProps = {
+  colorMode: DashboardColorMode;
+  onChangeColorMode: (mode: DashboardColorMode) => void;
   appearanceTheme: DashboardThemeId;
   onChangeAppearanceTheme: (themeId: DashboardThemeId) => void;
 };
 
 const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
-  "/dashboard/client-portal": { title: "Portal do Cliente", subtitle: "Propostas, contratos, ordens e cobrança em uma visão única." },
-  "/dashboard/documents": { title: "Central Documental", subtitle: "Versões prontas para imprimir, salvar em PDF e compartilhar." },
-  "/dashboard/deliveries": { title: "Histórico de Envios", subtitle: "Rastreamento de compartilhamentos, abertura do link e falhas." },
-  "/dashboard/notifications": { title: "Central de Alertas", subtitle: "Aprovações, operação, comercial e financeiro em uma fila única." },
-  "/dashboard": { title: "Gestão e Operações", subtitle: "KPIs executivos, pipeline comercial e execução técnica." },
-  "/dashboard/opportunities": { title: "Funil de Vendas", subtitle: "Pipeline por fase, temperatura e previsão de receita." },
-  "/dashboard/commercial-inspections": { title: "Vistorias Comerciais", subtitle: "Checklists técnicos e mídias para dimensionamento." },
-  "/dashboard/proposals": { title: "Central de Propostas", subtitle: "Controle completo por fase e revisões." },
-  "/dashboard/orders": { title: "Centro de Ordens", subtitle: "Execução técnica com SLA e prioridade." },
-  "/dashboard/operation/downtimes": { title: "Máquinas Paradas", subtitle: "Resposta a falhas, retorno à operação e causa raiz." },
-  "/dashboard/operation/warranties": { title: "Gestão de Garantias", subtitle: "Cobertura própria, fábrica e acompanhamento de fornecedores." },
-  "/dashboard/contracts": { title: "Gestão de Contratos", subtitle: "Vigência, SLA, faturamento e preventiva automática." },
-  "/dashboard/reports": { title: "Relatórios Gerenciais", subtitle: "Indicadores consolidados de performance e operação." },
-  "/dashboard/monitoring": { title: "Monitoramento Operacional", subtitle: "Telemetria, alertas, automações e resposta de campo." },
-  "/dashboard/dispatch": { title: "Painel de Despacho", subtitle: "Agenda diária/semanal com roteirização e prioridade operacional." },
-  "/dashboard/technicians": { title: "Equipe de Técnicos", subtitle: "Capacidade operacional, skills e certificações da equipe." },
-  "/dashboard/sites": { title: "Locais e Obras", subtitle: "Mapa de instalações e ativos por local." },
-  "/dashboard/inventory": { title: "Controle de Estoque", subtitle: "Inventário, rupturas e valorização." },
-  "/dashboard/purchase-orders": { title: "Pedidos de Compra", subtitle: "Solicitações e acompanhamento de compras." },
-  "/dashboard/finance/accounts-receivable": { title: "Contas a Receber", subtitle: "Recebimentos de contratos e ordens avulsas." },
-  "/dashboard/finance/accounts-payable": { title: "Contas a Pagar", subtitle: "Despesas operacionais, folha e fornecedores." },
-  "/dashboard/finance/cash-flow": { title: "Fluxo de Caixa", subtitle: "Previsão de saldo, entradas e saídas do dia." },
-  "/dashboard/finance/bank-accounts": { title: "Contas Bancárias & Caixas", subtitle: "Consolidação de saldos por banco e caixa interno." },
-  "/dashboard/finance/cost-centers": { title: "Centros de Custo (DRE)", subtitle: "Margem por contrato, ativo e cliente." },
-  "/dashboard/hr/collaborators": { title: "Agentes e Acessos", subtitle: "Colaboradores, usuários internos, clientes de portal e auditores separados." },
-  "/dashboard/hr/epis-tools": { title: "EPIs e Ferramentas", subtitle: "Controle de entrega, responsabilidade e rastreabilidade." },
-  "/dashboard/hr/time-tracking": { title: "Apontamento e Banco de Horas", subtitle: "Horas de campo, extras e sobreaviso." },
-  "/dashboard/hr/commissions": { title: "Comissões e Premiação", subtitle: "Consolidado de variáveis do comercial e operação." },
-  "/dashboard/hr/fleet": { title: "Gestão de Frota", subtitle: "Veículos, manutenção, multas e alocação por técnico." },
-  "/dashboard/billing": { title: "Faturamento", subtitle: "Recebíveis de contratos e ordens de serviço." },
-  "/dashboard/costs": { title: "Custos de Operação", subtitle: "Análise de custos técnicos e margens." },
-  "/dashboard/company-settings": { title: "Configurações da Empresa", subtitle: "Cadastros de empresas, CNPJs e identidade visual." },
-  "/dashboard/profile": { title: "Meu Perfil", subtitle: "Dados pessoais e preferências do usuário." },
-  "/dashboard/clients": { title: "CRM de Clientes", subtitle: "Contatos, máquinas e histórico consolidado." },
-  "/dashboard/equipments": { title: "Parque de Equipamentos", subtitle: "Rastreio de ativos e manutenção." },
-  "/dashboard/catalog": { title: "Inteligência de Catálogo", subtitle: "Peças, custos, margens e precificação." },
-  "/dashboard/suppliers": { title: "Rede de Fornecedores", subtitle: "Compras, SLA e condições comerciais." },
-  "/dashboard/developer/data": { title: "Manitec Studio", subtitle: "Visualizacao, edicao controlada, importacao preparada e exportacao de dados." },
-  "/dashboard/developer/history": { title: "Historico do Studio", subtitle: "Auditoria e rastreabilidade dos eventos administrativos." },
-  "/dashboard/developer": { title: "Manitec Studio", subtitle: "Gerenciamento seguro dos dados do ERP." },
-  "/dashboard/management/users": { title: "Área de Gestão (Admin)", subtitle: "Cadastros de usuários, permissões e governança." },
-  "/dashboard/management": { title: "Área de Gestão (Admin)", subtitle: "Cadastros de usuários, permissões e governança." },
-  "/dashboard/control": { title: "Área de Gestão (Admin)", subtitle: "Cadastros de usuários, permissões e governança." },
-  "/dashboard/automation": { title: "Central de Automações", subtitle: "Histórico, saúde e disparos manuais das rotinas agendadas." },
+  "/dashboard/finance/bank-movements": {
+    title: "Extrato bancário",
+    subtitle: "Movimentos, saldos e lançamentos da conta.",
+  },
+  "/dashboard/finance/reconciliation": {
+    title: "Conciliação bancária",
+    subtitle: "Extratos, movimentos e divergências.",
+  },
+  "/dashboard/hr/documentation": {
+    title: "Documentação e certificações",
+    subtitle: "Documentos e vencimentos dos colaboradores.",
+  },
+  "/dashboard/relatorios-tecnicos": {
+    title: "Laudos técnicos",
+    subtitle: "Diagnósticos, evidências e documentos técnicos.",
+  },
+  "/dashboard/tecnico": {
+    title: "Minha rota",
+    subtitle: "Execução atribuída ao técnico responsável.",
+  },
+  "/dashboard/inventory/operations": {
+    title: "Central do almoxarifado",
+    subtitle: "Recebimento, separa\u00e7\u00e3o, estoque e vencimentos.",
+  },
+  "/dashboard/purchase-orders/requests": {
+    title: "Solicita\u00e7\u00f5es de compra",
+    subtitle: "Necessidades, an\u00e1lise e acompanhamento do atendimento.",
+  },
+  "/dashboard/purchase-orders/quotations": {
+    title: "Cota\u00e7\u00f5es e comparativo",
+    subtitle: "Consulta a fornecedores, ofertas e sele\u00e7\u00e3o.",
+  },
+  "/dashboard/purchase-orders/approvals": {
+    title: "Aprova\u00e7\u00f5es de compras",
+    subtitle: "Decis\u00f5es e al\u00e7adas do processo de compras.",
+  },
+  "/dashboard/purchase-orders/settings": {
+    title: "Regras de compras",
+    subtitle: "Pol\u00edticas e configura\u00e7\u00f5es do departamento.",
+  },
+
+  "/dashboard/client-portal": {
+    title: "Portal do Cliente",
+    subtitle: "Propostas, contratos, ordens e cobrança em uma visão única.",
+  },
+  "/dashboard/documents": {
+    title: "Central Documental",
+    subtitle: "Versões prontas para imprimir, salvar em PDF e compartilhar.",
+  },
+  "/dashboard/deliveries": {
+    title: "Histórico de Envios",
+    subtitle: "Rastreamento de compartilhamentos, abertura do link e falhas.",
+  },
+  "/dashboard/notifications": {
+    title: "Central de Alertas",
+    subtitle: "Aprovações, operação, comercial e financeiro em uma fila única.",
+  },
+  "/dashboard": {
+    title: "Meu painel",
+    subtitle: "Indicadores e atividades de acordo com sua área e permissões.",
+  },
+  "/dashboard/opportunities": {
+    title: "Funil de Vendas",
+    subtitle: "Pipeline por fase, temperatura e previsão de receita.",
+  },
+  "/dashboard/commercial-inspections": {
+    title: "Vistorias Comerciais",
+    subtitle: "Checklists técnicos e mídias para dimensionamento.",
+  },
+  "/dashboard/proposals": {
+    title: "Central de Propostas",
+    subtitle: "Controle completo por fase e revisões.",
+  },
+  "/dashboard/atendimento": {
+    title: "Central de Atendimento",
+    subtitle: "Chamados, responsáveis, conversas e prazos de atendimento.",
+  },
+  "/dashboard/orders": {
+    title: "Centro de Ordens",
+    subtitle: "Execução técnica com SLA e prioridade.",
+  },
+  "/dashboard/operation/downtimes": {
+    title: "Máquinas Paradas",
+    subtitle: "Resposta a falhas, retorno à operação e causa raiz.",
+  },
+  "/dashboard/operation/warranties": {
+    title: "Gestão de Garantias",
+    subtitle: "Cobertura própria, fábrica e acompanhamento de fornecedores.",
+  },
+  "/dashboard/contracts": {
+    title: "Gestão de Contratos",
+    subtitle: "Vigência, SLA, faturamento e preventiva automática.",
+  },
+  "/dashboard/reports": {
+    title: "Relatórios Gerenciais",
+    subtitle: "Indicadores consolidados de performance e operação.",
+  },
+  "/dashboard/monitoring": {
+    title: "Monitoramento Operacional",
+    subtitle: "Telemetria, alertas, automações e resposta de campo.",
+  },
+  "/dashboard/dispatch": {
+    title: "Programação e Despacho",
+    subtitle: "Agenda, distribuição de ordens e prioridades da equipe.",
+  },
+  "/dashboard/technicians": {
+    title: "Equipe de Técnicos",
+    subtitle: "Capacidade operacional, skills e certificações da equipe.",
+  },
+  "/dashboard/sites": {
+    title: "Locais e Obras",
+    subtitle: "Mapa de instalações e ativos por local.",
+  },
+  "/dashboard/inventory": {
+    title: "Controle de Estoque",
+    subtitle: "Inventário, rupturas e valorização.",
+  },
+  "/dashboard/sales-orders": {
+    title: "Pedidos de Venda",
+    subtitle: "Separação, entregas parciais e rastreabilidade das peças.",
+  },
+  "/dashboard/purchase-orders": {
+    title: "Pedidos de Compra",
+    subtitle: "Solicitações e acompanhamento de compras.",
+  },
+  "/dashboard/finance/accounts-receivable": {
+    title: "Contas a Receber",
+    subtitle: "Recebimentos de contratos e ordens avulsas.",
+  },
+  "/dashboard/finance/collections": {
+    title: "Cobrança Santander",
+    subtitle: "Boletos, remessas CNAB 240 e retornos bancários.",
+  },
+  "/dashboard/finance/fiscal-documents": {
+    title: "Notas Fiscais",
+    subtitle: "Rascunhos de NF-e e NFS-e vinculados ao financeiro.",
+  },
+  "/dashboard/finance/accounts-payable": {
+    title: "Contas a Pagar",
+    subtitle: "Despesas operacionais, folha e fornecedores.",
+  },
+  "/dashboard/finance/cash-flow": {
+    title: "Fluxo de Caixa",
+    subtitle: "Previsão de saldo, entradas e saídas do dia.",
+  },
+  "/dashboard/finance/bank-accounts": {
+    title: "Contas Bancárias & Caixas",
+    subtitle: "Consolidação de saldos por banco e caixa interno.",
+  },
+  "/dashboard/finance/cost-centers": {
+    title: "Centros de Custo (DRE)",
+    subtitle: "Margem por contrato, ativo e cliente.",
+  },
+  "/dashboard/hr/collaborators": {
+    title: "Colaboradores",
+    subtitle: "Equipe, departamentos e contas de acesso no RH.",
+  },
+  "/dashboard/hr/epis-tools": {
+    title: "EPIs e Ferramentas",
+    subtitle: "Controle de entrega, responsabilidade e rastreabilidade.",
+  },
+  "/dashboard/hr/time-tracking": {
+    title: "Apontamento e Banco de Horas",
+    subtitle: "Horas de campo, extras e sobreaviso.",
+  },
+  "/dashboard/hr/commissions": {
+    title: "Comissões e Premiação",
+    subtitle: "Consolidado de variáveis do comercial e operação.",
+  },
+  "/dashboard/hr/fleet": {
+    title: "Gestão de Frota",
+    subtitle: "Veículos, manutenção, multas e alocação por técnico.",
+  },
+  "/dashboard/billing": {
+    title: "Faturamento",
+    subtitle: "Recebíveis de contratos e ordens de serviço.",
+  },
+  "/dashboard/costs": {
+    title: "Custos de Operação",
+    subtitle: "Análise de custos técnicos e margens.",
+  },
+  "/dashboard/company-settings": {
+    title: "Configurações da Empresa",
+    subtitle: "Cadastros de empresas, CNPJs e identidade visual.",
+  },
+  "/dashboard/profile": {
+    title: "Meu Perfil",
+    subtitle: "Dados pessoais e preferências do usuário.",
+  },
+  "/dashboard/clients": {
+    title: "Clientes",
+    subtitle: "Contatos, máquinas e histórico consolidado.",
+  },
+  "/dashboard/equipments": {
+    title: "Equipamentos",
+    subtitle: "Rastreio de ativos e manutenção.",
+  },
+  "/dashboard/catalog": {
+    title: "Peças e serviços",
+    subtitle: "Peças, custos, margens e precificação.",
+  },
+  "/dashboard/suppliers": {
+    title: "Fornecedores",
+    subtitle: "Compras, SLA e condições comerciais.",
+  },
+  "/dashboard/developer/data": {
+    title: "Manitec Studio",
+    subtitle: "Consulta, edição, importação e exportação de dados.",
+  },
+  "/dashboard/developer/document-editor": {
+    title: "Editor de documentos",
+    subtitle: "Monte propostas, contratos e relatórios com campos visuais.",
+  },
+  "/dashboard/developer/history": {
+    title: "Histórico do Studio",
+    subtitle: "Auditoria e rastreabilidade dos eventos administrativos.",
+  },
+  "/dashboard/developer": {
+    title: "Manitec Studio",
+    subtitle: "Gerenciamento seguro dos dados do ERP.",
+  },
+  "/dashboard/management/users": {
+    title: "Usuários e permissões",
+    subtitle: "Cadastro de usuários e controle de acesso.",
+  },
+  "/dashboard/management": {
+    title: "Usuários e permissões",
+    subtitle: "Cadastro de usuários e controle de acesso.",
+  },
+  "/dashboard/control": {
+    title: "Usuários e permissões",
+    subtitle: "Cadastro de usuários e controle de acesso.",
+  },
+  "/dashboard/automation": {
+    title: "Central de Automações",
+    subtitle: "Histórico, saúde e disparos manuais das rotinas agendadas.",
+  },
 };
 
 function getRouteFamily(pathname: string) {
   if (pathname.startsWith("/dashboard/client-portal")) return "Portal";
-  if (pathname.startsWith("/dashboard/developer")) return "Studio";
-  if (pathname.startsWith("/dashboard/documents")) return "Painel";
-  if (pathname.startsWith("/dashboard/deliveries")) return "Painel";
-  if (pathname.startsWith("/dashboard/notifications")) return "Painel";
-  if (pathname.startsWith("/dashboard/finance")) return "Financeiro";
-  if (pathname.startsWith("/dashboard/hr/collaborators")) return "Agentes";
-  if (pathname.startsWith("/dashboard/hr")) return "RH Operacional";
-  if (pathname.startsWith("/dashboard/catalog") || pathname.startsWith("/dashboard/suppliers") || pathname.startsWith("/dashboard/inventory") || pathname.startsWith("/dashboard/purchase-orders")) {
-    return "Suprimentos";
-  }
-  if (pathname.startsWith("/dashboard/clients") || pathname.startsWith("/dashboard/opportunities") || pathname.startsWith("/dashboard/commercial-inspections") || pathname.startsWith("/dashboard/proposals") || pathname.startsWith("/dashboard/contracts")) {
-    return "Comercial";
-  }
-  if (pathname.startsWith("/dashboard/orders") || pathname.startsWith("/dashboard/operation") || pathname.startsWith("/dashboard/dispatch") || pathname.startsWith("/dashboard/technicians") || pathname.startsWith("/dashboard/monitoring") || pathname.startsWith("/dashboard/sites") || pathname.startsWith("/dashboard/equipments")) {
-    return "Operação";
-  }
-  if (pathname.startsWith("/dashboard/control") || pathname.startsWith("/dashboard/management") || pathname.startsWith("/dashboard/company-settings") || pathname.startsWith("/dashboard/profile") || pathname.startsWith("/dashboard/automation") || pathname.startsWith("/dashboard/reports")) {
-    return "Gestão";
-  }
-  return "Painel";
+  if (pathname.startsWith("/dashboard/profile")) return "Minha conta";
+  if (
+    pathname.startsWith("/dashboard/management") ||
+    pathname.startsWith("/dashboard/control")
+  )
+    return "Administração";
+  return navigationContext(pathname)?.section.title || "Meu espa\u00e7o";
 }
 
 function getQuickAction(pathname: string, roleCode: string) {
@@ -113,56 +305,67 @@ function getQuickAction(pathname: string, roleCode: string) {
   if (pathname === "/dashboard") {
     return null;
   }
-  if (pathname.startsWith("/dashboard/proposals")) {
-    return { href: "/dashboard/proposals/new", label: "Nova proposta" };
-  }
-  if (pathname.startsWith("/dashboard/clients")) {
-    return { href: "/dashboard/clients/new", label: "Novo cliente" };
-  }
-  if (pathname.startsWith("/dashboard/contracts")) {
-    return { href: "/dashboard/contracts/new", label: "Novo contrato" };
-  }
+  if (pathname.startsWith("/dashboard/proposals")) return null;
+  if (pathname.startsWith("/dashboard/clients")) return null;
+  if (pathname.startsWith("/dashboard/contracts")) return null;
   if (pathname.startsWith("/dashboard/billing")) {
-    return { href: "/dashboard/finance/accounts-receivable", label: "Contas a receber" };
+    return {
+      href: "/dashboard/finance/accounts-receivable",
+      label: "Contas a receber",
+    };
   }
   if (pathname.startsWith("/dashboard/finance/accounts-receivable")) {
     return { href: "/dashboard/billing", label: "Ver faturamento" };
   }
   if (pathname.startsWith("/dashboard/finance/accounts-payable")) {
-    return { href: "/dashboard/finance/cash-flow", label: "Ver fluxo de caixa" };
+    return {
+      href: "/dashboard/finance/cash-flow",
+      label: "Ver fluxo de caixa",
+    };
   }
   if (pathname.startsWith("/dashboard/finance/cash-flow")) {
-    return { href: "/dashboard/finance/accounts-receivable", label: "Ver recebiveis" };
+    return {
+      href: "/dashboard/finance/accounts-receivable",
+      label: "Ver recebiveis",
+    };
   }
   if (pathname.startsWith("/dashboard/finance/bank-accounts")) {
-    return { href: "/dashboard/finance/cash-flow", label: "Ver fluxo de caixa" };
+    return {
+      href: "/dashboard/finance/cash-flow",
+      label: "Ver fluxo de caixa",
+    };
   }
   if (pathname.startsWith("/dashboard/finance/cost-centers")) {
-    return { href: "/dashboard/finance/cash-flow", label: "Ver fluxo de caixa" };
+    return {
+      href: "/dashboard/finance/cash-flow",
+      label: "Ver fluxo de caixa",
+    };
   }
-  if (pathname.startsWith("/dashboard/orders") || pathname.startsWith("/dashboard/dispatch") || pathname.startsWith("/dashboard/technicians")) {
+  if (
+    pathname.startsWith("/dashboard/orders") ||
+    pathname.startsWith("/dashboard/dispatch") ||
+    pathname.startsWith("/dashboard/technicians")
+  ) {
     return { href: "/dashboard/orders", label: "Agenda técnica" };
   }
   if (pathname.startsWith("/dashboard/monitoring")) {
     return { href: "/dashboard/dispatch", label: "Abrir despacho" };
   }
-  if (pathname.startsWith("/dashboard/suppliers")) {
-    return { href: "/dashboard/suppliers/new", label: "Novo fornecedor" };
-  }
-  if (pathname.startsWith("/dashboard/catalog")) {
-    return { href: "/dashboard/catalog/new", label: "Novo item" };
-  }
+  if (pathname.startsWith("/dashboard/suppliers")) return null;
+  if (pathname.startsWith("/dashboard/catalog")) return null;
   if (pathname.startsWith("/dashboard/developer/history")) {
     return { href: "/dashboard/developer/data", label: "Tabelas" };
   }
   if (pathname.startsWith("/dashboard/developer")) {
-    return { href: "/dashboard/developer/history", label: "Historico" };
+    return { href: "/dashboard/developer/history", label: "Histórico" };
   }
   return null;
 }
 
 export default function TopBar({
   appearanceTheme,
+  colorMode,
+  onChangeColorMode,
   onChangeAppearanceTheme,
 }: TopBarProps) {
   const pathname = usePathname();
@@ -170,11 +373,8 @@ export default function TopBar({
   const [userName, setUserName] = useState("Usuário");
   const [userRole, setUserRole] = useState("Operador");
   const [userRoleCode, setUserRoleCode] = useState("NORMAL");
-  const [notificationSummary, setNotificationSummary] = useState({
-    total: 0,
-    actionRequired: 0,
-    highPriority: 0,
-  });
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
+  const [failedPhotoUrl, setFailedPhotoUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const token = getStoredAccessToken();
@@ -183,7 +383,11 @@ export default function TopBar({
       return;
     }
 
-    const payload = decodeJwtPayload<{ name?: string; email?: string; role?: string }>(token);
+    const payload = decodeJwtPayload<{
+      name?: string;
+      email?: string;
+      role?: string;
+    }>(token);
     if (!payload) {
       clearAuthSession();
       router.replace("/");
@@ -206,53 +410,71 @@ export default function TopBar({
 
   useEffect(() => {
     let active = true;
-
-    async function loadNotifications() {
+    let revision = 0;
+    function applyProfile(profile: CurrentProfile) {
+      if (!active) return;
+      setUserName(profile.name || "Usuário");
+      setProfilePhotoUrl(profile.profilePhotoUrl || null);
+      setFailedPhotoUrl(null);
+    }
+    async function loadProfile() {
+      const requestRevision = ++revision;
       try {
-        const payload = await fetchDashboardNotificationInbox(12);
-        if (!active) return;
-
-        setNotificationSummary({
-          total: payload.summary.total,
-          actionRequired: payload.summary.actionRequired,
-          highPriority: payload.summary.highPriority,
-        });
-      } catch (error: unknown) {
-        if ((error as { status?: number })?.status === 401) {
-          clearAuthSession();
-          router.replace("/");
-        }
+        const response = await apiFetch("/users/me", { cache: "no-store" });
+        if (!response.ok) return;
+        const profile = (await response.json()) as CurrentProfile;
+        if (requestRevision === revision) applyProfile(profile);
+      } catch {
+        /* Keep the last saved profile during a temporary connection failure. */
       }
     }
-
-    const handleRefresh = () => {
-      if (document.visibilityState === "visible") {
-        void loadNotifications();
-      }
+    const onUpdated = (event: Event) => {
+      revision += 1;
+      applyProfile((event as CustomEvent<CurrentProfile>).detail);
     };
-
-    void loadNotifications();
-    const intervalId = window.setInterval(() => {
-      void loadNotifications();
-    }, 60_000);
-
-    window.addEventListener("focus", handleRefresh);
-    document.addEventListener("visibilitychange", handleRefresh);
-
+    const onFocus = () => {
+      if (document.visibilityState === "visible") void loadProfile();
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === PROFILE_REVISION_KEY) void loadProfile();
+    };
+    void loadProfile();
+    window.addEventListener(PROFILE_UPDATED_EVENT, onUpdated);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("storage", onStorage);
     return () => {
       active = false;
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", handleRefresh);
-      document.removeEventListener("visibilitychange", handleRefresh);
+      window.removeEventListener(PROFILE_UPDATED_EVENT, onUpdated);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("storage", onStorage);
     };
-  }, [router]);
+  }, []);
 
   const heading = useMemo(() => {
     const matched = Object.keys(PAGE_TITLES)
       .sort((a, b) => b.length - a.length)
       .find((key) => pathname.startsWith(key));
 
-    return matched ? PAGE_TITLES[matched] : PAGE_TITLES["/dashboard"];
+    const context = navigationContext(pathname);
+    const explicit =
+      matched && matched !== "/dashboard" ? PAGE_TITLES[matched] : undefined;
+    const navigationIsMoreSpecific =
+      context &&
+      (!matched || (context.item.href?.length || 0) > matched.length);
+    if (navigationIsMoreSpecific)
+      return {
+        title: context.item.label,
+        subtitle: context.section.description || "",
+      };
+    return (
+      explicit ||
+      (context
+        ? {
+            title: context.item.label,
+            subtitle: context.section.description || "",
+          }
+        : PAGE_TITLES["/dashboard"])
+    );
   }, [pathname]);
 
   const routeFamily = useMemo(() => getRouteFamily(pathname), [pathname]);
@@ -261,7 +483,6 @@ export default function TopBar({
     [pathname, userRoleCode],
   );
   const showBackButton = pathname !== "/dashboard";
-  const isNotificationsPage = pathname.startsWith("/dashboard/notifications");
   const todayLabel = useMemo(
     () =>
       new Intl.DateTimeFormat("pt-BR", {
@@ -284,7 +505,7 @@ export default function TopBar({
 
   return (
     <header className="dashboard-topbar sticky top-0 z-20 border-b border-white/70 bg-white/80 shadow-[0_14px_28px_-24px_rgba(15,31,50,0.28)] backdrop-blur-xl">
-      <div className="dashboard-container flex items-center justify-between gap-3 px-4 py-2.5 md:px-6">
+      <div className="dashboard-container flex h-full min-w-0 items-center justify-between gap-3 px-4 md:px-6">
         <div className="flex min-w-0 items-center gap-3">
           {showBackButton ? (
             <button
@@ -297,18 +518,19 @@ export default function TopBar({
               <span aria-hidden="true">&larr;</span>
             </button>
           ) : null}
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="dashboard-topbar-chip inline-flex rounded-full border border-slate-200 bg-slate-100/90 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-100">
-                {routeFamily}
-              </span>
-            </div>
-            <h2 className="mt-1.5 truncate text-base font-bold leading-tight text-white md:text-lg">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="hidden shrink-0 text-xs font-semibold text-slate-300 lg:block">
+              {routeFamily}
+            </span>
+            <span aria-hidden="true" className="hidden text-slate-500 lg:block">
+              /
+            </span>
+            <h2
+              className="truncate text-sm font-semibold text-white"
+              title={heading.subtitle}
+            >
               {heading.title}
             </h2>
-            <p className="hidden max-w-2xl truncate text-xs text-slate-200/85 md:block">
-              {heading.subtitle}
-            </p>
           </div>
         </div>
 
@@ -321,40 +543,11 @@ export default function TopBar({
           </div>
 
           <DashboardAppearanceControl
+            colorMode={colorMode}
+            onChangeMode={onChangeColorMode}
             themeId={appearanceTheme}
             onChange={onChangeAppearanceTheme}
           />
-
-          <Link
-            href="/dashboard/notifications"
-            className={`dashboard-topbar-chip hidden items-center gap-2 rounded-xl border px-3 py-1.5 shadow-sm transition hover:border-white/20 lg:inline-flex ${
-              isNotificationsPage ? "dashboard-accent-surface" : ""
-            }`}
-          >
-            <div className="text-left">
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-200/70">
-                Alertas
-              </p>
-              <p className="text-xs font-semibold text-white">
-                {notificationSummary.highPriority > 0
-                  ? "Prioridade alta"
-                  : notificationSummary.actionRequired > 0
-                    ? "Requer ação"
-                    : "Tudo em dia"}
-              </p>
-            </div>
-            <span
-              className={`inline-flex min-w-7 items-center justify-center rounded-full px-2 py-0.5 text-xs font-bold ${
-                isNotificationsPage
-                  ? "bg-white/18 text-white"
-                  : notificationSummary.highPriority > 0
-                    ? "bg-rose-500/20 text-rose-100"
-                    : "bg-white/10 text-white"
-              }`}
-            >
-              {notificationSummary.actionRequired}
-            </span>
-          </Link>
 
           {quickAction ? (
             <Link
@@ -365,17 +558,35 @@ export default function TopBar({
             </Link>
           ) : null}
 
-          <div className="dashboard-topbar-profile flex items-center gap-2 rounded-xl border border-slate-200 bg-white/88 px-2 py-1.5 shadow-sm">
+          <NotificationCenter />
+
+          <Link
+            href="/dashboard/profile"
+            aria-label="Abrir meu perfil"
+            className="dashboard-topbar-profile flex items-center gap-2 rounded-xl border border-slate-200 bg-white/88 px-2 py-1.5 shadow-sm"
+          >
             <div className="hidden max-w-32 text-right xl:block">
-              <p className="truncate text-xs font-bold text-white">{userName}</p>
+              <p className="truncate text-xs font-bold text-white">
+                {userName}
+              </p>
               <p className="truncate text-[10px] uppercase tracking-[0.14em] text-slate-200/75">
                 {userRole}
               </p>
             </div>
-            <div className="dashboard-topbar-avatar flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-sm font-bold text-white">
-              {initials}
+            <div className="dashboard-topbar-avatar flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-950 text-sm font-bold text-white">
+              {profilePhotoUrl && failedPhotoUrl !== profilePhotoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={profilePhotoUrl}
+                  alt="Foto do meu perfil"
+                  className="h-full w-full object-cover"
+                  onError={() => setFailedPhotoUrl(profilePhotoUrl)}
+                />
+              ) : (
+                initials
+              )}
             </div>
-          </div>
+          </Link>
         </div>
       </div>
     </header>

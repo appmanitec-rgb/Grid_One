@@ -1,13 +1,20 @@
 "use client";
+import { InterfaceIcon } from "@/app/dashboard/components/InterfaceIcon";
+
+import { SelectField } from "@/app/dashboard/components/SelectField";
+import {
+  MetricCard as SummaryMetric,
+  PageHeader,
+} from "../components/DashboardPageKit";
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
-import { apiFetch, readApiErrorMessage } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { commercialLabel } from "@/lib/commercial-labels";
 import { getAccessFromToken } from "@/lib/access";
-import ListPagination, {
-  useListPagination,
-} from "../components/ListPagination";
+import ListPagination from "../components/ListPagination";
+import { usePagedList } from "../components/usePagedList";
+import QuickRecordEditor from "../components/QuickRecordEditor";
 
 type EquipmentListItem = {
   id: string;
@@ -33,10 +40,18 @@ type EquipmentListItem = {
   }>;
   contractSchedules?: Array<{
     scheduledDate?: string | null;
-    contract?: { id: string; code?: string | null; status?: string | null } | null;
+    contract?: {
+      id: string;
+      code?: string | null;
+      status?: string | null;
+    } | null;
   }>;
   contractLinks?: Array<{
-    contract?: { id: string; code?: string | null; status?: string | null } | null;
+    contract?: {
+      id: string;
+      code?: string | null;
+      status?: string | null;
+    } | null;
   }>;
   serviceTickets?: Array<{
     id: string;
@@ -59,9 +74,6 @@ const CRITICALITY_STYLES: Record<string, string> = {
 };
 
 export default function EquipmentsPage() {
-  const [equipments, setEquipments] = useState<EquipmentListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [contractFilter, setContractFilter] = useState("ALL");
@@ -69,74 +81,36 @@ export default function EquipmentsPage() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [ticketFilter, setTicketFilter] = useState("ALL");
   const [access, setAccess] = useState(() => getAccessFromToken());
+  const [selectedEquipmentId, setSelectedEquipmentId] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     setAccess(getAccessFromToken());
-    void loadEquipments();
   }, []);
 
-  async function loadEquipments() {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await apiFetch("/generators", { cache: "no-store" });
-      if (!res.ok) {
-        throw new Error(
-          await readApiErrorMessage(res, "Nao foi possivel carregar equipamentos."),
-        );
-      }
-      setEquipments((await res.json()) as EquipmentListItem[]);
-    } catch (loadError: unknown) {
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Erro ao carregar equipamentos.",
-      );
-      setEquipments([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const filtered = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    return equipments.filter((item) => {
-      const contract = getPrimaryContract(item);
-      const hasContract = Boolean(contract);
-      const hasActiveContract =
-        contract?.status === "ACTIVE" || contract?.status === "RENEWAL";
-      const hasTickets = hasOpenTickets(item);
-
-      if (contractFilter === "CONTRACTED" && !hasContract) return false;
-      if (contractFilter === "NO_CONTRACT" && hasContract) return false;
-      if (contractFilter === "ACTIVE_CONTRACT" && !hasActiveContract) return false;
-      if (criticalityFilter !== "ALL" && item.criticality !== criticalityFilter) {
-        return false;
-      }
-      if (statusFilter !== "ALL" && item.operationalStatus !== statusFilter) {
-        return false;
-      }
-      if (ticketFilter === "OPEN" && !hasTickets) return false;
-      if (ticketFilter === "NONE" && hasTickets) return false;
-      if (!term) return true;
-
-      return [
-        item.code,
-        item.name,
-        item.assetTag,
-        item.serialNumber,
-        item.client?.companyName,
-        item.currentSite?.name,
-        item.model?.name,
-        item.brand,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(term);
-    });
-  }, [contractFilter, criticalityFilter, equipments, query, statusFilter, ticketFilter]);
-
+  const {
+    items: paginatedItems,
+    total,
+    summary: totals,
+    loading,
+    error,
+    refresh: loadEquipments,
+    paginationProps,
+  } = usePagedList<
+    EquipmentListItem,
+    { total: number; critical: number; contracted: number; openTickets: number }
+  >({
+    endpoint: "/generators/page",
+    search: query,
+    filters: {
+      contract: contractFilter,
+      criticality: criticalityFilter,
+      status: statusFilter,
+      tickets: ticketFilter,
+    },
+    initialSummary: { total: 0, critical: 0, contracted: 0, openTickets: 0 },
+  });
   const activeFilterCount = [
     contractFilter !== "ALL",
     criticalityFilter !== "ALL",
@@ -144,57 +118,61 @@ export default function EquipmentsPage() {
     ticketFilter !== "ALL",
     Boolean(query.trim()),
   ].filter(Boolean).length;
-  const { paginatedItems, paginationProps } = useListPagination(
-    filtered,
-    [query, contractFilter, criticalityFilter, statusFilter, ticketFilter].join("|"),
-  );
-
-  const totals = useMemo(
-    () => ({
-      total: equipments.length,
-      critical: equipments.filter((item) => item.criticality === "A").length,
-      openTickets: equipments.reduce(
-        (sum, item) => sum + countOpenTickets(item),
-        0,
-      ),
-      contracted: equipments.filter((item) => getPrimaryContract(item)).length,
-    }),
-    [equipments],
-  );
-
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold text-zinc-800">Equipamentos</h1>
-          <p className="mt-1 text-zinc-500">
-            Geradores por cliente, contrato, manutencao, chamados e prontuario tecnico.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {access.equipments.manageModels ? (
-            <Link href="/dashboard/equipments/models" className={SECONDARY_BUTTON}>
-              Modelos
-            </Link>
-          ) : null}
-          {access.equipments.create ? (
-            <Link href="/dashboard/equipments/new" className={PRIMARY_BUTTON}>
-              <span className="mr-2">+</span> Novo equipamento
-            </Link>
-          ) : null}
-        </div>
-      </div>
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Ativos"
+        title="Equipamentos"
+        description="Consulte geradores, contratos, manutenções e o histórico técnico."
+        actions={
+          <>
+            <div className="flex items-center gap-2">
+              {access.equipments.manageModels ? (
+                <Link
+                  href="/dashboard/equipments/models"
+                  className={SECONDARY_BUTTON}
+                >
+                  Modelos
+                </Link>
+              ) : null}
+              {access.equipments.create ? (
+                <Link
+                  href="/dashboard/equipments/new"
+                  className={PRIMARY_BUTTON}
+                >
+                  <InterfaceIcon name="plus" /> Novo equipamento
+                </Link>
+              ) : null}
+            </div>
+          </>
+        }
+      />
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Metric label="Equipamentos" value={String(totals.total)} />
-        <Metric label="Criticidade A" value={String(totals.critical)} tone="rose" />
-        <Metric label="Com contrato" value={String(totals.contracted)} tone="blue" />
-        <Metric label="Chamados abertos" value={String(totals.openTickets)} tone="amber" />
+        <Metric
+          label="Criticidade A"
+          value={String(totals.critical)}
+          tone="rose"
+        />
+        <Metric
+          label="Com contrato"
+          value={String(totals.contracted)}
+          tone="blue"
+        />
+        <Metric
+          label="Chamados abertos"
+          value={String(totals.openTickets)}
+          tone="amber"
+        />
       </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center gap-2">
-          <label className="block flex-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          <label
+            htmlFor="equipment-search"
+            className="block flex-1 text-xs font-semibold uppercase tracking-wide text-zinc-500"
+          >
             Buscar equipamento
           </label>
           <button
@@ -206,9 +184,10 @@ export default function EquipmentsPage() {
           </button>
         </div>
         <input
+          id="equipment-search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Nome, tag, serie, cliente, local ou modelo..."
+          placeholder="Nome, tag, série, cliente, local ou modelo..."
           className="w-full rounded-lg border border-zinc-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
         />
         {showFilters ? (
@@ -261,8 +240,10 @@ export default function EquipmentsPage() {
         ) : null}
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-zinc-500">
-            {filtered.length} resultado(s)
-            {activeFilterCount ? ` | ${activeFilterCount} filtro(s) ativo(s)` : ""}
+            {total} resultado(s)
+            {activeFilterCount
+              ? ` | ${activeFilterCount} filtro(s) ativo(s)`
+              : ""}
           </p>
           <div className="flex items-center gap-3">
             {activeFilterCount ? (
@@ -293,7 +274,7 @@ export default function EquipmentsPage() {
 
       {loading ? <State text="Carregando equipamentos..." /> : null}
       {error ? <State text={error} tone="error" /> : null}
-      {!loading && !error && filtered.length === 0 ? (
+      {!loading && !error && total === 0 ? (
         <State text="Nenhum equipamento encontrado para os filtros atuais." />
       ) : null}
 
@@ -318,21 +299,30 @@ export default function EquipmentsPage() {
                     className="break-words text-lg font-bold leading-snug text-slate-950"
                     title={displayTitle}
                   >
-                    <Link href={`/dashboard/equipments/${item.id}`} className="dashboard-record-link" title="Abrir ficha do equipamento">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedEquipmentId(item.id)}
+                      className="dashboard-record-link text-left"
+                      title="Abrir resumo do equipamento"
+                    >
                       {displayTitle}
-                    </Link>
+                    </button>
                   </h2>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <Badge className={CRITICALITY_STYLES[item.criticality || ""]}>
+                    <Badge
+                      className={CRITICALITY_STYLES[item.criticality || ""]}
+                    >
                       Criticidade {item.criticality || "-"}
                     </Badge>
-                    <Badge className={STATUS_STYLES[item.operationalStatus || ""]}>
+                    <Badge
+                      className={STATUS_STYLES[item.operationalStatus || ""]}
+                    >
                       {statusLabel(item.operationalStatus)}
                     </Badge>
                   </div>
                   <p className="mt-1 text-sm text-slate-500">
                     Código interno{" "}
-                    <span className="font-mono font-semibold text-slate-700">
+                    <span className="tabular-nums font-semibold text-slate-700">
                       {item.code}
                     </span>
                     {serialNumber ? <> | Série {serialNumber}</> : null}
@@ -364,7 +354,10 @@ export default function EquipmentsPage() {
                   label="Modelo"
                   value={item.model?.name || item.brand || "-"}
                 />
-                <Info label="Potencia" value={item.power ? `${item.power} kVA` : "-"} />
+                <Info
+                  label="Potencia"
+                  value={item.power ? `${item.power} kVA` : "-"}
+                />
                 <Info
                   label="Horimetro"
                   value={item.hourMeter != null ? `${item.hourMeter} h` : "-"}
@@ -383,10 +376,14 @@ export default function EquipmentsPage() {
                         )}`
                       : "Sem OS recente"
                   }
-                  href={lastOrder?.id ? `/dashboard/orders/${lastOrder.id}` : undefined}
+                  href={
+                    lastOrder?.id
+                      ? `/dashboard/orders/${lastOrder.id}`
+                      : undefined
+                  }
                 />
                 <TimelineItem
-                  label="Proxima preventiva"
+                  label="Próxima preventiva"
                   value={formatDate(nextPreventive?.scheduledDate)}
                   helper={
                     nextPreventive?.contract?.code
@@ -402,12 +399,20 @@ export default function EquipmentsPage() {
                 <TimelineItem
                   label="Contrato"
                   value={contract?.code || "-"}
-                  helper={contract ? statusLabel(contract.status) : "Nao vinculado"}
-                  href={contract?.id ? `/dashboard/contracts/${contract.id}` : undefined}
+                  helper={
+                    contract ? statusLabel(contract.status) : "Nao vinculado"
+                  }
+                  href={
+                    contract?.id
+                      ? `/dashboard/contracts/${contract.id}`
+                      : undefined
+                  }
                 />
                 <TimelineItem
                   label="Chamados"
-                  value={openTickets ? `${openTickets} aberto(s)` : "Sem chamados"}
+                  value={
+                    openTickets ? `${openTickets} aberto(s)` : "Sem chamados"
+                  }
                   helper={firstOpenTicket?.title || "Nenhuma pendencia aberta"}
                   href={
                     firstOpenTicket?.id
@@ -421,17 +426,24 @@ export default function EquipmentsPage() {
         })}
       </section>
 
-      {!loading && !error && filtered.length > 0 ? (
+      {!loading && !error && total > 0 ? (
         <ListPagination {...paginationProps} />
+      ) : null}
+      {selectedEquipmentId ? (
+        <QuickRecordEditor
+          kind="equipment"
+          id={selectedEquipmentId}
+          canEdit={access.equipments.update}
+          onClose={() => setSelectedEquipmentId(null)}
+          onSaved={loadEquipments}
+        />
       ) : null}
     </div>
   );
 }
 
-const PRIMARY_BUTTON =
-  "inline-flex min-h-10 items-center justify-center rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800";
-const SECONDARY_BUTTON =
-  "inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 
 function Metric({
   label,
@@ -442,26 +454,15 @@ function Metric({
   value: string;
   tone?: "slate" | "rose" | "blue" | "amber";
 }) {
-  const tones = {
-    slate: "border-slate-200 bg-white text-slate-950",
-    rose: "border-rose-200 bg-rose-50 text-rose-700",
-    blue: "border-blue-200 bg-blue-50 text-blue-700",
-    amber: "border-amber-200 bg-amber-50 text-amber-700",
-  };
-  return (
-    <div className={`rounded-2xl border p-4 shadow-sm ${tones[tone]}`}>
-      <p className="text-xs font-bold uppercase tracking-[0.16em] opacity-70">
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-black">{value}</p>
-    </div>
-  );
+  return <SummaryMetric label={label} value={String(value)} tone={tone} />;
 }
 
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-      <dt className="text-[11px] font-bold uppercase text-slate-400">{label}</dt>
+      <dt className="text-[11px] font-bold uppercase text-slate-400">
+        {label}
+      </dt>
       <dd className="mt-1 break-words text-sm font-semibold text-slate-800">
         {value}
       </dd>
@@ -483,7 +484,7 @@ function FilterSelect({
   return (
     <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
       {label}
-      <select
+      <SelectField
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-sm font-medium normal-case text-zinc-700"
@@ -493,7 +494,7 @@ function FilterSelect({
             {optionLabel}
           </option>
         ))}
-      </select>
+      </SelectField>
     </label>
   );
 }
@@ -512,7 +513,9 @@ function TimelineItem({
   const content = (
     <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 transition hover:border-sky-200 hover:bg-sky-50">
       <p className="text-[11px] font-bold uppercase text-slate-400">{label}</p>
-      <p className="mt-1 break-words text-sm font-bold text-slate-900">{value}</p>
+      <p className="mt-1 break-words text-sm font-bold text-slate-900">
+        {value}
+      </p>
       <p className="mt-1 line-clamp-2 text-xs text-slate-500">{helper}</p>
     </div>
   );
@@ -534,14 +537,16 @@ function equipmentTitle(item: EquipmentListItem) {
         }).format(item.power)} kVA`
       : null;
 
-  return [
-    power,
-    equipmentTitlePart(item.brand),
-    equipmentTitlePart(item.assetTag),
-    equipmentTitlePart(item.name),
-  ]
-    .filter((part): part is string => Boolean(part))
-    .join(" - ") || "Equipamento";
+  return (
+    [
+      power,
+      equipmentTitlePart(item.brand),
+      equipmentTitlePart(item.assetTag),
+      equipmentTitlePart(item.name),
+    ]
+      .filter((part): part is string => Boolean(part))
+      .join(" - ") || "Equipamento"
+  );
 }
 
 function equipmentTitlePart(value: string | null | undefined) {
@@ -564,10 +569,6 @@ function countOpenTickets(item: EquipmentListItem) {
   return (item.serviceTickets || []).filter((ticket) =>
     isOpenTicketStatus(ticket.status),
   ).length;
-}
-
-function hasOpenTickets(item: EquipmentListItem) {
-  return countOpenTickets(item) > 0;
 }
 
 function getFirstOpenTicket(item: EquipmentListItem) {
@@ -638,7 +639,7 @@ function statusLabel(status?: string | null) {
     PREVENTIVE: "Preventiva",
     CORRECTIVE: "Corretiva",
   };
-  return status ? labels[status] || status.replace(/_/g, " ") : "-";
+  return status ? labels[status] || commercialLabel(status) : "-";
 }
 
 function formatDate(value?: string | null) {

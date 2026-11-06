@@ -1,8 +1,17 @@
 ﻿"use client";
+import { formatDocument } from "@/lib/formatters";
+import { InterfaceIcon } from "@/app/dashboard/components/InterfaceIcon";
+
+import { SelectField } from "@/app/dashboard/components/SelectField";
+import { PageHeader } from "../components/DashboardPageKit";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { getAccessFromToken } from "@/lib/access";
+import QuickRecordEditor from "../components/QuickRecordEditor";
+import ListPagination from "../components/ListPagination";
+import { usePagedList } from "../components/usePagedList";
+import { ListSortHeader } from "../components/ListSortHeader";
 
 type ClientListItem = {
   id: string;
@@ -45,11 +54,10 @@ type FilterOption = "ALL" | "YES" | "NO";
 type ContractFilter = "ALL" | "CONTRACT" | "NO_CONTRACT";
 
 export default function ClientsPage() {
-  const [clients, setClients] = useState<ClientListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [canEditClients, setCanEditClients] = useState(false);
   const [inssFilter, setInssFilter] = useState<FilterOption>("ALL");
   const [retentionFilter, setRetentionFilter] = useState<FilterOption>("ALL");
   const [delinquentFilter, setDelinquentFilter] = useState<FilterOption>("ALL");
@@ -58,141 +66,50 @@ export default function ClientsPage() {
   const [contractFilter, setContractFilter] = useState<ContractFilter>("ALL");
 
   useEffect(() => {
-    void loadClients();
+    setCanEditClients(getAccessFromToken().clients.update);
   }, []);
 
-  async function loadClients() {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await apiFetch(apiUrl("/clients"), { cache: "no-store" });
-      if (!res.ok) {
-        throw new Error(
-          await readApiErrorMessage(
-            res,
-            "Nao foi possivel carregar os clientes.",
-          ),
-        );
-      }
-      setClients((await res.json()) as ClientListItem[]);
-    } catch (loadError: unknown) {
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Nao foi possivel carregar os clientes.",
-      );
-      setClients([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const filteredClients = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    return clients.filter((client) => {
-      const matchesInss =
-        inssFilter === "ALL" ||
-        (inssFilter === "YES"
-          ? Boolean(client.withholdsInss)
-          : !client.withholdsInss);
-      const matchesRetention =
-        retentionFilter === "ALL" ||
-        (retentionFilter === "YES"
-          ? Boolean(client.withholdsIss)
-          : !client.withholdsIss);
-      const matchesDelinquent =
-        delinquentFilter === "ALL" ||
-        (delinquentFilter === "YES"
-          ? Boolean(client.isDelinquent)
-          : !client.isDelinquent);
-      const matchesContract =
-        contractFilter === "ALL" || client.clientType === contractFilter;
-      const matchesProposalBlock =
-        proposalBlockFilter === "ALL" ||
-        (proposalBlockFilter === "YES"
-          ? Boolean(client.proposalCreationBlocked)
-          : !client.proposalCreationBlocked);
-
-      if (
-        !matchesInss ||
-        !matchesRetention ||
-        !matchesDelinquent ||
-        !matchesContract ||
-        !matchesProposalBlock
-      ) {
-        return false;
-      }
-      if (!term) return true;
-
-      const topLevel = [
-        client.code,
-        client.companyName,
-        client.tradeName,
-        client.cnpj,
-        client.email,
-        client.phone,
-        client.address,
-        client.city,
-        client.state,
-        client.preferences,
-      ];
-
-      const contactFields =
-        client.contacts?.flatMap((contact) => [
-          contact.name,
-          contact.role,
-          contact.phone,
-          contact.mobile,
-          contact.email,
-        ]) ?? [];
-
-      const addressFields =
-        client.addresses?.flatMap((address) => [
-          address.street,
-          address.number,
-          address.complement,
-          address.district,
-          address.city,
-          address.state,
-          address.zipCode,
-        ]) ?? [];
-
-      return [...topLevel, ...contactFields, ...addressFields].some((value) =>
-        String(value ?? "")
-          .toLowerCase()
-          .includes(term),
-      );
-    });
-  }, [
-    clients,
-    query,
-    inssFilter,
-    retentionFilter,
-    delinquentFilter,
-    contractFilter,
-    proposalBlockFilter,
-  ]);
+  const {
+    items: filteredClients,
+    total,
+    loading,
+    error,
+    refresh: loadClients,
+    paginationProps,
+    sort,
+    direction,
+    onSort,
+  } = usePagedList<ClientListItem>({
+    endpoint: "/clients/page",
+    search: query,
+    filters: {
+      inss: inssFilter,
+      iss: retentionFilter,
+      delinquent: delinquentFilter,
+      blocked: proposalBlockFilter,
+      contract: contractFilter,
+    },
+  });
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold text-zinc-800">
-            Carteira de Clientes
-          </h1>
-          <p className="mt-1 text-zinc-500">
-            Faca a gestao das empresas, contatos e equipamentos associados.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/dashboard/clients/new"
-            className="ml-2 flex items-center rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white shadow-sm transition-colors hover:bg-blue-500"
-          >
-            <span className="mr-2">+</span> Novo Cliente
-          </Link>
-        </div>
-      </div>
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Comercial"
+        title="Clientes"
+        description="Gerencie empresas, contatos e equipamentos associados."
+        actions={
+          <>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/dashboard/clients/new"
+                className="app-button app-button-primary"
+              >
+                <InterfaceIcon name="plus" /> Novo cliente
+              </Link>
+            </div>
+          </>
+        }
+      />
 
       {error ? (
         <div
@@ -230,7 +147,7 @@ export default function ClientsPage() {
           id="client-search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="CNPJ, nome, razao social, endereco, contato, e-mail, telefone..."
+          placeholder="CNPJ, nome, razão social, endereço, contato, e-mail, telefone..."
           className="w-full rounded-lg border border-zinc-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
         />
         {showFilters ? (
@@ -242,7 +159,7 @@ export default function ClientsPage() {
               options={[
                 { value: "ALL", label: "Todos" },
                 { value: "YES", label: "Sim" },
-                { value: "NO", label: "Nao" },
+                { value: "NO", label: "Não" },
               ]}
             />
             <SelectFilter
@@ -252,7 +169,7 @@ export default function ClientsPage() {
               options={[
                 { value: "ALL", label: "Todos" },
                 { value: "YES", label: "Sim" },
-                { value: "NO", label: "Nao" },
+                { value: "NO", label: "Não" },
               ]}
             />
             <SelectFilter
@@ -262,7 +179,7 @@ export default function ClientsPage() {
               options={[
                 { value: "ALL", label: "Todos" },
                 { value: "YES", label: "Sim" },
-                { value: "NO", label: "Nao" },
+                { value: "NO", label: "Não" },
               ]}
             />
             <SelectFilter
@@ -289,21 +206,102 @@ export default function ClientsPage() {
             />
           </div>
         ) : null}
-        <p className="mt-2 text-xs text-zinc-500">
-          {filteredClients.length} resultado(s)
-        </p>
+        <p className="mt-2 text-xs text-zinc-500">{total} resultado(s)</p>
       </div>
 
+      <div
+        className="flex flex-wrap items-center gap-2 md:hidden"
+        aria-label="Ordenação de clientes"
+      >
+        <span className="text-sm text-[var(--text-muted)]">Ordenar por</span>
+        <button
+          type="button"
+          className="app-button app-button-secondary"
+          onClick={() => onSort("name")}
+        >
+          Nome
+          {sort === "name" ? (direction === "asc" ? " · A–Z" : " · Z–A") : ""}
+        </button>
+        <button
+          type="button"
+          className="app-button app-button-secondary"
+          onClick={() => onSort("code")}
+        >
+          Código
+          {sort === "code"
+            ? direction === "asc"
+              ? " · crescente"
+              : " · decrescente"
+            : ""}
+        </button>
+        <button
+          type="button"
+          className="app-button app-button-secondary"
+          onClick={() => onSort("document")}
+        >
+          CPF/CNPJ
+          {sort === "document"
+            ? direction === "asc"
+              ? " · crescente"
+              : " · decrescente"
+            : ""}
+        </button>
+      </div>
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left">
+        <div
+          className="overflow-x-auto"
+          tabIndex={0}
+          role="region"
+          aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas."
+        >
+          <table
+            data-pagination-skip="true"
+            data-sort-skip="true"
+            aria-busy={loading}
+            className="dashboard-responsive-table w-full border-collapse text-left"
+          >
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 text-sm text-zinc-500">
-                <th className="p-4 font-medium">Codigo</th>
-                <th className="p-4 font-medium">Empresa / Nome</th>
-                <th className="p-4 font-medium">CNPJ/CPF</th>
-                <th className="p-4 font-medium">Contatos</th>
-                <th className="p-4 font-medium">Endereco</th>
+                <ListSortHeader
+                  column="code"
+                  sort={sort}
+                  direction={direction}
+                  onSort={onSort}
+                >
+                  Código
+                </ListSortHeader>
+                <ListSortHeader
+                  column="name"
+                  sort={sort}
+                  direction={direction}
+                  onSort={onSort}
+                >
+                  Empresa / Nome
+                </ListSortHeader>
+                <ListSortHeader
+                  column="document"
+                  sort={sort}
+                  direction={direction}
+                  onSort={onSort}
+                >
+                  CNPJ/CPF
+                </ListSortHeader>
+                <ListSortHeader
+                  column="contact"
+                  sort={sort}
+                  direction={direction}
+                  onSort={onSort}
+                >
+                  Contatos
+                </ListSortHeader>
+                <ListSortHeader
+                  column="address"
+                  sort={sort}
+                  direction={direction}
+                  onSort={onSort}
+                >
+                  Endereço
+                </ListSortHeader>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200">
@@ -313,13 +311,21 @@ export default function ClientsPage() {
                     key={client.id}
                     className="transition-colors hover:bg-zinc-50"
                   >
-                    <td className="p-4 font-mono text-sm font-bold text-zinc-700">
+                    <td
+                      data-label="Código"
+                      className="p-4 tabular-nums text-sm font-bold text-zinc-700"
+                    >
                       {client.code}
                     </td>
-                    <td className="p-4">
-                      <Link href={`/dashboard/clients/${client.id}`} className="dashboard-record-link font-bold" title="Abrir cadastro do cliente">
+                    <td className="record-identity p-4">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedClientId(client.id)}
+                        className="dashboard-record-link text-left font-bold"
+                        title="Abrir resumo do cliente"
+                      >
                         {client.companyName}
-                      </Link>
+                      </button>
                       <p className="text-xs text-zinc-500">
                         {client.tradeName || "---"}
                       </p>
@@ -335,18 +341,27 @@ export default function ClientsPage() {
                       ) : null}
                       {client.isProvisional ? (
                         <span className="mt-2 inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800">
-                          Vinculo de maquina pendente
+                          Vínculo de máquina pendente
                         </span>
                       ) : null}
                     </td>
-                    <td className="p-4 font-medium text-zinc-600">
-                      {client.cnpj || "Nao informado"}
+                    <td
+                      data-label="CPF/CNPJ"
+                      className="p-4 font-medium text-zinc-600"
+                    >
+                      {formatDocument(client.cnpj)}
                     </td>
-                    <td className="p-4 text-sm text-zinc-600">
+                    <td
+                      data-label="Contato"
+                      className="p-4 text-sm text-zinc-600"
+                    >
                       <p>{client.email || "Sem e-mail"}</p>
                       <p>{client.phone || "Sem telefone"}</p>
                     </td>
-                    <td className="max-w-xs truncate p-4 text-sm text-zinc-600">
+                    <td
+                      data-label="Endereço"
+                      className="max-w-xs p-4 text-sm text-zinc-600"
+                    >
                       {client.address
                         ? `${client.address} - ${client.city || ""}/${client.state || ""}`
                         : `${client.city || ""}/${client.state || ""}`}
@@ -371,6 +386,16 @@ export default function ClientsPage() {
           </table>
         </div>
       </div>
+      <ListPagination {...paginationProps} />
+      {selectedClientId ? (
+        <QuickRecordEditor
+          kind="client"
+          id={selectedClientId}
+          canEdit={canEditClients}
+          onClose={() => setSelectedClientId(null)}
+          onSaved={loadClients}
+        />
+      ) : null}
     </div>
   );
 }
@@ -389,7 +414,7 @@ function SelectFilter({
   return (
     <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
       {label}
-      <select
+      <SelectField
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-sm font-medium normal-case text-zinc-700"
@@ -399,7 +424,7 @@ function SelectFilter({
             {option.label}
           </option>
         ))}
-      </select>
+      </SelectField>
     </label>
   );
 }

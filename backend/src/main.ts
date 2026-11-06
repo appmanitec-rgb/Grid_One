@@ -1,5 +1,6 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import compression from 'compression';
 import { json, urlencoded } from 'express';
 import helmet from 'helmet';
@@ -19,8 +20,17 @@ function parseCorsOrigins() {
 async function bootstrap() {
   await runDatabaseSafetyChecks();
 
-  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bodyParser: false,
+  });
   const allowedOrigins = parseCorsOrigins();
+  if (process.env.API_TRUST_PROXY) {
+    app.set(
+      'trust proxy',
+      process.env.API_TRUST_PROXY.split(',').map((value) => value.trim()),
+    );
+  }
+  app.enableShutdownHooks();
 
   app.use(
     json({ limit: process.env.JSON_BODY_LIMIT || '15mb' }),
@@ -53,7 +63,7 @@ async function bootstrap() {
   );
   app.useGlobalInterceptors(new RequestLoggingInterceptor());
 
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 3000, process.env.API_HOST || '0.0.0.0');
 }
 
 void bootstrap();

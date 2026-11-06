@@ -1,28 +1,59 @@
 "use client";
 
+import {
+  MetricCard as SummaryMetric,
+  PageHeader,
+} from "../../components/DashboardPageKit";
+
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { getAccessFromToken } from "@/lib/access";
 import { STUDIO_RESOURCES } from "./resources";
 
 type ResourceCount = Record<string, number>;
 
-const categoryOrder = ["Comercial", "Operacao", "Ativos", "Suprimentos", "Financeiro", "RH"];
+const categoryOrder = [
+  "Comercial",
+  "Operacao",
+  "Ativos",
+  "Suprimentos",
+  "Financeiro",
+  "RH",
+];
 
 export default function StudioDataPage() {
+  const [access, setAccess] = useState(() => getAccessFromToken());
+  const visibleResources = useMemo(
+    () =>
+      STUDIO_RESOURCES.filter(
+        (resource) =>
+          resource.key !== "proposalPaymentProfiles" ||
+          access.finance.view ||
+          access.finance.update,
+      ),
+    [access.finance.view, access.finance.update],
+  );
   const [query, setQuery] = useState("");
   const [counts, setCounts] = useState<ResourceCount>({});
+
+  useEffect(() => setAccess(getAccessFromToken()), []);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadCounts() {
       const entries = await Promise.allSettled(
-        STUDIO_RESOURCES.map(async (resource) => {
-          const response = await apiFetch(resource.endpoint, { cache: "no-store" });
+        visibleResources.map(async (resource) => {
+          const response = await apiFetch(resource.endpoint, {
+            cache: "no-store",
+          });
           if (!response.ok) return [resource.key, 0] as const;
           const payload = await response.json();
-          return [resource.key, Array.isArray(payload) ? payload.length : 0] as const;
+          return [
+            resource.key,
+            Array.isArray(payload) ? payload.length : 0,
+          ] as const;
         }),
       );
 
@@ -41,54 +72,49 @@ export default function StudioDataPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [visibleResources]);
 
   const filteredResources = useMemo(() => {
     const term = query.trim().toLowerCase();
-    return STUDIO_RESOURCES.filter((resource) => {
+    return visibleResources.filter((resource) => {
       if (!term) return true;
       return `${resource.pluralLabel} ${resource.category} ${resource.description}`
         .toLowerCase()
         .includes(term);
     });
-  }, [query]);
+  }, [query, visibleResources]);
 
   const groupedResources = categoryOrder
     .map((category) => ({
       category,
-      resources: filteredResources.filter((resource) => resource.category === category),
+      resources: filteredResources.filter(
+        (resource) => resource.category === category,
+      ),
     }))
     .filter((group) => group.resources.length > 0);
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <section className="rounded-[28px] border border-slate-200 bg-white/95 p-5 shadow-[0_24px_54px_-42px_rgba(15,23,42,0.28)]">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
-              Manitec Studio
-            </p>
-            <h1 className="mt-2 text-3xl font-bold text-slate-950">
-              Dados / Tabelas
-            </h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              Gerencie registros operacionais sem expor tabelas fisicas do banco. A edicao segue regras do ERP, com recursos de menor risco liberados primeiro.
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-3 md:grid-cols-3">
-          <Metric label="Recursos" value={String(STUDIO_RESOURCES.length)} />
-          <Metric
-            label="Editaveis"
-            value={String(STUDIO_RESOURCES.filter((resource) => resource.editable).length)}
-          />
-          <Metric
-            label="Protegidos"
-            value={String(STUDIO_RESOURCES.filter((resource) => !resource.editable).length)}
-          />
-        </div>
-      </section>
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Manitec Studio"
+        title="Dados / Tabelas"
+        description="Gerencie registros operacionais sem expor tabelas fisicas do banco. A edição segue regras do ERP, com recursos de menor risco liberados primeiro."
+      />
+      <div className="dashboard-metrics-grid">
+        <Metric label="Recursos" value={String(visibleResources.length)} />
+        <Metric
+          label="Editaveis"
+          value={String(
+            visibleResources.filter((resource) => resource.editable).length,
+          )}
+        />
+        <Metric
+          label="Protegidos"
+          value={String(
+            visibleResources.filter((resource) => !resource.editable).length,
+          )}
+        />
+      </div>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <label className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
@@ -102,6 +128,26 @@ export default function StudioDataPage() {
         </label>
       </section>
 
+      <details className="dashboard-create-panel">
+        <summary>Editor de documentos</summary>
+        <Link
+          href="/dashboard/developer/document-editor"
+          className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4 transition hover:border-blue-400 hover:bg-blue-100"
+        >
+          <span>
+            <span className="block text-base font-bold text-blue-950">
+              Editor Inteligente de Documentos
+            </span>
+            <span className="mt-1 block text-sm text-blue-800">
+              Monte propostas, contratos e relatórios com texto e campos
+              visuais.
+            </span>
+          </span>
+          <span className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-bold text-white">
+            Abrir editor
+          </span>
+        </Link>
+      </details>
       {groupedResources.map((group) => (
         <section key={group.category} className="space-y-3">
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
@@ -128,7 +174,11 @@ export default function StudioDataPage() {
                   </span>
                 </div>
                 <div className="mt-4 flex items-center justify-between text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                  <span>{resource.editable ? "Edicao controlada" : "Somente leitura"}</span>
+                  <span>
+                    {resource.editable
+                      ? "Edicao controlada"
+                      : "Somente leitura"}
+                  </span>
                   <span>Abrir</span>
                 </div>
               </Link>
@@ -141,10 +191,5 @@ export default function StudioDataPage() {
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-black text-slate-950">{value}</p>
-    </div>
-  );
+  return <SummaryMetric label={label} value={value} />;
 }

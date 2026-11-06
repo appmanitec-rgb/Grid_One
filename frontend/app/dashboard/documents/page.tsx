@@ -1,4 +1,5 @@
 "use client";
+import { FormField } from "@/app/dashboard/components/DashboardPageKit";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -26,18 +27,18 @@ import ListPagination, {
   useListPagination,
 } from "../components/ListPagination";
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800";
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 
-const KIND_OPTIONS: Array<{ value: "ALL" | DashboardDocumentKind; label: string }> =
-  [
-    { value: "ALL", label: "Todos os tipos" },
-    { value: "proposal", label: "Propostas" },
-    { value: "contract", label: "Contratos" },
-    { value: "order", label: "Ordens" },
-  ];
+const KIND_OPTIONS: Array<{
+  value: "ALL" | DashboardDocumentKind;
+  label: string;
+}> = [
+  { value: "ALL", label: "Todos os tipos" },
+  { value: "proposal", label: "Propostas" },
+  { value: "contract", label: "Contratos" },
+  { value: "order", label: "Ordens" },
+];
 
 export default function DocumentsPage() {
   const router = useRouter();
@@ -81,7 +82,11 @@ export default function DocumentsPage() {
   const allItems = useMemo(
     () =>
       hub
-        ? [...hub.sections.proposals, ...hub.sections.contracts, ...hub.sections.orders].sort(
+        ? [
+            ...hub.sections.proposals,
+            ...hub.sections.contracts,
+            ...hub.sections.orders,
+          ].sort(
             (left, right) =>
               new Date(right.updatedAt).getTime() -
               new Date(left.updatedAt).getTime(),
@@ -125,11 +130,12 @@ export default function DocumentsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
-        eyebrow="Documentos"
-        title="Central documental"
-        description="Versoes prontas para imprimir, salvar em PDF e compartilhar com clareza."
+        loading={loading}
+        eyebrow="Painel"
+        title="Central de documentos"
+        description="Consulte propostas aprovadas, contratos e ordens de serviço e compartilhe os arquivos."
         stats={[
           {
             label: "Total",
@@ -140,13 +146,13 @@ export default function DocumentsPage() {
           {
             label: "Prontos",
             value: String(summary.ready),
-            helper: "Itens ja maduros para envio.",
+            helper: "Itens já maduros para envio.",
             tone: "emerald",
           },
           {
-            label: "Em atencao",
+            label: "Em atenção",
             value: String(summary.attention),
-            helper: "Pedem revisao ou alinhamento.",
+            helper: "Pedem revisão ou alinhamento.",
             tone: "amber",
           },
           {
@@ -158,7 +164,11 @@ export default function DocumentsPage() {
         ]}
         actions={
           <>
-            <button type="button" onClick={() => void loadHub()} className={SECONDARY_BUTTON}>
+            <button
+              type="button"
+              onClick={() => void loadHub()}
+              className={SECONDARY_BUTTON}
+            >
               Atualizar central
             </button>
           </>
@@ -170,28 +180,34 @@ export default function DocumentsPage() {
       <SectionCard
         eyebrow="Fila documental"
         title="Buscar e abrir versoes"
-        description="Cada card entrega uma copia preparada para impressao e o atalho para o cadastro original."
+        description="Propostas entram após aprovação da diretoria. Aqui você pode visualizar, baixar e compartilhar; edição e aprovação ficam no registro original."
         actions={
           <div className="flex w-full flex-col gap-3 xl:w-auto xl:min-w-[640px] xl:flex-row xl:items-center xl:justify-end">
-            <TextInput
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar por codigo, cliente ou status..."
-              className="xl:min-w-[280px]"
-            />
-            <SelectInput
-              value={kindFilter}
-              onChange={(event) =>
-                setKindFilter(event.target.value as "ALL" | DashboardDocumentKind)
-              }
-              className="xl:w-[220px]"
-            >
-              {KIND_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </SelectInput>
+            <FormField label="Buscar documento">
+              <TextInput
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Buscar por código, cliente ou status..."
+                className="xl:min-w-[280px]"
+              />
+            </FormField>
+            <FormField label="Tipo de documento">
+              <SelectInput
+                value={kindFilter}
+                onChange={(event) =>
+                  setKindFilter(
+                    event.target.value as "ALL" | DashboardDocumentKind,
+                  )
+                }
+                className="xl:w-[220px]"
+              >
+                {KIND_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </SelectInput>
+            </FormField>
           </div>
         }
       >
@@ -202,7 +218,7 @@ export default function DocumentsPage() {
         ) : filteredItems.length === 0 ? (
           <EmptyState
             title="Nenhum documento encontrado"
-            description="Ajuste a busca ou aguarde novas movimentacoes na operacao."
+            description="Ajuste a busca ou aguarde novas movimentacoes na operação."
           />
         ) : (
           <div className="space-y-4">
@@ -231,7 +247,9 @@ function DocumentCard({ item }: { item: DashboardDocumentHubItem }) {
             </DataPill>
             <DataPill tone="blue">{item.statusLabel}</DataPill>
           </div>
-          <h3 className="mt-3 text-lg font-bold text-slate-950">{item.title}</h3>
+          <h3 className="mt-3 text-lg font-bold text-slate-950">
+            {item.title}
+          </h3>
           <p className="mt-1 text-sm text-slate-600">{item.counterpart}</p>
         </div>
         <p className="text-sm font-semibold text-slate-500">
@@ -251,10 +269,10 @@ function DocumentCard({ item }: { item: DashboardDocumentHubItem }) {
 
       <div className="mt-4 flex flex-wrap gap-3">
         <Link href={item.href} className={PRIMARY_BUTTON}>
-          Abrir copia
+          Visualizar e enviar
         </Link>
         <Link href={item.sourceHref} className={SECONDARY_BUTTON}>
-          Abrir cadastro
+          Abrir registro
         </Link>
       </div>
     </article>

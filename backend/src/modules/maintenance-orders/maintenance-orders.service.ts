@@ -1,3 +1,4 @@
+import { checkOrderCreation } from '../auth/rules/commercial-access';
 import {
   BadRequestException,
   ForbiddenException,
@@ -23,11 +24,19 @@ import {
   UserRole,
 } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
+import { publishOrderCompleted } from '../team/team-automation';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { billCompletedExecution } from '../finance/execution-billing';
+import { assertProposalFinancialRelease } from '../proposals/proposal-financial-release';
 import { CreateMaintenanceOrderDto } from './dto/create-maintenance-order.dto';
 import { ListMaintenanceOrdersQueryDto } from './dto/list-maintenance-orders-query.dto';
 import { UpdateMaintenanceOrderDto } from './dto/update-maintenance-order.dto';
+import { TechnicalAuthorizationDto } from './dto/technical-authorization.dto';
+import {
+  preserveOrderTechnicalScope,
+  recordTechnicalScopeAuthorization,
+} from '../technical-scopes/technical-scope-execution';
 
 type AssignmentValidationResult = {
   warnings: string[];
@@ -53,6 +62,11 @@ export class MaintenanceOrdersService {
     dto: CreateMaintenanceOrderDto,
     actorUserId?: string,
   ) {
+    await checkOrderCreation(
+      this.prisma,
+      actorUserId,
+      dto.type || 'CORRECTIVE',
+    );
     const generator = await this.ensureGeneratorAndSite(
       tx,
       dto.generatorId,
@@ -93,7 +107,12 @@ export class MaintenanceOrdersService {
         status: dto.status ?? OrderStatus.OPEN,
         priority: dto.priority,
         customerReport: dto.customerReport,
-        checklistData: dto.checklistData as Prisma.InputJsonValue | undefined,
+        checklistData: dto.checklistData
+          ? (preserveOrderTechnicalScope(
+              undefined,
+              dto.checklistData,
+            ) as Prisma.InputJsonValue)
+          : undefined,
         customerSignatureUrl: dto.customerSignatureUrl,
         displacementStartedAt: dto.displacementStartedAt
           ? new Date(dto.displacementStartedAt)
@@ -134,6 +153,7 @@ export class MaintenanceOrdersService {
 
     if ((dto.status ?? OrderStatus.OPEN) === OrderStatus.COMPLETED) {
       await this.finalizeCompletedOrder(tx, order.id, actorUserId);
+      await publishOrderCompleted(tx, order.id);
     }
 
     const fullOrder = await tx.maintenanceOrder.findUnique({
@@ -245,11 +265,64 @@ export class MaintenanceOrdersService {
     return this.withCostVisibility(order, scope?.role);
   }
 
+  async recordTechnicalAuthorization(
+    id: string,
+    dto: TechnicalAuthorizationDto,
+    actorUserId: string,
+  ) {
+    if (!actorUserId) throw new ForbiddenException('Autenticação obrigatória.');
+    await this.assertInternalActor(actorUserId);
+    await this.findOne(id, actorUserId);
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(
+        'SELECT pg_advisory_xact_lock(hashtext($1))',
+        'technical-authorization:' + id,
+      );
+      const current = await tx.maintenanceOrder.findUnique({ where: { id } });
+      if (!current) throw new NotFoundException('OS não encontrada.');
+      if (
+        current.status === OrderStatus.CANCELED ||
+        current.status === OrderStatus.COMPLETED
+      )
+        throw new BadRequestException(
+          'Registre a autorização antes do encerramento da OS.',
+        );
+      const checklist = recordTechnicalScopeAuthorization(
+        current.checklistData,
+        {
+          ...dto,
+          recordedByUserId: actorUserId,
+          recordedAt: new Date().toISOString(),
+        },
+      );
+      await tx.maintenanceOrder.update({
+        where: { id },
+        data: { checklistData: checklist as Prisma.InputJsonValue },
+      });
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.MAINTENANCE_ORDERS,
+          entityType: 'MAINTENANCE_ORDER_TECHNICAL_AUTHORIZATION',
+          entityId: id,
+          action: 'RECORD_AUTHORIZATION',
+          actorUserId,
+          ...(current.checklistData
+            ? { beforePayload: current.checklistData as Prisma.InputJsonValue }
+            : {}),
+          afterPayload: checklist as Prisma.InputJsonValue,
+        },
+        tx,
+      );
+      return { id, checklistData: checklist };
+    });
+  }
+
   async update(
     id: string,
     dto: UpdateMaintenanceOrderDto,
     actorUserId?: string,
   ) {
+    if (dto.type) await checkOrderCreation(this.prisma, actorUserId, dto.type);
     const actor = await this.assertInternalActor(actorUserId);
     const current = await this.prisma.maintenanceOrder.findUnique({
       where: { id },
@@ -260,6 +333,7 @@ export class MaintenanceOrdersService {
         type: true,
         technicianId: true,
         checklistData: true,
+        sourceProposalId: true,
       },
     });
 
@@ -278,6 +352,8 @@ export class MaintenanceOrdersService {
 
     return this.prisma.$transaction(async (tx) => {
       const targetGeneratorId = dto.generatorId ?? current.generatorId;
+      if (current.sourceProposalId && dto.status !== OrderStatus.CANCELED)
+        await assertProposalFinancialRelease(tx, current.sourceProposalId);
       const generator = await this.ensureGeneratorAndSite(
         tx,
         targetGeneratorId,
@@ -326,6 +402,10 @@ export class MaintenanceOrdersService {
         });
       }
 
+      await tx.$executeRawUnsafe(
+        'SELECT pg_advisory_xact_lock(hashtext($1))',
+        'technical-authorization:' + id,
+      );
       const before = await tx.maintenanceOrder.findUnique({
         where: { id },
         include: this.orderInclude(),
@@ -342,7 +422,13 @@ export class MaintenanceOrdersService {
           status: dto.status,
           priority: dto.priority,
           customerReport: dto.customerReport,
-          checklistData: dto.checklistData as Prisma.InputJsonValue | undefined,
+          checklistData:
+            dto.checklistData !== undefined
+              ? (preserveOrderTechnicalScope(
+                  before?.checklistData,
+                  dto.checklistData,
+                ) as Prisma.InputJsonValue)
+              : undefined,
           customerSignatureUrl: dto.customerSignatureUrl,
           displacementStartedAt: dto.displacementStartedAt
             ? new Date(dto.displacementStartedAt)
@@ -388,6 +474,7 @@ export class MaintenanceOrdersService {
         current.status !== OrderStatus.COMPLETED
       ) {
         await this.finalizeCompletedOrder(tx, id, actorUserId);
+        await publishOrderCompleted(tx, id);
       }
 
       const fullOrder = await tx.maintenanceOrder.findUnique({
@@ -430,10 +517,15 @@ export class MaintenanceOrdersService {
     await this.assertInternalActor(actorUserId);
     const current = await this.prisma.maintenanceOrder.findUnique({
       where: { id },
-      select: { id: true, status: true },
+      select: { id: true, status: true, sourceProposalId: true },
     });
     if (!current) throw new NotFoundException('OS nao encontrada.');
 
+    if (current.sourceProposalId)
+      await assertProposalFinancialRelease(
+        this.prisma,
+        current.sourceProposalId,
+      );
     const updated = await this.prisma.maintenanceOrder.update({
       where: { id },
       data: {
@@ -994,6 +1086,7 @@ export class MaintenanceOrdersService {
   ) {
     await this.consumeOrderMaterials(tx, orderId, actorUserId);
     await this.createTimeEntryForFinishedOrder(tx, orderId, actorUserId);
+    await billCompletedExecution(tx, orderId, { actorUserId });
     await this.auditLogsService.record(
       {
         domain: AuditDomain.MAINTENANCE_ORDERS,

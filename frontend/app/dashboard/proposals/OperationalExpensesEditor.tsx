@@ -44,7 +44,7 @@ export default function OperationalExpensesEditor({
         setRates((await response.json()) as OperationalExpenseRate[]);
       })
       .catch(() =>
-        setError("Nao foi possivel carregar as tarifas operacionais."),
+        setError("Não foi possivel carregar as tarifas operacionais."),
       );
   }, []);
 

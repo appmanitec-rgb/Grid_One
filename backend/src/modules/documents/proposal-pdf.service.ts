@@ -29,6 +29,7 @@ export type ProposalPdfInput = {
     scope?: string | null;
     freight?: string | null;
     paymentTerm?: string | null;
+    paymentSummary?: string | null;
     deliveryLeadTimeDays?: number | null;
     paymentDetails?: string | null;
     hasDownPayment?: boolean | null;
@@ -158,17 +159,15 @@ export class ProposalPdfService {
         createdAt: this.formatDate(input.document.issuedAt),
         validUntil: this.formatDate(input.document.validUntil),
         total: this.formatCurrency(input.document.totalValue),
-        paymentTerms: input.document.paymentTerm || '-',
+        paymentTerms:
+          input.document.paymentSummary || input.document.paymentTerm || '-',
         deliveryTerms: input.document.deliveryLeadTimeDays
           ? `${input.document.deliveryLeadTimeDays} dia(s)`
           : '-',
         warranty: 'Garantia conforme condicoes comerciais e fabricante.',
         exclusions:
           'Obras civis, infraestrutura externa e itens nao descritos no escopo.',
-        notes:
-          input.document.paymentDetails ||
-          input.document.externalNotes ||
-          'Sem observacoes adicionais.',
+        notes: input.document.externalNotes || 'Sem observacoes adicionais.',
         freight: input.document.freight || '-',
         scope: input.document.scope || 'Escopo nao informado.',
       },

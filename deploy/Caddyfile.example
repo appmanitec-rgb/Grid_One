@@ -1,0 +1,10 @@
+# Copie e substitua o dominio pelo endereco publico configurado no DNS.
+# Mantenha 3000/3001/5433 acessiveis somente no servidor.
+erp.suaempresa.com.br {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:3001 {
+        # Substitui qualquer endereco enviado pelo navegador.
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Real-IP {remote_host}
+    }
+}

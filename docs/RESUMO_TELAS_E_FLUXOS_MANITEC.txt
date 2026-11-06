@@ -1,0 +1,948 @@
+MANITEC GRIDONE — RESUMO DAS TELAS E DOS FLUXOS DO SISTEMA
+Levantamento do código atual em 23/10/2026
+========================================================
+
+COMO LER ESTE DOCUMENTO
+
+Foram identificadas 119 rotas de página no frontend. Esse total inclui
+listagens, cadastros, fichas individuais, portais, páginas públicas e
+redirecionamentos. Não significa 119 opções diferentes no menu.
+
+[id] representa o registro aberto; [token], um link individual de acesso;
+[resource], uma tabela operacional do Manitec Studio.
+
+As telas e ações disponíveis dependem das permissões do usuário. A presença
+de uma tela no código não comprova que uma integração externa esteja ativa.
+Este é um mapa funcional baseado nas páginas, componentes e serviços atuais,
+não uma homologação visual de todas as telas.
+
+
+1. ACESSO E CONTA PESSOAL
+========================================================
+
+1.1 Entrada do sistema
+Rota: /
+Login de usuários, verificação de autenticação e etapas de MFA quando
+habilitadas. Direciona para a área interna ou para o ambiente do cliente.
+
+1.2 Entrada do cliente
+Rota: /cliente/entrar
+Entrada específica para o cliente acessar a central da sua empresa.
+Conversa com as configurações de acesso do cliente e com o portal.
+
+1.3 Ativação do cliente
+Rota: /cliente/ativar
+Permite ativar o acesso usando o link individual e definir a senha.
+O link é administrado pela gestão do portal do cliente.
+
+1.4 Meu perfil
+Rota: /dashboard/profile
+Dados pessoais, senha, foto e informações da própria conta, além de
+indicadores associados à atuação do usuário.
+
+
+2. MEU ESPAÇO — ROTINA, EQUIPE E DOCUMENTOS
+========================================================
+
+2.1 Meu painel
+Rota: /dashboard
+Mostra indicadores, prioridades, filas e atalhos conforme o departamento
+e as telas liberadas. A gestão tem visão geral; as áreas recebem sua rotina.
+Reúne informações dos demais módulos e encaminha aos registros de origem.
+
+2.2 Equipe e mensagens
+Rota: /dashboard/team
+Feed interno, avisos, atualizações, canais e conversas da equipe.
+Relaciona usuários e acontecimentos operacionais em um espaço de comunicação.
+
+2.3 Notificações
+Rota: /dashboard/notifications
+Concentra alertas, aprovações e pendências, com pesquisa e filtros.
+Leva à proposta, atendimento ou outro registro que exige acompanhamento.
+
+2.4 Central de documentos
+Rota: /dashboard/documents
+Localiza documentos de propostas liberadas, contratos e ordens de serviço.
+Abre a visualização, o download e o compartilhamento. Edição e aprovação
+do conteúdo de negócio continuam nos respectivos cadastros de origem.
+
+2.5 Envios de documentos
+Rota: /dashboard/deliveries
+Histórico de documentos compartilhados, canal utilizado, situação do envio
+e acessos ao link. Trabalha com a central de documentos e seus registros.
+Envio externo por e-mail ou WhatsApp depende do provedor configurado.
+
+2.6 Relatórios gerenciais
+Rota: /dashboard/reports
+Consolida indicadores comerciais, operacionais, financeiros e de estoque,
+com recorte de período. Recebe dados das rotinas, sem substituí-las.
+
+
+3. COMERCIAL — DO CLIENTE À VENDA
+========================================================
+
+3.1 Oportunidades
+Rota: /dashboard/opportunities
+Funil de vendas com etapas, valores, responsáveis, previsão e próximos passos.
+Separa as carteiras comerciais conforme a permissão do colaborador.
+
+3.2 Ficha da oportunidade
+Rota: /dashboard/opportunities/[id]
+Detalha a negociação e seu contexto. Relaciona cliente, responsável,
+equipamento e propostas, permitindo seguir do contato para o orçamento.
+
+3.3 Vistorias comerciais
+Rota: /dashboard/commercial-inspections
+Organiza visitas e informações técnicas para preparar o orçamento,
+incluindo vínculos comerciais e registros de mídia.
+Conversa com oportunidades, colaboradores e dados da instalação.
+
+3.4 Clientes
+Rota: /dashboard/clients
+Pesquisa empresas e contatos; abre o resumo do cliente e a ficha completa.
+É a entrada para consultar a carteira e iniciar novas demandas.
+
+3.5 Cadastro e edição de cliente
+Rota: /dashboard/clients/new
+Dados cadastrais, contatos, endereços e informações comerciais.
+Alimenta propostas, equipamentos, contratos, chamados e financeiro.
+
+3.6 Ficha do cliente
+Rota: /dashboard/clients/[id]
+Reúne cadastro, equipamentos, propostas e histórico do relacionamento.
+Funciona como um ponto de navegação entre os registros da mesma empresa.
+
+3.7 Gestão da central do cliente
+Rota: /dashboard/clients/[id]/portal
+Configura a utilização da central, os acessos e recursos liberados para
+o cliente. Relaciona cadastro comercial, autenticação e portal externo.
+
+3.8 Central de propostas
+Rota: /dashboard/proposals
+Carteira de propostas em lista ou Kanban, com etapas, valores e filtros.
+Agrupa os tipos de proposta e respeita as carteiras comerciais autorizadas.
+
+3.9 Proposta de peças e serviços
+Rota: /dashboard/proposals/new
+Formulário por etapas: dados comerciais, peças, serviços e revisão.
+Usa cliente, equipamento, catálogo, tarifas, contas e condições de pagamento.
+Permite selecionar os itens do equipamento em sobretela, individualmente
+ou pelos conjuntos TOF, TM e TB, entre os grupos disponíveis.
+Na revisão, permite gerar, editar e conferir o escopo técnico.
+
+3.10 Proposta de gerador
+Rota: /dashboard/proposals/new/generator
+Assistente de venda de gerador: necessidade, pré-dimensionamento,
+seleção/configuração comercial e condições da proposta.
+Usa o catálogo de geradores para venda e as regras comerciais do Studio.
+O equipamento novo à venda é tratado separadamente do parque já instalado.
+
+3.11 Proposta externa
+Rota: /dashboard/proposals/new/external
+Registra dados comerciais e preserva o arquivo original de uma proposta
+produzida fora do sistema. Participa do acompanhamento e das aprovações.
+
+3.12 Ficha da proposta
+Rota: /dashboard/proposals/[id]
+Itens, valores, condições, revisões, aprovações e decisão do cliente.
+Mostra o escopo técnico, suas condições e o histórico de versões.
+Encaminha para documentos e, conforme o tipo e as liberações, para pedido
+de venda, O.S., conversão em contrato ou pré-cadastro de equipamento vendido.
+
+3.13 Pedidos de venda
+Rota: /dashboard/sales-orders
+Acompanha a entrega de peças de propostas aceitas: vinculação ao catálogo,
+reserva por almoxarifado, separação, entregas e devoluções conforme a ação.
+Conversa com propostas, estoque, clientes e acompanhamento financeiro.
+
+COMO O COMERCIAL SE CONECTA
+Cliente -> oportunidade -> vistoria, se necessária -> proposta -> aprovação
+interna -> decisão do cliente -> destino da venda conforme o tipo.
+A entrada financeira, quando exigida, condiciona a liberação operacional.
+
+
+4. CONTRATOS — CARTEIRA, COBERTURA E RENOVAÇÃO
+========================================================
+
+4.1 Carteira de contratos
+Rota: /dashboard/contracts
+Consulta situação, vigência, faturamento e manutenção preventiva.
+Oferece acompanhamento das rotinas contratuais e geração de ordens.
+
+4.2 Novo contrato
+Rota: /dashboard/contracts/new
+Define cliente, equipamentos cobertos, vigência, cobertura, condições
+de atendimento e faturamento. Pode receber contexto de uma proposta.
+
+4.3 Ficha do contrato
+Rota: /dashboard/contracts/[id]
+Detalha cobertura, equipamentos, recebimentos, preventivas e relações
+com cliente e proposta. Permite acompanhar e executar ações contratuais.
+
+4.4 Renovações
+Rota: /dashboard/contracts/renewals
+Fila de vencimentos e negociação das condições do próximo período.
+Mantém a continuidade e o histórico do contrato.
+
+CONEXÕES
+Proposta contratual -> cadastro/conversão em contrato -> equipamentos
+cobertos -> programação preventiva -> O.S. -> laudo e faturamento.
+As faturas contratuais se relacionam com contas a receber e inadimplência.
+
+
+5. PLANEJAMENTO — AGENDA, EQUIPE E LOGÍSTICA
+========================================================
+
+5.1 Agenda e programação
+Rota: /dashboard/dispatch
+Organiza visitas e O.S., horários e distribuição entre os técnicos.
+Usa o equipamento, a situação da ordem e os dados da equipe técnica.
+
+5.2 Equipe técnica
+Rota: /dashboard/technicians
+Cadastro operacional dos técnicos, especialidades, disponibilidade
+e certificações. Relaciona o colaborador à alocação de atendimentos.
+
+5.3 Monitoramento de campo
+Rota: /dashboard/monitoring
+Consulta telemetria, eventos e alertas registrados para os equipamentos,
+com relações com clientes, locais e respostas operacionais.
+Depende das informações efetivamente recebidas pelas integrações.
+
+5.4 Frota e veículos
+Rota: /dashboard/hr/fleet
+Consulta veículos, disponibilidade, quilometragem e referência de próxima
+troca de óleo. Apoia a logística do planejamento.
+Apesar do endereço conter /hr/, está organizada no menu de Planejamento.
+
+CONEXÕES
+Chamados e O.S. -> programação -> técnico disponível e qualificado -> campo.
+RH fornece dados de certificação; frota e locais apoiam o deslocamento.
+
+
+6. OPERAÇÃO — ATENDIMENTO E EXECUÇÃO
+========================================================
+
+6.1 Central de atendimento
+Rota: /dashboard/atendimento
+Fila de chamados com responsáveis, prioridade, situação e prazos.
+Oferece pesquisa, filtros e organização em lista ou quadro.
+
+6.2 Ficha do chamado
+Rota: /dashboard/atendimento/[id]
+Contexto do cliente/equipamento, mensagens, anotações, anexos,
+responsável e propriedades do atendimento.
+Relaciona o chamado à O.S. quando a demanda exige execução de campo.
+
+6.3 Ordens de serviço
+Rota: /dashboard/orders
+Lista O.S. por situação, cliente, equipamento e contexto contratual.
+É a fila de acompanhamento da execução e suas prioridades.
+
+6.4 Ficha da O.S.
+Rota: /dashboard/orders/[id]
+Dados do atendimento, materiais, técnico, datas, relatório e relações
+com cliente, equipamento, contrato, chamado, laudo e documentos.
+O escopo aprovado pode ser copiado da proposta. Autorizações e recusas
+operacionais são registradas separadamente do que foi vendido.
+Conclusão, cancelamento e demais ações respeitam permissões específicas.
+
+6.5 Portal do técnico / Minha rota
+Rota: /dashboard/tecnico
+Mostra as O.S., chamados e apontamentos atribuídos ao técnico.
+Concentra a rotina individual de campo.
+
+6.6 Atendimento do técnico
+Rota: /dashboard/tecnico/ordens/[id]
+Abre a ordem atribuída e os controles de execução disponíveis,
+como deslocamento, início, pausa, retomada e finalização da sessão.
+Os apontamentos alimentam o acompanhamento operacional e as horas.
+
+6.7 Laudos técnicos
+Rota: /dashboard/relatorios-tecnicos
+Fila de laudos e criação vinculada à O.S. O contexto de cliente,
+equipamento, contrato e técnico é herdado da ordem selecionada.
+
+6.8 Ficha do laudo
+Rota: /dashboard/relatorios-tecnicos/[id]
+Diagnóstico, serviços realizados, recomendações, evidências e assinaturas.
+Inclui documento, liberação ao cliente e recursos de autenticidade.
+Mantém a navegação para O.S., equipamento, cliente e contrato.
+
+6.9 Máquinas paradas
+Rota: /dashboard/operation/downtimes
+Registra e acompanha falhas, impacto, início da parada, previsão,
+restabelecimento e resolução. Relaciona equipamento, chamado e O.S.
+Pode se conectar a um processo de garantia.
+
+6.10 Garantias
+Rota: /dashboard/operation/warranties
+Processos de garantia, componente afetado, protocolos, cobertura,
+valores, responsáveis e evidências.
+Conecta cliente/equipamento, fornecedor/fabricante, parada, chamado e O.S.
+
+CONEXÕES
+Chamado -> triagem -> O.S. -> agenda -> execução técnica -> relatório/laudo
+-> liberação do documento -> faturamento, quando aplicável.
+Uma parada ou garantia pode ser vinculada a esse mesmo atendimento.
+
+
+7. ATIVOS — PARQUE INSTALADO E REFERÊNCIAS TÉCNICAS
+========================================================
+
+7.1 Equipamentos
+Rota: /dashboard/equipments
+Pesquisa o parque de geradores e abre resumo ou ficha completa.
+Relaciona os equipamentos ao cliente, contratos e histórico técnico.
+
+7.2 Novo equipamento
+Rota: /dashboard/equipments/new
+Identificação e vínculos; informações de gerador, motor, alternador,
+QTA e bateria. Usa clientes, locais, modelos e fabricantes.
+
+7.3 Ficha do equipamento
+Rota: /dashboard/equipments/[id]
+Prontuário técnico, foto, identificação, localização, situação e histórico.
+Inclui os itens de manutenção da máquina e vínculos com modelo,
+contrato, O.S. e laudos. Esses itens podem ser usados nas propostas.
+
+7.4 Modelos de geradores
+Rota: /dashboard/equipments/models
+Referências técnicas e recomendações de manutenção por modelo.
+Fornecem uma base reutilizável para os equipamentos cadastrados.
+
+7.5 Locais
+Rota: /dashboard/sites
+Cadastro de locais de instalação e sua relação com o cliente/equipamento.
+Apoia a identificação do ponto de atendimento e a programação das ordens.
+
+CONEXÕES
+Cliente -> local -> equipamento -> modelo e itens de manutenção.
+Propostas, contratos, chamados, O.S., laudos e telemetria reutilizam
+essa mesma identificação do equipamento.
+
+
+8. SUPRIMENTOS — NECESSIDADE, COTAÇÃO E COMPRA
+========================================================
+
+8.1 Solicitações de compra
+Rota: /dashboard/purchase-orders/requests
+Fila de necessidades de materiais e serviços, com pesquisa e situação.
+
+8.2 Nova solicitação
+Rota: /dashboard/purchase-orders/requests/new
+Registra departamento, origem, prioridade, prazo, justificativa,
+itens, quantidades e especificações.
+Pode destinar a necessidade ao almoxarifado, O.S., contrato, pedido de
+venda ou garantia, com cliente, equipamento e centro de custo pertinentes.
+
+8.3 Ficha da solicitação
+Rota: /dashboard/purchase-orders/requests/[id]
+Consulta e acompanha a necessidade, disponibilidade e encaminhamentos.
+Permite seguir para cotação conforme situação e permissões.
+
+8.4 Cotações e comparativo
+Rota: /dashboard/purchase-orders/quotations
+Fila de processos de cotação e acompanhamento das propostas de fornecedores.
+
+8.5 Nova cotação
+Rota: /dashboard/purchase-orders/quotations/new
+Abre o processo de cotação a partir das necessidades e itens selecionados.
+Relaciona os fornecedores que participarão da comparação.
+
+8.6 Ficha da cotação
+Rota: /dashboard/purchase-orders/quotations/[id]
+Registra ofertas, condições e evidências; compara fornecedores e seleciona
+os itens/condições que seguirão para aprovação e geração de pedidos.
+
+8.7 Aprovações de compras
+Rota: /dashboard/purchase-orders/approvals
+Fila de decisão: aprovar, reprovar ou solicitar revisão com justificativa.
+Preserva as condições submetidas, o aprovador e a data da decisão.
+
+8.8 Pedidos de compra
+Rota: /dashboard/purchase-orders
+Lista compras, fornecedores, condições e recebimentos.
+Também mantém os controles de pedidos legados existentes no sistema.
+
+8.9 Ficha do pedido de compra
+Rota: /dashboard/purchase-orders/[id]
+Itens, destinação, acompanhamento, evidências e recebimento conferido,
+com quantidades aceitas/recusadas, divergências e entregas parciais.
+Inclui documento de entrada, parcelamento e conferência documental.
+No fluxo atualizado, essa conferência gera títulos em aberto no financeiro;
+ela não registra o pagamento. Pedidos legados preservam suas regras.
+
+8.10 Fornecedores
+Rota: /dashboard/suppliers
+Pesquisa parceiros de compra, marcas, contatos e condições comerciais.
+
+8.11 Cadastro de fornecedor
+Rota: /dashboard/suppliers/new
+Dados cadastrais, contatos e itens negociados, usados em cotações e compras.
+
+8.12 Ficha do fornecedor
+Rota: /dashboard/suppliers/[id]
+Dados, avaliação e itens negociados do parceiro selecionado.
+Conecta o catálogo aos processos de compra.
+
+8.13 Regras de compras
+Rota: /dashboard/purchase-orders/settings
+Configura a utilização do fluxo e suas regras de aprovação.
+Controla o encaminhamento de solicitações, cotações e decisões de compra.
+
+FLUXO ATUALIZADO DE COMPRAS
+Necessidade -> solicitação -> consulta de disponibilidade -> cotação
+-> comparativo/seleção -> aprovação -> pedido -> acompanhamento
+-> recebimento/aceite -> conferência do documento e parcelas
+-> contas a pagar -> pagamento pelo Financeiro.
+
+O recebimento aceito atualiza o estoque quando se trata de material
+com controle de estoque. A destinação mantém a origem da necessidade.
+Receber, aprovar uma compra e pagar são eventos distintos.
+
+
+9. ALMOXARIFADO — SALDOS, SEPARAÇÃO E CATÁLOGO
+========================================================
+
+9.1 Recebimento e separação
+Rota: /dashboard/inventory/operations
+Painel das filas de compras, separação, estoque, validade de produtos e EPIs,
+conforme as permissões do usuário.
+Encaminha às rotinas de origem para executar recebimentos e movimentações.
+
+9.2 Estoque e reposição
+Rota: /dashboard/inventory
+Saldos físicos, reservas, disponíveis, movimentos, mínimos e reposição
+por almoxarifado/local. Permite ajustes conforme permissão.
+Recebe entradas das compras e saídas/reservas das rotinas operacionais.
+
+9.3 Peças e serviços
+Rota: /dashboard/catalog
+Catálogo pesquisável de materiais e serviços, com dados de preços,
+estoque e identificação. Alimenta propostas, compras e atendimentos.
+
+9.4 Cadastro de peça ou serviço
+Rota: /dashboard/catalog/new
+Cadastro completo: identificação, descrições, dados técnicos/fiscais,
+fornecedores, preços, documentos e parâmetros de estoque.
+Também serve à edição pelo contexto do registro selecionado.
+
+9.5 Ficha do item
+Rota: /dashboard/catalog/[id]
+Resumo, foto, saldos, preços, rastreabilidade, fornecedores, histórico,
+relações operacionais e informações técnicas/fiscais.
+Inclui a configuração do vínculo técnico usado pelo gerador de escopos.
+
+9.6 Biblioteca técnica de escopos
+Rota: /dashboard/catalog/technical-library
+Mantém famílias, procedimentos e vínculos explícitos com produtos/serviços.
+Organiza atividades, requisitos, compatibilidade e condições operacionais.
+O motor utiliza essa biblioteca na revisão das propostas, preservando
+as versões e distinguindo material vendido de serviço contratado.
+
+CONEXÕES
+Catálogo identifica o item. Estoque controla a quantidade e sua localização.
+Compras repõem materiais; O.S. e pedidos de venda usam reservas e saídas.
+O catálogo também se conecta aos fornecedores e aos itens do equipamento.
+A biblioteca técnica descreve o trabalho; ela não movimenta o estoque.
+
+
+10. FINANCEIRO — FATURAMENTO, CONTAS E TESOURARIA
+========================================================
+
+10.1 Faturamento
+Rota: /dashboard/billing
+Acompanha faturas de contratos e a fila de faturamento de execuções/O.S.
+Relaciona a origem operacional ao título financeiro e ao recebimento.
+
+10.2 Contas a receber
+Rota: /dashboard/finance/accounts-receivable
+Títulos por cliente, origem, vencimento, saldo e situação.
+Registra recebimentos e ações de cancelamento/estorno conforme permissões.
+Conversa com faturas, propostas, cobranças, contas bancárias e liberação
+de entradas financeiras que condicionam a operação.
+
+10.3 Contas a pagar
+Rota: /dashboard/finance/accounts-payable
+Despesas e parcelas por fornecedor, pedido de compra e centro de custo.
+Acompanha vencimentos e registra pagamentos autorizados.
+
+10.4 Cobrança e boletos
+Rota: /dashboard/finance/collections
+Prepara cobrança Santander, gera remessa CNAB 240 e importa o retorno.
+O arquivo de remessa deve ser encaminhado ao banco pelo fluxo aplicável;
+o retorno é usado para atualizar os títulos, conforme os eventos processados.
+
+10.5 Notas fiscais
+Rota: /dashboard/finance/fiscal-documents
+Prepara rascunhos de NF-e de produtos e NFS-e de serviços, com emitente,
+itens e conta a receber. Acompanha o histórico dos documentos.
+A autorização fiscal depende da integração ativa; um rascunho não tem
+valor fiscal e sua existência não significa emissão autorizada.
+
+10.6 Fluxo de caixa
+Rota: /dashboard/finance/cash-flow
+Entradas, saídas e projeções de saldo, incluindo janelas de 30, 60 e 90 dias.
+Usa contas a pagar/receber e os saldos financeiros disponíveis.
+
+10.7 Movimentações bancárias
+Rota: /dashboard/finance/bank-movements
+Extrato interno por conta, período, tipo e origem; conciliação de movimentos
+e controles de fechamento/reabertura mensal conforme permissão.
+
+10.8 Conciliação bancária
+Rota: /dashboard/finance/reconciliation
+Importa extratos, compara lançamentos e trata divergências.
+Relaciona movimentos internos, entradas bancárias importadas e fechamentos.
+
+10.9 Contas bancárias e caixas
+Rota: /dashboard/finance/bank-accounts
+Cadastra e acompanha contas, situação, saldos e movimentações.
+É referência para os pagamentos, recebimentos e a tesouraria.
+
+10.10 Centros de custo
+Rota: /dashboard/finance/cost-centers
+Receitas, despesas, lançamentos e resultado por cliente, contrato e equipamento.
+Permite consultar o DRE do centro e o histórico no período selecionado.
+
+10.11 Custos operacionais
+Rota: /dashboard/costs
+Consolida custos e resultados das ordens, contratos e centros de custo.
+Fornece a leitura gerencial do que foi executado e registrado.
+
+CONEXÕES
+Venda/contrato/execução -> faturamento -> contas a receber -> recebimento
+-> movimento bancário -> conciliação -> relatórios e resultado.
+Compra/documento conferido -> contas a pagar -> pagamento -> movimento
+bancário -> conciliação -> relatórios e resultado.
+
+
+11. RECURSOS HUMANOS E SEGURANÇA DE ACESSO
+========================================================
+
+11.1 Colaboradores
+Rota: /dashboard/hr/collaborators
+Visão da equipe por departamento, perfil e situação; relaciona pessoas,
+usuários do sistema, dados administrativos e vínculos técnicos.
+Encaminha ao cadastro da conta, permissões e documentação.
+
+11.2 Documentos e certificações
+Rota: /dashboard/hr/documentation
+Treinamentos, certificados, NRs, liberações e vencimentos por colaborador.
+Fornece requisitos usados na alocação e no acompanhamento da equipe técnica.
+
+11.3 EPIs e ferramentas
+Rota: /dashboard/hr/epis-tools
+Entregas, devoluções, responsabilidade, vencimentos e calibrações.
+Relaciona os itens do catálogo ao colaborador e à rotina do almoxarifado.
+
+11.4 Apontamentos e banco de horas
+Rota: /dashboard/hr/time-tracking
+Consulta horas por competência e recursos de exportação para a rotina
+de folha. Recebe contexto dos apontamentos de execução disponíveis.
+
+11.5 Comissões
+Rota: /dashboard/hr/commissions
+Consulta comissões, percentuais, valores, situação e origem vinculada
+ao colaborador, contrato ou O.S. A tela atual é de acompanhamento.
+
+11.6 Usuários e permissões — visão geral
+Rota: /dashboard/management/users
+Central de cadastros, controle de contas, permissões e documentos.
+Relaciona a pessoa ao perfil e às áreas do sistema disponíveis para ela.
+
+11.7 Novo usuário
+Rota: /dashboard/management/users/new
+Cria a conta e seus dados de cargo, departamento e vínculo.
+Parte de um perfil de acesso que pode ser refinado depois.
+
+11.8 Controle de contas
+Rota: /dashboard/management/users/control
+Pesquisa contas, altera dados/situação, trata senhas e vínculos,
+e administra ações de acesso conforme a permissão do gestor.
+
+11.9 Permissões por usuário
+Rota: /dashboard/management/users/permissions
+Define telas visíveis e ações permitidas; carteiras comerciais,
+alçadas de desconto, tipos de tarefa e regras de plantão pertinentes.
+Influencia menu, painel e validação das ações nos serviços da API.
+
+11.10 Documentos a vencer da gestão
+Rota: /dashboard/management/users/documents
+Fila de certificados, NRs e liberações próximos do vencimento.
+É um acesso específico da gestão à mesma base de pessoas/certificações.
+
+CONEXÕES
+Colaborador -> conta/perfil -> permissões -> telas e ações disponíveis.
+Colaborador -> certificações/EPIs/horas -> planejamento e execução técnica.
+Estar em um departamento não equivale, por si só, a liberar todas as ações.
+
+
+12. ADMINISTRAÇÃO
+========================================================
+
+12.1 Empresa
+Rota: /dashboard/company-settings
+Configura CNPJs, dados jurídicos/fiscais, contatos e identidade visual
+das empresas. Esses dados são usados nas propostas e nos documentos,
+e como referência do emitente nas rotinas fiscais.
+
+12.2 Automação
+Rota: /dashboard/automation
+Consulta situação, execuções e histórico das rotinas automáticas.
+Permite acionar tarefas disponíveis, como sincronizações de inadimplência,
+preventivas, recebíveis e vencimentos financeiros.
+Essa tela de rotinas não é uma biblioteca geral de textos/modelos.
+
+
+13. MANITEC STUDIO
+========================================================
+
+13.1 Dados / Tabelas
+Rota: /dashboard/developer/data
+Lista recursos operacionais administráveis, com pesquisa e organização
+por área. A edição segue as regras do ERP e as permissões do usuário.
+
+13.2 Explorador de uma tabela
+Rota: /dashboard/developer/data/[resource]
+Abre os registros do recurso escolhido, seus campos e ações permitidas.
+Consulta, edição, importação e exportação dependem do recurso; não há
+liberação irrestrita para alterar qualquer tabela física do banco.
+
+Recursos atualmente cadastrados nessa área:
+  - Clientes.
+  - Tarifas operacionais: deslocamento, alimentação, pedágio, hospedagem etc.
+  - Tarifas de hora por tipo de hora e profissional.
+  - Contas para propostas, por empresa e finalidade.
+  - Geradores para venda.
+  - Regras de pré-dimensionamento.
+  - Fornecedores.
+  - Equipamentos.
+  - Modelos.
+  - Fabricantes.
+  - Catálogo de peças e serviços.
+  - Políticas de preço.
+  - Lembretes de itens complementares da proposta.
+  - Unidades de medida.
+  - Marcas de peças.
+  - Categorias de documentos.
+  - Locais de estoque.
+  - Tipos de serviço.
+  - Tipos de manutenção.
+  - Categorias de planos de manutenção.
+  - Categorias de chamados.
+  - Aplicações de equipamentos.
+  - Modos de operação.
+  - Categorias de itens de RH.
+  - Condições de pagamento.
+  - Estados / UF.
+  - Colaboradores, com consulta e edição direcionada ao RH.
+
+13.3 Editor de documentos
+Rota: /dashboard/developer/document-editor
+Configura modelos e campos dinâmicos, com edição, prévia e publicação
+conforme as opções disponíveis, incluindo o fluxo de documentos Word.
+Usa dados reais de cliente, vendedor, proposta, contrato ou ordem
+para preencher os campos do documento correspondente.
+
+13.4 Histórico e auditoria
+Rota: /dashboard/developer/history
+Consulta eventos auditados por domínio, registro, usuário e período.
+Permite rastrear ações que os módulos efetivamente registram.
+
+13.5 Utilização
+Rota: /dashboard/developer/utilization
+Acompanha acessos, atividades, arquivos e uso dos recursos do sistema.
+Serve à gestão administrativa/técnica da utilização.
+
+CONEXÕES
+Studio configura referências reutilizadas pelas telas operacionais.
+Exemplos: tarifa de hora -> proposta; política de preço -> catálogo;
+modelo documental -> emissão; catálogo comercial -> proposta de gerador.
+Auditoria e utilização acompanham os acontecimentos registrados no sistema.
+
+
+14. VISUALIZAÇÕES INDIVIDUAIS DE DOCUMENTOS
+========================================================
+
+14.1 Documento da proposta
+Rota: /dashboard/documents/proposals/[id]
+Visualização comercial com cliente, itens, condições e escopo técnico.
+Utiliza os dados e liberações da proposta e os recursos de emissão/envio.
+
+14.2 Documento do contrato
+Rota: /dashboard/documents/contracts/[id]
+Visualização consolidada da vigência, cobertura, equipamentos e condições
+do contrato, incluindo contexto de renovação quando selecionado.
+
+14.3 Documento da O.S.
+Rota: /dashboard/documents/orders/[id]
+Visualização do atendimento com descrição, relatório, materiais e assinatura.
+Apoia consulta, arquivo e compartilhamento com o cliente.
+
+Essas páginas não são cadastros independentes: apresentam os documentos
+dos registros originais e usam a identidade visual/modelos configurados.
+
+
+15. CENTRAL DO CLIENTE
+========================================================
+
+15.1 Painel do cliente
+Rota: /portal/dashboard
+Resumo da empresa com equipamentos, propostas, ordens, preventivas
+e documentos recentes, conforme os recursos liberados para o cliente.
+
+15.2 Propostas do cliente
+Rota: /portal/propostas
+Lista propostas disponibilizadas para a empresa vinculada ao acesso.
+
+15.3 Ficha da proposta no portal
+Rota: /portal/propostas/[id]
+Consulta os dados comerciais liberados, documento e ações de decisão
+disponíveis. A decisão retorna ao fluxo comercial interno.
+
+15.4 Equipamentos do cliente
+Rota: /portal/equipamentos
+Lista geradores vinculados à empresa do cliente.
+
+15.5 Ficha do equipamento no portal
+Rota: /portal/equipamentos/[id]
+Dados do equipamento, histórico de O.S. e preventivas programadas.
+Apresenta o acompanhamento do parque a partir dos registros internos.
+
+15.6 Contratos do cliente
+Rota: /portal/contratos
+Consulta vigência, cobertura e equipamentos vinculados aos contratos.
+
+15.7 Laudos liberados
+Rota: /portal/laudos
+Lista relatórios técnicos liberados pela Manitec para a empresa.
+
+15.8 Ficha do laudo no portal
+Rota: /portal/laudos/[id]
+Diagnóstico, serviços realizados, recomendações, evidências e documento
+liberado ao cliente, conforme o conteúdo disponibilizado.
+
+15.9 Documentos do cliente
+Rota: /portal/documentos
+Consulta documentos enviados ou liberados para a empresa.
+Recebe as publicações e compartilhamentos das áreas internas.
+
+15.10 Financeiro do cliente
+Rota: /portal/financeiro
+Consulta títulos vinculados à empresa e valores em aberto.
+É uma visão do relacionamento financeiro, sem expor a tesouraria interna.
+
+15.11 Solicitar cotação
+Rota: /portal/solicitacoes
+Permite enviar solicitações comerciais de peças/serviços e acompanhar
+as respostas. Encaminha a demanda ao fluxo interno correspondente.
+
+15.12 Observações e feedback
+Rota: /portal/feedback
+Envia observações/sugestões e consulta o histórico de mensagens da empresa.
+
+15.13 Chamados do cliente
+Rota: /portal/chamados
+Acompanha atendimentos, prazos e vínculo com O.S.
+
+15.14 Novo chamado no portal
+Rota: /portal/chamados/novo
+Registra a solicitação e o equipamento, com as informações necessárias
+para a equipe interna realizar a triagem.
+
+15.15 Ficha do chamado no portal
+Rota: /portal/chamados/[id]
+Consulta andamento, mensagens e informações liberadas do atendimento.
+Conversa com a central de atendimento interna sobre o mesmo chamado.
+
+CONEXÕES
+O portal apresenta uma parte dos registros internos para o cliente certo.
+Proposta liberada aparece no portal; decisão do cliente volta ao Comercial.
+Chamado aberto no portal entra no atendimento interno; respostas voltam
+ao portal. Laudos e documentos aparecem após a respectiva liberação.
+
+
+16. PÁGINAS PÚBLICAS POR LINK INDIVIDUAL
+========================================================
+
+16.1 Compartilhamento de documentos
+Rota: /share/[token]
+Abre a cópia disponibilizada por um link individual de compartilhamento.
+Pode apresentar ações específicas, como aceite de proposta, conforme o
+tipo do compartilhamento e suas condições de acesso.
+
+16.2 Compartilhamento público de laudo
+Rota: /public/service-reports/share/[token]
+Consulta o conteúdo do laudo disponibilizado pelo link e seus downloads,
+conforme validade e regras do compartilhamento.
+
+16.3 Verificação de autenticidade do laudo
+Rota: /public/service-reports/verify/[token]
+Confere o registro de autenticidade correspondente ao laudo/documento.
+É distinta da página que exibe o conteúdo completo compartilhado.
+
+
+17. ACESSOS ALTERNATIVOS E REDIRECIONAMENTOS
+========================================================
+
+17.1 Entrada administrativa antiga
+Rota: /dashboard/management
+Redireciona para /dashboard/management/users.
+
+17.2 Entrada do Studio
+Rota: /dashboard/developer
+Redireciona para /dashboard/developer/data.
+
+17.3 Entrada do portal
+Rota: /portal
+Redireciona para /portal/dashboard.
+
+17.4 Controle de acesso alternativo
+Rota: /dashboard/control
+Abre a mesma área geral de gestão de usuários. Não é outra base de contas.
+
+17.5 Visão de relacionamento do cliente no dashboard
+Rota: /dashboard/client-portal
+Página adicional de resumo do relacionamento, com propostas, contratos,
+atendimentos e cobrança do cliente vinculado à conta.
+É diferente da configuração de acesso em /dashboard/clients/[id]/portal
+e da entrada principal da central em /portal/dashboard.
+
+
+18. COMO OS MÓDULOS SE CONVERSAM — FLUXOS PRINCIPAIS
+========================================================
+
+A. VENDA DE PEÇAS
+Cliente -> oportunidade -> proposta de peças -> aprovação/aceite
+-> liberação financeira quando exigida -> pedido de venda
+-> reserva -> separação -> entrega -> acompanhamento financeiro.
+A entrega baixa o estoque pelo fluxo correspondente; aceitar a proposta
+não equivale a registrar a entrega de todos os materiais.
+
+B. SERVIÇO OU PEÇAS COM SERVIÇO
+Cliente + equipamento + itens/serviços -> proposta -> escopo técnico
+-> aprovações -> liberação financeira quando exigida -> O.S.
+-> planejamento -> execução -> relatório/laudo -> faturamento
+-> contas a receber -> recebimento -> conciliação.
+A geração de O.S. a partir da proposta depende do tipo, do equipamento
+vinculado e das regras de liberação existentes.
+
+C. CONTRATO RECORRENTE
+Negociação/proposta contratual -> cadastro/conversão em contrato
+-> equipamentos cobertos -> preventivas programadas -> O.S.
+-> execução e laudos; em paralelo, faturas -> contas a receber.
+Vigência e histórico alimentam a fila de renovações.
+
+D. VENDA DE GERADOR
+Oportunidade -> assistente de gerador -> catálogo comercial/configuração
+-> proposta -> aprovação/aceite -> conversão de pós-venda quando aplicável.
+O pré-cadastro resultante não representa, por si só, instalação concluída;
+o equipamento entra no fluxo técnico/operacional pertinente.
+
+E. CHAMADO EMERGENCIAL
+Portal/atendimento interno/evento monitorado -> chamado ou registro
+operacional pertinente -> triagem -> O.S. quando necessária
+-> despacho -> técnico -> execução -> relatório e comunicação ao cliente.
+Tipos de tarefa e regras de plantão são conferidos conforme o perfil.
+
+F. COMPRA E ALMOXARIFADO
+Necessidade de O.S./contrato/venda/estoque/garantia -> solicitação
+-> disponibilidade -> cotação -> seleção -> aprovação -> pedido
+-> recebimento/aceite -> entrada de material no estoque
+-> documento conferido/parcelas -> contas a pagar -> pagamento.
+Compra para um destino específico mantém esse vínculo durante o processo.
+
+G. PESSOAS E EXECUÇÃO
+RH cadastra e acompanha o colaborador -> conta recebe perfil/permissões
+-> certificações e disponibilidade apoiam a alocação
+-> execução registra apontamentos -> horas e custos são acompanhados.
+EPIs e ferramentas têm seus próprios controles de entrega e vencimento.
+
+H. ESCOPO TÉCNICO E DOCUMENTOS
+Catálogo + vínculo técnico + biblioteca de procedimentos + equipamento
+-> prévia de escopo -> revisão humana -> texto e snapshot na proposta
+-> documento comercial -> cópia da versão aprovada na O.S.
+Autorizações/recusas pertencem à execução e não alteram os itens vendidos.
+O editor de documentos controla a apresentação dos modelos documentais.
+
+I. FINANCEIRO E GESTÃO
+Recebíveis + despesas + pagamentos/recebimentos + contas bancárias
+-> movimentos -> conciliação -> fluxo de caixa -> centros de custo
+-> custos e relatórios gerenciais -> painel conforme o perfil.
+
+J. PUBLICAÇÃO PARA O CLIENTE
+Registro interno -> aprovação/liberação -> documento/portal/link seguro
+-> consulta, resposta ou aceite do cliente -> atualização do registro
+interno correspondente, conforme a ação disponível.
+
+
+19. PRINCIPAIS REGISTROS COMPARTILHADOS
+========================================================
+
+CLIENTE
+É usado em oportunidades, propostas, equipamentos, locais, contratos,
+chamados, O.S., laudos, títulos financeiros, documentos e portal.
+
+EQUIPAMENTO
+É usado em propostas técnicas, contratos, atendimentos, O.S., laudos,
+garantias, paradas, telemetria e histórico de manutenção.
+
+ITEM DO CATÁLOGO
+É usado nas propostas, itens do equipamento, compras, fornecedores,
+estoque, materiais da O.S., pedidos de venda e controles de EPIs/ferramentas.
+
+COLABORADOR/USUÁRIO
+Conecta responsabilidades comerciais e operacionais, acesso ao sistema,
+documentação, equipe técnica, apontamentos e comissões.
+
+FORNECEDOR
+Conecta itens negociados, cotações, pedidos, documentos de entrada,
+garantias e contas a pagar.
+
+CONTRATO E O.S.
+Conectam o compromisso comercial à prestação do serviço, às evidências,
+ao consumo de recursos e ao resultado financeiro.
+
+CENTRO DE CUSTO
+Conecta receitas e despesas à análise do cliente, contrato e equipamento.
+
+
+20. OBSERVAÇÕES SOBRE O ESTADO ATUAL
+========================================================
+
+- A visibilidade varia por usuário, departamento, tela, ação e carteira.
+  Um gestor pode acompanhar mais de uma carteira sem liberar tudo à equipe.
+
+- Proposta aprovada, autorização operacional, recebimento de material,
+  faturamento e pagamento têm significados e registros diferentes.
+
+- Fiscal: a tela atual prepara rascunhos; a emissão/autorização depende
+  de integração e configuração fiscal efetivamente disponíveis.
+
+- Bancos: a rotina CNAB depende dos dados corretos de conta/convênio e
+  do processamento dos arquivos pelo banco; a tela não prova transmissão.
+
+- E-mail, WhatsApp e monitoramento dependem de suas respectivas integrações.
+  O levantamento de telas não confirma credenciais, conexão ou entrega.
+
+- Frota e comissões possuem telas de acompanhamento no código atual;
+  não devem ser confundidas com uma gestão completa de todos os processos
+  de transporte, folha ou metas.
+
+- A biblioteca técnica de escopos está em Peças e serviços. A ideia recente
+  de uma biblioteca unificada no Manitec Studio para e-mails, avisos,
+  lembretes e escopos é uma melhoria proposta, ainda não implementada.
+
+- O levantamento considera as páginas existentes em frontend/app e as
+  ligações identificadas nos componentes/serviços. Algumas funções aparecem
+  em abas ou sobretelas e não possuem uma rota própria.
+
+FONTES DO LEVANTAMENTO
+frontend/lib/dashboard-navigation.ts; frontend/app/**/page.tsx;
+componentes de compras, gestão de usuários e casos operacionais;
+frontend/app/dashboard/developer/data/resources.ts;
+serviços de propostas, compras, ordens, documentos e pedidos de venda.
+
+FIM DO RESUMO

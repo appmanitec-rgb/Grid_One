@@ -1,0 +1,1 @@
+ALTER TABLE "generators" ADD COLUMN IF NOT EXISTS "photoUrl" TEXT;

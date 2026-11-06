@@ -1,14 +1,21 @@
 "use client";
+import { formatCalendarDate } from "@/lib/formatters";
+import { InterfaceIcon } from "@/app/dashboard/components/InterfaceIcon";
+
+import { commercialLabel } from "@/lib/commercial-labels";
+
+import { PageHeader } from "../../components/DashboardPageKit";
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
+import CrmTimeline from "../../components/CrmTimeline";
+import ClientRelationshipMap from "../ClientRelationshipMap";
 import {
   OperationalBreadcrumb,
   PermissionAwareLink,
   QuickActions,
-  RelatedEntityGrid,
 } from "../../components/OperationalLinks";
 
 type ClientAddress = {
@@ -192,7 +199,7 @@ function mapLogAction(action: string) {
 async function getClientProfile(id: string): Promise<ClientProfile> {
   const res = await apiFetch(apiUrl(`/clients/${id}`), { cache: "no-store" });
   if (!res.ok) {
-    throw new Error(await readApiErrorMessage(res, "Cliente nao encontrado."));
+    throw new Error(await readApiErrorMessage(res, "Cliente não encontrado."));
   }
   return res.json();
 }
@@ -206,7 +213,7 @@ export default function ClientProfilePage() {
 
   const loadClient = useCallback(async () => {
     if (!id) {
-      setError("Cliente nao informado.");
+      setError("Cliente não informado.");
       setLoading(false);
       return;
     }
@@ -248,7 +255,7 @@ export default function ClientProfilePage() {
       <div className="p-8">
         <div className="bg-white border border-zinc-200 rounded-xl p-8 text-center">
           <h1 className="text-2xl font-bold text-zinc-800 mb-2">
-            Cliente nao encontrado
+            Cliente não encontrado
           </h1>
           <p className="text-zinc-500 mb-6">
             {error || "Verifique se o cliente existe ou se foi removido."}
@@ -269,15 +276,6 @@ export default function ClientProfilePage() {
   const generators = client.generators ?? [];
   const proposals = client.proposals ?? [];
   const contracts = client.contracts ?? [];
-  const orders = generators.flatMap((generator) =>
-    (generator.orders ?? []).map((order) => ({
-      ...order,
-      generatorId: generator.id,
-      generatorName: generator.name,
-    })),
-  );
-  const tickets = client.serviceTickets ?? [];
-  const serviceReports = client.serviceReports ?? [];
   const logItems = (client.auditLogs ?? [])
     .map((log) => ({
       id: log.id,
@@ -289,7 +287,7 @@ export default function ClientProfilePage() {
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-6">
+    <div className="dashboard-page space-y-5">
       <OperationalBreadcrumb
         items={[
           { label: "Dashboard", href: "/dashboard" },
@@ -298,24 +296,12 @@ export default function ClientProfilePage() {
         ]}
       />
 
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <Link
+      <PageHeader eyebrow="Comercial" title="Ficha do cliente" description="Cadastro, equipamentos, propostas e histórico do relacionamento." actions={<>
+<Link
               href="/dashboard/clients"
-              className="w-9 h-9 flex items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
-            >
-              ←
-            </Link>
-            <h1 className="text-3xl font-bold text-zinc-800">
-              Perfil do Cliente
-            </h1>
-          </div>
-          <p className="text-zinc-500">
-            Visao completa cadastral, operacional e comercial.
-          </p>
-        </div>
-      </div>
+              className="app-icon-button" aria-label="Voltar para clientes"
+            ><InterfaceIcon name="arrow-left" className="h-4 w-4" /></Link>
+</>} />
 
       <section className="bg-white border border-zinc-200 rounded-xl p-6">
         <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">
@@ -326,6 +312,11 @@ export default function ClientProfilePage() {
             {
               label: "Editar cadastro",
               href: `/dashboard/clients/new?editClientId=${client.id}`,
+              permission: "clients.update",
+            },
+            {
+              label: "Gerenciar central do cliente",
+              href: `/dashboard/clients/${client.id}/portal`,
               permission: "clients.update",
             },
             {
@@ -347,17 +338,17 @@ export default function ClientProfilePage() {
             },
             {
               label: "Ver chamados",
-              href: "/dashboard/atendimento",
+              href: `/dashboard/atendimento?q=${encodeURIComponent(client.companyName)}`,
               permission: "tickets.view",
             },
             {
               label: "Ver O.S.",
-              href: "/dashboard/orders",
+              href: `/dashboard/orders?q=${encodeURIComponent(client.companyName)}`,
               permission: "orders.view",
             },
             {
               label: "Ver contratos",
-              href: "/dashboard/contracts",
+              href: `/dashboard/contracts?q=${encodeURIComponent(client.companyName)}`,
               permission: "contracts.view",
             },
           ]}
@@ -368,60 +359,16 @@ export default function ClientProfilePage() {
         <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">
           Mapa de relacionamentos
         </h2>
-        <RelatedEntityGrid
-          items={[
-            ...generators.slice(0, 6).map((generator) => ({
-              label: generator.name,
-              description: `Equipamento ${generator.serialNumber || "sem serie"} - ${generator.power} kVA`,
-              href: `/dashboard/equipments/${generator.id}`,
-              badge: "Equipamento",
-              tone: "blue" as const,
-              permission: "equipments.view",
-            })),
-            ...contracts.slice(0, 4).map((contract) => ({
-              label: contract.code,
-              description: `${contract.status} - vigencia ate ${new Date(contract.endDate).toLocaleDateString("pt-BR")}`,
-              href: `/dashboard/contracts/${contract.id}`,
-              badge: "Contrato",
-              tone: "emerald" as const,
-              permission: "contracts.view",
-            })),
-            ...orders.slice(0, 5).map((order) => ({
-              label: order.title,
-              description: `${order.generatorName} - ${order.status}`,
-              href: `/dashboard/orders/${order.id}`,
-              badge: "O.S.",
-              tone: "amber" as const,
-              permission: "orders.view",
-            })),
-            ...tickets.slice(0, 4).map((ticket) => ({
-              label: ticket.code || ticket.title,
-              description: `${ticket.status} - ${ticket.generator?.name || "sem equipamento"}`,
-              href: `/dashboard/atendimento/${ticket.id}`,
-              badge: "Chamado",
-              tone: "rose" as const,
-              permission: "tickets.view",
-            })),
-            ...serviceReports.slice(0, 4).map((report) => ({
-              label: report.code,
-              description: `${report.title || "Laudo tecnico"} - ${report.status}`,
-              href: `/dashboard/relatorios-tecnicos/${report.id}`,
-              badge: "Laudo",
-              tone: "slate" as const,
-              permission: "serviceReports.view",
-            })),
-          ]}
-          empty="Nenhum relacionamento navegavel encontrado para este cliente."
-        />
+        <ClientRelationshipMap client={client} />
       </section>
 
       <section className="bg-white border border-zinc-200 rounded-xl p-6">
         {client.isProvisional ? (
           <div className="mb-5 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-            <p className="font-bold">Vinculo importado aguardando revisao</p>
+            <p className="font-bold">Vínculo importado aguardando revisão</p>
             <p className="mt-1">
-              Este cadastro agrupa maquinas cujo proprietario nao pode ser
-              associado com seguranca a uma filial. Confirme o cliente correto
+              Este cadastro agrupa máquinas cujo proprietario não pode ser
+              associado com segurança a uma filial. Confirme o cliente correto
               antes de ativar ou usar estes dados comercialmente.
             </p>
           </div>
@@ -430,8 +377,8 @@ export default function ClientProfilePage() {
           Dados gerais
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-          <Info label="Codigo do cliente" value={client.code} />
-          <Info label="Razao social / Nome" value={client.companyName} />
+          <Info label="Código do cliente" value={client.code} />
+          <Info label="Razão social / Nome" value={client.companyName} />
           <Info label="Nome fantasia" value={client.tradeName || "-"} />
           <Info label="Documento" value={client.cnpj || "Nao informado"} />
           <Info
@@ -459,7 +406,7 @@ export default function ClientProfilePage() {
           />
           <Info label="Retem ISS" value={client.withholdsIss ? "Sim" : "Nao"} />
           <Info
-            label="Endereco principal"
+            label="Endereço principal"
             value={
               client.address
                 ? `${client.address} - ${client.city}/${client.state}`
@@ -483,10 +430,10 @@ export default function ClientProfilePage() {
 
       <section className="bg-white border border-zinc-200 rounded-xl p-6">
         <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">
-          Enderecos
+          Endereços
         </h2>
         {addresses.length === 0 ? (
-          <p className="text-sm text-zinc-500">Nenhum endereco cadastrado.</p>
+          <p className="text-sm text-zinc-500">Nenhum endereço cadastrado.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {addresses.map((addr) => (
@@ -523,7 +470,7 @@ export default function ClientProfilePage() {
         {contacts.length === 0 ? (
           <p className="text-sm text-zinc-500">Nenhum contato cadastrado.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-zinc-500 border-b border-zinc-200">
@@ -556,10 +503,10 @@ export default function ClientProfilePage() {
 
       <section className="bg-white border border-zinc-200 rounded-xl p-6">
         <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">
-          Maquinas vinculadas
+          Máquinas vinculadas
         </h2>
         {generators.length === 0 ? (
-          <p className="text-sm text-zinc-500">Nenhuma maquina vinculada.</p>
+          <p className="text-sm text-zinc-500">Nenhuma máquina vinculada.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {generators.map((gen) => (
@@ -576,7 +523,7 @@ export default function ClientProfilePage() {
                   Potencia: {gen.power} kVA
                 </p>
                 <p className="text-sm text-zinc-600">
-                  Codigo: {gen.code} | Serie: {gen.serialNumber || "-"}
+                  Código: {gen.code} | Série: {gen.serialNumber || "-"}
                 </p>
                 <p className="text-sm text-zinc-600">
                   Cadastrada por:{" "}
@@ -598,11 +545,11 @@ export default function ClientProfilePage() {
         {contracts.length === 0 ? (
           <p className="text-sm text-zinc-500">Nenhum contrato vinculado.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-zinc-500 border-b border-zinc-200">
-                  <th className="py-2">Numero</th>
+                  <th className="py-2">Número</th>
                   <th className="py-2">Inicio</th>
                   <th className="py-2">Fim</th>
                   <th className="py-2">Periodicidade</th>
@@ -623,13 +570,13 @@ export default function ClientProfilePage() {
                       </PermissionAwareLink>
                     </td>
                     <td className="py-2">
-                      {new Date(contract.startDate).toLocaleDateString("pt-BR")}
+                      {formatCalendarDate(contract.startDate)}
                     </td>
                     <td className="py-2">
-                      {new Date(contract.endDate).toLocaleDateString("pt-BR")}
+                      {formatCalendarDate(contract.endDate)}
                     </td>
-                    <td className="py-2">{contract.preventiveRecurrence}</td>
-                    <td className="py-2">{contract.status}</td>
+                    <td className="py-2">{commercialLabel(contract.preventiveRecurrence)}</td>
+                    <td className="py-2">{commercialLabel(contract.status)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -645,11 +592,11 @@ export default function ClientProfilePage() {
         {proposals.length === 0 ? (
           <p className="text-sm text-zinc-500">Nenhuma proposta cadastrada.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-zinc-500 border-b border-zinc-200">
-                  <th className="py-2">Codigo</th>
+                  <th className="py-2">Código</th>
                   <th className="py-2">Status</th>
                   <th className="py-2">Valor</th>
                   <th className="py-2">Data</th>
@@ -668,7 +615,7 @@ export default function ClientProfilePage() {
                         {proposal.code}
                       </PermissionAwareLink>
                     </td>
-                    <td className="py-2">{proposal.status}</td>
+                    <td className="py-2">{commercialLabel(proposal.status)}</td>
                     <td className="py-2">
                       R$ {Number(proposal.totalValue || 0).toFixed(2)}
                     </td>
@@ -682,6 +629,8 @@ export default function ClientProfilePage() {
           </div>
         )}
       </section>
+
+      <CrmTimeline clientId={client.id} />
 
       <section className="bg-white border border-zinc-200 rounded-xl p-6">
         <h2 className="text-lg font-bold text-zinc-800 mb-4 border-b border-zinc-100 pb-2">

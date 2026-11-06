@@ -7,7 +7,10 @@ describe('DocxTemplateRendererService', () => {
   const renderer = new DocxTemplateRendererService();
 
   it('loads an institutional proposal template and renders DOCX with variables and table rows', () => {
-    const template = templates.loadInstitutional('proposal');
+    const template = templates.loadInstitutional(
+      'proposal',
+      'manitec-default-v1',
+    );
     const generated = renderer.render({
       template,
       fileName: 'proposta-PROP-1.docx',

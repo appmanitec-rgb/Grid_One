@@ -1,4 +1,5 @@
 "use client";
+import { FormField } from "../components/DashboardPageKit";
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -27,8 +28,7 @@ import ListPagination, {
   useListPagination,
 } from "../components/ListPagination";
 
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 
 export default function DeliveriesPage() {
   const router = useRouter();
@@ -143,11 +143,12 @@ export default function DeliveriesPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
-        eyebrow="Envios"
-        title="Historico de compartilhamentos"
-        description="Tudo o que ja saiu por e-mail, WhatsApp, webhook e link seguro."
+        loading={loading}
+        eyebrow="Painel"
+        title="Histórico de envios"
+        description="Consulte os documentos compartilhados por e-mail, WhatsApp e link."
         stats={[
           {
             label: "Total",
@@ -170,7 +171,7 @@ export default function DeliveriesPage() {
           {
             label: "Falhas",
             value: String(summary.failed),
-            helper: "Pontos que pedem revisao.",
+            helper: "Pontos que pedem revisão.",
             tone: "rose",
           },
         ]}
@@ -181,7 +182,7 @@ export default function DeliveriesPage() {
               onClick={() => void loadHistory()}
               className={SECONDARY_BUTTON}
             >
-              Atualizar historico
+              Atualizar histórico
             </button>
           </>
         }
@@ -196,30 +197,36 @@ export default function DeliveriesPage() {
         description="Cada item mostra documento, canal, provider e abertura do link."
         actions={
           <div className="flex w-full flex-col gap-3 xl:w-auto xl:min-w-[540px] xl:flex-row">
-            <TextInput
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar por documento, cliente, destino ou status..."
-              className="xl:min-w-[320px]"
-            />
-            <SelectInput
-              value={channelFilter}
-              onChange={(event) =>
-                setChannelFilter(event.target.value as "ALL" | DeliveryChannel)
-              }
-              className="xl:w-[190px]"
-            >
-              <option value="ALL">Todos os canais</option>
-              <option value="EMAIL">E-mail</option>
-              <option value="WHATSAPP">WhatsApp</option>
-              <option value="WEBHOOK">Webhook</option>
-            </SelectInput>
+            <FormField className="min-w-0 flex-1" label="Buscar envio">
+              <TextInput
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Buscar por documento, cliente, destino ou status..."
+                className="xl:min-w-[320px]"
+              />
+            </FormField>
+            <FormField className="min-w-0 flex-1" label="Canal do envio">
+              <SelectInput
+                value={channelFilter}
+                onChange={(event) =>
+                  setChannelFilter(
+                    event.target.value as "ALL" | DeliveryChannel,
+                  )
+                }
+                className="xl:w-[190px]"
+              >
+                <option value="ALL">Todos os canais</option>
+                <option value="EMAIL">E-mail</option>
+                <option value="WHATSAPP">WhatsApp</option>
+                <option value="WEBHOOK">Webhook</option>
+              </SelectInput>
+            </FormField>
           </div>
         }
       >
         {loading ? (
           <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 px-5 py-10 text-sm text-slate-500">
-            Carregando historico...
+            Carregando histórico...
           </div>
         ) : filteredItems.length === 0 ? (
           <EmptyState
@@ -259,7 +266,9 @@ export default function DeliveriesPage() {
                   <div className="text-right text-sm text-slate-500">
                     <p>{formatDateTime(item.createdAt)}</p>
                     {item.share ? (
-                      <p className="mt-1">{item.share.openedCount} abertura(s)</p>
+                      <p className="mt-1">
+                        {item.share.openedCount} abertura(s)
+                      </p>
                     ) : null}
                     {canRetryDelivery(item.status, viewerRole) ? (
                       <button
@@ -268,7 +277,9 @@ export default function DeliveriesPage() {
                         disabled={retryingId === item.id}
                         className="mt-3 inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        {retryingId === item.id ? "Reenviando..." : "Tentar de novo"}
+                        {retryingId === item.id
+                          ? "Reenviando..."
+                          : "Tentar de novo"}
                       </button>
                     ) : null}
                   </div>

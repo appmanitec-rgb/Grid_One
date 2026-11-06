@@ -1,0 +1,104 @@
+{
+  "databaseName": "gridone_stage3_stage",
+  "cases": [
+    {
+      "case": "QA-FLOW-01-peca-maquina",
+      "type": "PARTS",
+      "proposalAmount": 179,
+      "receivableCount": 1,
+      "receivableAmount": 179,
+      "status": "PASS"
+    },
+    {
+      "case": "QA-FLOW-02-peca-avulsa",
+      "type": "PARTS",
+      "proposalAmount": 95,
+      "receivableCount": 1,
+      "receivableAmount": 95,
+      "status": "PASS"
+    },
+    {
+      "case": "QA-FLOW-03-servico-catalogo",
+      "type": "SERVICES",
+      "proposalAmount": 6800,
+      "receivableCount": 1,
+      "receivableAmount": 6800,
+      "status": "PASS"
+    },
+    {
+      "case": "QA-FLOW-04-hora-junior",
+      "type": "SERVICES",
+      "proposalAmount": 375,
+      "receivableCount": 1,
+      "receivableAmount": 375,
+      "status": "PASS"
+    },
+    {
+      "case": "QA-FLOW-05-misto-maquina-hora",
+      "type": "PARTS_AND_SERVICES",
+      "proposalAmount": 539.5,
+      "receivableCount": 2,
+      "receivableAmount": 539.5,
+      "status": "PASS"
+    },
+    {
+      "case": "QA-FLOW-06-contrato",
+      "type": "CONTRACT",
+      "proposalAmount": 6800,
+      "receivableCount": 13,
+      "receivableAmount": 88400,
+      "status": "PASS"
+    },
+    {
+      "case": "QA-FLOW-07-peca-maquina-desconto",
+      "type": "PARTS",
+      "proposalAmount": 912,
+      "receivableCount": 1,
+      "receivableAmount": 912,
+      "status": "PASS"
+    },
+    {
+      "case": "QA-FLOW-08-peca-avulsa-quantidade",
+      "type": "PARTS",
+      "proposalAmount": 380,
+      "receivableCount": 1,
+      "receivableAmount": 380,
+      "status": "PASS"
+    },
+    {
+      "case": "QA-FLOW-09-servico-mais-hora",
+      "type": "SERVICES",
+      "proposalAmount": 13750,
+      "receivableCount": 1,
+      "receivableAmount": 13750,
+      "status": "PASS"
+    },
+    {
+      "case": "QA-FLOW-10-hora-assistente",
+      "type": "SERVICES",
+      "proposalAmount": 400,
+      "receivableCount": 1,
+      "receivableAmount": 400,
+      "status": "PASS"
+    },
+    {
+      "case": "QA-FLOW-11-misto-avulsa-servico",
+      "type": "PARTS_AND_SERVICES",
+      "proposalAmount": 6895,
+      "receivableCount": 2,
+      "receivableAmount": 6895,
+      "status": "PASS"
+    },
+    {
+      "case": "QA-FLOW-12-pecas-multiplas-maquina",
+      "type": "PARTS",
+      "proposalAmount": 819,
+      "receivableCount": 1,
+      "receivableAmount": 819,
+      "status": "PASS"
+    }
+  ],
+  "proposalAmountTotal": 37944.5,
+  "nonContractReceivableAmountTotal": 31144.5,
+  "result": "PASS"
+}

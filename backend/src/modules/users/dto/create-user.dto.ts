@@ -1,6 +1,7 @@
 import {
   IsArray,
   IsBoolean,
+  IsByteLength,
   IsEmail,
   IsEnum,
   IsNotEmpty,
@@ -11,10 +12,16 @@ import {
   IsUrl,
   IsUUID,
   MinLength,
+  Min,
+  Max,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { SkillLevel, UserAvailabilityStatus, UserRole } from '@prisma/client';
+import { IsAccessRules } from '../../auth/rules/access-rules.validator';
+import type { DetailedAccessRules } from '../../auth/rules/access-rules';
+import { IsProfilePhoto } from '../profile-photo.validator';
 
 export class CreateUserTechnicianProfileDto {
   @IsString()
@@ -38,9 +45,11 @@ export class CreateUserDto {
   @IsEmail({}, { message: 'Forneca um email valido' })
   email: string;
 
+  @ValidateIf((dto: CreateUserDto) => dto.role !== UserRole.CLIENT)
   @IsString()
-  @MinLength(6, { message: 'A senha deve ter no minimo 6 caracteres' })
-  password: string;
+  @MinLength(12, { message: 'A senha deve ter no minimo 12 caracteres' })
+  @IsByteLength(12, 72, { message: 'A senha deve ter no maximo 72 bytes' })
+  password?: string;
 
   @IsEnum(UserRole, {
     message: 'O cargo deve ser um UserRole valido.',
@@ -61,7 +70,13 @@ export class CreateUserDto {
 
   @IsNumber()
   @IsOptional()
+  @Min(0)
+  @Max(100)
   approvalDiscountLimit?: number;
+
+  @IsOptional()
+  @IsAccessRules()
+  accessRules?: DetailedAccessRules;
 
   @IsNumber()
   @IsOptional()
@@ -79,7 +94,7 @@ export class CreateUserDto {
   @IsOptional()
   documentId?: string;
 
-  @IsUrl()
+  @IsProfilePhoto()
   @IsOptional()
   profilePhotoUrl?: string;
 
@@ -90,6 +105,11 @@ export class CreateUserDto {
   @IsUUID()
   @IsOptional()
   linkedClientId?: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  portalPermissions?: string[];
 
   @IsEnum(UserAvailabilityStatus)
   @IsOptional()

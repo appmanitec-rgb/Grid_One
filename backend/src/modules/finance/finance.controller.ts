@@ -1,4 +1,8 @@
-﻿import {
+import {
+  canReadBankBalances,
+  type RuleActor,
+} from '../auth/rules/access-rules';
+import {
   Body,
   Controller,
   Get,
@@ -42,7 +46,10 @@ import {
   ResolveReconciliationIssueDto,
   ReversePayablePaymentDto,
   ReverseReceivablePaymentDto,
+  ReviewExecutionBillingDto,
+  ScheduleProposalPaymentsDto,
   SyncOrderReceivableDto,
+  SyncSalesOrderReceivableDto,
   UnmatchBankStatementEntryDto,
   UnreconcileBankMovementDto,
   UpdateBankAccountDto,
@@ -66,6 +73,25 @@ export class FinanceController {
 
   private getActorRole(req: Request): string | undefined {
     return (req as AuthenticatedRequest).user?.role;
+  }
+
+  @Get('receivables/proposals/pending')
+  pendingProposalPayments() {
+    return this.financeService.pendingProposalPayments();
+  }
+
+  @Post('receivables/proposals/:id/schedule')
+  @RequireAccessPolicy('finance.create')
+  scheduleProposalPayments(
+    @Param('id') id: string,
+    @Body() dto: ScheduleProposalPaymentsDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.scheduleProposalPayments(
+      id,
+      dto.dueDates,
+      this.getActorUserId(req),
+    );
   }
 
   @UseGuards(AuthGuard)
@@ -159,6 +185,43 @@ export class FinanceController {
 
   @UseGuards(AuthGuard)
   @RequireAccessPolicy('finance.view')
+  @Get('execution-billing/queue')
+  executionBillingQueue() {
+    return this.financeService.listExecutionBillingQueue();
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.create')
+  @Post('execution-billing/orders/:orderId/confirm')
+  confirmExecutionBilling(
+    @Param('orderId') orderId: string,
+    @Body() dto: ReviewExecutionBillingDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.createReceivablesFromExecutionProposal(
+      orderId,
+      dto.dueDate,
+      this.getActorUserId(req),
+    );
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.create')
+  @Post('receivables/sync/sales-orders/:salesOrderId')
+  syncSalesOrder(
+    @Param('salesOrderId') salesOrderId: string,
+    @Body() dto: SyncSalesOrderReceivableDto,
+    @Req() req: Request,
+  ) {
+    return this.financeService.createReceivableFromSalesOrder(
+      salesOrderId,
+      dto.dueDate,
+      this.getActorUserId(req),
+    );
+  }
+
+  @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.view')
   @Get('payables')
   payables() {
     return this.financeService.listPayables();
@@ -222,6 +285,17 @@ export class FinanceController {
   }
 
   @UseGuards(AuthGuard)
+  @RequireAccessPolicy('finance.view')
+  @Get('bank-account-options')
+  bankAccountOptions(@Req() req: Request) {
+    const actor = req['user'] as RuleActor & {
+      accessPolicy?: { pages?: { finance?: boolean } };
+    };
+    return this.financeService.listBankAccountOptions(
+      canReadBankBalances(actor, actor.accessPolicy?.pages?.finance === true),
+    );
+  }
+
   @RequireAccessPolicy('finance.view')
   @Get('bank-accounts')
   bankAccounts() {

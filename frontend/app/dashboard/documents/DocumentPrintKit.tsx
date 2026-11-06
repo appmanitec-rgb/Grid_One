@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { PageHeader } from "../components/DashboardPageKit";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { DashboardDocumentCompany } from "@/lib/dashboard-documents";
@@ -37,15 +38,28 @@ export function PrintDocumentShell({
   children: ReactNode;
 }) {
   return (
-    <div className="space-y-5">
-      <div className="document-print-toolbar flex flex-wrap items-center gap-3">
-        {backHref ? <Link href={backHref} className={SECONDARY_BUTTON}>{backLabel}</Link> : null}
-        {sourceHref && sourceLabel ? (
-          <Link href={sourceHref} className={SECONDARY_BUTTON}>
-            {sourceLabel}
-          </Link>
-        ) : null}
-        {actions}
+    <div className="dashboard-page space-y-5">
+      <div className="document-print-toolbar">
+        <PageHeader
+          eyebrow="Documentos"
+          title={title}
+          description={subtitle}
+          actions={
+            <>
+              {backHref ? (
+                <Link href={backHref} className={SECONDARY_BUTTON}>
+                  {backLabel}
+                </Link>
+              ) : null}
+              {sourceHref && sourceLabel ? (
+                <Link href={sourceHref} className={SECONDARY_BUTTON}>
+                  {sourceLabel}
+                </Link>
+              ) : null}
+              {actions}
+            </>
+          }
+        />
       </div>
 
       <article className="document-print-page overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_30px_70px_-50px_rgba(15,23,42,0.34)]">
@@ -80,27 +94,27 @@ export function PrintDocumentShell({
 
               <div className="space-y-1">
                 <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-500">
-                  Documento operacional
+                  Resumo para consulta
                 </p>
-                <h1 className="text-3xl font-bold tracking-tight text-slate-950">
+                <h2 className="text-3xl font-bold tracking-tight text-slate-950">
                   {title}
-                </h1>
+                </h2>
                 <p className="max-w-2xl text-sm leading-6 text-slate-600">
                   {subtitle}
                 </p>
               </div>
             </div>
 
-            <div className="grid gap-2 text-sm text-slate-600 md:min-w-[240px]">
-              <InfoLine label="Codigo" value={code} />
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm text-slate-600 md:w-[360px] md:shrink-0">
+              <InfoLine label="Código" value={code} />
               <InfoLine label="Empresa" value={company.tradeName} />
-              <InfoLine label="CNPJ" value={company.cnpj || "-"} />
+              <InfoLine label="CNPJ" value={company.cnpj || "Não informado"} />
               <InfoLine
                 label="Contato"
                 value={company.email || company.phone || "-"}
               />
               <InfoLine
-                label="Endereco"
+                label="Endereço"
                 value={formatCompanyAddress(company) || "-"}
               />
             </div>
@@ -201,11 +215,7 @@ export function PrintTable({
   );
 }
 
-export function ToolbarPill({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export function ToolbarPill({ children }: { children: ReactNode }) {
   return (
     <span className="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
       {children}
@@ -219,7 +229,7 @@ function InfoLine({ label, value }: { label: string; value: string }) {
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
         {label}
       </p>
-      <p className="mt-1 text-sm text-slate-800">{value}</p>
+      <p className="mt-1 break-words text-sm text-slate-800">{value}</p>
     </div>
   );
 }

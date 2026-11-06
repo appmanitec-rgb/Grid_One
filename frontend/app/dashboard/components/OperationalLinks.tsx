@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { InterfaceIcon } from "./InterfaceIcon";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import type { AccessPolicy } from "@/lib/access";
@@ -36,7 +37,7 @@ const TONE_CLASSES: Record<Tone, string> = {
 };
 
 const LINK_CLASSES =
-  "inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-800";
+  "app-button app-button-secondary";
 
 const DISABLED_CLASSES =
   "inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-500";
@@ -61,14 +62,14 @@ export function PermissionAwareLink({
 
   if (!href || !allowed) {
     return (
-      <span className={fallbackClassName || DISABLED_CLASSES} title={title}>
+      <span className={fallbackClassName || DISABLED_CLASSES} title={title} aria-disabled="true">
         {children}
       </span>
     );
   }
 
   return (
-    <Link href={href} className={className || LINK_CLASSES}>
+    <Link href={href} className={className || LINK_CLASSES} title={title}>
       {children}
     </Link>
   );
@@ -86,18 +87,18 @@ export function OperationalBreadcrumb({ items }: { items: BreadcrumbItem[] }) {
         const isLast = index === visible.length - 1;
         return (
           <span key={`${item.label}-${index}`} className="flex min-w-0 items-center gap-2">
-            {index > 0 ? <span className="text-slate-300">/</span> : null}
+            {index > 0 ? <InterfaceIcon name="chevron-right" className="h-3.5 w-3.5 shrink-0 text-slate-400" /> : null}
             {item.href && !isLast ? (
               <PermissionAwareLink
                 href={item.href}
                 permission={item.permission}
-                className="max-w-[14rem] truncate text-xs font-bold text-slate-500 transition hover:text-sky-700 hover:underline"
-                fallbackClassName="max-w-[14rem] truncate text-xs font-bold text-slate-400"
+                className="max-w-[14rem] truncate text-xs font-medium text-slate-500 transition hover:text-sky-700"
+                fallbackClassName="max-w-[14rem] truncate text-xs font-medium text-slate-400"
               >
                 {item.label}
               </PermissionAwareLink>
             ) : (
-              <span className="max-w-[18rem] truncate text-slate-800">{item.label}</span>
+              <span aria-current={isLast ? "page" : undefined} className="max-w-[18rem] truncate font-medium text-slate-800">{item.label}</span>
             )}
           </span>
         );
@@ -115,7 +116,7 @@ export function EntityBadge({
 }) {
   return (
     <span
-      className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold ${TONE_CLASSES[tone]}`}
+      className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${TONE_CLASSES[tone]}`}
     >
       {label}
     </span>
@@ -152,10 +153,10 @@ export function RelatedEntityCard({
   const access = useAccessPolicy();
   const allowed = isAllowed(item.href, access, item.permission);
   const content = (
-    <article className="h-full rounded-2xl border border-slate-200 bg-slate-50/85 p-4 transition hover:border-sky-200 hover:bg-sky-50">
+    <article className="h-full rounded-xl border border-slate-200 bg-white p-4 transition-colors hover:border-slate-300 hover:bg-slate-50/60">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="break-words text-sm font-bold text-slate-900">{item.label}</p>
+          <p className="break-words text-sm font-semibold text-slate-900">{item.label}</p>
           {item.description ? (
             <p className="mt-1 break-words text-xs leading-5 text-slate-600">
               {item.description}
@@ -165,17 +166,17 @@ export function RelatedEntityCard({
         {item.badge ? <EntityBadge label={item.badge} tone={item.tone} /> : null}
       </div>
       {item.href && allowed ? (
-        <p className="mt-3 text-xs font-bold text-sky-700">Abrir relacionamento</p>
+        <p className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-sky-700">Ver detalhes<InterfaceIcon name="arrow-right" className="h-3.5 w-3.5" /></p>
       ) : (
         <p className="mt-3 text-xs font-semibold text-slate-500">
-          {item.disabledReason || "Sem acesso ou vinculo navegavel."}
+          {item.disabledReason || (item.href ? "Sem acesso a este vínculo." : "Nenhum vínculo disponível.")}
         </p>
       )}
     </article>
   );
 
   if (!item.href || !allowed) return content;
-  return <Link href={item.href}>{content}</Link>;
+  return <Link href={item.href} aria-label={item.label}>{content}</Link>;
 }
 
 export function RelatedEntityGrid({

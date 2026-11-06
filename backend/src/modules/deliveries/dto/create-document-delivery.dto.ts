@@ -1,7 +1,18 @@
-import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  Min,
+} from 'class-validator';
 import { DeliveryChannel, DeliveryDocumentType } from '@prisma/client';
 
 export class CreateDocumentDeliveryDto {
+  @IsOptional()
+  @IsUUID()
+  requestKey?: string;
   @IsEnum(DeliveryChannel)
   channel!: DeliveryChannel;
 

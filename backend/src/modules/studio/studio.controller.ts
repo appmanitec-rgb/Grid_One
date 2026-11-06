@@ -8,12 +8,14 @@ import {
   Query,
   Req,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { AuditDomain } from '@prisma/client';
 import { Request } from 'express';
 import { RequireAccessPolicy } from '../auth/access-policy.decorator';
 import { AccessPolicyGuard } from '../auth/access-policy.guard';
 import { AuthGuard } from '../auth/auth.guard';
+import { CommercialDataPrivacyInterceptor } from '../auth/rules/commercial-privacy.interceptor';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { StudioImportService } from './studio-import.service';
 import { StudioService } from './studio.service';
@@ -30,6 +32,7 @@ type AuthRequest = Request & {
 };
 
 @Controller('studio')
+@UseInterceptors(CommercialDataPrivacyInterceptor)
 @UseGuards(AuthGuard, AccessPolicyGuard)
 export class StudioController {
   constructor(
@@ -71,6 +74,12 @@ export class StudioController {
     });
   }
 
+  @Get('payment-issuers')
+  @RequireAccessPolicy('studio.access', 'studio.dataView')
+  listPaymentIssuers(@Req() req: AuthRequest) {
+    return this.studioService.listPaymentIssuers(req.user ?? {});
+  }
+
   @Patch('data/:resource/:id')
   @RequireAccessPolicy('studio.access', 'studio.dataEdit')
   updateRecord(
@@ -84,13 +93,16 @@ export class StudioController {
 
   @Get('data/:resource')
   @RequireAccessPolicy('studio.access', 'studio.dataView')
-  listRecords(@Param('resource') resource: string) {
-    return this.studioService.listRecords(resource);
+  listRecords(@Param('resource') resource: string, @Req() req: AuthRequest) {
+    return this.studioService.listRecords(resource, req.user ?? {});
   }
 
   @Post('imports/preview')
   @RequireAccessPolicy('studio.access', 'studio.dataImport')
-  previewImport(@Body() body: any, @Req() req: AuthRequest) {
+  previewImport(
+    @Body() body: Parameters<StudioImportService['preview']>[0],
+    @Req() req: AuthRequest,
+  ) {
     return this.studioImportService.preview(body, req.user ?? {});
   }
 

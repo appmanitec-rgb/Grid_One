@@ -19,13 +19,13 @@ export default function DashboardError({
       className="mx-auto mt-10 max-w-2xl rounded-2xl border border-rose-200 bg-white p-6 shadow-sm"
     >
       <p className="text-xs font-black uppercase tracking-[0.18em] text-rose-600">
-        Nao foi possivel abrir esta pagina
+        Não foi possivel abrir esta pagina
       </p>
       <h1 className="mt-2 text-2xl font-bold text-slate-900">
-        O restante do sistema continua disponivel
+        O restante do sistema continua disponível
       </h1>
       <p className="mt-3 text-sm leading-6 text-slate-600">
-        Tente carregar esta area novamente. Se o problema continuar, recarregue
+        Tente carregar esta área novamente. Se o problema continuar, recarregue
         o painel para renovar a sessao e os dados locais.
       </p>
       <div className="mt-6 flex flex-wrap gap-3">

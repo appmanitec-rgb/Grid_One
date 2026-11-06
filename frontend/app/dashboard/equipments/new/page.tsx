@@ -1,5 +1,8 @@
 "use client";
 
+import { SelectField as SearchableField, SuggestionInput } from "@/app/dashboard/components/SelectField";
+import { PageHeader } from "../../components/DashboardPageKit";
+
 import Link from "next/link";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -191,7 +194,7 @@ export default function NewEquipmentPage() {
         operationModes: options.EQUIPMENT_OPERATION_MODE || [],
       });
     } catch {
-      setError("Nao foi possivel carregar clientes, locais ou modelos.");
+      setError("Não foi possivel carregar clientes, locais ou modelos.");
     } finally {
       setLoading(false);
     }
@@ -288,31 +291,20 @@ export default function NewEquipmentPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 pb-24 sm:p-6 lg:p-8">
-      <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div>
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
-              Cadastro mestre tecnico
-            </p>
-            <h1 className="mt-2 text-3xl font-black text-slate-950">
-              Novo equipamento
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Organize identificacao, dados do gerador, motor, alternador, QTA
-              e bateria sem depender de planilhas paralelas.
-            </p>
-          </div>
-        </div>
-      </header>
+    <div className="dashboard-page pb-24 space-y-5">
+      <PageHeader
+        eyebrow="Ativos"
+        title="Novo equipamento"
+        description="Organize identificação, dados do gerador, motor, alternador, QTA e bateria sem depender de planilhas paralelas."
+      />
 
       {loading ? <State text="Carregando dados de apoio..." /> : null}
       {error ? <State text={error} tone="error" /> : null}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        <EditSection title="1. Identificacao e vinculos">
+        <EditSection title="1. Identificação e vínculos">
           <Field label="Cliente">
-            <select
+            <SearchableField searchable
               value={form.clientId}
               onChange={(event) =>
                 setForm((prev) => ({
@@ -330,10 +322,10 @@ export default function NewEquipmentPage() {
                   {client.companyName} {client.cnpj ? `(${client.cnpj})` : ""}
                 </option>
               ))}
-            </select>
+            </SearchableField>
           </Field>
           <Field label="Local/site">
-            <select
+            <SearchableField
               value={form.currentSiteId}
               onChange={(event) =>
                 setForm((prev) => ({ ...prev, currentSiteId: event.target.value }))
@@ -346,7 +338,7 @@ export default function NewEquipmentPage() {
                   {site.name} {site.code ? `(${site.code})` : ""}
                 </option>
               ))}
-            </select>
+            </SearchableField>
           </Field>
           <TextField label="Nome/apelido" field="name" form={form} setForm={setForm} required />
           <ManufacturerField
@@ -359,7 +351,7 @@ export default function NewEquipmentPage() {
             required
           />
           <Field label="Modelo">
-            <select
+            <SearchableField searchable
               value={form.modelId}
               onChange={(event) =>
                 setForm((prev) => ({ ...prev, modelId: event.target.value }))
@@ -373,9 +365,9 @@ export default function NewEquipmentPage() {
                   {model.name}
                 </option>
               ))}
-            </select>
+            </SearchableField>
           </Field>
-          <TextField label="Numero de serie" field="serialNumber" form={form} setForm={setForm} />
+          <TextField label="Número de série" field="serialNumber" form={form} setForm={setForm} />
           <TextField label="Tag patrimonial" field="assetTag" form={form} setForm={setForm} />
           <NumberField label="Potencia kVA" field="power" form={form} setForm={setForm} required />
           <NumberField label="Horimetro atual" field="hourMeter" form={form} setForm={setForm} />
@@ -383,7 +375,7 @@ export default function NewEquipmentPage() {
           <SelectField label="Ciclo de vida" field="lifecycleStatus" form={form} setForm={setForm} options={LIFECYCLE_STATUS_OPTIONS} />
           <SelectField label="Criticidade" field="criticality" form={form} setForm={setForm} options={CRITICALITY_OPTIONS} />
           <ControlOptionField
-            label="Aplicacao"
+            label="Aplicação"
             field="application"
             form={form}
             setForm={setForm}
@@ -395,7 +387,7 @@ export default function NewEquipmentPage() {
 
         {selectedModel ? (
           <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-            <p className="font-bold">Base tecnica do modelo: {selectedModel.name}</p>
+            <p className="font-bold">Base técnica do modelo: {selectedModel.name}</p>
             <p className="mt-1">
               {groupedModelBase.length
                 ? `Itens por grupo: ${groupedModelBase
@@ -422,9 +414,9 @@ export default function NewEquipmentPage() {
           <NumberField label="Frequencia Hz" field="frequencyHz" form={form} setForm={setForm} />
           <NumberField label="Ano de fabricacao" field="manufactureYear" form={form} setForm={setForm} />
           <DateField label="Data de instalacao" field="installationDate" form={form} setForm={setForm} />
-          <DateField label="Garantia ate" field="warrantyEndDate" form={form} setForm={setForm} />
+          <DateField label="Garantia até" field="warrantyEndDate" form={form} setForm={setForm} />
           <ControlOptionField
-            label="Regime de operacao"
+            label="Regime de operação"
             field="operationMode"
             form={form}
             setForm={setForm}
@@ -444,7 +436,7 @@ export default function NewEquipmentPage() {
             listId="engine-manufacturer-options"
           />
           <TextField label="Modelo" field="engineModelName" form={form} setForm={setForm} />
-          <TextField label="Numero de serie" field="engineSerialNumber" form={form} setForm={setForm} />
+          <TextField label="Número de série" field="engineSerialNumber" form={form} setForm={setForm} />
           <TextField label="Potencia" field="enginePower" form={form} setForm={setForm} />
           <TextField label="Combustivel" field="fuelType" form={form} setForm={setForm} />
           <NumberField label="Cilindros" field="engineCylinders" form={form} setForm={setForm} />
@@ -463,14 +455,14 @@ export default function NewEquipmentPage() {
             listId="alternator-manufacturer-options"
           />
           <TextField label="Modelo" field="alternatorModelName" form={form} setForm={setForm} />
-          <TextField label="Numero de serie" field="alternatorSerialNumber" form={form} setForm={setForm} />
+          <TextField label="Número de série" field="alternatorSerialNumber" form={form} setForm={setForm} />
           <TextField label="Tensao" field="alternatorVoltage" form={form} setForm={setForm} />
           <NumberField label="Frequencia Hz" field="alternatorFrequencyHz" form={form} setForm={setForm} />
           <TextField label="Classe de isolacao" field="alternatorInsulationClass" form={form} setForm={setForm} />
           <TextField label="Grau de protecao" field="alternatorProtectionDegree" form={form} setForm={setForm} />
         </EditSection>
 
-        <EditSection title="5. QTA, bateria e observacoes">
+        <EditSection title="5. QTA, bateria e observações">
           <SelectField label="Possui QTA" field="hasTransferSwitch" form={form} setForm={setForm} options={BOOLEAN_OPTIONS} />
           <ManufacturerField
             label="QTA fabricante"
@@ -481,17 +473,17 @@ export default function NewEquipmentPage() {
             listId="transfer-switch-manufacturer-options"
           />
           <TextField label="QTA modelo" field="transferSwitchModel" form={form} setForm={setForm} />
-          <TextField label="QTA serie" field="transferSwitchSerialNumber" form={form} setForm={setForm} />
+          <TextField label="QTA série" field="transferSwitchSerialNumber" form={form} setForm={setForm} />
           <TextField label="Corrente nominal" field="transferSwitchRatedCurrent" form={form} setForm={setForm} />
           <TextField label="Tensao comando" field="transferSwitchCommandVoltage" form={form} setForm={setForm} />
-          <TextField label="Tipo transferencia" field="transferSwitchType" form={form} setForm={setForm} />
+          <TextField label="Tipo transferência" field="transferSwitchType" form={form} setForm={setForm} />
           <NumberField label="Quantidade baterias" field="batteryQuantity" form={form} setForm={setForm} />
           <TextField label="Tensao bateria" field="batteryVoltage" form={form} setForm={setForm} />
           <NumberField label="Capacidade Ah" field="batteryCapacityAh" form={form} setForm={setForm} step="0.1" />
           <DateField label="Instalacao bateria" field="batteryInstallationDate" form={form} setForm={setForm} />
           <TextField label="Carregador" field="batteryChargerModel" form={form} setForm={setForm} />
           <DateField label="Ultima substituicao" field="batteryLastReplacementDate" form={form} setForm={setForm} />
-          <TextAreaField label="Observacoes gerais" field="notes" form={form} setForm={setForm} />
+          <TextAreaField label="Observações gerais" field="notes" form={form} setForm={setForm} />
         </EditSection>
 
         <div className="fixed bottom-0 left-0 right-0 z-20 flex justify-end gap-2 border-t border-slate-200 bg-white/95 p-4 shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur">
@@ -507,10 +499,8 @@ export default function NewEquipmentPage() {
   );
 }
 
-const PRIMARY_BUTTON =
-  "inline-flex min-h-10 items-center justify-center rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 const INPUT_CLASS =
   "min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100";
 
@@ -581,23 +571,23 @@ function ManufacturerField({
 }) {
   return (
     <Field label={label}>
-      <input
+      <SuggestionInput aria-label={label} id={listId}
         data-testid={`equipment-field-${field}`}
         value={form[field] || ""}
-        list={listId}
+
         onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
         required={required}
         className={INPUT_CLASS}
-      />
-      <datalist id={listId}>
+      >
         {manufacturers.map((manufacturer) => (
           <option
             key={manufacturer.id}
             value={manufacturer.name}
-            label={manufacturer.type || undefined}
+            label={manufacturer.name}
           />
         ))}
-      </datalist>
+      </SuggestionInput>
+
     </Field>
   );
 }
@@ -617,14 +607,13 @@ function ControlOptionField({
 }) {
   return (
     <Field label={label}>
-      <input
+      <SuggestionInput aria-label={label} id={listId}
         data-testid={`equipment-field-${field}`}
         value={form[field] || ""}
-        list={listId}
+
         onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
         className={INPUT_CLASS}
-      />
-      <datalist id={listId}>
+      >
         {options.map((option) => (
           <option
             key={option.id}
@@ -632,7 +621,8 @@ function ControlOptionField({
             label={optionLabel(option)}
           />
         ))}
-      </datalist>
+      </SuggestionInput>
+
     </Field>
   );
 }
@@ -684,7 +674,7 @@ function SelectField({
 }: FieldProps & { options: ReadonlyArray<readonly [string, string]> }) {
   return (
     <Field label={label}>
-      <select
+      <SearchableField
         data-testid={`equipment-field-${field}`}
         value={form[field] || ""}
         onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
@@ -695,7 +685,7 @@ function SelectField({
             {optionLabel}
           </option>
         ))}
-      </select>
+      </SearchableField>
     </Field>
   );
 }

@@ -3,6 +3,131 @@ import { InstitutionalDocumentService } from './institutional-document.service';
 describe('InstitutionalDocumentService contract generation', () => {
   const service = new InstitutionalDocumentService();
 
+  it.each([
+    '2026-11-13',
+    '2026-11-13T00:00:00.000Z',
+    new Date('2026-11-13T00:00:00.000Z'),
+  ])('keeps the calendar validity date across timezones: %s', (validUntil) => {
+    const context = service.buildContext(
+      'proposal',
+      { document: { validUntil } },
+      'proposal/manitec-default-v6',
+    );
+    expect(context.proposal?.validUntil).toBe('13/11/2026');
+  });
+
+  it('keeps customer notes separate from banking details and private observations', () => {
+    const context = service.buildContext(
+      'proposal',
+      {
+        document: {
+          code: 'P-2',
+          externalNotes: 'Agendar com o cliente.',
+          paymentDetails: 'Conta de recebimento',
+          internalNotes: 'PRIVADO',
+        },
+        client: { id: 'uuid-interno', code: '2020CLI', companyName: 'Cliente' },
+      },
+      'proposal/manitec-default-v2',
+    );
+    expect(context.proposal?.notes).toBe('Agendar com o cliente.');
+    expect(context.proposal?.paymentMethod).toBe('Conta de recebimento');
+    expect(context.client.code).toBe('2020CLI');
+    expect(JSON.stringify(context)).not.toContain('PRIVADO');
+    expect(context.proposal?.validUntil).toBe('Não informada');
+    expect(context.proposal?.deliveryTerms).toBe(
+      'A confirmar com o planejamento',
+    );
+  });
+
+  it('shows the selected issuers and subtracts only the general discount from net lines', () => {
+    const context = service.buildContext(
+      'proposal',
+      {
+        document: {
+          code: 'P-3',
+          totalValue: 1220,
+          discount: 50,
+          paymentSelections: [
+            {
+              purpose: 'PARTS',
+              issuerCompanyName: 'Empresa de peças',
+              beneficiaryDocument: 'DOC-PECAS',
+            },
+            {
+              purpose: 'SERVICES',
+              beneficiary: 'Empresa de serviços',
+              beneficiaryDocument: 'DOC-SERVICOS',
+            },
+          ],
+        },
+        client: { companyName: 'Cliente' },
+        items: [
+          {
+            kind: 'PART',
+            quantity: 2,
+            unitPrice: 200,
+            discountPercent: 10,
+            totalPrice: 360,
+          },
+          { kind: 'PART', quantity: 1, unitPrice: 550, totalPrice: 550 },
+          {
+            kind: 'HOURLY_SERVICE',
+            hours: 2,
+            quantity: 1,
+            unitPrice: 200,
+            discountPercent: 10,
+            totalPrice: 360,
+          },
+        ],
+      },
+      'proposal/manitec-default-v2',
+    );
+    expect(context.proposal).toMatchObject({
+      summaryMaterialsTotal: 'R$\u00a0910,00',
+      summaryLaborTotal: 'R$\u00a0360,00',
+      generalDiscountTotal: 'R$\u00a050,00',
+      total: 'R$\u00a01.220,00',
+      billingSummary:
+        'Peças e materiais · Empresa de peças · CPF/CNPJ: DOC-PECAS\nServiços · Empresa de serviços · CPF/CNPJ: DOC-SERVICOS',
+    });
+    expect(context.items[2]).toMatchObject({
+      quantity: '2',
+      unit: 'h',
+      discountPercent: '10%',
+    });
+  });
+
+  it('does not show a parts issuer in a service-only proposal or expose UUID as the customer code', () => {
+    const context = service.buildContext(
+      'proposal',
+      {
+        document: {
+          code: 'P-4',
+          deliveryLeadTimeDays: 0,
+          paymentSelections: [
+            { purpose: 'PARTS', beneficiary: 'Emitente inaplicável' },
+            {
+              purpose: 'SERVICES',
+              beneficiary: 'Prestadora',
+              beneficiaryDocument: 'DOC',
+            },
+          ],
+        },
+        client: { id: 'uuid-interno', companyName: 'Cliente' },
+        items: [
+          { kind: 'SERVICE', quantity: 1, unitPrice: 100, totalPrice: 100 },
+        ],
+      },
+      'proposal/manitec-default-v2',
+    );
+    expect(context.proposal?.billingSummary).toBe(
+      'Serviços · Prestadora · CPF/CNPJ: DOC',
+    );
+    expect(context.client.code).toBe('Não informado');
+    expect(context.proposal?.deliveryTerms).toBe('0 dia(s)');
+  });
+
   it('keeps proposal item semantics and calculates every discount in the document', () => {
     const context = service.buildContext(
       'proposal',

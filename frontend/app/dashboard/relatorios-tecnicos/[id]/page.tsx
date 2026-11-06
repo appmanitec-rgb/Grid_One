@@ -1,5 +1,8 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
+import { commercialLabel } from "@/lib/commercial-labels";
+
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { getAccessFromToken } from "@/lib/access";
@@ -37,12 +40,9 @@ import {
   RelatedEntityGrid,
 } from "../../components/OperationalLinks";
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
-const DANGER_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
+const DANGER_BUTTON = "app-button app-button-danger";
 
 const CHECKLIST_RESULTS = Object.keys(
   CHECKLIST_RESULT_LABELS,
@@ -248,7 +248,7 @@ export default function ServiceReportDetailPage() {
   async function signReport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!signatureForm.signedByName.trim()) {
-      setError("Informe o responsavel pela assinatura.");
+      setError("Informe o responsável pela assinatura.");
       return;
     }
     await runAction("sign", async () => {
@@ -502,7 +502,7 @@ export default function ServiceReportDetailPage() {
   if (!report) return <State text="Laudo não encontrado." />;
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <OperationalBreadcrumb
         items={[
           { label: "Dashboard", href: "/dashboard" },
@@ -558,7 +558,7 @@ export default function ServiceReportDetailPage() {
                   disabled={busyKey === "retention-policy"}
                   onClick={() => void updateRetentionPolicy()}
                 >
-                  Retencao/legal hold
+                  Retenção/legal hold
                 </button>
                 <button
                   type="button"
@@ -692,7 +692,7 @@ export default function ServiceReportDetailPage() {
             ...(report.maintenanceOrder
               ? [{
                   label: report.maintenanceOrder.title,
-                  description: `OS ${report.maintenanceOrder.status}.`,
+                  description: `O.S. ${commercialLabel(report.maintenanceOrder.status)}.`,
                   href: `/dashboard/orders/${report.maintenanceOrder.id}`,
                   badge: "O.S.",
                   tone: "amber" as const,
@@ -722,7 +722,7 @@ export default function ServiceReportDetailPage() {
             ...(report.contract
               ? [{
                   label: report.contract.code,
-                  description: report.contract.title || `Contrato ${report.contract.status}.`,
+                  description: report.contract.title || `Contrato ${commercialLabel(report.contract.status)}.`,
                   href: `/dashboard/contracts/${report.contract.id}`,
                   badge: "Contrato",
                   tone: "emerald" as const,
@@ -785,7 +785,7 @@ export default function ServiceReportDetailPage() {
           <Info label="Hash" value={report.documentHash?.slice(0, 24)} />
           <Info label="Storage" value={report.storageDriver || "local"} />
           <Info
-            label="Retencao"
+            label="Retenção"
             value={formatServiceReportDate(report.retentionUntil)}
           />
           <Info
@@ -919,7 +919,7 @@ export default function ServiceReportDetailPage() {
               disabled={!canEdit}
             />
           </FormField>
-          <FormField label="Servico realizado" className="lg:col-span-2">
+          <FormField label="Serviço realizado" className="lg:col-span-2">
             <TextAreaInput
               value={form.performedServices}
               onChange={(event) =>
@@ -945,7 +945,7 @@ export default function ServiceReportDetailPage() {
               disabled={!canEdit}
             />
           </FormField>
-          <FormField label="Observacoes ao cliente">
+          <FormField label="Observações ao cliente">
             <TextAreaInput
               value={form.customerNotes}
               onChange={(event) =>
@@ -958,7 +958,7 @@ export default function ServiceReportDetailPage() {
               disabled={!canEdit}
             />
           </FormField>
-          <FormField label="Observacoes internas">
+          <FormField label="Observações internas">
             <TextAreaInput
               value={form.observations}
               onChange={(event) =>
@@ -1040,7 +1040,7 @@ export default function ServiceReportDetailPage() {
                 disabled={!canEdit}
                 placeholder="Item verificado"
               />
-              <select
+              <SelectField
                 value={item.result}
                 onChange={(event) =>
                   updateChecklistItem(index, {
@@ -1055,7 +1055,7 @@ export default function ServiceReportDetailPage() {
                     {CHECKLIST_RESULT_LABELS[result]}
                   </option>
                 ))}
-              </select>
+              </SelectField>
               <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
                 <input
                   type="checkbox"
@@ -1067,7 +1067,7 @@ export default function ServiceReportDetailPage() {
                   }
                   disabled={!canEdit}
                 />
-                Obrigatorio
+                Obrigatório
               </label>
               <TextInput
                 value={item.notes || ""}
@@ -1101,7 +1101,7 @@ export default function ServiceReportDetailPage() {
             className="mb-5 grid gap-4 lg:grid-cols-2"
           >
             <FormField label="Tipo">
-              <select
+              <SelectField
                 value={evidenceForm.type}
                 onChange={(event) =>
                   setEvidenceForm((current) => ({
@@ -1116,7 +1116,7 @@ export default function ServiceReportDetailPage() {
                     {EVIDENCE_TYPE_LABELS[type]}
                   </option>
                 ))}
-              </select>
+              </SelectField>
             </FormField>
             <FormField label="Título">
               <TextInput
@@ -1272,7 +1272,7 @@ export default function ServiceReportDetailPage() {
               {accessLogs.slice(0, 12).map((log) => (
                 <div
                   key={log.id}
-                  className="grid gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 md:grid-cols-[160px_140px_1fr_160px]"
+                  className="grid gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 md:grid-cols-2 xl:grid-cols-[160px_140px_minmax(0,1fr)_160px]"
                 >
                   <p className="text-sm font-bold text-slate-950">
                     {log.accessType}
@@ -1310,7 +1310,7 @@ export default function ServiceReportDetailPage() {
         description="Assinatura simples coletada em campo, sem certificado digital avancado neste ciclo."
       >
         <form onSubmit={signReport} className="grid gap-4 lg:grid-cols-2">
-          <FormField label="Responsavel">
+          <FormField label="Responsável">
             <TextInput
               value={signatureForm.signedByName}
               onChange={(event) =>

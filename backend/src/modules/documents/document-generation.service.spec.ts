@@ -1,8 +1,10 @@
 import { DocumentGenerationService } from './document-generation.service';
+import { createHash } from 'crypto';
 import { DocumentTemplateService } from './document-template.service';
 import { DocxToPdfService } from './docx-to-pdf.service';
 import { DocxTemplateRendererService } from './docx-template-renderer.service';
 import { InstitutionalDocumentService } from './institutional-document.service';
+import { VisualDocumentService } from './visual-document.service';
 
 describe('DocumentGenerationService', () => {
   const docxToPdf = {
@@ -21,8 +23,26 @@ describe('DocumentGenerationService', () => {
     docxToPdf as unknown as DocxToPdfService,
   );
 
-  it('generates proposal DOCX from normalized institutional payload', () => {
-    const generated = service.generateDocx('proposal', {
+  it('converts approved DOCX bytes directly without rendering the current template', async () => {
+    const generate = jest.spyOn(service, 'generateDocx');
+    const bytes = Buffer.from('Word aprovado imutável');
+    const result = await service.convertRenderedDocxToPdf({
+      buffer: bytes,
+      fileName: 'approved-copy.docx',
+      templateKey: 'original',
+      templateVersion: '2',
+    });
+    expect(generate).not.toHaveBeenCalled();
+    expect(result.sourceDocxChecksumSha256).toBe(
+      createHash('sha256').update(bytes).digest('hex'),
+    );
+    expect(result.fileName).toBe('approved-copy.pdf');
+    expect(result.templateKey).toBe('original');
+    generate.mockRestore();
+  });
+
+  it('generates proposal DOCX from normalized institutional payload', async () => {
+    const generated = await service.generateDocx('proposal', {
       company: {
         companyName: 'MANITEC',
         tradeName: 'MANITEC Operacao Integrada',
@@ -62,10 +82,20 @@ describe('DocumentGenerationService', () => {
     const content = generated.buffer.toString('utf8');
 
     expect(generated.fileName).toBe('proposal-PROP-9001.docx');
-    expect(generated.templateKey).toBe('proposal/manitec-default-v1');
+    expect(generated.templateKey).toBe('proposal/manitec-default-v6');
     expect(content).toContain('PROP-9001');
     expect(content).toContain('Cliente Exemplo');
     expect(content).toContain('Manutencao preventiva');
+    expect(content).toContain(
+      'Capa institucional Manitec com grupos geradores Generac',
+    );
+    expect(content).toContain(
+      'Cabeçalho institucional Manitec Grupos Geradores',
+    );
+    expect(content).toContain('comercial@manitec.com.br');
+    expect(content).toContain('www.manitec.com.br');
+    expect(content.match(/<w:sectPr\b/g)).toHaveLength(2);
+    expect(content).toContain('w:instr="NUMPAGES"');
     expect(content).not.toContain('internalCost');
     expect(content).not.toContain('{{margin}}');
   });
@@ -106,5 +136,35 @@ describe('DocumentGenerationService', () => {
         buffer: expect.any(Buffer),
       }),
     );
+  });
+
+  it('uses the published Word file as the source of a proposal', async () => {
+    const word = Buffer.from('PK Word preservado');
+    const renderPublished = jest.fn();
+    const visual = {
+      renderPublishedWord: jest.fn().mockResolvedValue({
+        buffer: word,
+        checksumSha256: 'hash-do-word',
+        templateKey: 'visual/modelo-word',
+        templateVersion: 'v2',
+      }),
+      renderPublished,
+    } as unknown as VisualDocumentService;
+    const generator = new DocumentGenerationService(
+      new DocumentTemplateService(),
+      new InstitutionalDocumentService(),
+      new DocxTemplateRendererService(),
+      docxToPdf as unknown as DocxToPdfService,
+      visual,
+    );
+    const generated = await generator.generateDocx('proposal', {
+      company: { companyName: 'MANITEC' },
+      client: { companyName: 'Cliente Word' },
+      document: { id: 'proposal-word', code: 'PROP-WORD' },
+    });
+    expect(generated.buffer).toBe(word);
+    expect(generated.templateKey).toBe('visual/modelo-word');
+    expect(generated.templateVersion).toBe('v2');
+    expect(renderPublished).not.toHaveBeenCalled();
   });
 });

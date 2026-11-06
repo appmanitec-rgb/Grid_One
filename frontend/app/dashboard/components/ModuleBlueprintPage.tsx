@@ -21,7 +21,7 @@ export default function ModuleBlueprintPage({
   integrations,
 }: ModuleBlueprintPageProps) {
   return (
-    <div className="space-y-6 pb-10">
+    <div className="dashboard-page pb-10 space-y-5">
       <PageHero
         eyebrow="Módulo em estruturação"
         title={title}
@@ -44,7 +44,7 @@ export default function ModuleBlueprintPage({
 
       <SectionCard
         eyebrow="Direcao"
-        title="Objetivo do modulo"
+        title="Objetivo do módulo"
         description="Antes de adicionar campos e tabelas, a tela precisa deixar claro o que resolve e o que deve ficar em evidência."
       >
         <p className="max-w-3xl text-sm leading-7 text-slate-700">{objective}</p>

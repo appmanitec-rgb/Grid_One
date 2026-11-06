@@ -1,91 +1,26 @@
 const fs = require('fs');
 const path = require('path');
-
-function loadEnvFile() {
-  const envPath = path.resolve(__dirname, '..', '.env');
-  if (!fs.existsSync(envPath)) return;
-
-  const raw = fs.readFileSync(envPath, 'utf8');
-  for (const line of raw.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const eqIndex = trimmed.indexOf('=');
-    if (eqIndex < 0) continue;
-    const key = trimmed.slice(0, eqIndex).trim();
-    const value = trimmed.slice(eqIndex + 1).trim().replace(/^"|"$/g, '');
-    if (!(key in process.env)) {
-      process.env[key] = value;
-    }
+const envPath = path.resolve(__dirname, '../.env');
+if (fs.existsSync(envPath)) {
+  for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+    const match = line.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+    if (match && !(match[1] in process.env)) process.env[match[1]] = match[2].trim().replace(/^"|"$/g, '');
   }
 }
-
-function required(name) {
-  if (!process.env[name]?.trim()) return name;
-  return null;
-}
-
-function main() {
-  loadEnvFile();
-
-  const isProduction = process.env.NODE_ENV === 'production';
-  const isStaging = process.env.NODE_ENV === 'staging';
-  const isDeployedEnvironment = isProduction || isStaging;
-  const missing = ['DATABASE_URL', 'JWT_SECRET']
-    .map(required)
-    .filter(Boolean);
-
-  if (isDeployedEnvironment) {
-    for (const name of ['CORS_ORIGINS', 'APP_BASE_URL', 'FRONTEND_BASE_URL']) {
-      const miss = required(name);
-      if (miss) missing.push(miss);
-    }
-  }
-
-  if (missing.length) {
-    throw new Error(`Variaveis obrigatorias ausentes: ${missing.join(', ')}`);
-  }
-
-  if (isDeployedEnvironment) {
-    const weakJwtSecrets = [
-      'change_me',
-      'change_me_local_only',
-      'REPLACE_WITH_64_PLUS_RANDOM_CHARS',
-    ];
-    if (
-      weakJwtSecrets.includes(process.env.JWT_SECRET) ||
-      process.env.JWT_SECRET.length < 32
-    ) {
-      throw new Error('JWT_SECRET precisa ser forte em staging/producao.');
-    }
-  }
-
-  const storageDriver = (process.env.FILE_STORAGE_DRIVER || 'local').toLowerCase();
-  if (isStaging && !['s3', 'minio', 'supabase'].includes(storageDriver)) {
-    throw new Error('Staging deve usar storage externo s3|minio|supabase.');
-  }
-  if (['s3', 'minio', 'supabase'].includes(storageDriver)) {
-    const storageMissing = [
-      'S3_ENDPOINT',
-      'S3_BUCKET',
-      'S3_ACCESS_KEY_ID',
-      'S3_SECRET_ACCESS_KEY',
-    ]
-      .map(required)
-      .filter(Boolean);
-    if (storageMissing.length) {
-      throw new Error(
-        `Storage externo sem configuracao: ${storageMissing.join(', ')}`,
-      );
-    }
-  }
-
-  console.log(
-    `[env:check] OK. environment=${process.env.NODE_ENV || 'development'}; storage=${storageDriver}`,
-  );
-}
-
 try {
-  main();
+  // Validate current source even when a previous build is still installed.
+  let validator;
+  try {
+    require.resolve('ts-node/register/transpile-only');
+    require('ts-node/register/transpile-only');
+    validator = require('../src/config/runtime-environment');
+  } catch (error) {
+    if (error.code !== 'MODULE_NOT_FOUND') throw error;
+    validator = require('../dist/src/config/runtime-environment');
+  }
+  const { validateRuntimeEnvironment } = validator;
+  const result = validateRuntimeEnvironment();
+  console.log(`[env:check] OK. environment=${result.environment}; storage=${result.storage}`);
 } catch (error) {
   console.error(`[env:check] FAILED: ${error.message}`);
   process.exit(1);

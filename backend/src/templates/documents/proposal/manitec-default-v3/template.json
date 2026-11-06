@@ -1,0 +1,18 @@
+{
+  "title": "Proposta comercial {{proposal.number}}",
+  "sections": [
+    {
+      "paragraphs": [
+        "{{clientProposal.reviewLabel}}",
+        "{{client.companyName}}",
+        "{{clientProposal.objective}}",
+        "Valor total {{proposal.total}}",
+        "Pagamento {{clientProposal.payment}}",
+        "{{clientProposal.execution}}"
+      ]
+    }
+  ],
+  "footer": [
+    "Proposta {{proposal.number}}"
+  ]
+}

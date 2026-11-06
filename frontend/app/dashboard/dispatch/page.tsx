@@ -1,4 +1,6 @@
 "use client";
+import { formatCalendarDate } from "@/lib/formatters";
+import { InterfaceIcon } from "@/app/dashboard/components/InterfaceIcon";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -26,6 +28,7 @@ type DispatchOrder = {
   id: string;
   title: string;
   description?: string | null;
+  auvoId?: string | null;
   status: OrderStatus;
   type?: string | null;
   priority?: string | null;
@@ -141,10 +144,8 @@ type DispatchSuggestion = {
 
 const API_ROOT = apiUrl("");
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 
 const EMPTY_CREATE_FORM: CreateOrderForm = {
   title: "",
@@ -214,7 +215,13 @@ export default function DispatchPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | OrderStatus>("ALL");
   const [onlyUnassigned, setOnlyUnassigned] = useState(false);
-  const [createForm, setCreateForm] = useState<CreateOrderForm>(EMPTY_CREATE_FORM);
+  const [scheduleFilter, setScheduleFilter] = useState<
+    "ALL" | "TODAY" | "OVERDUE" | "UNSCHEDULED"
+  >("ALL");
+  const [queueSort, setQueueSort] = useState<"AGENDA" | "PRIORITY">("AGENDA");
+  const [queuePage, setQueuePage] = useState(1);
+  const [createForm, setCreateForm] =
+    useState<CreateOrderForm>(EMPTY_CREATE_FORM);
 
   const clearFeedback = useCallback(() => {
     setSuccessMessage("");
@@ -251,32 +258,35 @@ export default function DispatchPage() {
     [orders],
   );
 
+  const unassignedQueue = useMemo(
+    () => activeQueue.filter((order) => !order.technicianId),
+    [activeQueue],
+  );
   const coverageReadyCount = useMemo(
     () =>
-      activeQueue.filter((order) =>
+      unassignedQueue.filter((order) =>
         Boolean(suggestTechnician(order, technicians, openOrderCountByTech)),
       ).length,
-    [activeQueue, openOrderCountByTech, technicians],
+    [unassignedQueue, openOrderCountByTech, technicians],
   );
-
   const selectedGenerator = useMemo(
     () => generators.find((item) => item.id === createForm.generatorId) || null,
     [createForm.generatorId, generators],
   );
 
   const kpis = useMemo(() => {
-    const open = orders.filter((order) => order.status === "OPEN").length;
-    const inProgress = orders.filter(
-      (order) => order.status === "IN_PROGRESS",
-    ).length;
-    const unassigned = orders.filter(
-      (order) =>
-        (order.status === "OPEN" || order.status === "IN_PROGRESS") &&
-        !order.technicianId,
-    ).length;
-    return { open, inProgress, unassigned };
-  }, [orders]);
-
+    const now = Date.now();
+    return {
+      open: orders.filter((order) => order.status === "OPEN").length,
+      inProgress: orders.filter((order) => order.status === "IN_PROGRESS")
+        .length,
+      unassigned: unassignedQueue.length,
+      overdue: activeQueue.filter(
+        (order) =>
+          order.scheduledTo && new Date(order.scheduledTo).getTime() < now,
+      ).length,
+    };
+  }, [activeQueue, orders, unassignedQueue]);
   const technicianCoverage = useMemo(() => {
     return technicians
       .map((technician) => {
@@ -311,19 +321,47 @@ export default function DispatchPage() {
 
   const filteredOrders = useMemo(() => {
     const term = search.trim().toLowerCase();
+    const now = Date.now();
+    const today = new Date(now).toDateString();
 
     return [...orders]
       .filter((order) => {
-        if (statusFilter !== "ALL" && order.status !== statusFilter) return false;
+        if (statusFilter !== "ALL" && order.status !== statusFilter)
+          return false;
         if (
           onlyUnassigned &&
-          (order.technicianId || !["OPEN", "IN_PROGRESS"].includes(order.status))
-        ) {
+          (order.technicianId ||
+            !["OPEN", "IN_PROGRESS"].includes(order.status))
+        )
           return false;
-        }
-        if (!term) return true;
 
-        const source = [
+        const active =
+          order.status === "OPEN" || order.status === "IN_PROGRESS";
+        const scheduledTime = order.scheduledTo
+          ? new Date(order.scheduledTo).getTime()
+          : null;
+        if (
+          scheduleFilter === "TODAY" &&
+          (!active ||
+            !order.scheduledTo ||
+            new Date(order.scheduledTo).toDateString() !== today)
+        )
+          return false;
+        if (
+          scheduleFilter === "OVERDUE" &&
+          (!active || scheduledTime === null || scheduledTime >= now)
+        )
+          return false;
+        if (
+          scheduleFilter === "UNSCHEDULED" &&
+          (!active || scheduledTime !== null)
+        )
+          return false;
+
+        if (!term) return true;
+        return [
+          order.id,
+          order.auvoId || "",
           order.title,
           order.description || "",
           order.generator?.name || "",
@@ -335,29 +373,47 @@ export default function DispatchPage() {
           order.status,
         ]
           .join(" ")
-          .toLowerCase();
-
-        return source.includes(term);
+          .toLowerCase()
+          .includes(term);
       })
       .sort((a, b) => {
-        const aPriority = PRIORITY_ORDER[a.priority || "NORMAL"] ?? 9;
-        const bPriority = PRIORITY_ORDER[b.priority || "NORMAL"] ?? 9;
-        if (aPriority !== bPriority) return aPriority - bPriority;
-
         const aDate = a.scheduledTo
           ? new Date(a.scheduledTo).getTime()
           : Number.MAX_SAFE_INTEGER;
         const bDate = b.scheduledTo
           ? new Date(b.scheduledTo).getTime()
           : Number.MAX_SAFE_INTEGER;
-        if (aDate !== bDate) return aDate - bDate;
-
+        const aPriority = PRIORITY_ORDER[a.priority || "NORMAL"] ?? 9;
+        const bPriority = PRIORITY_ORDER[b.priority || "NORMAL"] ?? 9;
+        if (queueSort === "AGENDA") {
+          if (aDate !== bDate) return aDate - bDate;
+          if (aPriority !== bPriority) return aPriority - bPriority;
+        } else {
+          if (aPriority !== bPriority) return aPriority - bPriority;
+          if (aDate !== bDate) return aDate - bDate;
+        }
         const aOpen = a.openedAt ? new Date(a.openedAt).getTime() : 0;
         const bOpen = b.openedAt ? new Date(b.openedAt).getTime() : 0;
         return bOpen - aOpen;
       });
-  }, [onlyUnassigned, orders, search, statusFilter]);
+  }, [onlyUnassigned, orders, queueSort, scheduleFilter, search, statusFilter]);
 
+  useEffect(() => {
+    setQueuePage(1);
+  }, [onlyUnassigned, queueSort, scheduleFilter, search, statusFilter]);
+
+  const queuePageSize = 20;
+  const queuePageCount = Math.max(
+    1,
+    Math.ceil(filteredOrders.length / queuePageSize),
+  );
+  useEffect(() => {
+    setQueuePage((current) => Math.min(current, queuePageCount));
+  }, [queuePageCount]);
+  const visibleOrders = filteredOrders.slice(
+    (queuePage - 1) * queuePageSize,
+    queuePage * queuePageSize,
+  );
   const loadData = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -370,14 +426,25 @@ export default function DispatchPage() {
       ]);
 
       const failed = [
-        { response: ordersRes, fallback: "Falha ao carregar a fila de despacho." },
-        { response: techniciansRes, fallback: "Falha ao carregar a equipe tecnica." },
-        { response: generatorsRes, fallback: "Falha ao carregar os equipamentos." },
+        {
+          response: ordersRes,
+          fallback: "Falha ao carregar a fila de despacho.",
+        },
+        {
+          response: techniciansRes,
+          fallback: "Falha ao carregar a equipe tecnica.",
+        },
+        {
+          response: generatorsRes,
+          fallback: "Falha ao carregar os equipamentos.",
+        },
       ].find((entry) => !entry.response.ok);
 
       if (failed) {
         if (await handleUnauthorized(failed.response)) return;
-        throw new Error(await readApiErrorMessage(failed.response, failed.fallback));
+        throw new Error(
+          await readApiErrorMessage(failed.response, failed.fallback),
+        );
       }
 
       const [nextOrders, nextTechs, nextGenerators] = (await Promise.all([
@@ -421,7 +488,10 @@ export default function DispatchPage() {
       title: title || prev.title,
       description: description || prev.description,
       generatorId: generatorId || prev.generatorId,
-      type: orderType && ORDER_TYPE_OPTIONS.includes(orderType) ? orderType : prev.type,
+      type:
+        orderType && ORDER_TYPE_OPTIONS.includes(orderType)
+          ? orderType
+          : prev.type,
       priority: priority && PRIORITY_LABEL[priority] ? priority : prev.priority,
     }));
     setPrefillMessage(
@@ -492,13 +562,18 @@ export default function DispatchPage() {
 
       if (await handleUnauthorized(res)) return;
       if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, "Nao foi possivel criar a O.S."));
+        throw new Error(
+          await readApiErrorMessage(res, "Não foi possivel criar a O.S."),
+        );
       }
 
       const created = (await res.json()) as DispatchMutationResponse;
       setCreateForm(EMPTY_CREATE_FORM);
       setPrefillMessage("");
-      applySuccess("O.S. criada e enviada para a fila de despacho.", created.dispatchWarnings);
+      applySuccess(
+        "O.S. criada e enviada para a fila de despacho.",
+        created.dispatchWarnings,
+      );
       await loadData();
     } catch (createError: unknown) {
       setApiError(
@@ -529,7 +604,9 @@ export default function DispatchPage() {
       payload.status = draft.status;
     }
 
-    const currentSchedule = order.scheduledTo ? toInputDateTime(order.scheduledTo) : "";
+    const currentSchedule = order.scheduledTo
+      ? toInputDateTime(order.scheduledTo)
+      : "";
     if (draft.scheduledTo !== currentSchedule) {
       payload.scheduledTo = draft.scheduledTo
         ? new Date(draft.scheduledTo).toISOString()
@@ -537,7 +614,9 @@ export default function DispatchPage() {
     }
 
     if (Object.keys(payload).length === 0) {
-      setSuccessMessage(`Nenhuma alteracao pendente para a O.S. ${order.title}.`);
+      setSuccessMessage(
+        `Nenhuma alteracao pendente para a O.S. ${order.title}.`,
+      );
       return;
     }
 
@@ -546,8 +625,13 @@ export default function DispatchPage() {
 
   async function handleQuickDispatch(order: DispatchOrder) {
     const draft = drafts[order.id] || emptyDraft(order);
-    const suggestion = suggestTechnician(order, technicians, openOrderCountByTech);
-    const technicianId = draft.technicianId || suggestion?.technician.id || order.technicianId;
+    const suggestion = suggestTechnician(
+      order,
+      technicians,
+      openOrderCountByTech,
+    );
+    const technicianId =
+      draft.technicianId || suggestion?.technician.id || order.technicianId;
 
     clearFeedback();
 
@@ -588,7 +672,7 @@ export default function DispatchPage() {
       if (await handleUnauthorized(res)) return;
       if (!res.ok) {
         throw new Error(
-          await readApiErrorMessage(res, "Nao foi possivel atualizar a O.S."),
+          await readApiErrorMessage(res, "Não foi possivel atualizar a O.S."),
         );
       }
 
@@ -607,85 +691,77 @@ export default function DispatchPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
+        loading={loading}
         eyebrow="Despacho e agenda"
-        title="Central de despacho com fila, cobertura tecnica e excecoes guiadas."
-        description="A operacao agora consegue abrir O.S., alocar tecnico, ajustar agenda e tratar bloqueios de senioridade ou competencia no mesmo fluxo. A pagina tambem passou a respeitar sessao, feedback de API e warnings devolvidos pelo backend."
+        title="Programação"
+        description="Agenda, responsáveis e prioridades da equipe."
         stats={[
           {
             label: "Abertas",
             value: String(kpis.open),
-            helper: "Itens aguardando tracao ou definicao de agenda.",
+            helper: "Ordens aguardando atendimento ou agenda.",
             tone: "amber",
           },
           {
             label: "Em execucao",
             value: String(kpis.inProgress),
-            helper: "Atendimentos que ja sairam da fila.",
+            helper: "Serviços em execução pela equipe.",
             tone: "blue",
           },
           {
-            label: "Sem tecnico",
+            label: "Sem técnico",
             value: String(kpis.unassigned),
-            helper: "Ordens que ainda pedem alocacao.",
+            helper: coverageReadyCount + " com sugestão de técnico disponível.",
             tone: "rose",
           },
           {
-            label: "Cobertas por sugestao",
-            value: String(coverageReadyCount),
-            helper: "Ordens com indicacao automatica de tecnico.",
-            tone: "emerald",
+            label: "Atrasadas",
+            value: String(kpis.overdue),
+            helper: "Ordens ativas com horário vencido.",
+            tone: "rose",
           },
         ]}
         actions={
           <>
-            <button type="button" onClick={() => void loadData()} className={SECONDARY_BUTTON}>
-              Atualizar painel
+            <a href="#fila-programacao" className={PRIMARY_BUTTON}>
+              Agenda
+            </a>
+            <a href="#nova-os" className={SECONDARY_BUTTON}>
+              <InterfaceIcon name="plus" /> Nova O.S.
+            </a>
+            <button
+              type="button"
+              onClick={() => void loadData()}
+              disabled={loading}
+              className={SECONDARY_BUTTON}
+            >
+              {loading ? "Atualizando..." : "Atualizar painel"}
             </button>
           </>
         }
-        aside={
-          <FieldBox className="space-y-4 rounded-[28px] border-white/70 bg-white/85 p-5 shadow-[0_22px_60px_-42px_rgba(15,31,50,0.4)]">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                Verificacao de fluxo
-              </p>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                O despacho agora reconhece quando a alocacao precisa de justificativa,
-                quando depende de aprovacao do gestor e quando segue com ressalva de
-                certificacao.
-              </p>
-            </div>
-            <MiniRadar
-              label="Equipe ativa"
-              value={`${technicians.length} tecnico(s)`}
-              helper="Base disponivel para alocacao e replanejamento."
-              tone="blue"
-            />
-            <MiniRadar
-              label="Fila sem cobertura"
-              value={`${Math.max(activeQueue.length - coverageReadyCount, 0)} ordem(ns)`}
-              helper="Itens que ainda nao encontram sugestao automatica confiavel."
-              tone="amber"
-            />
-          </FieldBox>
-        }
+        compact
       />
 
-      {successMessage ? <StatusBanner tone="emerald">{successMessage}</StatusBanner> : null}
-      {prefillMessage ? <StatusBanner tone="blue">{prefillMessage}</StatusBanner> : null}
+      {successMessage ? (
+        <StatusBanner tone="emerald">{successMessage}</StatusBanner>
+      ) : null}
+      {prefillMessage ? (
+        <StatusBanner tone="blue">{prefillMessage}</StatusBanner>
+      ) : null}
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
       {approvalHintId ? (
         <StatusBanner tone="amber">
-          Aprovacao de excecao identificada: use o ID <strong>{approvalHintId}</strong> no campo
-          &quot;ID da aprovacao&quot; depois que o gestor liberar o override.
+          Aprovação de excecao identificada: use o ID{" "}
+          <strong>{approvalHintId}</strong> no campo &quot;ID da aprovação&quot;
+          depois que o gestor liberar o override.
         </StatusBanner>
       ) : null}
       {warnings.length > 0 ? (
         <StatusBanner tone="amber">
           <div className="space-y-1">
-            <p className="font-semibold">O backend confirmou o despacho com ressalvas:</p>
+            <p className="font-semibold">Despacho registrado com ressalvas:</p>
             {warnings.map((warning) => (
               <p key={warning}>{warning}</p>
             ))}
@@ -693,21 +769,178 @@ export default function DispatchPage() {
         </StatusBanner>
       ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.95fr)]">
+      <div id="fila-programacao">
         <SectionCard
-          eyebrow="Abertura operacional"
-          title="Nova O.S. avulsa"
-          description="Abre a demanda com prioridade, agenda e tecnico opcional. Se a alocacao exigir excecao, a justificativa ja nasce no mesmo formulario."
+          actionsLayout="below"
+          eyebrow="Atendimentos"
+          title="Agenda de serviços"
+          description="Veja o que precisa de atendimento, ajuste horários e distribua ordens entre os técnicos."
+          actions={
+            <div className="flex w-full flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <ScheduleButton
+                  active={scheduleFilter === "ALL"}
+                  onClick={() => setScheduleFilter("ALL")}
+                >
+                  Toda a fila
+                </ScheduleButton>
+                <ScheduleButton
+                  active={scheduleFilter === "TODAY"}
+                  onClick={() => setScheduleFilter("TODAY")}
+                >
+                  Hoje
+                </ScheduleButton>
+                <ScheduleButton
+                  active={scheduleFilter === "OVERDUE"}
+                  onClick={() => setScheduleFilter("OVERDUE")}
+                >
+                  Atrasadas
+                </ScheduleButton>
+                <ScheduleButton
+                  active={scheduleFilter === "UNSCHEDULED"}
+                  onClick={() => setScheduleFilter("UNSCHEDULED")}
+                >
+                  Sem agenda
+                </ScheduleButton>
+                <span className="ml-auto rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700">
+                  {filteredOrders.length} de {orders.length} ordens
+                </span>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(250px,1fr)_180px_180px_auto]">
+                <label className="sr-only" htmlFor="dispatch-search">
+                  Pesquisar ordem de serviço
+                </label>
+                <TextInput
+                  id="dispatch-search"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Ordem, cliente, equipamento ou técnico"
+                  className="min-w-0"
+                />
+                <SelectInput
+                  aria-label="Status da fila"
+                  value={statusFilter}
+                  onChange={(event) =>
+                    setStatusFilter(event.target.value as "ALL" | OrderStatus)
+                  }
+                >
+                  <option value="ALL">Todos os status</option>
+                  {ORDER_STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>
+                      {STATUS_LABEL[status]}
+                    </option>
+                  ))}
+                </SelectInput>
+                <SelectInput
+                  aria-label="Ordenar fila"
+                  value={queueSort}
+                  onChange={(event) =>
+                    setQueueSort(event.target.value as "AGENDA" | "PRIORITY")
+                  }
+                >
+                  <option value="AGENDA">Por data da agenda</option>
+                  <option value="PRIORITY">Por prioridade</option>
+                </SelectInput>
+                <label className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={onlyUnassigned}
+                    onChange={(event) =>
+                      setOnlyUnassigned(event.target.checked)
+                    }
+                  />
+                  Sem técnico
+                </label>
+              </div>
+            </div>
+          }
         >
-          <form onSubmit={(event) => void handleCreateOrder(event)} className="space-y-5">
+          {loading ? (
+            <div
+              role="status"
+              className="rounded-[24px] border border-slate-200 bg-slate-50/80 px-5 py-10 text-sm text-slate-500"
+            >
+              Carregando fila de despacho...
+            </div>
+          ) : null}
+
+          {!loading && filteredOrders.length === 0 ? (
+            <EmptyState
+              title="Nenhuma ordem encontrada"
+              description="Ajuste os filtros ou abra uma nova O.S. no formulário abaixo."
+            />
+          ) : null}
+
+          {!loading && filteredOrders.length > 0 ? (
+            <div className="space-y-4">
+              {visibleOrders.map((order) => (
+                <DispatchOrderCard
+                  key={order.id}
+                  order={order}
+                  draft={drafts[order.id] || emptyDraft(order)}
+                  technicians={technicians}
+                  openOrderCountByTech={openOrderCountByTech}
+                  saving={savingOrderId === order.id}
+                  onDraftChange={updateDraft}
+                  onSave={handleSaveOrder}
+                  onQuickDispatch={handleQuickDispatch}
+                />
+              ))}
+              {queuePageCount > 1 ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                  <p className="text-sm text-slate-600">
+                    Página {queuePage} de {queuePageCount} ·{" "}
+                    {filteredOrders.length} ordens
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={queuePage === 1}
+                      onClick={() => setQueuePage((current) => current - 1)}
+                      className={SECONDARY_BUTTON}
+                    >
+                      Anterior
+                    </button>
+                    <button
+                      type="button"
+                      disabled={queuePage === queuePageCount}
+                      onClick={() => setQueuePage((current) => current + 1)}
+                      className={SECONDARY_BUTTON}
+                    >
+                      Próxima
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </SectionCard>
+      </div>
+
+      <div
+        id="nova-os"
+        className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.95fr)]"
+      >
+        <SectionCard
+          eyebrow="Nova O.S."
+          title="Nova O.S. avulsa"
+          description="Abre a demanda com prioridade, agenda e técnico opcional. Se a alocacao exigir excecao, a justificativa já nasce no mesmo formulario."
+        >
+          <form
+            onSubmit={(event) => void handleCreateOrder(event)}
+            className="space-y-5"
+          >
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <FormField label="Titulo">
+              <FormField label="Título">
                 <TextInput
                   value={createForm.title}
                   onChange={(event) =>
-                    setCreateForm((prev) => ({ ...prev, title: event.target.value }))
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      title: event.target.value,
+                    }))
                   }
-                  placeholder="Falha de transferencia, preventiva, partida..."
+                  placeholder="Falha de transferência, preventiva, partida..."
                   required
                 />
               </FormField>
@@ -716,30 +949,38 @@ export default function DispatchPage() {
                 <SelectInput
                   value={createForm.generatorId}
                   onChange={(event) =>
-                    setCreateForm((prev) => ({ ...prev, generatorId: event.target.value }))
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      generatorId: event.target.value,
+                    }))
                   }
                   required
                 >
                   <option value="">Selecionar equipamento</option>
                   {generators.map((generator) => (
                     <option key={generator.id} value={generator.id}>
-                      {generator.name} - {generator.client?.companyName || "Sem cliente"}
+                      {generator.name} -{" "}
+                      {generator.client?.companyName || "Sem cliente"}
                     </option>
                   ))}
                 </SelectInput>
               </FormField>
 
-              <FormField label="Tecnico">
+              <FormField label="Técnico">
                 <SelectInput
                   value={createForm.technicianId}
                   onChange={(event) =>
-                    setCreateForm((prev) => ({ ...prev, technicianId: event.target.value }))
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      technicianId: event.target.value,
+                    }))
                   }
                 >
                   <option value="">Definir depois</option>
                   {technicians.map((technician) => (
                     <option key={technician.id} value={technician.id}>
-                      {technician.user.name} ({openOrderCountByTech.get(technician.id) || 0} ativas)
+                      {technician.user.name} (
+                      {openOrderCountByTech.get(technician.id) || 0} ativas)
                     </option>
                   ))}
                 </SelectInput>
@@ -749,7 +990,10 @@ export default function DispatchPage() {
                 <TextInput
                   value={createForm.scheduledTo}
                   onChange={(event) =>
-                    setCreateForm((prev) => ({ ...prev, scheduledTo: event.target.value }))
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      scheduledTo: event.target.value,
+                    }))
                   }
                   type="datetime-local"
                 />
@@ -759,7 +1003,10 @@ export default function DispatchPage() {
                 <SelectInput
                   value={createForm.type}
                   onChange={(event) =>
-                    setCreateForm((prev) => ({ ...prev, type: event.target.value }))
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      type: event.target.value,
+                    }))
                   }
                 >
                   {ORDER_TYPE_OPTIONS.map((type) => (
@@ -774,7 +1021,10 @@ export default function DispatchPage() {
                 <SelectInput
                   value={createForm.priority}
                   onChange={(event) =>
-                    setCreateForm((prev) => ({ ...prev, priority: event.target.value }))
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      priority: event.target.value,
+                    }))
                   }
                 >
                   {Object.keys(PRIORITY_LABEL).map((priority) => (
@@ -786,11 +1036,14 @@ export default function DispatchPage() {
               </FormField>
 
               <div className="md:col-span-2 xl:col-span-2">
-                <FormField label="Descricao" hint="Contexto da ocorrencia">
+                <FormField label="Descrição" hint="Contexto da ocorrencia">
                   <TextAreaInput
                     value={createForm.description}
                     onChange={(event) =>
-                      setCreateForm((prev) => ({ ...prev, description: event.target.value }))
+                      setCreateForm((prev) => ({
+                        ...prev,
+                        description: event.target.value,
+                      }))
                     }
                     placeholder="Descreva sintoma, risco ou motivo da visita."
                     className="min-h-[132px]"
@@ -807,37 +1060,49 @@ export default function DispatchPage() {
                 <div className="grid gap-3 md:grid-cols-3">
                   <InfoTile
                     label="Cliente"
-                    value={selectedGenerator?.client?.companyName || "A definir"}
+                    value={
+                      selectedGenerator?.client?.companyName || "A definir"
+                    }
                     helper="Conta vinculada ao equipamento escolhido."
                     tone="blue"
                   />
                   <InfoTile
                     label="Site"
-                    value={selectedGenerator?.currentSite?.name || "Sem site vinculado"}
+                    value={
+                      selectedGenerator?.currentSite?.name ||
+                      "Sem site vinculado"
+                    }
                     helper="O site e reaproveitado como contexto da O.S."
                     tone="slate"
                   />
                   <InfoTile
                     label="Status de abertura"
-                    value={createForm.technicianId ? "Ja sai com alocacao" : "Entra na fila"}
+                    value={
+                      createForm.technicianId
+                        ? "Ja sai com alocacao"
+                        : "Entra na fila"
+                    }
                     helper="Voce pode deixar a equipe definir o despacho depois."
                     tone={createForm.technicianId ? "emerald" : "amber"}
                   />
                 </div>
               </FieldBox>
 
-              <div className="flex flex-col justify-between gap-3 rounded-[24px] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-4 shadow-[0_18px_46px_-38px_rgba(15,31,50,0.35)]">
+              <div className="flex flex-col justify-between gap-3 rounded-[24px] border border-slate-200 dashboard-tinted-surface bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-4 shadow-[0_18px_46px_-38px_rgba(15,31,50,0.35)]">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
                     Comando
                   </p>
                   <p className="mt-2 text-sm leading-6 text-slate-600">
-                    A abertura ja conversa com as regras reais do backend. Se houver
-                    bloqueio de senioridade ou competencia, o formulario aceita a
-                    justificativa e o ID da aprovacao sem sair da tela.
+                    Se houver restrição de senioridade ou competência, informe a
+                    justificativa e o ID da aprovação para concluir a alocação.
                   </p>
                 </div>
-                <button type="submit" disabled={creating} className={PRIMARY_BUTTON}>
+                <button
+                  type="submit"
+                  disabled={creating}
+                  className={PRIMARY_BUTTON}
+                >
                   {creating ? "Criando..." : "Abrir O.S."}
                 </button>
               </div>
@@ -846,8 +1111,9 @@ export default function DispatchPage() {
             {createForm.technicianId ? (
               <FieldBox className="space-y-4 rounded-[24px] border-amber-200 bg-amber-50/80 p-4">
                 <InlineMessage tone="warning">
-                  Use este bloco apenas quando a alocacao exigir excecao de senioridade,
-                  aprovacao do gestor ou justificativa de certificacao.
+                  Use este bloco apenas quando a alocacao exigir excecao de
+                  senioridade, aprovação do gestor ou justificativa de
+                  certificação.
                 </InlineMessage>
                 <div className="grid gap-4 xl:grid-cols-3">
                   <FormField label="Justificativa da excecao">
@@ -863,7 +1129,10 @@ export default function DispatchPage() {
                       className="min-h-[112px]"
                     />
                   </FormField>
-                  <FormField label="ID da aprovacao" hint="Preencha apos liberacao">
+                  <FormField
+                    label="ID da aprovação"
+                    hint="Preencha apos liberacao"
+                  >
                     <TextInput
                       value={createForm.assignmentOverrideApprovalId}
                       onChange={(event) =>
@@ -872,10 +1141,10 @@ export default function DispatchPage() {
                           assignmentOverrideApprovalId: event.target.value,
                         }))
                       }
-                      placeholder="UUID da aprovacao do gestor"
+                      placeholder="UUID da aprovação do gestor"
                     />
                   </FormField>
-                  <FormField label="Justificativa de certificacao">
+                  <FormField label="Justificativa de certificação">
                     <TextAreaInput
                       value={createForm.certificationJustification}
                       onChange={(event) =>
@@ -884,7 +1153,7 @@ export default function DispatchPage() {
                           certificationJustification: event.target.value,
                         }))
                       }
-                      placeholder="Detalhe a ressalva quando faltar certificacao ou especialidade."
+                      placeholder="Detalhe a ressalva quando faltar certificação ou especialidade."
                       className="min-h-[112px]"
                     />
                   </FormField>
@@ -896,12 +1165,12 @@ export default function DispatchPage() {
 
         <SectionCard
           eyebrow="Cobertura da equipe"
-          title="Radar tecnico"
-          description="Mostra carga ativa, urgencias por tecnico e a proxima certificacao a vencer para apoiar a distribuicao da fila."
+          title="Radar técnico"
+          description="Mostra carga ativa, urgencias por técnico e a próxima certificação a vencer para apoiar a distribuicao da fila."
         >
           {technicianCoverage.length === 0 ? (
             <EmptyState
-              title="Nenhum tecnico ativo encontrado"
+              title="Nenhum técnico ativo encontrado"
               description="Cadastre ou reative a equipe para usar o despacho assistido."
             />
           ) : (
@@ -919,77 +1188,34 @@ export default function DispatchPage() {
           )}
         </SectionCard>
       </div>
-
-      <SectionCard
-        eyebrow="Fila operacional"
-        title="Ordens em despacho"
-        description="Filtre a fila, veja a melhor sugestao de tecnico, ajuste agenda e trate excecoes sem depender de uma tabela densa e pouco guiada."
-        actions={
-          <div className="flex w-full flex-col gap-3 xl:w-auto xl:min-w-[760px] xl:flex-row xl:items-center xl:justify-end">
-            <TextInput
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Buscar por O.S., cliente, equipamento, tecnico ou contrato..."
-              className="xl:min-w-[340px]"
-            />
-            <SelectInput
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as "ALL" | OrderStatus)}
-              className="xl:w-[210px]"
-            >
-              <option value="ALL">Todos os status</option>
-              {ORDER_STATUS_OPTIONS.map((status) => (
-                <option key={status} value={status}>
-                  {STATUS_LABEL[status]}
-                </option>
-              ))}
-            </SelectInput>
-            <label className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-3 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                checked={onlyUnassigned}
-                onChange={(event) => setOnlyUnassigned(event.target.checked)}
-              />
-              Somente sem tecnico
-            </label>
-          </div>
-        }
-      >
-        {loading ? (
-          <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 px-5 py-10 text-sm text-slate-500">
-            Carregando fila de despacho...
-          </div>
-        ) : null}
-
-        {!loading && filteredOrders.length === 0 ? (
-          <EmptyState
-            title="Nenhuma ordem encontrada"
-            description="Ajuste os filtros ou abra uma nova O.S. avulsa na central acima."
-          />
-        ) : null}
-
-        {!loading && filteredOrders.length > 0 ? (
-          <div className="space-y-4">
-            {filteredOrders.map((order) => (
-              <DispatchOrderCard
-                key={order.id}
-                order={order}
-                draft={drafts[order.id] || emptyDraft(order)}
-                technicians={technicians}
-                openOrderCountByTech={openOrderCountByTech}
-                saving={savingOrderId === order.id}
-                onDraftChange={updateDraft}
-                onSave={handleSaveOrder}
-                onQuickDispatch={handleQuickDispatch}
-              />
-            ))}
-          </div>
-        ) : null}
-      </SectionCard>
     </div>
   );
 }
 
+function ScheduleButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={
+        active
+          ? "rounded-full border border-sky-600 bg-sky-600 px-3 py-2 text-xs font-bold text-white"
+          : "rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-sky-300 hover:bg-sky-50"
+      }
+    >
+      {children}
+    </button>
+  );
+}
 function DispatchOrderCard({
   order,
   draft,
@@ -1009,8 +1235,13 @@ function DispatchOrderCard({
   onSave: (order: DispatchOrder) => Promise<void>;
   onQuickDispatch: (order: DispatchOrder) => Promise<void>;
 }) {
-  const suggestion = suggestTechnician(order, technicians, openOrderCountByTech);
-  const siteName = order.site?.name || order.generator?.currentSite?.name || "Sem local";
+  const suggestion = suggestTechnician(
+    order,
+    technicians,
+    openOrderCountByTech,
+  );
+  const siteName =
+    order.site?.name || order.generator?.currentSite?.name || "Sem local";
   const needsAttention =
     !order.technician?.id ||
     !order.scheduledTo ||
@@ -1021,8 +1252,8 @@ function DispatchOrderCard({
     Boolean(draft.technicianId || order.technicianId) ||
     Boolean(
       draft.assignmentJustification ||
-        draft.assignmentOverrideApprovalId ||
-        draft.certificationJustification,
+      draft.assignmentOverrideApprovalId ||
+      draft.certificationJustification,
     );
 
   return (
@@ -1030,7 +1261,11 @@ function DispatchOrderCard({
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Link href={`/dashboard/orders/${order.id}`} className="dashboard-record-link text-lg font-bold" title="Abrir ordem de serviço">
+            <Link
+              href={`/dashboard/orders/${order.id}`}
+              className="dashboard-record-link text-lg font-bold"
+              title="Abrir ordem de serviço"
+            >
               {order.title}
             </Link>
             <DataPill tone={orderStatusTone(order.status)}>
@@ -1039,17 +1274,24 @@ function DispatchOrderCard({
             <DataPill tone={priorityTone(order.priority)}>
               {priorityLabel(order.priority)}
             </DataPill>
-            {order.contract ? <DataPill tone="blue">{order.contract.code}</DataPill> : null}
-            {needsAttention ? <DataPill tone="amber">Pede atencao</DataPill> : null}
+            {order.contract ? (
+              <DataPill tone="blue">{order.contract.code}</DataPill>
+            ) : null}
+            {needsAttention ? (
+              <DataPill tone="amber">Pede atenção</DataPill>
+            ) : null}
           </div>
 
           <p className="max-w-4xl text-sm leading-6 text-slate-600">
-            {order.description || "Sem descricao operacional registrada."}
+            {order.description || "Nenhuma descrição registrada."}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Link href={`/dashboard/orders/${order.id}`} className={PRIMARY_BUTTON}>
+          <Link
+            href={`/dashboard/orders/${order.id}`}
+            className={PRIMARY_BUTTON}
+          >
             Abrir O.S.
           </Link>
           {order.contract ? (
@@ -1088,7 +1330,9 @@ function DispatchOrderCard({
         />
         <InfoTile
           label="Agenda"
-          value={order.scheduledTo ? formatDateTime(order.scheduledTo) : "Sem agenda"}
+          value={
+            order.scheduledTo ? formatDateTime(order.scheduledTo) : "Sem agenda"
+          }
           helper={
             order.materials?.length
               ? `${order.materials.length} material(is) reservado(s).`
@@ -1106,7 +1350,7 @@ function DispatchOrderCard({
                 Editor de despacho
               </p>
               <p className="mt-1 text-sm text-slate-600">
-                Ajuste agenda, tecnico e status sem sair da fila.
+                Ajuste agenda, técnico e status sem sair da fila.
               </p>
             </div>
             <DataPill tone={needsAttention ? "amber" : "emerald"}>
@@ -1115,17 +1359,18 @@ function DispatchOrderCard({
           </div>
 
           <div className="grid gap-4 md:grid-cols-3">
-            <FormField label="Tecnico">
+            <FormField label="Técnico">
               <SelectInput
                 value={draft.technicianId}
                 onChange={(event) =>
                   onDraftChange(order.id, { technicianId: event.target.value })
                 }
               >
-                <option value="">Selecionar tecnico</option>
+                <option value="">Selecionar técnico</option>
                 {technicians.map((technician) => (
                   <option key={technician.id} value={technician.id}>
-                    {technician.user.name} ({openOrderCountByTech.get(technician.id) || 0} ativas)
+                    {technician.user.name} (
+                    {openOrderCountByTech.get(technician.id) || 0} ativas)
                   </option>
                 ))}
               </SelectInput>
@@ -1162,9 +1407,9 @@ function DispatchOrderCard({
           {hasExceptionFields ? (
             <div className="space-y-4 rounded-[22px] border border-amber-200 bg-amber-50/80 p-4">
               <InlineMessage tone="warning">
-                Se o backend bloquear a alocacao por senioridade ou competencia,
-                registre a justificativa aqui, solicite a aprovacao e reenvie com o ID
-                retornado.
+                Se a alocação exigir exceção de senioridade ou competência,
+                registre a justificativa aqui, solicite a aprovação e reenvie
+                com o ID retornado.
               </InlineMessage>
               <div className="grid gap-4 xl:grid-cols-3">
                 <FormField label="Justificativa da excecao">
@@ -1175,11 +1420,14 @@ function DispatchOrderCard({
                         assignmentJustification: event.target.value,
                       })
                     }
-                    placeholder="Explique por que este tecnico precisa assumir a ordem."
+                    placeholder="Explique por que este técnico precisa assumir a ordem."
                     className="min-h-[108px]"
                   />
                 </FormField>
-                <FormField label="ID da aprovacao" hint="UUID liberado pelo gestor">
+                <FormField
+                  label="ID da aprovação"
+                  hint="UUID liberado pelo gestor"
+                >
                   <TextInput
                     value={draft.assignmentOverrideApprovalId}
                     onChange={(event) =>
@@ -1187,10 +1435,10 @@ function DispatchOrderCard({
                         assignmentOverrideApprovalId: event.target.value,
                       })
                     }
-                    placeholder="Cole aqui o ID da aprovacao"
+                    placeholder="Cole aqui o ID da aprovação"
                   />
                 </FormField>
-                <FormField label="Justificativa de certificacao">
+                <FormField label="Justificativa de certificação">
                   <TextAreaInput
                     value={draft.certificationJustification}
                     onChange={(event) =>
@@ -1198,7 +1446,7 @@ function DispatchOrderCard({
                         certificationJustification: event.target.value,
                       })
                     }
-                    placeholder="Descreva a ressalva quando faltar certificacao ou especialidade."
+                    placeholder="Descreva a ressalva quando faltar certificação ou especialidade."
                     className="min-h-[108px]"
                   />
                 </FormField>
@@ -1256,31 +1504,38 @@ function DispatchOrderCard({
                   </DataPill>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <DataPill tone={suggestion.skillHits > 0 ? "emerald" : "slate"}>
+                  <DataPill
+                    tone={suggestion.skillHits > 0 ? "emerald" : "slate"}
+                  >
                     {suggestion.skillHits > 0
                       ? `${suggestion.skillHits} skill(s) aderente(s)`
                       : "Sem match explicito de skill"}
                   </DataPill>
-                  <DataPill tone={Number.isFinite(suggestion.distanceKm) ? "amber" : "slate"}>
+                  <DataPill
+                    tone={
+                      Number.isFinite(suggestion.distanceKm) ? "amber" : "slate"
+                    }
+                  >
                     {formatDistance(suggestion.distanceKm)}
                   </DataPill>
                 </div>
                 {suggestion.technician.skills.length > 0 ? (
                   <p className="mt-4 text-sm leading-6 text-slate-600">
-                    Skills: {suggestion.technician.skills.slice(0, 4).join(", ")}
+                    Skills:{" "}
+                    {suggestion.technician.skills.slice(0, 4).join(", ")}
                     {suggestion.technician.skills.length > 4 ? "..." : ""}
                   </p>
                 ) : null}
               </div>
               <p className="text-sm leading-6 text-slate-600">
-                O despacho rapido usa este tecnico por padrao se voce ainda nao tiver
-                escolhido outro no editor.
+                O despacho rapido usa este técnico por padrão se voce ainda não
+                tiver escolhido outro no editor.
               </p>
             </>
           ) : (
             <EmptyState
-              title="Sem sugestao automatica"
-              description="A fila nao encontrou tecnico com cobertura suficiente. Vale revisar skills, disponibilidade ou tratar a ordem manualmente."
+              title="Sem sugestao automática"
+              description="A fila não encontrou técnico com cobertura suficiente. Vale revisar skills, disponibilidade ou tratar a ordem manualmente."
             />
           )}
         </FieldBox>
@@ -1301,16 +1556,20 @@ function TechnicianRadarCard({
   nextCertification?: NonNullable<DispatchTechnician["certifications"]>[number];
 }) {
   const nextCertificationLabel = nextCertification
-    ? formatDate(nextCertification.validUntil)
+    ? formatCalendarDate(nextCertification.validUntil)
     : "Sem certificacao registrada";
   const nextCertificationTone =
-    nextCertification && daysUntil(nextCertification.validUntil) <= 30 ? "amber" : "slate";
+    nextCertification && daysUntil(nextCertification.validUntil) <= 30
+      ? "amber"
+      : "slate";
 
   return (
     <article className="rounded-[24px] border border-slate-200 bg-slate-50/80 px-4 py-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-base font-semibold text-slate-950">{technician.user.name}</p>
+          <p className="text-base font-semibold text-slate-950">
+            {technician.user.name}
+          </p>
           <p className="mt-1 text-sm text-slate-600">
             {technician.user.department || "Campo"}
             {technician.user.branch ? ` - ${technician.user.branch}` : ""}
@@ -1321,55 +1580,35 @@ function TechnicianRadarCard({
         </DataPill>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+      <div className="mt-4 grid gap-3">
         <InfoTile
           label="Urgencias"
           value={String(urgentAssignments)}
-          helper="Ordens altas ou urgentes no colo deste tecnico."
+          helper="Ordens de alta prioridade atribuídas ao técnico."
           tone={urgentAssignments > 0 ? "amber" : "emerald"}
         />
         <InfoTile
-          label="Skills"
-          value={technician.skills.length ? technician.skills.slice(0, 2).join(", ") : "Nao mapeadas"}
-          helper="A base do match automatico usa esse cadastro."
+          label="Competências"
+          value={
+            technician.skills.length
+              ? technician.skills.slice(0, 2).join(", ")
+              : "Nao mapeadas"
+          }
+          helper="Usadas para sugerir o técnico adequado."
           tone="slate"
         />
         <InfoTile
-          label="Certificacao"
+          label="Certificação"
           value={nextCertificationLabel}
           helper={
             nextCertification
               ? `Codigo ${nextCertification.code}`
-              : "Convem completar a trilha da equipe."
+              : "Complete os dados da equipe."
           }
           tone={nextCertificationTone}
         />
       </div>
     </article>
-  );
-}
-
-function MiniRadar({
-  label,
-  value,
-  helper,
-  tone,
-}: {
-  label: string;
-  value: string;
-  helper: string;
-  tone: Tone;
-}) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-          {label}
-        </p>
-        <DataPill tone={tone}>{value}</DataPill>
-      </div>
-      <p className="mt-2 text-sm leading-6 text-slate-600">{helper}</p>
-    </div>
   );
 }
 
@@ -1386,7 +1625,7 @@ function InfoTile({
 }) {
   return (
     <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col items-start gap-2">
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
           {label}
         </p>
@@ -1428,11 +1667,13 @@ function serializeExceptionFields(input: {
   }
 
   if (input.assignmentOverrideApprovalId?.trim()) {
-    payload.assignmentOverrideApprovalId = input.assignmentOverrideApprovalId.trim();
+    payload.assignmentOverrideApprovalId =
+      input.assignmentOverrideApprovalId.trim();
   }
 
   if (input.certificationJustification?.trim()) {
-    payload.certificationJustification = input.certificationJustification.trim();
+    payload.certificationJustification =
+      input.certificationJustification.trim();
   }
 
   return payload;
@@ -1454,12 +1695,6 @@ function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("pt-BR", {
     dateStyle: "short",
     timeStyle: "short",
-  }).format(new Date(value));
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("pt-BR", {
-    dateStyle: "short",
   }).format(new Date(value));
 }
 
@@ -1525,8 +1760,10 @@ function suggestTechnician(
   openOrderCountByTech: Map<string, number>,
 ): DispatchSuggestion | null {
   const orderText = `${order.title} ${order.description || ""}`.toLowerCase();
-  const siteLatitude = order.site?.latitude ?? order.generator?.currentSite?.latitude;
-  const siteLongitude = order.site?.longitude ?? order.generator?.currentSite?.longitude;
+  const siteLatitude =
+    order.site?.latitude ?? order.generator?.currentSite?.latitude;
+  const siteLongitude =
+    order.site?.longitude ?? order.generator?.currentSite?.longitude;
 
   const ranked = technicians
     .filter((technician) => technician.user.isActive)

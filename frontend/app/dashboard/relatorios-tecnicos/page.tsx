@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -28,10 +29,8 @@ import ListPagination, {
   useListPagination,
 } from "../components/ListPagination";
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 
 const STATUS_OPTIONS: Array<"ALL" | ReportStatus> = [
   "ALL",
@@ -75,7 +74,9 @@ export default function ServiceReportsPage() {
       setReports(reportRows);
       setOrders(orderRows);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao carregar laudos.");
+      setError(
+        err instanceof Error ? err.message : "Falha ao carregar laudos.",
+      );
     } finally {
       setLoading(false);
     }
@@ -88,7 +89,8 @@ export default function ServiceReportsPage() {
   const filteredReports = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return reports.filter((report) => {
-      if (statusFilter !== "ALL" && report.status !== statusFilter) return false;
+      if (statusFilter !== "ALL" && report.status !== statusFilter)
+        return false;
       if (!normalizedQuery) return true;
       return [
         report.code,
@@ -114,7 +116,9 @@ export default function ServiceReportsPage() {
     const pending = reports.filter((report) =>
       ["DRAFT", "IN_REVIEW"].includes(report.status),
     ).length;
-    const approved = reports.filter((report) => report.status === "APPROVED").length;
+    const approved = reports.filter(
+      (report) => report.status === "APPROVED",
+    ).length;
     return { released, pending, approved };
   }, [reports]);
 
@@ -125,7 +129,7 @@ export default function ServiceReportsPage() {
       return;
     }
     if (!form.diagnosis.trim() || !form.performedServices.trim()) {
-      setError("Diagnostico e servico realizado sao obrigatorios.");
+      setError("Diagnostico e serviço realizado sao obrigatórios.");
       return;
     }
     setSubmitting(true);
@@ -149,16 +153,20 @@ export default function ServiceReportsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
-        eyebrow="Operacao tecnica"
-        title="Laudos tecnicos"
-        description="Checklist, diagnostico, evidencias, assinatura e liberacao controlada para o Portal do Cliente."
+        eyebrow="Operação"
+        title="Laudos técnicos"
+        description="Consulte diagnósticos, evidências, assinaturas e documentos liberados ao cliente."
         stats={[
           { label: "Total", value: String(reports.length), tone: "slate" },
           { label: "Pendentes", value: String(stats.pending), tone: "amber" },
           { label: "Aprovados", value: String(stats.approved), tone: "blue" },
-          { label: "No portal", value: String(stats.released), tone: "emerald" },
+          {
+            label: "No portal",
+            value: String(stats.released),
+            tone: "emerald",
+          },
         ]}
       />
 
@@ -166,132 +174,150 @@ export default function ServiceReportsPage() {
       {success ? <StatusBanner tone="emerald">{success}</StatusBanner> : null}
 
       {access.serviceReports.create ? (
-        <SectionCard
-          title="Novo laudo"
-          description="O cliente, equipamento, contrato e tecnico sao herdados da OS selecionada."
-        >
-          <form onSubmit={createReport} className="grid gap-4 lg:grid-cols-2">
-            <FormField label="OS">
-              <select
-                value={form.maintenanceOrderId}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    maintenanceOrderId: event.target.value,
-                  }))
-                }
-                className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-400"
-              >
-                <option value="">Selecione uma OS</option>
-                {orders.map((order) => (
-                  <option key={order.id} value={order.id}>
-                    {order.title} - {order.generator?.name || "sem equipamento"}
-                  </option>
-                ))}
-              </select>
-            </FormField>
-            <FormField label="Titulo">
-              <TextInput
-                value={form.title}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, title: event.target.value }))
-                }
-                placeholder="Laudo tecnico de atendimento"
-              />
-            </FormField>
-            <FormField label="Diagnostico" className="lg:col-span-2">
-              <TextAreaInput
-                value={form.diagnosis}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    diagnosis: event.target.value,
-                  }))
-                }
-                rows={4}
-                placeholder="Diagnostico tecnico observado em campo"
-              />
-            </FormField>
-            <FormField label="Servico realizado" className="lg:col-span-2">
-              <TextAreaInput
-                value={form.performedServices}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    performedServices: event.target.value,
-                  }))
-                }
-                rows={4}
-                placeholder="Atividades executadas, testes e validacoes"
-              />
-            </FormField>
-            <FormField label="Recomendacoes">
-              <TextAreaInput
-                value={form.recommendations}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    recommendations: event.target.value,
-                  }))
-                }
-                rows={3}
-                placeholder="Proximas acoes recomendadas"
-              />
-            </FormField>
-            <FormField label="Observacoes">
-              <TextAreaInput
-                value={form.observations}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    observations: event.target.value,
-                  }))
-                }
-                rows={3}
-                placeholder="Observacoes para historico tecnico"
-              />
-            </FormField>
-            <div className="lg:col-span-2">
-              <button
-                type="submit"
-                className={PRIMARY_BUTTON}
-                disabled={submitting}
-              >
-                {submitting ? "Criando..." : "Criar laudo"}
-              </button>
-            </div>
-          </form>
-        </SectionCard>
+        <details className="dashboard-create-panel">
+          <summary>Novo laudo técnico</summary>
+          <SectionCard
+            title="Novo laudo"
+            description="O cliente, equipamento, contrato e técnico sao herdados da OS selecionada."
+          >
+            <form onSubmit={createReport} className="grid gap-4 lg:grid-cols-2">
+              <FormField label="OS">
+                <SelectField
+                  searchable
+                  value={form.maintenanceOrderId}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      maintenanceOrderId: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-400"
+                >
+                  <option value="">Selecione uma OS</option>
+                  {orders.map((order) => (
+                    <option key={order.id} value={order.id}>
+                      {order.title} -{" "}
+                      {order.generator?.name || "sem equipamento"}
+                    </option>
+                  ))}
+                </SelectField>
+              </FormField>
+              <FormField label="Título">
+                <TextInput
+                  value={form.title}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      title: event.target.value,
+                    }))
+                  }
+                  placeholder="Laudo técnico de atendimento"
+                />
+              </FormField>
+              <FormField label="Diagnostico" className="lg:col-span-2">
+                <TextAreaInput
+                  value={form.diagnosis}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      diagnosis: event.target.value,
+                    }))
+                  }
+                  rows={4}
+                  placeholder="Diagnostico técnico observado em campo"
+                />
+              </FormField>
+              <FormField label="Serviço realizado" className="lg:col-span-2">
+                <TextAreaInput
+                  value={form.performedServices}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      performedServices: event.target.value,
+                    }))
+                  }
+                  rows={4}
+                  placeholder="Atividades executadas, testes e validações"
+                />
+              </FormField>
+              <FormField label="Recomendacoes">
+                <TextAreaInput
+                  value={form.recommendations}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      recommendations: event.target.value,
+                    }))
+                  }
+                  rows={3}
+                  placeholder="Próximas acoes recomendadas"
+                />
+              </FormField>
+              <FormField label="Observações">
+                <TextAreaInput
+                  value={form.observations}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      observations: event.target.value,
+                    }))
+                  }
+                  rows={3}
+                  placeholder="Observações para histórico técnico"
+                />
+              </FormField>
+              <div className="lg:col-span-2">
+                <button
+                  type="submit"
+                  className={PRIMARY_BUTTON}
+                  disabled={submitting}
+                >
+                  {submitting ? "Criando..." : "Criar laudo"}
+                </button>
+              </div>
+            </form>
+          </SectionCard>
+        </details>
       ) : null}
 
       <SectionCard
         title="Fila de laudos"
         description="Somente laudos aprovados e liberados aparecem para o cliente."
         actions={
-          <button type="button" onClick={() => void load()} className={SECONDARY_BUTTON}>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className={SECONDARY_BUTTON}
+          >
             Atualizar
           </button>
         }
       >
         <div className="mb-4 grid gap-3 md:grid-cols-[1fr_220px]">
-          <TextInput
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar por cliente, OS, equipamento ou codigo"
-          />
-          <select
-            value={statusFilter}
-            onChange={(event) =>
-              setStatusFilter(event.target.value as "ALL" | ReportStatus)
-            }
-            className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-400"
-          >
-            {STATUS_OPTIONS.map((status) => (
-              <option key={status} value={status}>
-                {status === "ALL" ? "Todos os status" : REPORT_STATUS_LABELS[status]}
-              </option>
-            ))}
-          </select>
+          <FormField label="Buscar laudo">
+            <TextInput
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Buscar por cliente, OS, equipamento ou código"
+            />
+          </FormField>
+          <FormField label="Situação do laudo">
+            <SelectField
+              value={statusFilter}
+              onChange={(event) =>
+                setStatusFilter(event.target.value as "ALL" | ReportStatus)
+              }
+              className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-400"
+            >
+              {STATUS_OPTIONS.map((status) => (
+                <option key={status} value={status}>
+                  {status === "ALL"
+                    ? "Todos os status"
+                    : REPORT_STATUS_LABELS[status]}
+                </option>
+              ))}
+            </SelectField>
+          </FormField>
         </div>
 
         {loading ? <EmptyState text="Carregando laudos..." /> : null}
@@ -314,7 +340,9 @@ export default function ServiceReportsPage() {
             >
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <strong className="text-sm text-slate-950">{report.code}</strong>
+                  <strong className="text-sm text-slate-950">
+                    {report.code}
+                  </strong>
                   <DataPill tone={reportStatusTone(report.status)}>
                     {REPORT_STATUS_LABELS[report.status]}
                   </DataPill>
@@ -331,10 +359,14 @@ export default function ServiceReportsPage() {
               </div>
               <div className="text-sm text-slate-600">
                 <p className="font-semibold text-slate-800">
-                  {report.client?.tradeName || report.client?.companyName || "Cliente"}
+                  {report.client?.tradeName ||
+                    report.client?.companyName ||
+                    "Cliente"}
                 </p>
                 <p>{report.generator?.name || "Equipamento nao informado"}</p>
-                <p>{report.technician?.user?.name || "Tecnico nao atribuido"}</p>
+                <p>
+                  {report.technician?.user?.name || "Tecnico nao atribuido"}
+                </p>
               </div>
               <div className="text-right text-sm font-semibold text-slate-600">
                 {formatServiceReportDate(report.updatedAt)}
@@ -350,7 +382,9 @@ export default function ServiceReportsPage() {
 async function fetchJson<T>(path: string) {
   const response = await apiFetch(path, { cache: "no-store" });
   if (!response.ok) {
-    throw new Error(await readApiErrorMessage(response, "Falha ao carregar dados."));
+    throw new Error(
+      await readApiErrorMessage(response, "Falha ao carregar dados."),
+    );
   }
   return (await response.json()) as T;
 }

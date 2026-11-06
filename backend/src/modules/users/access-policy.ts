@@ -111,6 +111,15 @@ export type AccessPolicy = {
     adjust: boolean;
   };
   purchaseOrders: {
+    request: boolean;
+    analyze: boolean;
+    quote: boolean;
+    selectOffer: boolean;
+    generate: boolean;
+    send: boolean;
+    exception: boolean;
+    configure: boolean;
+    validateInvoice: boolean;
     view: boolean;
     create: boolean;
     update: boolean;
@@ -280,6 +289,15 @@ const emptyAccessPolicy: AccessPolicy = {
     adjust: false,
   },
   purchaseOrders: {
+    request: false,
+    analyze: false,
+    quote: false,
+    selectOffer: false,
+    generate: false,
+    send: false,
+    exception: false,
+    configure: false,
+    validateInvoice: false,
     view: false,
     create: false,
     update: false,
@@ -681,6 +699,7 @@ export function defaultAccessPolicyByRole(role: UserRole): AccessPolicy {
         create: true,
         update: true,
         reserve: true,
+        consume: true,
         adjust: true,
       },
       purchaseOrders: {

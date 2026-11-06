@@ -75,6 +75,7 @@ export type DashboardDocumentDelivery = {
 
 export type ProposalDocumentPayload = {
   kind: "proposal";
+  hasApprovedSnapshot?: boolean;
   company: DashboardDocumentCompany;
   viewerRole: string;
   sourceHref: string;
@@ -83,6 +84,8 @@ export type ProposalDocumentPayload = {
     id: string;
     code: string;
     status: string;
+    origin: string;
+    externalDocumentFileName?: string | null;
     statusLabel: string;
     type: string;
     totalValue: number;
@@ -95,8 +98,21 @@ export type ProposalDocumentPayload = {
     scope?: string | null;
     freight?: string | null;
     paymentTerm?: string | null;
+    paymentSummary?: string | null;
     deliveryLeadTimeDays?: number | null;
     paymentDetails?: string | null;
+    paymentSelections?: Array<{
+      purpose?: string;
+      method?: string;
+      issuerCompanyName?: string;
+      beneficiary?: string;
+      beneficiaryDocument?: string;
+      bankName?: string;
+      agency?: string;
+      accountNumber?: string;
+      pixKey?: string;
+      boletoInstructions?: string;
+    }>;
     hasDownPayment?: boolean | null;
     downPaymentAmount?: number | null;
     installmentCount?: number | null;
@@ -316,7 +332,11 @@ export type OrderDocumentPayload = {
     quantity: number;
     unitCost?: number | null;
     reservedAt?: string | null;
-    warehouse?: { id: string; code?: string | null; name?: string | null } | null;
+    warehouse?: {
+      id: string;
+      code?: string | null;
+      name?: string | null;
+    } | null;
     catalogItem?: {
       id: string;
       name?: string | null;
@@ -406,6 +426,13 @@ export function fetchProposalDocumentInstitutionalPdf(id: string) {
   return fetchDocumentBlob(
     `/documents/proposals/${id}/download-document-pdf`,
     "Nao foi possivel baixar o PDF institucional da proposta.",
+  );
+}
+
+export function fetchProposalApprovedWordPdfCopy(id: string) {
+  return fetchDocumentBlob(
+    `/documents/proposals/${id}/download-approved-word-pdf`,
+    "Não foi possível converter o Word aprovado para PDF. Os arquivos originais foram preservados.",
   );
 }
 

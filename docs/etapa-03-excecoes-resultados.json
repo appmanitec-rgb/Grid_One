@@ -1,0 +1,18 @@
+{
+  "databaseName": "gridone_stage3_stage",
+  "checks": [
+    {
+      "name": "cancelamento-libera-reserva-sem-cobranca",
+      "status": "PASS",
+      "salesOrderId": "9cafc4c8-9b05-49a9-945e-9fff22f7457d"
+    },
+    {
+      "name": "entrega-parcial-cobra-somente-entregue",
+      "status": "PASS",
+      "salesOrderId": "4b212ed6-6126-4f9e-b9f5-5478d93b57e0",
+      "receivableId": "dddaa686-cee8-4ce5-8141-5f78fb2d819b",
+      "amount": 95
+    }
+  ],
+  "failures": []
+}

@@ -40,6 +40,7 @@ enum SkillLevel {
 }
 
 enum ApprovalType {
+  PURCHASE_QUOTATION
   BUDGET_DISCOUNT
   GENERATOR_PROPOSAL
   RVT_SIGNOFF
@@ -215,11 +216,22 @@ enum ProposalHourType {
 }
 
 enum ProposalTechnicianType {
+  ASSISTANT
   JUNIOR_TECHNICIAN
   MID_LEVEL_TECHNICIAN
   SENIOR_TECHNICIAN
   APPLICATION_ENGINEER
   SPECIALIST
+}
+
+enum ProposalPaymentPurpose {
+  PARTS
+  SERVICES
+}
+
+enum ProposalPaymentMethod {
+  PIX
+  BOLETO
 }
 
 enum ProposalStatus {
@@ -256,6 +268,19 @@ enum SalesOpportunityStage {
   NEGOTIATION
   WON
   LOST
+}
+
+enum CrmActivityType {
+  CALL
+  VISIT
+  MESSAGE
+  TASK
+}
+
+enum CrmActivityStatus {
+  PLANNED
+  COMPLETED
+  CANCELED
 }
 
 enum OpportunityTemperature {
@@ -434,6 +459,7 @@ enum ContractInvoiceStatus {
 }
 
 enum MaintenanceOrderType {
+  EMERGENCY
   PREVENTIVE
   CORRECTIVE
   INSTALLATION
@@ -539,6 +565,16 @@ enum InventoryMovementType {
   ADJUSTMENT
   PURCHASE_RECEIPT
   OS_CONSUMPTION
+  SALES_DELIVERY
+  SALES_RETURN
+}
+
+enum SalesOrderStatus {
+  OPEN
+  PARTIALLY_DELIVERED
+  DELIVERED
+  CLOSED
+  CANCELED
 }
 
 enum PurchaseOrderStatus {
@@ -563,6 +599,11 @@ enum AccountsReceivableStatus {
   OVERDUE
   PAID
   CANCELED
+}
+
+enum ExecutionBillingCategory {
+  PARTS
+  SERVICES
 }
 
 enum PaymentMethod {
@@ -784,36 +825,41 @@ enum DocumentAccessResult {
 }
 
 model User {
-  id                    String                 @id @default(uuid())
-  code                  String                 @unique @default(dbgenerated())
-  name                  String
-  email                 String                 @unique
-  passwordHash          String
-  role                  UserRole               @default(TECHNICIAN)
-  isActive              Boolean                @default(true)
-  isSystemMaster        Boolean                @default(false)
-  accessPolicy          Json?
-  functionalId          String?
-  documentId            String?
-  profilePhotoUrl       String?
-  managerId             String?
-  linkedClientId        String?
-  availabilityStatus    UserAvailabilityStatus @default(AVAILABLE)
-  availabilityUpdatedAt DateTime?
-  skillLevel            SkillLevel             @default(JUNIOR)
-  regionTags            String[]
-  digitalSignatureUrl   String?
-  salesTargetMonthly    Float?
-  kpiTargetJson         Json?
-  mfaEnabled            Boolean                @default(false)
-  mfaSecretEncrypted    String?
-  mfaRecoveryCodesHash  Json?
-  department            String?
-  branch                String?
-  approvalDiscountLimit Float?
-  hourCost              Float?
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
+  proposalEditingDrafts ProposalEditingDraft[]
+  procurementRequests    ProcurementRequest[]
+  procurementAttachments ProcurementAttachment[]
+  id                     String                  @id @default(uuid())
+  code                   String                  @unique @default(dbgenerated())
+  name                   String
+  email                  String                  @unique
+  passwordHash           String
+  role                   UserRole                @default(TECHNICIAN)
+  isActive               Boolean                 @default(true)
+  isSystemMaster         Boolean                 @default(false)
+  accessPolicy           Json?
+  accessRules            Json?
+  functionalId           String?
+  documentId             String?
+  profilePhotoUrl        String?
+  managerId              String?
+  linkedClientId         String?
+  portalPermissions      String[]                @default(["EQUIPMENT", "CONTRACTS", "PROPOSALS", "TICKETS", "REQUESTS", "REPORTS", "DOCUMENTS", "FINANCIAL", "FEEDBACK"])
+  availabilityStatus     UserAvailabilityStatus  @default(AVAILABLE)
+  availabilityUpdatedAt  DateTime?
+  skillLevel             SkillLevel              @default(JUNIOR)
+  regionTags             String[]
+  digitalSignatureUrl    String?
+  salesTargetMonthly     Float?
+  kpiTargetJson          Json?
+  mfaEnabled             Boolean                 @default(false)
+  mfaSecretEncrypted     String?
+  mfaRecoveryCodesHash   Json?
+  department             String?
+  branch                 String?
+  approvalDiscountLimit  Float?
+  hourCost               Float?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
 
   technicianProfile              Technician?
   manager                        User?                       @relation("UserManagementHierarchy", fields: [managerId], references: [id], onDelete: SetNull)
@@ -835,6 +881,8 @@ model User {
   createdContracts               ServiceContract[]           @relation("ContractCreatedBy")
   createdContractRenewals        ContractRenewal[]           @relation("ContractRenewalCreatedBy")
   assignedOpportunities          SalesOpportunity[]          @relation("OpportunityAssignedSeller")
+  createdCrmActivities           CrmActivity[]               @relation("CrmActivityCreator")
+  ownedCrmActivities             CrmActivity[]               @relation("CrmActivityOwner")
   commercialInspections          CommercialInspection[]      @relation("InspectionInspector")
   companySettingsUpdated         CompanySettings[]           @relation("CompanySettingsUpdatedBy")
   financialAuditLogs             FinancialAuditLog[]         @relation("FinancialAuditActor")
@@ -856,6 +904,8 @@ model User {
   hrAssetAssignments             HrAssetAssignment[]
   fleetAllocations               FleetAllocation[]
   authSessions                   AuthSession[]
+  clientPortalActivations        ClientPortalActivation[]
+  portalFeedbacks                ClientPortalFeedback[]
   requestedAutomationRuns        AutomationRun[]             @relation("AutomationRunRequestedBy")
   createdDocumentShareTokens     DocumentShareToken[]        @relation("DocumentShareCreatedBy")
   createdDocumentDeliveries      DocumentDelivery[]          @relation("DocumentDeliveryCreatedBy")
@@ -883,13 +933,19 @@ model User {
   createdTeamChannels            TeamChannel[]               @relation("TeamChannelCreator")
   teamMessages                   TeamMessage[]               @relation("TeamMessageAuthor")
   teamChannelReads               TeamChannelRead[]
+  teamChannelMemberships         TeamChannelMember[]
 
   @@index([linkedClientId])
   @@map("users")
+  commercialHandoffTasks CommercialHandoffTask[] @relation("CommercialHandoffOwner")
+  technicalScopeVersions ProposalTechnicalScopeVersion[] @relation("TechnicalScopeVersionActor")
+
 }
 
 model TeamPost {
   id         String             @id @default(uuid())
+  category   String             @default("GENERAL")
+  eventKey   String?            @unique
   authorId   String?
   author     User?              @relation("TeamPostAuthor", fields: [authorId], references: [id], onDelete: SetNull)
   authorName String
@@ -904,6 +960,7 @@ model TeamPost {
 
   @@index([pinnedAt, createdAt])
   @@index([createdAt])
+  @@index([category, createdAt])
   @@map("team_posts")
 }
 
@@ -933,20 +990,34 @@ model TeamPostReaction {
 }
 
 model TeamChannel {
-  id              String            @id @default(uuid())
-  slug            String            @unique
+  id              String              @id @default(uuid())
+  slug            String              @unique
   name            String
   description     String?
   createdByUserId String?
-  createdByUser   User?             @relation("TeamChannelCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  isArchived      Boolean           @default(false)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  createdByUser   User?               @relation("TeamChannelCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  isArchived      Boolean             @default(false)
+  isPrivate       Boolean             @default(false)
+  directKey       String?             @unique
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
   messages        TeamMessage[]
   reads           TeamChannelRead[]
+  members         TeamChannelMember[]
 
   @@index([isArchived, name])
   @@map("team_channels")
+}
+
+model TeamChannelMember {
+  channelId String
+  channel   TeamChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([channelId, userId])
+  @@index([userId])
+  @@map("team_channel_members")
 }
 
 model TeamMessage {
@@ -993,6 +1064,20 @@ model AuthSession {
   @@unique([userId, deviceId])
   @@index([expiresAt, revokedAt])
   @@map("auth_sessions")
+}
+
+model ClientPortalActivation {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash      String    @unique
+  expiresAt      DateTime
+  usedAt         DateTime?
+  createdAt      DateTime  @default(now())
+  issuedByUserId String?
+
+  @@index([userId, usedAt, expiresAt])
+  @@map("client_portal_activations")
 }
 
 model AutomationRun {
@@ -1174,8 +1259,8 @@ model StudioImportRow {
 }
 
 model CompanySettings {
-  id                        String   @id @default(uuid())
-  key                       String   @unique @default("default")
+  id                        String                    @id @default(uuid())
+  key                       String                    @unique @default("default")
   companyName               String?
   tradeName                 String?
   cnpj                      String?
@@ -1208,11 +1293,15 @@ model CompanySettings {
   deliveryEmailFooter       String?
   deliveryTemplatesJson     Json?
   notes                     String?
-  isPrimary                 Boolean  @default(false)
+  isPrimary                 Boolean                   @default(false)
   updatedByUserId           String?
-  updatedByUser             User?    @relation("CompanySettingsUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
-  createdAt                 DateTime @default(now())
-  updatedAt                 DateTime @updatedAt
+  updatedByUser             User?                     @relation("CompanySettingsUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  createdAt                 DateTime                  @default(now())
+  updatedAt                 DateTime                  @updatedAt
+  fiscalDocuments           FiscalDocument[]
+  fiscalCertificate         FiscalCertificate?
+  bankCollectionAgreements  BankCollectionAgreement[]
+  paymentProfiles           ProposalPaymentProfile[]
 
   @@index([cnpj])
   @@index([isPrimary])
@@ -1245,12 +1334,13 @@ model Technician {
 }
 
 model Client {
-  id                      String           @id @default(uuid())
-  code                    String           @unique @default(dbgenerated())
-  legacyCode              String?          @unique
+  procurementAllocations  ProcurementAllocation[]
+  id                      String                  @id @default(uuid())
+  code                    String                  @unique @default(dbgenerated())
+  legacyCode              String?                 @unique
   companyName             String
   tradeName               String?
-  cnpj                    String?          @unique
+  cnpj                    String?                 @unique
   email                   String?
   contactName             String?
   phone                   String
@@ -1264,29 +1354,34 @@ model Client {
   notes                   String?
   legacyData              Json?
   segment                 String?
-  clientType              ClientType       @default(NO_CONTRACT)
-  personType              ClientPersonType @default(LEGAL_ENTITY)
+  clientType              ClientType              @default(NO_CONTRACT)
+  personType              ClientPersonType        @default(LEGAL_ENTITY)
   paymentTermDefault      String?
   creditLimit             Float?
   priceTableCode          String?
-  isDelinquent            Boolean          @default(false)
-  isProvisional           Boolean          @default(false)
-  proposalCreationBlocked Boolean          @default(false)
+  isDelinquent            Boolean                 @default(false)
+  isProvisional           Boolean                 @default(false)
+  proposalCreationBlocked Boolean                 @default(false)
   proposalBlockReason     String?
-  blockedPaymentTerms     String[]         @default([])
-  withholdsInss           Boolean          @default(false)
-  withholdsIss            Boolean          @default(false)
-  isActive                Boolean          @default(true)
+  blockedPaymentTerms     String[]                @default([])
+  withholdsInss           Boolean                 @default(false)
+  withholdsIss            Boolean                 @default(false)
+  isActive                Boolean                 @default(true)
+  portalEnabled           Boolean                 @default(false)
+  portalLogoDataUrl       String?                 @db.Text
   salesOwnerId            String?
 
-  salesOwner  User?  @relation("ClientSalesOwner", fields: [salesOwnerId], references: [id], onDelete: SetNull)
-  portalUsers User[] @relation("ClientPortalUsers")
+  salesOwner      User?                  @relation("ClientSalesOwner", fields: [salesOwnerId], references: [id], onDelete: SetNull)
+  portalUsers     User[]                 @relation("ClientPortalUsers")
+  portalFeedbacks ClientPortalFeedback[]
 
   addresses             ClientAddress[]
   contacts              ClientContact[]
   auditLogs             ClientAuditLog[]
   proposals             Proposal[]
+  salesOrders           SalesOrder[]
   opportunities         SalesOpportunity[]
+  crmActivities         CrmActivity[]
   commercialInspections CommercialInspection[]
   sites                 Site[]
   generators            Generator[]
@@ -1305,6 +1400,21 @@ model Client {
   updatedAt DateTime @updatedAt
 
   @@map("clients")
+}
+
+model ClientPortalFeedback {
+  id        String   @id @default(uuid())
+  clientId  String
+  userId    String
+  kind      String
+  message   String   @db.Text
+  createdAt DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, createdAt])
+  @@map("client_portal_feedbacks")
 }
 
 model ClientAddress {
@@ -1428,6 +1538,8 @@ model GeneratorModelMaintenanceTemplate {
 }
 
 model Generator {
+  procurementAllocations       ProcurementAllocation[]
+  photoUrl                     String?
   id                           String                     @id @default(uuid())
   code                         String                     @unique @default(dbgenerated())
   legacyCode                   String?                    @unique
@@ -1530,57 +1642,60 @@ model ClientAuditLog {
 }
 
 model CatalogItem {
-  id                     String         @id @default(uuid())
-  sku                    String?        @unique
-  legacyCode             String?
-  legacySequence         String?        @unique
-  radarCode              String?
-  skuNumber              Int?           @unique
-  skuAreaId              String?
-  skuFamilyId            String?
-  skuApplicationId       String?
-  name                   String
-  description            String?
-  commercialDescription  String?
-  category               String?
-  subcategory            String?
-  type                   ItemType
-  itemClassification     String?
-  unit                   String?        @default("UN")
-  acquisitionOrigin      String?
-  manufacturerPartNumber String?
-  brand                  String?
-  supplier               String?
-  technicalSpecs         Json?
-  applicationNotes       String?
-  ncm                    String?
-  cest                   String?
-  origin                 ProductOrigin?
-  costPrice              Float?         @default(0)
-  averageCost            Float?         @default(0)
-  lastCost               Float?         @default(0)
-  taxPercentage          Float?         @default(0)
-  profitMargin           Float?         @default(0)
-  icmsPercent            Float          @default(0)
-  pisPercent             Float          @default(0)
-  cofinsPercent          Float          @default(0)
-  ipiPercent             Float          @default(0)
-  issPercent             Float          @default(0)
-  irpjPercent            Float          @default(0)
-  csllPercent            Float          @default(0)
-  cppPercent             Float          @default(0)
-  commissionPercent      Float          @default(0)
-  operationalCostPercent Float          @default(0)
-  pricingPolicyId        String?
-  basePrice              Float
-  stockCurrent           Float?         @default(0)
-  stockMin               Float?         @default(0)
-  stockMax               Float?         @default(0)
-  storageLocation        String?
-  grossWeight            Float?
-  netWeight              Float?
-  taxProfile             Json?
-  isActive               Boolean        @default(true)
+  procurementRequestItems ProcurementRequestItem[]
+  procurementOfferItems   ProcurementOfferItem[]
+  id                      String                   @id @default(uuid())
+  sku                     String?                  @unique
+  legacyCode              String?
+  legacySequence          String?                  @unique
+  radarCode               String?
+  skuNumber               Int?                     @unique
+  skuAreaId               String?
+  skuFamilyId             String?
+  skuApplicationId        String?
+  name                    String
+  description             String?
+  commercialDescription   String?
+  photoUrl                String?
+  category                String?
+  subcategory             String?
+  type                    ItemType
+  itemClassification      String?
+  unit                    String?                  @default("UN")
+  acquisitionOrigin       String?
+  manufacturerPartNumber  String?
+  brand                   String?
+  supplier                String?
+  technicalSpecs          Json?
+  applicationNotes        String?
+  ncm                     String?
+  cest                    String?
+  origin                  ProductOrigin?
+  costPrice               Float?                   @default(0)
+  averageCost             Float?                   @default(0)
+  lastCost                Float?                   @default(0)
+  taxPercentage           Float?                   @default(0)
+  profitMargin            Float?                   @default(0)
+  icmsPercent             Float                    @default(0)
+  pisPercent              Float                    @default(0)
+  cofinsPercent           Float                    @default(0)
+  ipiPercent              Float                    @default(0)
+  issPercent              Float                    @default(0)
+  irpjPercent             Float                    @default(0)
+  csllPercent             Float                    @default(0)
+  cppPercent              Float                    @default(0)
+  commissionPercent       Float                    @default(0)
+  operationalCostPercent  Float                    @default(0)
+  pricingPolicyId         String?
+  basePrice               Float
+  stockCurrent            Float?                   @default(0)
+  stockMin                Float?                   @default(0)
+  stockMax                Float?                   @default(0)
+  storageLocation         String?
+  grossWeight             Float?
+  netWeight               Float?
+  taxProfile              Json?
+  isActive                Boolean                  @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1594,6 +1709,7 @@ model CatalogItem {
   generatorBaseItems        GeneratorBaseItem[]
   maintenanceOrderMaterials MaintenanceOrderMaterial[]
   proposalItems             ProposalItem[]
+  salesOrderItems           SalesOrderItem[]
   supplierItems             SupplierCatalogItem[]
   identifiers               CatalogItemIdentifier[]
   supplierOffers            CatalogSupplierOffer[]
@@ -1603,6 +1719,7 @@ model CatalogItem {
   purchaseOrderItems        PurchaseOrderItem[]
   hrAssetAssignments        HrAssetAssignment[]
   priceRevisions            CatalogPriceRevision[]
+  technicalProfile          CatalogTechnicalProfile?
   commercialGenerator       CommercialGenerator?
 
   @@index([skuAreaId])
@@ -1849,28 +1966,31 @@ model CatalogItemIdentifier {
 }
 
 model Supplier {
-  id                    String   @id @default(uuid())
-  legacyCode            String?  @unique
-  companyName           String
-  tradeName             String?
-  cnpj                  String?  @unique
-  email                 String?
-  phone                 String?
-  address               String?
-  city                  String?
-  state                 String?
-  stateRegistration     String?
-  municipalRegistration String?
-  categories            String[]
-  representedBrands     String[]
-  paymentTerm           String?
-  qualityScore          Int?
-  punctualityScore      Int?
-  notes                 String?
-  legacyData            Json?
-  isActive              Boolean  @default(true)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  procurementInvitations ProcurementInvitation[]
+  procurementOffers      ProcurementOffer[]
+  procurementInvoices    ProcurementInvoice[]
+  id                     String                  @id @default(uuid())
+  legacyCode             String?                 @unique
+  companyName            String
+  tradeName              String?
+  cnpj                   String?                 @unique
+  email                  String?
+  phone                  String?
+  address                String?
+  city                   String?
+  state                  String?
+  stateRegistration      String?
+  municipalRegistration  String?
+  categories             String[]
+  representedBrands      String[]
+  paymentTerm            String?
+  qualityScore           Int?
+  punctualityScore       Int?
+  notes                  String?
+  legacyData             Json?
+  isActive               Boolean                 @default(true)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
 
   items          SupplierCatalogItem[]
   catalogOffers  CatalogSupplierOffer[]
@@ -2079,7 +2199,46 @@ model GeneratorBaseItem {
   @@map("generator_base_items")
 }
 
+model ProposalEditingDraft {
+  id String @id @default(uuid())
+  ownerUserId String
+  owner User @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  proposalId String?
+  proposal Proposal? @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  formData Json
+  revision Int @default(1)
+  lastRequestKey String
+  lastRequestHash String
+  clicks Int @default(0)
+  edits Int @default(0)
+  firstReadyAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([ownerUserId, updatedAt])
+  @@index([proposalId])
+  @@map("proposal_editing_drafts")
+}
+
+// Immutable customer documents, created only by explicit board approval in phase 1.
+// Separate from delivery queues: creating this snapshot never sends or publishes it.
+model ProposalDocumentSnapshot {
+  proposalId      String   @id
+  proposal        Proposal @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  publicData      Json
+  pdfBytes        Bytes
+  docxBytes       Bytes
+  html            String?
+  templateKey     String
+  templateVersion String
+  approvedBy      String
+  createdAt       DateTime @default(now())
+
+  @@map("proposal_document_snapshots")
+}
+
 model Proposal {
+  editingDrafts ProposalEditingDraft[]
+  customerDocumentSnapshot ProposalDocumentSnapshot?
   id                       String         @id @default(uuid())
   code                     String         @unique
   status                   ProposalStatus @default(DRAFT)
@@ -2101,8 +2260,12 @@ model Proposal {
   paymentTerm                     String?
   deliveryLeadTimeDays            Int?
   paymentDetails                  String?
+  paymentSelections               Json?
   hasDownPayment                  Boolean    @default(false)
   downPaymentAmount               Float?
+  paymentPlan                     Json?
+  downPaymentConfirmedAt          DateTime?
+  downPaymentConfirmedById        String?
   installmentCount                Int?
   installmentIntervalDays         Int?       @default(30)
   firstDueDate                    DateTime?
@@ -2128,6 +2291,8 @@ model Proposal {
   commercialGenerator   CommercialGenerator? @relation(fields: [commercialGeneratorId], references: [id], onDelete: SetNull)
   sizingSnapshot        Json?
   commercialSnapshot    Json?
+  technicalScopeSnapshot Json?
+  technicalScopeVersions ProposalTechnicalScopeVersion[]
 
   externalReference              String?
   externalCurrency               String? @default("BRL")
@@ -2147,12 +2312,19 @@ model Proposal {
 
   items             ProposalItem[]
   movements         ProposalMovement[]
-  generatedContract ServiceContract?   @relation("SourceProposalContract")
+  generatedContract ServiceContract?     @relation("SourceProposalContract")
+  salesOrder        SalesOrder?
+  executionOrder    MaintenanceOrder?    @relation("ExecutionProposalOrder")
+  receivables       AccountsReceivable[] @relation("ProposalReceivables")
+  commercialEstimate CommercialProposalEstimate?
+  commercialHandoffTasks CommercialHandoffTask[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("proposals")
+  @@index([userId, type, status, updatedAt])
+  @@index([type, status, validUntil])
 }
 
 model OperationalExpenseRate {
@@ -2172,20 +2344,22 @@ model OperationalExpenseRate {
 }
 
 model SalesOpportunity {
-  id                String                   @id @default(uuid())
-  title             String
-  stage             SalesOpportunityStage    @default(PROSPECTION)
-  pipeline          SalesOpportunityPipeline @default(COMMERCIAL_03_PARTS_SERVICES)
-  opportunityType   SalesOpportunityType     @default(FIELD_SERVICE)
-  temperature       OpportunityTemperature   @default(WARM)
-  estimatedValue    Float                    @default(0)
-  expectedCloseDate DateTime?
-  source            String?
-  notes             String?
-  lossReason        OpportunityLossReason?
-  lossReasonDetail  String?
-  wonAt             DateTime?
-  lostAt            DateTime?
+  id                 String                   @id @default(uuid())
+  title              String
+  stage              SalesOpportunityStage    @default(PROSPECTION)
+  pipeline           SalesOpportunityPipeline @default(COMMERCIAL_03_PARTS_SERVICES)
+  opportunityType    SalesOpportunityType     @default(FIELD_SERVICE)
+  temperature        OpportunityTemperature   @default(WARM)
+  estimatedValue     Float                    @default(0)
+  discountPercent    Float                    @default(0)
+  probabilityPercent Int?
+  expectedCloseDate  DateTime?
+  source             String?
+  notes              String?
+  lossReason         OpportunityLossReason?
+  lossReasonDetail   String?
+  wonAt              DateTime?
+  lostAt             DateTime?
 
   clientId         String
   client           Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -2198,8 +2372,9 @@ model SalesOpportunity {
   assignedSellerId String?
   assignedSeller   User?          @relation("OpportunityAssignedSeller", fields: [assignedSellerId], references: [id], onDelete: SetNull)
 
-  proposals   Proposal[]
-  inspections CommercialInspection[]
+  proposals     Proposal[]
+  inspections   CommercialInspection[]
+  crmActivities CrmActivity[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2210,6 +2385,35 @@ model SalesOpportunity {
   @@index([assignedSellerId])
   @@index([clientId, stage])
   @@map("sales_opportunities")
+  @@index([assignedSellerId, pipeline, stage, updatedAt], map: "sales_opportunity_owner_pipeline_stage_idx")
+}
+
+model CrmActivity {
+  id            String            @id @default(uuid())
+  type          CrmActivityType
+  status        CrmActivityStatus @default(COMPLETED)
+  subject       String
+  details       String?
+  occurredAt    DateTime          @default(now())
+  dueAt         DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  clientId      String
+  client        Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  opportunityId String?
+  opportunity   SalesOpportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  createdById   String?
+  createdBy     User?             @relation("CrmActivityCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  ownerId       String?
+  owner         User?             @relation("CrmActivityOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@index([clientId, occurredAt])
+  @@index([opportunityId, occurredAt])
+  @@index([status, dueAt])
+  @@map("crm_activities")
+  @@index([ownerId, status, dueAt])
+  @@index([opportunityId, status, dueAt])
 }
 
 model CommercialInspection {
@@ -2298,10 +2502,121 @@ model ProposalItem {
   proposalId String
   proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
 
-  catalogItemId String?
-  catalogItem   CatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  catalogItemId  String?
+  catalogItem    CatalogItem?    @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  salesOrderItem SalesOrderItem?
 
   @@map("proposal_items")
+}
+
+model SalesOrder {
+  procurementAllocations ProcurementAllocation[]
+  id                     String                  @id @default(uuid())
+  code                   String                  @unique
+  proposalId             String                  @unique
+  proposal               Proposal                @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  clientId               String
+  client                 Client                  @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  status                 SalesOrderStatus        @default(OPEN)
+  totalValue             Decimal                 @db.Decimal(15, 2)
+  paymentTerm            String?
+  notes                  String?
+  closedReason           String?
+  closedAt               DateTime?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+
+  items       SalesOrderItem[]
+  deliveries  SalesDelivery[]
+  returns     SalesReturn[]
+  receivables AccountsReceivable[]
+
+  @@index([clientId, status, createdAt])
+  @@map("sales_orders")
+}
+
+model SalesOrderItem {
+  id             String                 @id @default(uuid())
+  salesOrderId   String
+  salesOrder     SalesOrder             @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  proposalItemId String                 @unique
+  proposalItem   ProposalItem           @relation(fields: [proposalItemId], references: [id], onDelete: Restrict)
+  catalogItemId  String?
+  catalogItem    CatalogItem?           @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  description    String
+  quantity       Int
+  deliveredQty   Int                    @default(0)
+  unitPrice      Decimal                @db.Decimal(15, 2)
+  totalPrice     Decimal                @db.Decimal(15, 2)
+  allocations    SalesOrderAllocation[]
+  deliveryItems  SalesDeliveryItem[]
+
+  @@index([salesOrderId])
+  @@map("sales_order_items")
+}
+
+model SalesOrderAllocation {
+  id               String         @id @default(uuid())
+  salesOrderItemId String
+  salesOrderItem   SalesOrderItem @relation(fields: [salesOrderItemId], references: [id], onDelete: Cascade)
+  warehouseId      String
+  warehouse        Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  reservedQty      Int            @default(0)
+  pickedQty        Int            @default(0)
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([salesOrderItemId, warehouseId])
+  @@map("sales_order_allocations")
+}
+
+model SalesDelivery {
+  id                String              @id @default(uuid())
+  code              String              @unique
+  salesOrderId      String
+  salesOrder        SalesOrder          @relation(fields: [salesOrderId], references: [id], onDelete: Restrict)
+  receivedByName    String
+  shippingReference String?
+  notes             String?
+  deliveredByUserId String?
+  deliveredAt       DateTime            @default(now())
+  items             SalesDeliveryItem[]
+
+  @@index([salesOrderId, deliveredAt])
+  @@map("sales_deliveries")
+}
+
+model SalesDeliveryItem {
+  id               String         @id @default(uuid())
+  salesDeliveryId  String
+  salesDelivery    SalesDelivery  @relation(fields: [salesDeliveryId], references: [id], onDelete: Restrict)
+  salesOrderItemId String
+  salesOrderItem   SalesOrderItem @relation(fields: [salesOrderItemId], references: [id], onDelete: Restrict)
+  warehouseId      String
+  warehouse        Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  quantity         Int
+  returnedQty      Int            @default(0)
+  returns          SalesReturn[]
+
+  @@unique([salesDeliveryId, salesOrderItemId, warehouseId])
+  @@index([salesOrderItemId])
+  @@map("sales_delivery_items")
+}
+
+model SalesReturn {
+  id                  String            @id @default(uuid())
+  requestId           String            @unique
+  salesOrderId        String
+  salesOrder          SalesOrder        @relation(fields: [salesOrderId], references: [id], onDelete: Restrict)
+  salesDeliveryItemId String
+  salesDeliveryItem   SalesDeliveryItem @relation(fields: [salesDeliveryItemId], references: [id], onDelete: Restrict)
+  quantity            Int
+  reason              String
+  receivedByUserId    String?
+  createdAt           DateTime          @default(now())
+
+  @@index([salesOrderId, createdAt])
+  @@index([salesDeliveryItemId])
+  @@map("sales_returns")
 }
 
 model ProposalScopeTemplate {
@@ -2310,6 +2625,7 @@ model ProposalScopeTemplate {
   category                   String?
   description                String?
   scopeText                  String
+  sourceFileName             String?
   active                     Boolean                @default(true)
   sortOrder                  Int                    @default(0)
   tags                       String[]               @default([])
@@ -2322,24 +2638,66 @@ model ProposalScopeTemplate {
   @@map("proposal_scope_templates")
 }
 
+model ProposalHourlyRate {
+  id             String                 @id @default(uuid())
+  hourType       ProposalHourType
+  technicianType ProposalTechnicianType
+  unitPrice      Float
+  isActive       Boolean                @default(false)
+  sortOrder      Int                    @default(0)
+  notes          String?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@unique([hourType, technicianType])
+  @@index([isActive, sortOrder])
+  @@map("proposal_hourly_rates")
+}
+
+model ProposalPaymentProfile {
+  id                  String                 @id @default(uuid())
+  issuerCompanyId     String?
+  issuerCompany       CompanySettings?       @relation(fields: [issuerCompanyId], references: [id], onDelete: Restrict)
+  name                String
+  purpose             ProposalPaymentPurpose
+  method              ProposalPaymentMethod
+  beneficiary         String
+  beneficiaryDocument String?
+  bankName            String?
+  agency              String?
+  accountNumber       String?
+  pixKey              String?
+  pixCopyPaste        String?
+  boletoInstructions  String?
+  isActive            Boolean                @default(false)
+  sortOrder           Int                    @default(0)
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  @@index([purpose, method, isActive, sortOrder])
+  @@index([issuerCompanyId])
+  @@map("proposal_payment_profiles")
+}
+
 model MaintenanceOrder {
-  id                    String               @id @default(uuid())
-  title                 String
-  description           String?
-  auvoId                String?
-  auvoLink              String?
-  status                OrderStatus          @default(OPEN)
-  type                  MaintenanceOrderType @default(CORRECTIVE)
-  priority              String               @default("NORMAL")
-  customerReport        String?
-  checklistData         Json?
-  customerSignatureUrl  String?
-  displacementStartedAt DateTime?
-  startedAt             DateTime?
-  pausedAt              DateTime?
-  finishedAt            DateTime?
-  laborHours            Float?
-  hourMeterAfter        Int?
+  procurementAllocations ProcurementAllocation[]
+  id                     String                  @id @default(uuid())
+  title                  String
+  description            String?
+  auvoId                 String?
+  auvoLink               String?
+  status                 OrderStatus             @default(OPEN)
+  type                   MaintenanceOrderType    @default(CORRECTIVE)
+  priority               String                  @default("NORMAL")
+  customerReport         String?
+  checklistData          Json?
+  customerSignatureUrl   String?
+  displacementStartedAt  DateTime?
+  startedAt              DateTime?
+  pausedAt               DateTime?
+  finishedAt             DateTime?
+  laborHours             Float?
+  hourMeterAfter         Int?
 
   openedAt DateTime  @default(now())
   closedAt DateTime?
@@ -2352,6 +2710,8 @@ model MaintenanceOrder {
   costCenter          CostCenter?                 @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
   contractId          String?
   contract            ServiceContract?            @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  sourceProposalId    String?                     @unique
+  sourceProposal      Proposal?                   @relation("ExecutionProposalOrder", fields: [sourceProposalId], references: [id], onDelete: SetNull)
   contractScheduleId  String?
   contractSchedule    ContractPreventiveSchedule? @relation("ContractScheduleOrderLink", fields: [contractScheduleId], references: [id], onDelete: SetNull)
   generatedBySchedule ContractPreventiveSchedule? @relation("GeneratedOrderLink")
@@ -2435,45 +2795,46 @@ model MachineDowntimeEvent {
 }
 
 model WarrantyCase {
-  id                 String                @id @default(uuid())
-  code               String                @unique
-  generatorId        String
-  generator          Generator             @relation(fields: [generatorId], references: [id], onDelete: Restrict)
-  clientId           String
-  client             Client                @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  downtimeId         String?
-  downtime           MachineDowntime?      @relation(fields: [downtimeId], references: [id], onDelete: SetNull)
-  maintenanceOrderId String?
-  maintenanceOrder   MaintenanceOrder?     @relation(fields: [maintenanceOrderId], references: [id], onDelete: SetNull)
-  supplierId         String?
-  supplier           Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  manufacturerId     String?
-  manufacturer       Manufacturer?         @relation(fields: [manufacturerId], references: [id], onDelete: SetNull)
-  owner              WarrantyOwner
-  status             WarrantyStatus        @default(OPEN)
-  title              String
-  defectDescription  String
-  component          String?
-  partNumber         String?
-  serialNumber       String?
-  diagnosis          String?
-  coverageDecision   String?
-  resolution         String?
-  externalProtocol   String?
-  supplierProtocol   String?
-  claimAmount        Float?
-  approvedAmount     Float?
-  coverageEndsAt     DateTime?
-  submittedAt        DateTime?
-  responseDueAt      DateTime?
-  resolvedAt         DateTime?
-  closedAt           DateTime?
-  assignedUserId     String?
-  openedByUserId     String?
-  createdAt          DateTime              @default(now())
-  updatedAt          DateTime              @updatedAt
-  events             WarrantyCaseEvent[]
-  attachments        OperationAttachment[]
+  procurementAllocations ProcurementAllocation[]
+  id                     String                  @id @default(uuid())
+  code                   String                  @unique
+  generatorId            String
+  generator              Generator               @relation(fields: [generatorId], references: [id], onDelete: Restrict)
+  clientId               String
+  client                 Client                  @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  downtimeId             String?
+  downtime               MachineDowntime?        @relation(fields: [downtimeId], references: [id], onDelete: SetNull)
+  maintenanceOrderId     String?
+  maintenanceOrder       MaintenanceOrder?       @relation(fields: [maintenanceOrderId], references: [id], onDelete: SetNull)
+  supplierId             String?
+  supplier               Supplier?               @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  manufacturerId         String?
+  manufacturer           Manufacturer?           @relation(fields: [manufacturerId], references: [id], onDelete: SetNull)
+  owner                  WarrantyOwner
+  status                 WarrantyStatus          @default(OPEN)
+  title                  String
+  defectDescription      String
+  component              String?
+  partNumber             String?
+  serialNumber           String?
+  diagnosis              String?
+  coverageDecision       String?
+  resolution             String?
+  externalProtocol       String?
+  supplierProtocol       String?
+  claimAmount            Float?
+  approvedAmount         Float?
+  coverageEndsAt         DateTime?
+  submittedAt            DateTime?
+  responseDueAt          DateTime?
+  resolvedAt             DateTime?
+  closedAt               DateTime?
+  assignedUserId         String?
+  openedByUserId         String?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  events                 WarrantyCaseEvent[]
+  attachments            OperationAttachment[]
 
   @@index([status, owner, responseDueAt])
   @@index([generatorId, status])
@@ -2625,6 +2986,76 @@ model ServiceReportTemplate {
   @@index([defaultForGeneratorModelId])
   @@index([defaultForOrderType])
   @@map("service_report_templates")
+}
+
+enum VisualDocumentKind {
+  PROPOSAL
+  CONTRACT
+  SERVICE_REPORT
+}
+
+model VisualDocumentField {
+  id         String                               @id @default(uuid())
+  key        String                               @unique
+  label      String
+  category   String
+  kinds      VisualDocumentKind[]
+  sourcePath String?
+  fixedValue String?
+  isSystem   Boolean                              @default(false)
+  createdAt  DateTime                             @default(now())
+  mappings   VisualDocumentTemplateFieldMapping[]
+
+  @@index([category, label])
+  @@map("visual_document_fields")
+}
+
+model VisualDocumentTemplate {
+  id               String                          @id @default(uuid())
+  kind             VisualDocumentKind
+  name             String
+  description      String?
+  isActive         Boolean                         @default(false)
+  currentVersion   Int                             @default(1)
+  publishedVersion Int?
+  createdByUserId  String?
+  createdAt        DateTime                        @default(now())
+  updatedAt        DateTime                        @updatedAt
+  versions         VisualDocumentTemplateVersion[]
+
+  @@index([kind, isActive])
+  @@map("visual_document_templates")
+}
+
+model VisualDocumentTemplateVersion {
+  id              String                               @id @default(uuid())
+  templateId      String
+  template        VisualDocumentTemplate               @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  versionNumber   Int
+  blocks          Json
+  format          String                               @default("VISUAL")
+  wordTemplate    Bytes?                               @db.ByteA
+  wordFieldMap    Json?
+  changeSummary   String?
+  createdByUserId String?
+  createdAt       DateTime                             @default(now())
+  fieldsMapping   VisualDocumentTemplateFieldMapping[]
+
+  @@unique([templateId, versionNumber])
+  @@map("visual_document_template_versions")
+}
+
+model VisualDocumentTemplateFieldMapping {
+  id         String                        @id @default(uuid())
+  versionId  String
+  version    VisualDocumentTemplateVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  fieldId    String
+  field      VisualDocumentField           @relation(fields: [fieldId], references: [id], onDelete: Restrict)
+  sourcePath String?
+  fixedValue String?
+
+  @@unique([versionId, fieldId])
+  @@map("visual_document_template_fields_mapping")
 }
 
 model ServiceReportVersion {
@@ -2811,22 +3242,23 @@ model ServiceTicketComment {
 }
 
 model ServiceContract {
-  id                       String                 @id @default(uuid())
-  code                     String                 @unique
+  procurementAllocations   ProcurementAllocation[]
+  id                       String                  @id @default(uuid())
+  code                     String                  @unique
   title                    String?
-  status                   ContractStatus         @default(ACTIVE)
+  status                   ContractStatus          @default(ACTIVE)
   startDate                DateTime
   endDate                  DateTime
-  alertDays                Int                    @default(30)
+  alertDays                Int                     @default(30)
   preventiveRecurrence     PreventiveRecurrence
   responseTimeHours        Int?
   correctiveVisitAllowance Int?
-  partsCoverage            PartsCoverageType      @default(BILLED_SEPARATELY)
-  recurringAmount          Float                  @default(0)
-  dueDay                   Int                    @default(10)
-  adjustmentIndex          BillingAdjustmentIndex @default(IPCA)
+  partsCoverage            PartsCoverageType       @default(BILLED_SEPARATELY)
+  recurringAmount          Float                   @default(0)
+  dueDay                   Int                     @default(10)
+  adjustmentIndex          BillingAdjustmentIndex  @default(IPCA)
   adjustmentBaseMonth      Int?
-  includesFuelManagement   Boolean                @default(false)
+  includesFuelManagement   Boolean                 @default(false)
   notes                    String?
 
   clientId         String
@@ -2991,6 +3423,7 @@ model MaintenanceOrderMaterial {
   quantity      Float
   unitCost      Float?
   reservedAt    DateTime?
+  separatedAt DateTime?
   appliedAt     DateTime?
   createdAt     DateTime         @default(now())
 
@@ -3030,18 +3463,22 @@ model TelemetryEvent {
 }
 
 model Warehouse {
-  id           String        @id @default(uuid())
-  code         String        @unique
-  name         String
-  type         WarehouseType @default(MAIN)
-  technicianId String?
-  isActive     Boolean       @default(true)
+  procurementAllocations ProcurementAllocation[]
+  procurementReceipts    ProcurementReceipt[]
+  id                     String                  @id @default(uuid())
+  code                   String                  @unique
+  name                   String
+  type                   WarehouseType           @default(MAIN)
+  technicianId           String?
+  isActive               Boolean                 @default(true)
 
   technician       Technician?                @relation(fields: [technicianId], references: [id], onDelete: SetNull)
   balances         InventoryBalance[]
   movements        InventoryMovement[]
   purchaseReceipts PurchaseOrderReceipt[]
   orderMaterials   MaintenanceOrderMaterial[]
+  salesAllocations SalesOrderAllocation[]
+  salesDeliveries  SalesDeliveryItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3087,20 +3524,32 @@ model InventoryMovement {
 }
 
 model PurchaseOrder {
-  id                  String              @id @default(uuid())
-  code                String              @unique
-  supplierId          String
-  supplier            Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
-  status              PurchaseOrderStatus @default(DRAFT)
-  issueDate           DateTime            @default(now())
-  expectedDate        DateTime?
-  freightAmount       Float               @default(0)
-  taxAmount           Float               @default(0)
-  totalProductsAmount Float               @default(0)
-  totalAmount         Float               @default(0)
-  paymentTerm         String?
-  notes               String?
-  approvedAt          DateTime?
+  workflowVersion      Int                    @default(1)
+  procurementQuoteId   String?
+  procurementQuote     ProcurementQuote?      @relation(fields: [procurementQuoteId], references: [id], onDelete: Restrict)
+  generationKey        String?                @unique
+  dispatchEvidence     Json?
+  confirmationEvidence Json?
+  confirmedAt          DateTime?
+  closedAt             DateTime?
+  otherExpenses        Float                  @default(0)
+  procurementReceipts  ProcurementReceipt[]
+  procurementInvoices  ProcurementInvoice[]
+  commitment           ProcurementCommitment?
+  id                   String                 @id @default(uuid())
+  code                 String                 @unique
+  supplierId           String
+  supplier             Supplier               @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  status               PurchaseOrderStatus    @default(DRAFT)
+  issueDate            DateTime               @default(now())
+  expectedDate         DateTime?
+  freightAmount        Float                  @default(0)
+  taxAmount            Float                  @default(0)
+  totalProductsAmount  Float                  @default(0)
+  totalAmount          Float                  @default(0)
+  paymentTerm          String?
+  notes                String?
+  approvedAt           DateTime?
 
   items          PurchaseOrderItem[]
   receipts       PurchaseOrderReceipt[]
@@ -3114,64 +3563,72 @@ model PurchaseOrder {
 }
 
 model PurchaseOrderItem {
-  id              String        @id @default(uuid())
-  purchaseOrderId String
-  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  catalogItemId   String
-  catalogItem     CatalogItem   @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
-  quantity        Float
-  receivedQty     Float         @default(0)
-  unitPrice       Float
-  taxAmount       Float?        @default(0)
-  totalPrice      Float
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  procurementSelectionId  String?                  @unique
+  procurementSelection    ProcurementSelection?    @relation(fields: [procurementSelectionId], references: [id], onDelete: Restrict)
+  fulfillmentMode         String                   @default("WAREHOUSE")
+  landedUnitCost          Decimal?                 @db.Decimal(20, 6)
+  procurementReceiptItems ProcurementReceiptItem[]
+  id                      String                   @id @default(uuid())
+  purchaseOrderId         String
+  purchaseOrder           PurchaseOrder            @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  catalogItemId           String
+  catalogItem             CatalogItem              @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  quantity                Float
+  receivedQty             Float                    @default(0)
+  unitPrice               Float
+  taxAmount               Float?                   @default(0)
+  totalPrice              Float
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
 
   @@index([purchaseOrderId, catalogItemId])
   @@map("purchase_order_items")
 }
 
 model PurchaseOrderReceipt {
-  id              String        @id @default(uuid())
-  purchaseOrderId String
-  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  warehouseId     String
-  warehouse       Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
-  receivedAt      DateTime      @default(now())
-  notes           String?
-  createdAt       DateTime      @default(now())
+  idempotencyKey     String?             @unique
+  procurementReceipt ProcurementReceipt?
+  id                 String              @id @default(uuid())
+  purchaseOrderId    String
+  purchaseOrder      PurchaseOrder       @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  warehouseId        String
+  warehouse          Warehouse           @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  receivedAt         DateTime            @default(now())
+  notes              String?
+  createdAt          DateTime            @default(now())
 
   @@index([purchaseOrderId, receivedAt])
   @@map("purchase_order_receipts")
 }
 
 model AccountsPayable {
-  id              String                   @id @default(uuid())
-  purchaseOrderId String?
-  purchaseOrder   PurchaseOrder?           @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
-  supplierId      String
-  supplier        Supplier                 @relation(fields: [supplierId], references: [id], onDelete: Restrict)
-  description     String
-  issueDate       DateTime                 @default(now())
-  competenceDate  DateTime?
-  dueDate         DateTime
-  amount          Float
-  barcode         String?
-  pixCopyPaste    String?
-  category        PayableCategory          @default(SUPPLIERS)
-  proofUrl        String?
-  costCenterId    String?
-  costCenter      CostCenter?              @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
-  status          AccountsPayableStatus    @default(OPEN)
-  paidAmount      Float                    @default(0)
-  paidAt          DateTime?
-  canceledAt      DateTime?
-  cancelReason    String?
-  duplicateHash   String?
-  payments        AccountsPayablePayment[]
-  bankMovements   BankMovement[]
-  createdAt       DateTime                 @default(now())
-  updatedAt       DateTime                 @updatedAt
+  procurementInstallment ProcurementInstallment?
+  id                     String                   @id @default(uuid())
+  purchaseOrderId        String?
+  purchaseOrder          PurchaseOrder?           @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  supplierId             String
+  supplier               Supplier                 @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  description            String
+  issueDate              DateTime                 @default(now())
+  competenceDate         DateTime?
+  dueDate                DateTime
+  amount                 Float
+  barcode                String?
+  pixCopyPaste           String?
+  category               PayableCategory          @default(SUPPLIERS)
+  proofUrl               String?
+  costCenterId           String?
+  costCenter             CostCenter?              @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  status                 AccountsPayableStatus    @default(OPEN)
+  paidAmount             Float                    @default(0)
+  paidAt                 DateTime?
+  canceledAt             DateTime?
+  cancelReason           String?
+  duplicateHash          String?
+  payments               AccountsPayablePayment[]
+  bankMovements          BankMovement[]
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
 
   @@index([supplierId, status, dueDate])
   @@index([duplicateHash])
@@ -3199,43 +3656,256 @@ model BankAccount {
   statementEntries       BankStatementEntry[]
   reconciliationIssues   BankReconciliationIssue[]
   reconciliationClosings BankReconciliationClosing[]
+  collectionAgreement    BankCollectionAgreement?
+  collectionTitles       BankCollectionTitle[]
 
   @@map("bank_accounts")
 }
 
 model AccountsReceivable {
-  id                 String                      @id @default(uuid())
-  clientId           String
-  client             Client                      @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  contractId         String?
-  contract           ServiceContract?            @relation(fields: [contractId], references: [id], onDelete: SetNull)
-  maintenanceOrderId String?
-  maintenanceOrder   MaintenanceOrder?           @relation(fields: [maintenanceOrderId], references: [id], onDelete: SetNull)
-  costCenterId       String?
-  costCenter         CostCenter?                 @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
-  description        String
-  competenceDate     DateTime
-  dueDate            DateTime
-  grossAmount        Float
-  discountAmount     Float                       @default(0)
-  interestAmount     Float                       @default(0)
-  penaltyAmount      Float                       @default(0)
-  netAmount          Float
-  paidAmount         Float                       @default(0)
-  status             AccountsReceivableStatus    @default(OPEN)
-  lastChargeEmailAt  DateTime?
-  canceledAt         DateTime?
-  cancelReason       String?
-  commissionReleased Boolean                     @default(false)
-  payments           AccountsReceivablePayment[]
-  commissions        CommissionEntry[]
-  bankMovements      BankMovement[]
-  createdAt          DateTime                    @default(now())
-  updatedAt          DateTime                    @updatedAt
+  id                       String                      @id @default(uuid())
+  clientId                 String
+  client                   Client                      @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  contractId               String?
+  contract                 ServiceContract?            @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  maintenanceOrderId       String?
+  maintenanceOrder         MaintenanceOrder?           @relation(fields: [maintenanceOrderId], references: [id], onDelete: SetNull)
+  salesOrderId             String?
+  salesOrder               SalesOrder?                 @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
+  sourceProposalId         String?
+  sourceProposal           Proposal?                   @relation("ProposalReceivables", fields: [sourceProposalId], references: [id], onDelete: Restrict)
+  proposalPaymentStage     String?
+  proposalPaymentKey       String?                     @unique
+  executionBillingKey      String?                     @unique
+  executionBillingCategory ExecutionBillingCategory?
+  installmentNumber        Int?
+  installmentCount         Int?
+  costCenterId             String?
+  costCenter               CostCenter?                 @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  description              String
+  competenceDate           DateTime
+  dueDate                  DateTime
+  grossAmount              Float
+  discountAmount           Float                       @default(0)
+  interestAmount           Float                       @default(0)
+  penaltyAmount            Float                       @default(0)
+  netAmount                Float
+  paidAmount               Float                       @default(0)
+  status                   AccountsReceivableStatus    @default(OPEN)
+  lastChargeEmailAt        DateTime?
+  canceledAt               DateTime?
+  cancelReason             String?
+  commissionReleased       Boolean                     @default(false)
+  payments                 AccountsReceivablePayment[]
+  commissions              CommissionEntry[]
+  bankMovements            BankMovement[]
+  collectionTitle          BankCollectionTitle?
+  fiscalDocuments          FiscalDocument[]
+  createdAt                DateTime                    @default(now())
+  updatedAt                DateTime                    @updatedAt
 
   @@index([clientId, status, dueDate])
   @@index([contractId, competenceDate])
+  @@index([salesOrderId])
+  @@index([sourceProposalId, proposalPaymentStage, status], map: "receivable_proposal_stage_status_idx")
   @@map("accounts_receivable")
+}
+
+enum FiscalDocumentKind {
+  NFE
+  NFSE
+}
+
+enum FiscalDocumentStatus {
+  DRAFT
+  SUBMITTED
+  AUTHORIZED
+  REJECTED
+  CANCELLED
+}
+
+model FiscalDocument {
+  id                String               @id @default(uuid())
+  receivableId      String
+  receivable        AccountsReceivable   @relation(fields: [receivableId], references: [id], onDelete: Restrict)
+  issuerCompanyId   String?
+  issuerCompany     CompanySettings?     @relation(fields: [issuerCompanyId], references: [id], onDelete: Restrict)
+  kind              FiscalDocumentKind
+  status            FiscalDocumentStatus @default(DRAFT)
+  issuerSnapshot    Json
+  recipientSnapshot Json
+  items             Json
+  totalAmount       Decimal              @db.Decimal(15, 2)
+  fiscalNotes       String?
+  provider          String?
+  providerReference String?              @unique
+  number            String?
+  series            String?
+  accessKey         String?              @unique
+  issuedAt          DateTime?
+  authorizedAt      DateTime?
+  rejectionReason   String?
+  xml               Bytes?
+  pdf               Bytes?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@index([receivableId, kind, status])
+  @@index([issuerCompanyId, status, createdAt])
+  @@index([status, createdAt])
+  @@map("fiscal_documents")
+}
+
+model FiscalCertificate {
+  id                String          @id @default(uuid())
+  issuerCompanyId   String          @unique
+  issuerCompany     CompanySettings @relation(fields: [issuerCompanyId], references: [id], onDelete: Restrict)
+  encryptedBundle   Bytes
+  initializationVec Bytes
+  authenticationTag Bytes
+  fingerprintSha256 String
+  serialNumber      String
+  subjectName       String
+  certificateCnpj   String
+  validFrom         DateTime
+  validTo           DateTime
+  installedByUserId String?
+  installedAt       DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([validTo])
+  @@map("fiscal_certificates")
+}
+
+model BankCollectionAgreement {
+  id                    String           @id @default(uuid())
+  bankAccountId         String           @unique
+  bankAccount           BankAccount      @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  issuerCompanyId       String?
+  issuerCompany         CompanySettings? @relation(fields: [issuerCompanyId], references: [id], onDelete: Restrict)
+  transmissionCode      String
+  beneficiaryName       String
+  beneficiaryDocument   String
+  agency                String
+  agencyDigit           String
+  accountNumber         String
+  accountDigit          String
+  walletCode            String           @default("1")
+  registrationForm      String           @default("1")
+  documentType          String           @default("2")
+  nextRemittanceNumber  Int              @default(1)
+  nextOurNumber         Int              @default(1)
+  homologated           Boolean          @default(false)
+  homologationReference String?
+  homologatedAt         DateTime?
+  homologatedById       String?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  batches       BankCollectionBatch[]
+  returnImports BankCollectionReturnImport[]
+
+  @@index([issuerCompanyId])
+  @@map("bank_collection_agreements")
+}
+
+model BankCollectionTitle {
+  id                 String             @id @default(uuid())
+  receivableId       String             @unique
+  receivable         AccountsReceivable @relation(fields: [receivableId], references: [id], onDelete: Restrict)
+  bankAccountId      String
+  bankAccount        BankAccount        @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  documentNumber     String
+  ourNumber          String
+  speciesCode        String             @default("04")
+  status             String             @default("DRAFT")
+  invoiceNumber      String?
+  invoiceIssuedAt    DateTime?
+  invoiceAccessKey   String?
+  invoiceUrl         String?
+  lastOccurrenceCode String?
+  lastOccurrenceAt   DateTime?
+  lastMessage        String?
+  registeredAt       DateTime?
+  paidAt             DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  batchItems   BankCollectionBatchItem[]
+  returnEvents BankCollectionReturnEvent[]
+
+  @@unique([bankAccountId, ourNumber])
+  @@unique([bankAccountId, documentNumber])
+  @@index([status, updatedAt])
+  @@map("bank_collection_titles")
+}
+
+model BankCollectionBatch {
+  id             String                    @id @default(uuid())
+  agreementId    String
+  agreement      BankCollectionAgreement   @relation(fields: [agreementId], references: [id], onDelete: Restrict)
+  sequence       Int
+  fileName       String
+  content        Bytes
+  checksumSha256 String
+  status         String                    @default("GENERATED")
+  createdAt      DateTime                  @default(now())
+  sentAt         DateTime?
+  sentById       String?
+  items          BankCollectionBatchItem[]
+
+  @@unique([agreementId, sequence])
+  @@index([status, createdAt])
+  @@map("bank_collection_batches")
+}
+
+model BankCollectionBatchItem {
+  id      String              @id @default(uuid())
+  batchId String
+  batch   BankCollectionBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  titleId String
+  title   BankCollectionTitle @relation(fields: [titleId], references: [id], onDelete: Restrict)
+
+  @@unique([batchId, titleId])
+  @@index([titleId])
+  @@map("bank_collection_batch_items")
+}
+
+model BankCollectionReturnImport {
+  id             String                      @id @default(uuid())
+  agreementId    String
+  agreement      BankCollectionAgreement     @relation(fields: [agreementId], references: [id], onDelete: Restrict)
+  fileName       String
+  content        Bytes
+  checksumSha256 String
+  importedAt     DateTime                    @default(now())
+  importedById   String?
+  events         BankCollectionReturnEvent[]
+
+  @@unique([agreementId, checksumSha256])
+  @@index([importedAt])
+  @@map("bank_collection_return_imports")
+}
+
+model BankCollectionReturnEvent {
+  id              String                     @id @default(uuid())
+  importId        String
+  import          BankCollectionReturnImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+  titleId         String?
+  title           BankCollectionTitle?       @relation(fields: [titleId], references: [id], onDelete: SetNull)
+  lineNumber      Int
+  movementCode    String
+  reasonCodes     String?
+  amount          Float                      @default(0)
+  netCreditAmount Float                      @default(0)
+  eventDate       DateTime?
+  outcome         String                     @default("PENDING_REVIEW")
+  message         String?
+  createdAt       DateTime                   @default(now())
+
+  @@unique([importId, lineNumber])
+  @@index([outcome, createdAt])
+  @@map("bank_collection_return_events")
 }
 
 model AccountsReceivablePayment {
@@ -3508,19 +4178,20 @@ model FinancialAuditLog {
 }
 
 model CostCenter {
-  id          String           @id @default(uuid())
-  code        String           @unique
-  name        String
-  type        CostCenterType   @default(INTERNAL)
-  clientId    String?
-  client      Client?          @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  contractId  String?          @unique
-  contract    ServiceContract? @relation("ContractCostCenter")
-  generatorId String?          @unique
-  generator   Generator?       @relation("GeneratorCostCenter", fields: [generatorId], references: [id], onDelete: SetNull)
-  isActive    Boolean          @default(true)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  procurementAllocations ProcurementAllocation[]
+  id                     String                  @id @default(uuid())
+  code                   String                  @unique
+  name                   String
+  type                   CostCenterType          @default(INTERNAL)
+  clientId               String?
+  client                 Client?                 @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  contractId             String?                 @unique
+  contract               ServiceContract?        @relation("ContractCostCenter")
+  generatorId            String?                 @unique
+  generator              Generator?              @relation("GeneratorCostCenter", fields: [generatorId], references: [id], onDelete: SetNull)
+  isActive               Boolean                 @default(true)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
 
   entries           CostCenterEntry[]
   maintenanceOrders MaintenanceOrder[]
@@ -3806,4 +4477,468 @@ model DocumentAccessLog {
   @@index([shareLinkId, createdAt])
   @@index([accessType, result, createdAt])
   @@map("document_access_logs")
+}
+
+model ProcurementSettings {
+  id          String   @id @default("purchasing")
+  enabled     Boolean  @default(false)
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+
+  @@map("procurement_settings")
+}
+
+model ProcurementRequest {
+  id            String                   @id @default(uuid())
+  code          String                   @unique
+  requestKey    String                   @unique
+  requesterId   String
+  requester     User                     @relation(fields: [requesterId], references: [id], onDelete: Restrict)
+  department    String
+  origin        String
+  priority      String                   @default("NORMAL")
+  justification String
+  neededAt      DateTime?
+  notes         String?
+  status        String                   @default("DRAFT")
+  revision      Int                      @default(1)
+  items         ProcurementRequestItem[]
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+
+  @@index([status, createdAt])
+  @@index([requesterId, createdAt])
+  @@map("procurement_requests")
+}
+
+model ProcurementRequestItem {
+  id                String                   @id @default(uuid())
+  requestId         String
+  request           ProcurementRequest       @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  catalogItemId     String?
+  catalogItem       CatalogItem?             @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  description       String
+  specification     String?
+  originalReference String?
+  quantity          Decimal                  @db.Decimal(20, 6)
+  fulfilledQty      Decimal                  @default(0) @db.Decimal(20, 6)
+  unit              String
+  neededAt          DateTime?
+  notes             String?
+  allocations       ProcurementAllocation[]
+  quoteSources      ProcurementQuoteSource[]
+
+  @@index([catalogItemId])
+  @@map("procurement_request_items")
+}
+
+model ProcurementAllocation {
+  sortOrder     Int                    @default(0)
+  fulfilledQty  Decimal                @default(0) @db.Decimal(20, 6)
+  id            String                 @id @default(uuid())
+  requestItemId String
+  requestItem   ProcurementRequestItem @relation(fields: [requestItemId], references: [id], onDelete: Restrict)
+  quantity      Decimal                @db.Decimal(20, 6)
+  origin        String
+  clientId      String?
+  client        Client?                @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  orderId       String?
+  order         MaintenanceOrder?      @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  contractId    String?
+  contract      ServiceContract?       @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  generatorId   String?
+  generator     Generator?             @relation(fields: [generatorId], references: [id], onDelete: Restrict)
+  serialNumber  String?
+  salesOrderId  String?
+  salesOrder    SalesOrder?            @relation(fields: [salesOrderId], references: [id], onDelete: Restrict)
+  warrantyId    String?
+  warranty      WarrantyCase?          @relation(fields: [warrantyId], references: [id], onDelete: Restrict)
+  costCenterId  String?
+  costCenter    CostCenter?            @relation(fields: [costCenterId], references: [id], onDelete: Restrict)
+  warehouseId   String?
+  warehouse     Warehouse?             @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([contractId])
+  @@index([generatorId])
+  @@map("procurement_allocations")
+}
+
+model ProcurementQuote {
+  id               String                  @id @default(uuid())
+  code             String                  @unique
+  requestKey       String                  @unique
+  title            String
+  status           String                  @default("PREPARATION")
+  round            Int                     @default(1)
+  revision         Int                     @default(1)
+  createdById      String
+  notes            String?
+  exceptionReason  String?
+  approvalSnapshot Json?
+  approvedAt       DateTime?
+  items            ProcurementQuoteItem[]
+  invitations      ProcurementInvitation[]
+  offers           ProcurementOffer[]
+  orders           PurchaseOrder[]
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  @@index([status, createdAt])
+  @@map("procurement_quotes")
+}
+
+model ProcurementQuoteItem {
+  id            String                   @id @default(uuid())
+  quoteId       String
+  quote         ProcurementQuote         @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  description   String
+  specification String?
+  unit          String
+  quantity      Decimal                  @db.Decimal(20, 6)
+  neededAt      DateTime?
+  sources       ProcurementQuoteSource[]
+  offers        ProcurementOfferItem[]
+  selection     ProcurementSelection?
+
+  @@index([quoteId])
+  @@map("procurement_quote_items")
+}
+
+model ProcurementQuoteSource {
+  fulfilledQty  Decimal                @default(0) @db.Decimal(20, 6)
+  id            String                 @id @default(uuid())
+  quoteItemId   String
+  quoteItem     ProcurementQuoteItem   @relation(fields: [quoteItemId], references: [id], onDelete: Restrict)
+  requestItemId String
+  requestItem   ProcurementRequestItem @relation(fields: [requestItemId], references: [id], onDelete: Restrict)
+  quantity      Decimal                @db.Decimal(20, 6)
+
+  @@unique([quoteItemId, requestItemId])
+  @@index([requestItemId])
+  @@map("procurement_quote_sources")
+}
+
+model ProcurementInvitation {
+  id         String           @id @default(uuid())
+  quoteId    String
+  quote      ProcurementQuote @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  supplierId String
+  supplier   Supplier         @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  status     String           @default("INVITED")
+  notes      String?
+  round      Int              @default(1)
+
+  @@unique([quoteId, supplierId, round])
+  @@map("procurement_invitations")
+}
+
+model ProcurementOffer {
+  id                 String                 @id @default(uuid())
+  quoteId            String
+  quote              ProcurementQuote       @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  supplierId         String
+  supplier           Supplier               @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  round              Int
+  version            Int
+  validUntil         DateTime
+  paymentTerm        String
+  deliveryDays       Int
+  expectedAt         DateTime?
+  warranty           String?
+  notes              String?
+  negotiatedContract String?
+  freightAmount      Decimal                @default(0) @db.Decimal(20, 2)
+  freightAllocation  String                 @default("VALUE")
+  createdById        String
+  createdAt          DateTime               @default(now())
+  items              ProcurementOfferItem[]
+
+  @@unique([quoteId, supplierId, round, version])
+  @@map("procurement_offers")
+}
+
+model ProcurementOfferItem {
+  id              String                 @id @default(uuid())
+  offerId         String
+  offer           ProcurementOffer       @relation(fields: [offerId], references: [id], onDelete: Restrict)
+  quoteItemId     String
+  quoteItem       ProcurementQuoteItem   @relation(fields: [quoteItemId], references: [id], onDelete: Restrict)
+  catalogItemId   String?
+  catalogItem     CatalogItem?           @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  description     String
+  reference       String?
+  manufacturer    String?
+  quantity        Decimal                @db.Decimal(20, 6)
+  unit            String
+  unitPrice       Decimal                @db.Decimal(20, 6)
+  discountPercent Decimal                @default(0) @db.Decimal(8, 4)
+  taxAmount       Decimal                @default(0) @db.Decimal(20, 2)
+  freightShare    Decimal                @default(0) @db.Decimal(20, 2)
+  otherExpenses   Decimal                @default(0) @db.Decimal(20, 2)
+  totalAmount     Decimal                @db.Decimal(20, 2)
+  compatibility   String                 @default("PENDING")
+  technicalReason String?
+  available       Boolean                @default(true)
+  selections      ProcurementSelection[]
+
+  @@unique([offerId, quoteItemId])
+  @@map("procurement_offer_items")
+}
+
+model ProcurementSelection {
+  id              String               @id @default(uuid())
+  quoteItemId     String               @unique
+  quoteItem       ProcurementQuoteItem @relation(fields: [quoteItemId], references: [id], onDelete: Restrict)
+  offerItemId     String
+  offerItem       ProcurementOfferItem @relation(fields: [offerItemId], references: [id], onDelete: Restrict)
+  justification   String
+  exceptionReason String?
+  selectedById    String
+  selectedAt      DateTime             @default(now())
+  fulfillmentMode String               @default("WAREHOUSE")
+  orderItem       PurchaseOrderItem?
+
+  @@map("procurement_selections")
+}
+
+model ProcurementApprovalRule {
+  id             String   @id @default(uuid())
+  name           String
+  active         Boolean  @default(true)
+  minAmount      Decimal  @default(0) @db.Decimal(20, 2)
+  maxAmount      Decimal? @db.Decimal(20, 2)
+  department     String?
+  origin         String?
+  priority       String?
+  costCenterId   String?
+  itemType       String?
+  minimumOffers  Int      @default(1)
+  approverUserId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([active, minAmount])
+  @@map("procurement_approval_rules")
+}
+
+model ProcurementReceipt {
+  id              String                   @id @default(uuid())
+  orderId         String
+  order           PurchaseOrder            @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  legacyReceiptId String?                  @unique
+  legacyReceipt   PurchaseOrderReceipt?    @relation(fields: [legacyReceiptId], references: [id], onDelete: Restrict)
+  requestKey      String                   @unique
+  warehouseId     String?
+  warehouse       Warehouse?               @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  receivedById    String
+  receivedAt      DateTime                 @default(now())
+  fiscalReference String?
+  notes           String?
+  items           ProcurementReceiptItem[]
+
+  @@index([orderId, receivedAt])
+  @@map("procurement_receipts")
+}
+
+model ProcurementReceiptItem {
+  allocations   Json               @default("[]")
+  id            String             @id @default(uuid())
+  receiptId     String
+  receipt       ProcurementReceipt @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  orderItemId   String
+  orderItem     PurchaseOrderItem  @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  acceptedQty   Decimal            @db.Decimal(20, 6)
+  rejectedQty   Decimal            @default(0) @db.Decimal(20, 6)
+  serialNumbers String[]
+  divergence    String?
+
+  @@index([orderItemId])
+  @@map("procurement_receipt_items")
+}
+
+model ProcurementCommitment {
+  id               String        @id @default(uuid())
+  orderId          String        @unique
+  order            PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  amount           Decimal       @db.Decimal(20, 2)
+  recognizedAmount Decimal       @default(0) @db.Decimal(20, 2)
+  status           String        @default("OPEN")
+  createdAt        DateTime      @default(now())
+
+  @@map("procurement_commitments")
+}
+
+model ProcurementInvoice {
+  id             String                   @id @default(uuid())
+  orderId        String
+  order          PurchaseOrder            @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  supplierId     String
+  supplier       Supplier                 @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  number         String
+  series         String                   @default("1")
+  accessKey      String?                  @unique
+  kind           String                   @default("STANDARD")
+  status         String                   @default("DRAFT")
+  issueDate      DateTime
+  amount         Decimal                  @db.Decimal(20, 2)
+  advanceApplied Decimal                  @default(0) @db.Decimal(20, 2)
+  lines          Json
+  schedule       Json
+  evidence       String
+  justification  String?
+  validatedById  String?
+  validatedAt    DateTime?
+  installments   ProcurementInstallment[]
+  createdAt      DateTime                 @default(now())
+
+  @@unique([supplierId, number, series])
+  @@index([orderId, status])
+  @@map("procurement_invoices")
+}
+
+model ProcurementInstallment {
+  id        String             @id @default(uuid())
+  invoiceId String
+  invoice   ProcurementInvoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  number    Int
+  dueDate   DateTime
+  amount    Decimal            @db.Decimal(20, 2)
+  payableId String             @unique
+  payable   AccountsPayable    @relation(fields: [payableId], references: [id], onDelete: Restrict)
+
+  @@unique([invoiceId, number])
+  @@map("procurement_installments")
+}
+
+model ProcurementAttachment {
+  id             String   @id @default(uuid())
+  entityType     String
+  entityId       String
+  storageKey     String   @unique
+  fileName       String
+  mimeType       String
+  sizeBytes      Int
+  checksumSha256 String
+  uploadedById   String
+  uploadedBy     User     @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  createdAt      DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@map("procurement_attachments")
+}
+
+
+/// Explicit, versioned technical classification; independent of SKU classification.
+model TechnicalScopeFamily {
+  id             String   @id @default(uuid())
+  code           String   @unique
+  name           String
+  kind           String
+  definitionJson Json?
+  version        Int      @default(1)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
+
+  @@index([isActive, kind])
+  @@map("technical_scope_families")
+}
+
+model TechnicalScopeProcedure {
+  id             String   @id @default(uuid())
+  code           String   @unique
+  name           String
+  category       String?
+  definitionJson Json
+  version        Int      @default(1)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
+
+  @@index([isActive, category])
+  @@map("technical_scope_procedures")
+}
+
+model CatalogTechnicalProfile {
+  id                     String      @id @default(uuid())
+  catalogItemId          String      @unique
+  catalogItem            CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  familyCodes            String[]    @default([])
+  procedureCodes         String[]    @default([])
+  includedProcedureCodes String[]    @default([])
+  compatibility          Json?
+  isActive               Boolean     @default(true)
+  version                Int         @default(1)
+  createdAt              DateTime    @default(now())
+  updatedAt              DateTime    @default(now()) @updatedAt
+
+  @@index([isActive])
+  @@map("catalog_technical_profiles")
+}
+
+model ProposalTechnicalScopeVersion {
+  id          String   @id @default(uuid())
+  proposalId  String
+  proposal    Proposal @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  version     Int
+  snapshot    Json
+  text        String
+  sourceHash  String
+  actorUserId String?
+  actorUser   User?    @relation("TechnicalScopeVersionActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@unique([proposalId, version])
+  @@index([proposalId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("proposal_technical_scope_versions")
+}
+
+// Internal estimates remain separate from customer documents and approved snapshots.
+model CommercialProposalEstimate {
+  id String @id @default(uuid())
+  proposalId String @unique
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  version Int @default(1)
+  sourceHash String
+  snapshot Json
+  actorUserId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@map("commercial_proposal_estimates")
+}
+
+model CommercialContentTemplate {
+  id String @id @default(uuid())
+  key String
+  version Int
+  portfolio String
+  category String
+  name String
+  subject String?
+  body String
+  createdByUserId String
+  publishedByUserId String?
+  publishedAt DateTime?
+  createdAt DateTime @default(now())
+  @@unique([key, version])
+  @@index([portfolio, category, publishedAt])
+  @@map("commercial_content_templates")
+}
+
+model CommercialHandoffTask {
+  id String @id @default(uuid())
+  proposalId String
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  step String
+  ownerId String
+  owner User @relation("CommercialHandoffOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  dueAt DateTime
+  version Int @default(1)
+  updatedByUserId String
+  updatedAt DateTime @updatedAt
+  @@unique([proposalId, step])
+  @@index([ownerId, dueAt])
+  @@map("commercial_handoff_tasks")
 }

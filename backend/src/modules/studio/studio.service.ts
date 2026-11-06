@@ -12,6 +12,10 @@ import {
   ItemType,
   ManufacturerType,
   OperationalExpenseType,
+  ProposalHourType,
+  ProposalPaymentMethod,
+  ProposalPaymentPurpose,
+  ProposalTechnicianType,
   Prisma,
 } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
@@ -119,6 +123,18 @@ const CONTROL_OPTION_TYPES = {
     domain: AuditDomain.FINANCE,
     permission: 'finance.update',
   },
+  proposalExpenseReviewRules: {
+    group: 'commercial',
+    type: 'PROPOSAL_EXPENSE_REVIEW_RULE',
+    domain: AuditDomain.PROPOSALS,
+    permission: 'proposals.update',
+  },
+  proposalAccessoryRules: {
+    group: 'commercial',
+    type: 'PROPOSAL_ACCESSORY_RULE',
+    domain: AuditDomain.PROPOSALS,
+    permission: 'proposals.update',
+  },
   brazilStates: {
     group: 'address',
     type: 'BRAZIL_STATE',
@@ -141,6 +157,39 @@ function controlOptionDefinition(
       sortOrder: 'number',
       isActive: 'boolean',
       isBlockedForNewClients: 'boolean',
+    },
+    validate: (data, creating) => {
+      if (config.type === 'PROPOSAL_EXPENSE_REVIEW_RULE') {
+        if (
+          (creating || 'sortOrder' in data) &&
+          (!Number.isInteger(data.sortOrder) ||
+            Number(data.sortOrder) < 1 ||
+            Number(data.sortOrder) > 1000000)
+        )
+          throw new BadRequestException(
+            'Informe um limite de conferencia inteiro entre 1 e 1000000.',
+          );
+        return;
+      }
+      if (config.type !== 'PROPOSAL_ACCESSORY_RULE') return;
+      if (
+        (creating || 'description' in data) &&
+        !studioString(data.description).trim()
+      ) {
+        throw new BadRequestException(
+          'Informe a pergunta que sera exibida na proposta.',
+        );
+      }
+      if (
+        (creating || 'sortOrder' in data) &&
+        (!Number.isInteger(data.sortOrder) ||
+          Number(data.sortOrder) < 1 ||
+          Number(data.sortOrder) > 20)
+      ) {
+        throw new BadRequestException(
+          'A quantidade sugerida deve ser de 1 a 20 por unidade.',
+        );
+      }
     },
     create: (tx, data) =>
       tx.controlOption.create({
@@ -197,6 +246,46 @@ function controlOptionDefinition(
       });
     },
   };
+}
+
+async function validatePaymentProfileIssuer(
+  tx: Prisma.TransactionClient,
+  profile: Record<string, unknown>,
+): Promise<{ cnpj: string; companyName: string } | null> {
+  const issuerCompanyId = studioString(profile.issuerCompanyId).trim();
+  if (!issuerCompanyId) {
+    if (profile.isActive === true) {
+      throw new BadRequestException(
+        'Selecione o CNPJ emitente antes de ativar a conta de pagamento.',
+      );
+    }
+    return null;
+  }
+
+  const issuer = await tx.companySettings.findUnique({
+    where: { id: issuerCompanyId },
+    select: { cnpj: true, companyName: true },
+  });
+  if (!issuer) {
+    throw new BadRequestException('CNPJ emitente nao encontrado.');
+  }
+
+  const issuerCnpj = (issuer.cnpj ?? '').replace(/\D/g, '');
+  const beneficiaryCnpj = studioString(profile.beneficiaryDocument).replace(
+    /\D/g,
+    '',
+  );
+  if (profile.isActive === true && issuerCnpj.length !== 14) {
+    throw new BadRequestException(
+      'Cadastre o CNPJ da empresa emitente antes de ativar a conta.',
+    );
+  }
+  if (beneficiaryCnpj && issuerCnpj && beneficiaryCnpj !== issuerCnpj) {
+    throw new BadRequestException(
+      'O CNPJ do favorecido deve ser igual ao CNPJ emitente selecionado.',
+    );
+  }
+  return { cnpj: issuerCnpj, companyName: issuer.companyName ?? '' };
 }
 
 const DEFINITIONS: Record<string, StudioResourceDefinition> = {
@@ -604,6 +693,195 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
     update: (tx, id, data) =>
       tx.operationalExpenseRate.update({ where: { id }, data }),
   },
+  proposalHourlyRates: {
+    entityType: 'ProposalHourlyRate',
+    domain: AuditDomain.PROPOSALS,
+    resourcePermission: 'finance.update',
+    editableFields: {
+      hourType: 'enum',
+      technicianType: 'enum',
+      unitPrice: 'number',
+      isActive: 'boolean',
+      sortOrder: 'number',
+      notes: 'string',
+    },
+    enums: {
+      hourType: Object.values(ProposalHourType),
+      technicianType: Object.values(ProposalTechnicianType),
+    },
+    list: (tx) =>
+      tx.proposalHourlyRate.findMany({
+        orderBy: [
+          { hourType: 'asc' },
+          { sortOrder: 'asc' },
+          { technicianType: 'asc' },
+        ],
+      }),
+    validate: (data, creating) => {
+      if (creating && (!data.hourType || !data.technicianType)) {
+        throw new BadRequestException('Selecione tipo de hora e profissional.');
+      }
+      if ((creating || 'unitPrice' in data) && !(Number(data.unitPrice) > 0)) {
+        throw new BadRequestException(
+          'Informe uma tarifa de venda maior que zero.',
+        );
+      }
+    },
+    create: (tx, data) =>
+      tx.proposalHourlyRate.create({
+        data: {
+          hourType: data.hourType as ProposalHourType,
+          technicianType: data.technicianType as ProposalTechnicianType,
+          unitPrice: Number(data.unitPrice),
+          isActive: data.isActive === true,
+          sortOrder: Number(data.sortOrder ?? 0),
+          notes: typeof data.notes === 'string' ? data.notes : null,
+        },
+      }),
+    findUnique: (tx, id) => tx.proposalHourlyRate.findUnique({ where: { id } }),
+    update: (tx, id, data) =>
+      tx.proposalHourlyRate.update({ where: { id }, data }),
+  },
+  proposalPaymentProfiles: {
+    entityType: 'ProposalPaymentProfile',
+    domain: AuditDomain.PROPOSALS,
+    resourcePermission: 'finance.update',
+    editableFields: {
+      issuerCompanyId: 'string',
+      name: 'string',
+      purpose: 'enum',
+      method: 'enum',
+      beneficiary: 'string',
+      beneficiaryDocument: 'string',
+      bankName: 'string',
+      agency: 'string',
+      accountNumber: 'string',
+      pixKey: 'string',
+      pixCopyPaste: 'string',
+      boletoInstructions: 'string',
+      isActive: 'boolean',
+      sortOrder: 'number',
+    },
+    enums: {
+      purpose: Object.values(ProposalPaymentPurpose),
+      method: Object.values(ProposalPaymentMethod),
+    },
+    list: (tx) =>
+      tx.proposalPaymentProfile.findMany({
+        orderBy: [{ purpose: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
+        include: { issuerCompany: { select: { id: true, companyName: true } } },
+      }),
+    validate: (data, creating) => {
+      if (creating && (!data.name || !data.purpose || !data.method)) {
+        throw new BadRequestException('Informe nome, destino e meio.');
+      }
+      if (
+        creating &&
+        data.isActive === true &&
+        data.method === ProposalPaymentMethod.BOLETO &&
+        !data.boletoInstructions
+      ) {
+        throw new BadRequestException(
+          'Boleto ativo exige instrucoes de cobranca.',
+        );
+      }
+    },
+    create: async (tx, data) => {
+      const issuer = await validatePaymentProfileIssuer(tx, data);
+      const beneficiary =
+        studioString(data.beneficiary).trim() || issuer?.companyName || '';
+      if (!beneficiary) {
+        throw new BadRequestException('Informe o favorecido da conta.');
+      }
+      const pixKey =
+        studioString(data.pixKey).trim() ||
+        (data.method === ProposalPaymentMethod.PIX ? issuer?.cnpj : '') ||
+        '';
+      if (
+        data.isActive === true &&
+        data.method === ProposalPaymentMethod.PIX &&
+        !pixKey
+      ) {
+        throw new BadRequestException(
+          'Cadastre o CNPJ emitente para usar como chave PIX.',
+        );
+      }
+      return tx.proposalPaymentProfile.create({
+        data: {
+          issuerCompanyId: studioString(data.issuerCompanyId).trim() || null,
+          name: studioString(data.name).trim(),
+          purpose: data.purpose as ProposalPaymentPurpose,
+          method: data.method as ProposalPaymentMethod,
+          beneficiary,
+          beneficiaryDocument:
+            studioString(data.beneficiaryDocument).trim() ||
+            issuer?.cnpj ||
+            null,
+          bankName: studioString(data.bankName).trim() || null,
+          agency: studioString(data.agency).trim() || null,
+          accountNumber: studioString(data.accountNumber).trim() || null,
+          pixKey: pixKey || null,
+          pixCopyPaste: studioString(data.pixCopyPaste).trim() || null,
+          boletoInstructions:
+            studioString(data.boletoInstructions).trim() || null,
+          isActive: data.isActive === true,
+          sortOrder: Number(data.sortOrder ?? 0),
+        },
+        include: { issuerCompany: { select: { id: true, companyName: true } } },
+      });
+    },
+    findUnique: (tx, id) =>
+      tx.proposalPaymentProfile.findUnique({ where: { id } }),
+    update: async (tx, id, data) => {
+      const current = await tx.proposalPaymentProfile.findUnique({
+        where: { id },
+      });
+      if (!current)
+        throw new NotFoundException('Perfil de pagamento nao encontrado.');
+      const merged = { ...current, ...data };
+      const issuer = await validatePaymentProfileIssuer(tx, merged);
+      const beneficiary =
+        studioString(merged.beneficiary).trim() || issuer?.companyName || '';
+      if (!studioString(merged.name).trim() || !beneficiary) {
+        throw new BadRequestException('Nome e favorecido sao obrigatorios.');
+      }
+      const pixKey =
+        studioString(merged.pixKey).trim() ||
+        (merged.method === ProposalPaymentMethod.PIX ? issuer?.cnpj : '') ||
+        '';
+      if (
+        merged.isActive &&
+        merged.method === ProposalPaymentMethod.PIX &&
+        !pixKey
+      ) {
+        throw new BadRequestException(
+          'Cadastre o CNPJ emitente para usar como chave PIX.',
+        );
+      }
+      if (
+        merged.isActive &&
+        merged.method === ProposalPaymentMethod.BOLETO &&
+        !studioString(merged.boletoInstructions).trim()
+      ) {
+        throw new BadRequestException(
+          'Boleto ativo exige instrucoes de cobranca.',
+        );
+      }
+      return tx.proposalPaymentProfile.update({
+        where: { id },
+        data: {
+          ...data,
+          beneficiary,
+          beneficiaryDocument:
+            studioString(merged.beneficiaryDocument).trim() ||
+            issuer?.cnpj ||
+            null,
+          pixKey: pixKey || null,
+        },
+        include: { issuerCompany: { select: { id: true, companyName: true } } },
+      });
+    },
+  },
   commercialGenerators: {
     entityType: 'CommercialGenerator',
     domain: AuditDomain.OPPORTUNITIES,
@@ -751,6 +1029,23 @@ const DEFINITIONS: Record<string, StudioResourceDefinition> = {
 export class StudioService {
   constructor(private readonly prisma: DatabaseService) {}
 
+  async listPaymentIssuers(actor: StudioActor) {
+    if (
+      !actor.isSystemMaster &&
+      actor.role !== 'ADMIN' &&
+      !this.hasPermission(actor.accessPolicy, 'finance.view') &&
+      !this.hasPermission(actor.accessPolicy, 'finance.update')
+    ) {
+      throw new ForbiddenException(
+        'Seu perfil nao possui permissao para visualizar contas de pagamento.',
+      );
+    }
+    return this.prisma.companySettings.findMany({
+      select: { id: true, companyName: true, cnpj: true },
+      orderBy: [{ isPrimary: 'desc' }, { companyName: 'asc' }],
+    });
+  }
+
   async listControlOptions(type: string) {
     const config = Object.values(CONTROL_OPTION_TYPES).find(
       (item) => item.type === type,
@@ -765,10 +1060,21 @@ export class StudioService {
     });
   }
 
-  async listRecords(resource: string) {
+  async listRecords(resource: string, actor: StudioActor) {
     const definition = DEFINITIONS[resource];
     if (!definition?.list) {
       throw new NotFoundException('Recurso nao possui listagem pelo Studio.');
+    }
+    if (
+      resource === 'proposalPaymentProfiles' &&
+      !actor.isSystemMaster &&
+      actor.role !== 'ADMIN' &&
+      !this.hasPermission(actor.accessPolicy, 'finance.view') &&
+      !this.hasPermission(actor.accessPolicy, 'finance.update')
+    ) {
+      throw new ForbiddenException(
+        'Seu perfil nao possui permissao para visualizar contas de pagamento.',
+      );
     }
     return this.prisma.$transaction((tx) => definition.list!(tx));
   }
@@ -976,13 +1282,14 @@ export class StudioService {
     }
   }
 
-  private pickChangedFields(
-    record: Record<string, unknown>,
-    patch: Record<string, unknown>,
-  ) {
+  private pickChangedFields(record: unknown, patch: Record<string, unknown>) {
     const picked: Record<string, unknown> = {};
+    const source =
+      record && typeof record === 'object'
+        ? (record as Record<string, unknown>)
+        : {};
     for (const key of Object.keys(patch)) {
-      picked[key] = record?.[key];
+      picked[key] = source[key];
     }
     return picked;
   }

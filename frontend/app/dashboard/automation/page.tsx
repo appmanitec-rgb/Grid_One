@@ -1,5 +1,7 @@
 "use client";
 
+import { MetricCard as SummaryMetric, PageHeader } from "../components/DashboardPageKit";
+
 import { useEffect, useState } from "react";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
 
@@ -157,7 +159,7 @@ export default function AutomationPage() {
         throw new Error(
           await readApiErrorMessage(
             statusRes,
-            "Nao foi possivel carregar o status das automacoes.",
+            "Não foi possivel carregar o status das automações.",
           ),
         );
       }
@@ -166,7 +168,7 @@ export default function AutomationPage() {
         throw new Error(
           await readApiErrorMessage(
             runsRes,
-            "Nao foi possivel carregar o historico das automacoes.",
+            "Não foi possivel carregar o histórico das automações.",
           ),
         );
       }
@@ -217,12 +219,12 @@ export default function AutomationPage() {
 
       if (!res.ok) {
         throw new Error(
-          await readApiErrorMessage(res, "Nao foi possivel disparar a automacao."),
+          await readApiErrorMessage(res, "Não foi possivel disparar a automação."),
         );
       }
 
       if (body?.status === "SKIPPED") {
-        setNotice("Execucao ignorada porque ja existe uma automacao em andamento.");
+        setNotice("Execucao ignorada porque já existe uma automação em andamento.");
       } else if (body?.status === "FAILED") {
         setError(body.errorMessage || "A automacao terminou com falha.");
       } else {
@@ -247,22 +249,9 @@ export default function AutomationPage() {
   }
 
   return (
-    <div className="space-y-6 p-6 md:p-8">
-      <section className="rounded-[30px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.16),_transparent_34%),radial-gradient(circle_at_85%_18%,_rgba(14,116,144,0.16),_transparent_32%),linear-gradient(135deg,#f8fafc_0%,#eef8f7_55%,#ffffff_100%)] p-6 shadow-[0_24px_70px_-45px_rgba(15,23,42,0.45)]">
-        <div className="grid items-end gap-5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr))]">
-          <div className="max-w-3xl">
-            <span className="inline-flex rounded-full border border-emerald-200 bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-800">
-              Fase 2
-            </span>
-            <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-950 md:text-4xl">
-              Central de Automacoes
-            </h1>
-            <p className="mt-2 text-sm text-slate-600 md:text-base">
-              Historico, saude e disparo manual das rotinas que sustentam contratos, faturamento e inadimplencia.
-            </p>
-          </div>
-
-          <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,10.5rem),1fr))]">
+    <div className="dashboard-page space-y-5">
+      <PageHeader eyebrow="Painel" title="Central de automações" description="Acompanhe as rotinas automáticas, consulte o histórico e execute tarefas." />
+<div className="dashboard-metrics-grid">
             <MetricCard
               label="Status atual"
               value={status?.isRunning ? "Em execucao" : "Disponivel"}
@@ -284,8 +273,6 @@ export default function AutomationPage() {
               hint="Exigem revisao"
             />
           </div>
-        </div>
-      </section>
 
       {notice ? (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
@@ -319,15 +306,15 @@ export default function AutomationPage() {
 
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <ActionCard
-              title="Automacao completa"
+              title="Automação completa"
               description="Sincroniza inadimplencia, preventiva, recebiveis e vencimentos do financeiro."
               disabled={loading || status?.isRunning || triggeringMode !== null}
               busy={triggeringMode === "full"}
               onClick={() => void triggerRun("full")}
             />
             <ActionCard
-              title="Automacao leve"
-              description="Roda a versao horaria, focada em inadimplencia e sincronizacao de recebiveis."
+              title="Automação leve"
+              description="Roda a versao horaria, focada em inadimplencia e sincronização de recebiveis."
               disabled={loading || status?.isRunning || triggeringMode !== null}
               busy={triggeringMode === "light"}
               onClick={() => void triggerRun("light")}
@@ -367,9 +354,9 @@ export default function AutomationPage() {
       <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-black text-slate-950">Historico recente</h2>
+            <h2 className="text-lg font-black text-slate-950">Histórico recente</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Ultimas 25 execucoes com modo, gatilho, responsavel e resumo do que aconteceu.
+              Ultimas 25 execucoes com modo, gatilho, responsável e resumo do que aconteceu.
             </p>
           </div>
           <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -379,14 +366,14 @@ export default function AutomationPage() {
 
         {loading ? (
           <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-            Carregando central de automacoes...
+            Carregando central de automações...
           </div>
         ) : runs.length === 0 ? (
           <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
             Nenhuma execucao registrada ainda.
           </div>
         ) : (
-          <div className="mt-4 overflow-x-auto">
+          <div className="mt-4 overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-[0.14em] text-slate-500">
@@ -395,7 +382,7 @@ export default function AutomationPage() {
                   <th className="px-3 py-3">Status</th>
                   <th className="px-3 py-3">Inicio</th>
                   <th className="px-3 py-3">Duracao</th>
-                  <th className="px-3 py-3">Responsavel</th>
+                  <th className="px-3 py-3">Responsável</th>
                   <th className="px-3 py-3">Resumo</th>
                 </tr>
               </thead>
@@ -463,15 +450,7 @@ function MetricCard({
   value: string;
   hint: string;
 }) {
-  return (
-    <div className="rounded-[22px] border border-slate-200 bg-white/85 px-4 py-4">
-      <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-black text-slate-950">{value}</p>
-      <p className="mt-1 text-xs text-slate-500">{hint}</p>
-    </div>
-  );
+  return <SummaryMetric label={label} value={String(value)} helper={hint} tone={"blue"} />;
 }
 
 function ActionCard({
@@ -488,7 +467,7 @@ function ActionCard({
   onClick: () => void;
 }) {
   return (
-    <div className="rounded-[24px] border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f8fafc_100%)] p-4">
+    <div className="rounded-[24px] border border-slate-200 dashboard-tinted-surface bg-[linear-gradient(135deg,#ffffff_0%,#f8fafc_100%)] p-4">
       <p className="text-base font-black text-slate-950">{title}</p>
       <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
       <button

@@ -198,6 +198,11 @@ describe('CatalogsService', () => {
 
     const result = await service.findOne('cat-1', {
       role: UserRole.ADMIN,
+      accessRules: {
+        commercialManagement: {
+          partsServices: { responsible: true, costs: true, margins: true },
+        },
+      },
       accessPolicy: { catalog: { viewCosts: true } },
     });
 

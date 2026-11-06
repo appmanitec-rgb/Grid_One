@@ -1,0 +1,24 @@
+{
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    "outDir": "./dist-prp",
+    "tsBuildInfoFile": "./dist-prp/build.tsbuildinfo",
+    "paths": {
+      "@prisma/client": [
+        "./runtime-prp/client"
+      ]
+    },
+    "rootDir": "."
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "test",
+    "dist",
+    "dist-prp",
+    "runtime-prp",
+    "**/*spec.ts"
+  ]
+}

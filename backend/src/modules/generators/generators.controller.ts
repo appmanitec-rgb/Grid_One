@@ -10,11 +10,13 @@
   Query,
   Req,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { RequireAccessPolicy } from '../auth/access-policy.decorator';
 import { AccessPolicyGuard } from '../auth/access-policy.guard';
 import { AuthGuard } from '../auth/auth.guard';
+import { CommercialDataPrivacyInterceptor } from '../auth/rules/commercial-privacy.interceptor';
 import { GeneratorsService } from './generators.service';
 import { CreateGeneratorDto } from './dto/create-generator.dto';
 import { UpdateGeneratorDto } from './dto/update-generator.dto';
@@ -26,7 +28,10 @@ import {
 import { UpsertGeneratorBaseItemsDto } from './dto/generator-base-items.dto';
 import { ServiceGroup } from '@prisma/client';
 
+import { EquipmentListPageDto } from '../../common/list-page.dto';
+
 @Controller('generators')
+@UseInterceptors(CommercialDataPrivacyInterceptor)
 @UseGuards(AuthGuard, AccessPolicyGuard)
 @RequireAccessPolicy('pages.equipments')
 export class GeneratorsController {
@@ -41,9 +46,27 @@ export class GeneratorsController {
   }
 
   @RequireAccessPolicy('pages.equipments', 'equipments.view')
+  @Get('page')
+  listPage(@Query() query: EquipmentListPageDto) {
+    return this.generatorsService.listPage(query);
+  }
+
+  @RequireAccessPolicy('pages.equipments', 'equipments.view')
   @Get()
   findAll() {
     return this.generatorsService.findAll();
+  }
+
+  @RequireAccessPolicy(
+    'pages.equipments',
+    'equipments.view',
+    'orders.view',
+    'pages.orders',
+  )
+  @Get(':id/order-summary')
+  orderSummary(@Param('id') id: string, @Req() req: Request) {
+    const user = req['user'] as { sub: string };
+    return this.generatorsService.orderSummary(id, user.sub);
   }
 
   @RequireAccessPolicy('pages.equipments', 'equipments.view')
@@ -84,8 +107,11 @@ export class GeneratorsController {
 
   @RequireAccessPolicy('pages.equipments', 'equipments.view')
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.generatorsService.findOne(id);
+  findOne(@Param('id') id: string, @Req() req: Request) {
+    return this.generatorsService.findOne(
+      id,
+      (req['user'] as { sub: string }).sub,
+    );
   }
 
   @RequireAccessPolicy('pages.equipments', 'equipments.view')

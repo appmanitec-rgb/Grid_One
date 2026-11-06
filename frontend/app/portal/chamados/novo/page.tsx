@@ -1,5 +1,8 @@
 "use client";
-
+import { SelectField } from "@/app/dashboard/components/SelectField";
+import { WorkspaceState } from "@/app/dashboard/components/WorkspaceState";
+import { PageHeader } from "@/app/dashboard/components/DashboardPageKit";
+import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { customerPortalGet, PortalEquipment } from "@/lib/customer-portal";
@@ -79,19 +82,15 @@ export default function NewPortalTicketPage() {
   }
 
   return (
-    <section className="mx-auto max-w-3xl rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <h1 className="text-2xl font-extrabold text-slate-950">Novo chamado</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Informe o problema ou solicitação. A equipe interna classificará e dará
-        andamento.
-      </p>
+    <section className="dashboard-page mx-auto max-w-4xl">
+      <PageHeader eyebrow="Atendimento" title="Novo chamado" description="Descreva a solicitação e selecione o equipamento. Nossa equipe acompanhará o atendimento." actions={<Link href="/portal/chamados" className="app-button app-button-secondary">Voltar para chamados</Link>} />
 
       {error ? <State text={error} tone="error" /> : null}
       {loading ? <State text="Carregando equipamentos..." /> : null}
 
-      <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+      <form onSubmit={handleSubmit} className="mt-5 space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <Field label="Equipamento">
-          <select
+          <SelectField searchable
             value={form.generatorId}
             onChange={(event) =>
               setForm((current) => ({
@@ -107,12 +106,12 @@ export default function NewPortalTicketPage() {
                 {item.name} {item.serialNumber ? `- ${item.serialNumber}` : ""}
               </option>
             ))}
-          </select>
+          </SelectField>
         </Field>
 
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Categoria">
-            <select
+            <SelectField
               value={form.category}
               onChange={(event) =>
                 setForm((current) => ({
@@ -127,10 +126,10 @@ export default function NewPortalTicketPage() {
                   {TICKET_CATEGORY_LABELS[category]}
                 </option>
               ))}
-            </select>
+            </SelectField>
           </Field>
           <Field label="Prioridade">
-            <select
+            <SelectField
               value={form.priority}
               onChange={(event) =>
                 setForm((current) => ({
@@ -145,7 +144,7 @@ export default function NewPortalTicketPage() {
                   {TICKET_PRIORITY_LABELS[priority]}
                 </option>
               ))}
-            </select>
+            </SelectField>
           </Field>
         </div>
 
@@ -216,7 +215,7 @@ export default function NewPortalTicketPage() {
         <button
           type="submit"
           disabled={submitting}
-          className="rounded-md bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:opacity-60"
+          className="app-button app-button-primary"
         >
           {submitting ? "Abrindo..." : "Abrir chamado"}
         </button>
@@ -242,16 +241,6 @@ function Field({
   );
 }
 
-function State({ text, tone }: { text: string; tone?: "error" }) {
-  return (
-    <div
-      className={`mt-3 rounded-md border p-3 text-sm font-semibold ${
-        tone === "error"
-          ? "border-red-200 bg-red-50 text-red-700"
-          : "border-slate-200 bg-slate-50 text-slate-600"
-      }`}
-    >
-      {text}
-    </div>
-  );
+function State({ text, tone }: { text: string; tone?: "error" | "success" }) {
+  return <WorkspaceState title={text} tone={tone || (/^Carregando/i.test(text) ? "loading" : "empty")} />;
 }

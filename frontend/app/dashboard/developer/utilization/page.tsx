@@ -1,5 +1,8 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
+import { PageHeader } from "../../components/DashboardPageKit";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
@@ -83,7 +86,7 @@ export default function StudioUtilizationPage() {
       });
       if (!response.ok) {
         throw new Error(
-          await readApiErrorMessage(response, "Nao foi possivel carregar a utilizacao."),
+          await readApiErrorMessage(response, "Não foi possivel carregar a utilizacao."),
         );
       }
       setPayload((await response.json()) as UtilizationPayload);
@@ -126,17 +129,15 @@ export default function StudioUtilizationPage() {
     : null;
 
   return (
-    <div className="space-y-5">
-      <header className="rounded-lg border border-slate-200 bg-white px-5 py-5 shadow-sm">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Studio / Observabilidade</p>
-            <h1 className="mt-1 text-2xl font-bold text-slate-950">Utilizacao do sistema</h1>
-            <p className="mt-1 text-sm text-slate-600">Conexoes, atividade, arquivos e recursos da infraestrutura em uma leitura operacional.</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Manitec Studio"
+        title="Utilização do sistema"
+        description="Acompanhe acessos, atividades, arquivos e recursos do servidor."
+        actions={<>
+<div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={() => router.back()} className="min-h-10 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">Voltar</button>
-            <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1" aria-label="Periodo analisado">
+            <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1" aria-label="Período analisado">
               {([7, 14, 30] as const).map((period) => (
                 <button key={period} type="button" onClick={() => setDays(period)} className={`min-h-8 rounded-md px-3 text-xs font-bold ${days === period ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-white"}`}>{period} dias</button>
               ))}
@@ -147,8 +148,9 @@ export default function StudioUtilizationPage() {
             </label>
             <button type="button" onClick={() => void loadData()} className="min-h-10 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700">Atualizar</button>
           </div>
-        </div>
-      </header>
+</>}
+      />
+
 
       {error ? <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{error}</div> : null}
       {loading && !payload ? <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm font-semibold text-slate-500">Carregando telemetria...</div> : null}
@@ -156,7 +158,7 @@ export default function StudioUtilizationPage() {
       {payload ? (
         <>
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-            <Metric label="Usuarios conectados" value={String(payload.summary.onlineUsers)} detail={`${payload.summary.onlineSessions} sessao(oes)`} accent="blue" />
+            <Metric label="Usuários conectados" value={String(payload.summary.onlineUsers)} detail={`${payload.summary.onlineSessions} sessao(oes)`} accent="blue" />
             <Metric label="Equipe conectada" value={String(payload.summary.internalOnline)} detail={`${payload.summary.registeredInternal} contas ativas`} accent="cyan" />
             <Metric label="Clientes conectados" value={String(payload.summary.clientOnline)} detail={`${payload.summary.registeredClients} contas ativas`} accent="emerald" />
             <Metric label={`Acoes em ${days} dias`} value={payload.summary.actions.toLocaleString("pt-BR")} detail="eventos auditados" accent="amber" />
@@ -184,15 +186,15 @@ export default function StudioUtilizationPage() {
             </div>
 
             <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="font-bold text-slate-950">Acoes por area</h2>
-              <p className="mt-1 text-xs text-slate-500">Principais dominios no periodo selecionado.</p>
+              <h2 className="font-bold text-slate-950">Acoes por área</h2>
+              <p className="mt-1 text-xs text-slate-500">Principais dominios no período selecionado.</p>
               <DomainChart items={payload.domains} />
             </div>
           </section>
 
           <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-              <div><h2 className="font-bold text-slate-950">Ritmo de utilizacao</h2><p className="mt-1 text-xs text-slate-500">Quantidade diaria de acoes registradas.</p></div>
+              <div><h2 className="font-bold text-slate-950">Ritmo de utilizacao</h2><p className="mt-1 text-xs text-slate-500">Quantidade diária de acoes registradas.</p></div>
               <span className="text-xs font-semibold text-slate-500">Atualizado em {formatDateTime(payload.generatedAt)}</span>
             </div>
             <ActivityChart items={payload.activityTrend} />
@@ -201,17 +203,17 @@ export default function StudioUtilizationPage() {
           <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 p-4">
               <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
-                <label className="flex-1 text-[11px] font-bold uppercase text-slate-500">Pesquisar usuario<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nome, e-mail, empresa, setor ou pagina..." className="mt-1.5 min-h-10 w-full rounded-lg border border-slate-300 px-3 text-sm font-medium normal-case outline-none focus:border-blue-500" /></label>
-                <label className="text-[11px] font-bold uppercase text-slate-500">Publico<select value={audience} onChange={(event) => setAudience(event.target.value as Audience)} className="mt-1.5 block min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium normal-case xl:w-44"><option value="ALL">Todos</option><option value="INTERNAL">Equipe interna</option><option value="CLIENT">Clientes</option></select></label>
-                <label className="text-[11px] font-bold uppercase text-slate-500">Conexao<select value={connection} onChange={(event) => setConnection(event.target.value as Connection)} className="mt-1.5 block min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium normal-case xl:w-40"><option value="ALL">Todas</option><option value="ONLINE">Conectados</option><option value="OFFLINE">Sem conexao</option></select></label>
+                <label className="flex-1 text-[11px] font-bold uppercase text-slate-500">Pesquisar usuário<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nome, e-mail, empresa, setor ou pagina..." className="mt-1.5 min-h-10 w-full rounded-lg border border-slate-300 px-3 text-sm font-medium normal-case outline-none focus:border-blue-500" /></label>
+                <label className="text-[11px] font-bold uppercase text-slate-500">Publico<SelectField value={audience} onChange={(event) => setAudience(event.target.value as Audience)} className="mt-1.5 block min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium normal-case xl:w-44"><option value="ALL">Todos</option><option value="INTERNAL">Equipe interna</option><option value="CLIENT">Clientes</option></SelectField></label>
+                <label className="text-[11px] font-bold uppercase text-slate-500">Conexao<SelectField value={connection} onChange={(event) => setConnection(event.target.value as Connection)} className="mt-1.5 block min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium normal-case xl:w-40"><option value="ALL">Todas</option><option value="ONLINE">Conectados</option><option value="OFFLINE">Sem conexao</option></SelectField></label>
               </div>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
               <table className="min-w-[1040px] w-full text-left text-sm">
-                <thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-4 py-3">Usuario</th><th className="px-4 py-3">Conexao</th><th className="px-4 py-3">Pagina atual</th><th className="px-4 py-3 text-right">Acoes</th><th className="px-4 py-3 text-right">Arquivos</th><th className="px-4 py-3 text-right">Armazenamento</th><th className="px-4 py-3 text-right">RAM estimada</th></tr></thead>
+                <thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="px-4 py-3">Usuário</th><th className="px-4 py-3">Conexao</th><th className="px-4 py-3">Pagina atual</th><th className="px-4 py-3 text-right">Acoes</th><th className="px-4 py-3 text-right">Arquivos</th><th className="px-4 py-3 text-right">Armazenamento</th><th className="px-4 py-3 text-right">RAM estimada</th></tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {users.map((user) => <tr key={user.id} className="hover:bg-slate-50/70"><td className="px-4 py-3"><p className="font-semibold text-slate-900">{user.name}</p><p className="text-xs text-slate-500">{user.company || user.department || user.email}</p></td><td className="px-4 py-3"><ConnectionStatus online={user.online} sessions={user.sessions} lastSeenAt={user.lastSeenAt} /></td><td className="max-w-[280px] truncate px-4 py-3 font-mono text-xs text-slate-600" title={user.currentPath || ""}>{user.currentPath || "-"}</td><td className="px-4 py-3 text-right font-semibold">{user.actions.toLocaleString("pt-BR")}</td><td className="px-4 py-3 text-right">{user.files}</td><td className="px-4 py-3 text-right">{formatBytes(user.storageBytes)}</td><td className="px-4 py-3 text-right">{user.online ? formatBytes(user.estimatedRamBytes) : "-"}</td></tr>)}
-                  {!users.length ? <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">Nenhum usuario encontrado com estes filtros.</td></tr> : null}
+                  {!users.length ? <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">Nenhum usuário encontrado com estes filtros.</td></tr> : null}
                 </tbody>
               </table>
             </div>
@@ -246,7 +248,7 @@ function ActivityChart({ items }: { items: Array<{ day: string; actions: number 
 
 function DomainChart({ items }: { items: Array<{ domain: string; actions: number }> }) {
   const max = Math.max(1, ...items.map((item) => item.actions));
-  return <div className="mt-5 space-y-3">{items.length ? items.map((item) => <div key={item.domain}><div className="mb-1 flex justify-between gap-3 text-xs"><span className="truncate font-semibold text-slate-700">{domainLabel(item.domain)}</span><span className="font-bold text-slate-900">{item.actions}</span></div><div className="h-1.5 overflow-hidden rounded bg-slate-100"><div className="h-full rounded bg-cyan-500" style={{ width: `${(item.actions / max) * 100}%` }} /></div></div>) : <p className="py-8 text-center text-sm text-slate-500">Ainda nao ha acoes no periodo.</p>}</div>;
+  return <div className="mt-5 space-y-3">{items.length ? items.map((item) => <div key={item.domain}><div className="mb-1 flex justify-between gap-3 text-xs"><span className="truncate font-semibold text-slate-700">{domainLabel(item.domain)}</span><span className="font-bold text-slate-900">{item.actions}</span></div><div className="h-1.5 overflow-hidden rounded bg-slate-100"><div className="h-full rounded bg-cyan-500" style={{ width: `${(item.actions / max) * 100}%` }} /></div></div>) : <p className="py-8 text-center text-sm text-slate-500">Ainda não ha acoes no período.</p>}</div>;
 }
 
 function ConnectionStatus({ online, sessions, lastSeenAt }: { online: boolean; sessions: number; lastSeenAt: string | null }) { return <div><span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-bold ${online ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}><span className={`h-2 w-2 rounded-full ${online ? "bg-emerald-500" : "bg-slate-400"}`} />{online ? "Conectado" : "Sem conexao"}</span><p className="mt-1 text-[10px] text-slate-500">{online ? `${sessions} sessao(oes)` : lastSeenAt ? formatDateTime(lastSeenAt) : "Sem atividade recente"}</p></div>; }

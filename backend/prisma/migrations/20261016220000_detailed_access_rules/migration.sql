@@ -1,0 +1,3 @@
+ALTER TABLE "users" ADD COLUMN "accessRules" JSONB;
+ALTER TABLE "sales_opportunities" ADD COLUMN "discountPercent" DOUBLE PRECISION NOT NULL DEFAULT 0;
+ALTER TYPE "MaintenanceOrderType" ADD VALUE IF NOT EXISTS 'EMERGENCY';

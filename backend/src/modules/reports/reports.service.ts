@@ -1,3 +1,9 @@
+import {
+  proposalScope,
+  opportunityScope,
+  ruleActor,
+} from '../auth/rules/commercial-access';
+import { allowedPortfolios } from '../auth/rules/access-rules';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import {
   AccountsPayableStatus,
@@ -28,7 +34,20 @@ type OverviewAlert = {
 export class ReportsService {
   constructor(private readonly prisma: DatabaseService) {}
 
-  async overview(dateFrom?: string, dateTo?: string) {
+  async overview(dateFrom?: string, dateTo?: string, actorUserId?: string) {
+    const commercialProposalScope = await proposalScope(
+      this.prisma,
+      actorUserId,
+    );
+    const commercialOpportunityScope = await opportunityScope(
+      this.prisma,
+      actorUserId,
+    );
+    const actor = await ruleActor(this.prisma, actorUserId);
+    const commercialContractScope =
+      actor && !allowedPortfolios(actor).includes('contracts')
+        ? { id: { in: [] as string[] } }
+        : {};
     const period = this.resolvePeriod(dateFrom, dateTo);
     const now = new Date();
     const next30Days = this.endOfDay(this.addDays(now, 30));
@@ -60,6 +79,7 @@ export class ReportsService {
       this.prisma.proposal.groupBy({
         by: ['status'],
         where: {
+          AND: [commercialProposalScope],
           createdAt: {
             gte: period.start,
             lte: period.end,
@@ -71,6 +91,7 @@ export class ReportsService {
       this.prisma.proposal.groupBy({
         by: ['clientId'],
         where: {
+          AND: [commercialProposalScope],
           createdAt: {
             gte: period.start,
             lte: period.end,
@@ -82,6 +103,7 @@ export class ReportsService {
       this.prisma.salesOpportunity.groupBy({
         by: ['stage'],
         where: {
+          AND: [commercialOpportunityScope],
           createdAt: {
             gte: period.start,
             lte: period.end,
@@ -92,6 +114,7 @@ export class ReportsService {
       }),
       this.prisma.salesOpportunity.aggregate({
         where: {
+          AND: [commercialOpportunityScope],
           createdAt: {
             gte: period.start,
             lte: period.end,
@@ -128,12 +151,14 @@ export class ReportsService {
         },
       }),
       this.prisma.serviceContract.groupBy({
+        where: commercialContractScope,
         by: ['status'],
         _count: { _all: true },
         _sum: { recurringAmount: true },
       }),
       this.prisma.serviceContract.count({
         where: {
+          AND: [commercialContractScope],
           createdAt: {
             gte: period.start,
             lte: period.end,
@@ -141,7 +166,10 @@ export class ReportsService {
         },
       }),
       this.prisma.contractInvoice.aggregate({
-        where: { status: ContractInvoiceStatus.OVERDUE },
+        where: {
+          AND: [commercialContractScope],
+          status: ContractInvoiceStatus.OVERDUE,
+        },
         _count: { _all: true },
         _sum: { amount: true },
       }),

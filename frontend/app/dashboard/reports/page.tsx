@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader, MetricCard as SummaryMetric } from "../components/DashboardPageKit";
+
 import Link from "next/link";
 import { ReactNode, useEffect, useMemo, useState, useTransition } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
@@ -154,7 +156,7 @@ export default function ReportsPage() {
 
       if (!response.ok) {
         setOverview(null);
-        setError(await readApiErrorMessage(response, "Nao foi possivel carregar os relatorios."));
+        setError(await readApiErrorMessage(response, "Não foi possivel carregar os relatorios."));
         setLoading(false);
         return;
       }
@@ -186,7 +188,7 @@ export default function ReportsPage() {
 
     return [
       {
-        title: "Propostas no periodo",
+        title: "Propostas no período",
         value: formatNumber(overview.highlights.proposalsInPeriod),
         tone: "blue" as const,
         helper: `${formatCurrency(overview.highlights.proposalValueInPeriod)} movimentados`,
@@ -207,7 +209,7 @@ export default function ReportsPage() {
         title: "OS abertas agora",
         value: formatNumber(overview.highlights.openOrdersNow),
         tone: "rose" as const,
-        helper: `${formatNumber(overview.operations.preventiveBacklog)} preventivas em backlog`,
+        helper: `${formatNumber(overview.operations.preventiveBacklog)} preventivas pendentes`,
       },
       {
         title: "Recebiveis vencidos",
@@ -260,41 +262,11 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="min-h-full bg-[linear-gradient(180deg,#eef4ff_0%,#f7fbff_38%,#f6f8fb_100%)] p-4 md:p-8">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <section className="relative overflow-hidden rounded-[28px] bg-slate-950 px-6 py-7 text-white shadow-[0_30px_90px_-45px_rgba(15,23,42,0.9)] md:px-8">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.22),transparent_36%),radial-gradient(circle_at_80%_20%,rgba(45,212,191,0.16),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(251,191,36,0.14),transparent_32%)]" />
-          <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl space-y-3">
-              <p className="inline-flex w-fit rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.28em] text-sky-100">
-                Centro executivo
-              </p>
-              <div className="space-y-2">
-                <h1 className="text-3xl font-black tracking-tight text-white md:text-4xl">
-                  Relatorios gerenciais com leitura real do negocio
-                </h1>
-                <p className="max-w-2xl text-sm leading-6 text-slate-200 md:text-base">
-                  Comercial, contratos, operacao, estoque e financeiro agora aparecem no mesmo painel.
-                  O filtro atua sobre o periodo analisado, enquanto carteira, caixa e backlog seguem como leitura viva da operacao.
-                </p>
-              </div>
-            </div>
-
-            <div className="relative rounded-2xl border border-white/10 bg-white/8 px-4 py-4 backdrop-blur">
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-300">
-                Ultima atualizacao
-              </p>
-              <p className="mt-2 text-2xl font-semibold text-white">
-                {generatedAtLabel || "Carregando..."}
-              </p>
-              <p className="mt-1 text-sm text-slate-300">
-                {overview
-                  ? `${formatNumber(overview.period.days)} dias monitorados entre ${formatDate(overview.period.dateFrom)} e ${formatDate(overview.period.dateTo)}.`
-                  : "Sincronizando indicadores executivos."}
-              </p>
-            </div>
-          </div>
-        </section>
+    <div className="dashboard-page space-y-5">
+      <div className="dashboard-page space-y-5">
+        <PageHeader eyebrow="Gestão" title="Relatórios gerenciais" description="Compare os resultados comerciais, operacionais e financeiros por período." actions={<>
+<span className="text-xs text-slate-500">Última atualização: {generatedAtLabel || "Carregando..."}</span>
+</>} />
 
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1.6fr)]">
           <div className="rounded-[24px] border border-slate-200/80 bg-white/90 p-5 shadow-[0_24px_70px_-50px_rgba(15,23,42,0.45)] backdrop-blur">
@@ -302,7 +274,7 @@ export default function ReportsPage() {
               <div>
                 <h2 className="text-lg font-bold text-slate-900">Janela de analise</h2>
                 <p className="mt-1 text-sm text-slate-600">
-                  Ajuste o periodo do comercial e da producao para comparar desempenho e carga operacional.
+                  Ajuste o período do comercial e da producao para comparar desempenho e carga operacional.
                 </p>
               </div>
               <Link
@@ -360,7 +332,7 @@ export default function ReportsPage() {
                 {loading || isPending ? "Atualizando..." : "Atualizar painel"}
               </button>
               <p className="text-sm text-slate-500">
-                Snapshot atual: caixa, backlog, contratos, cobrancas e estoque.
+                Posição atual de caixa, ordens, contratos, cobranças e estoque.
               </p>
             </div>
 
@@ -380,7 +352,7 @@ export default function ReportsPage() {
               ? Array.from({ length: 6 }).map((_, index) => (
                   <div
                     key={index}
-                    className="h-[132px] animate-pulse rounded-[24px] border border-slate-200 bg-white/80"
+                    className="h-[112px] animate-pulse rounded-2xl border border-slate-200 bg-white"
                   />
                 ))
               : null}
@@ -392,7 +364,7 @@ export default function ReportsPage() {
             <div>
               <h2 className="text-lg font-bold text-slate-900">Alertas prioritarios</h2>
               <p className="mt-1 text-sm text-slate-600">
-                Leitura automatica dos pontos que mais pedem acao da gestao agora.
+                Leitura automática dos pontos que mais pedem acao da gestão agora.
               </p>
             </div>
 
@@ -407,7 +379,7 @@ export default function ReportsPage() {
         <section className="grid gap-4 2xl:grid-cols-2">
           <Panel
             title="Comercial"
-            subtitle="Pipeline de propostas, volume financeiro do periodo e concentracao por cliente."
+            subtitle="Propostas em andamento, valores do período e distribuição por cliente."
           >
             {overview ? (
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
@@ -443,7 +415,7 @@ export default function ReportsPage() {
                     <div>
                       <h3 className="text-sm font-semibold text-slate-900">Top clientes por valor</h3>
                       <p className="mt-1 text-xs text-slate-500">
-                        Ranking do periodo selecionado.
+                        Ranking do período selecionado.
                       </p>
                     </div>
 
@@ -483,7 +455,7 @@ export default function ReportsPage() {
           </Panel>
 
           <Panel
-            title="Operacao e Estoque"
+            title="Operação e Estoque"
             subtitle="Carga atual de ordens, preventivas pendentes e saude do estoque."
           >
             {overview ? (
@@ -494,11 +466,11 @@ export default function ReportsPage() {
                   <MetricGrid
                     items={[
                       {
-                        label: "OS abertas no periodo",
+                        label: "OS abertas no período",
                         value: formatNumber(overview.operations.ordersOpenedInPeriod),
                       },
                       {
-                        label: "OS concluidas no periodo",
+                        label: "OS concluidas no período",
                         value: formatNumber(overview.operations.ordersCompletedInPeriod),
                       },
                       {
@@ -506,7 +478,7 @@ export default function ReportsPage() {
                         value: formatNumber(overview.operations.preventiveBacklog),
                       },
                       {
-                        label: "Preventivas proximos 30d",
+                        label: "Preventivas próximos 30d",
                         value: formatNumber(overview.operations.preventivesNext30Days),
                       },
                     ]}
@@ -519,7 +491,7 @@ export default function ReportsPage() {
                       tone={overview.inventory.lowStockItems > 0 ? "amber" : "emerald"}
                     />
                     <MiniHealthCard
-                      title="Estoque fisico"
+                      title="Estoque físico"
                       value={formatNumber(overview.inventory.totalPhysicalQty)}
                       tone="slate"
                     />
@@ -531,7 +503,7 @@ export default function ReportsPage() {
                   </div>
 
                   <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4">
-                    <p className="text-sm font-semibold text-slate-900">Leitura rapida da operacao</p>
+                    <p className="text-sm font-semibold text-slate-900">Leitura rapida da operação</p>
                     <div className="mt-3 space-y-3 text-sm text-slate-600">
                       <MetricRow
                         label="OS em aberto agora"
@@ -561,7 +533,7 @@ export default function ReportsPage() {
 
           <Panel
             title="Contratos"
-            subtitle="Carteira viva, renovacoes e inadimplencia do portifolio contratado."
+            subtitle="Contratos, renovações e inadimplência."
           >
             {overview ? (
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -579,11 +551,11 @@ export default function ReportsPage() {
                         value: formatNumber(overview.contracts.activeCount),
                       },
                       {
-                        label: "Renovacoes",
+                        label: "Renovações",
                         value: formatNumber(overview.contracts.renewalCount),
                       },
                       {
-                        label: "Novos no periodo",
+                        label: "Novos no período",
                         value: formatNumber(overview.contracts.newContractsInPeriod),
                       },
                       {
@@ -647,12 +619,12 @@ export default function ReportsPage() {
 
                   <div className="grid gap-3 md:grid-cols-2">
                     <MiniHealthCard
-                      title="Titulos a receber"
+                      title="Títulos a receber"
                       value={formatNumber(overview.finance.receivablesOutstandingCount)}
                       tone="emerald"
                     />
                     <MiniHealthCard
-                      title="Titulos a pagar"
+                      title="Títulos a pagar"
                       value={formatNumber(overview.finance.payablesOutstandingCount)}
                       tone="rose"
                     />
@@ -681,7 +653,7 @@ export default function ReportsPage() {
                       amount={overview.finance.payablesOutstanding}
                       total={Math.max(overview.finance.receivablesOutstanding + overview.finance.payablesOutstanding, 1)}
                       tone="amber"
-                      helper="Compromissos ainda nao liquidados"
+                      helper="Compromissos ainda não liquidados"
                     />
                   </div>
                 </div>
@@ -727,24 +699,7 @@ function KpiCard({
   helper: string;
   tone: "blue" | "emerald" | "amber" | "rose" | "orange" | "slate";
 }) {
-  const toneClasses: Record<typeof tone, string> = {
-    blue: "border-sky-200 bg-sky-50 text-sky-700",
-    emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    amber: "border-amber-200 bg-amber-50 text-amber-700",
-    rose: "border-rose-200 bg-rose-50 text-rose-700",
-    orange: "border-orange-200 bg-orange-50 text-orange-700",
-    slate: "border-slate-200 bg-slate-100 text-slate-700",
-  };
-
-  return (
-    <div className="rounded-[24px] border border-slate-200 bg-white/90 p-5 shadow-[0_24px_60px_-52px_rgba(15,23,42,0.5)]">
-      <div className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] ${toneClasses[tone]}`}>
-        {title}
-      </div>
-      <p className="mt-4 text-3xl font-black tracking-tight text-slate-950">{value}</p>
-      <p className="mt-2 text-sm leading-6 text-slate-600">{helper}</p>
-    </div>
-  );
+  return <SummaryMetric label={title} value={value} helper={helper} tone={tone === "orange" ? "amber" : tone} />;
 }
 
 function QuickRangeButton({
@@ -801,7 +756,7 @@ function StatusDistribution({
       <div>
         <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
         <p className="mt-1 text-xs text-slate-500">
-          Distribuicao atual consolidada pelo backend.
+          Distribuição dos registros no período selecionado.
         </p>
       </div>
 

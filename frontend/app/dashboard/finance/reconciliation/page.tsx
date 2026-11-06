@@ -1,4 +1,6 @@
 "use client";
+import { getAccessFromToken, canAccessDashboardPath } from "@/lib/access";
+import { commercialLabel } from "@/lib/commercial-labels";
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -155,12 +157,9 @@ type BankReconciliationClosing = {
   reopenedAt?: string | null;
 };
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
-const DANGER_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
+const DANGER_BUTTON = "app-button app-button-danger";
 
 const MATCH_LABEL: Record<MatchStatus, string> = {
   UNMATCHED: "Pendente",
@@ -315,9 +314,19 @@ export default function BankReconciliationPage() {
 
   const loadAccounts = useCallback(async () => {
     const [response, profilesResponse] = await Promise.all([
-      apiFetch(apiUrl("/finance/bank-accounts"), {
-        cache: "no-store",
-      }),
+      apiFetch(
+        apiUrl(
+          canAccessDashboardPath(
+            "/dashboard/finance/bank-accounts",
+            getAccessFromToken().pages,
+          )
+            ? "/finance/bank-accounts"
+            : "/finance/bank-account-options",
+        ),
+        {
+          cache: "no-store",
+        },
+      ),
       apiFetch(apiUrl("/finance/bank-import-profiles"), {
         cache: "no-store",
       }),
@@ -333,11 +342,15 @@ export default function BankReconciliationPage() {
     ])) as [BankAccount[], BankImportProfile[]];
     setBankAccounts(accounts);
     setBankImportProfiles(profiles);
+    if (!accounts.length) setLoading(false);
     setSelectedBankAccountId((current) => current || accounts[0]?.id || "");
   }, [readOrThrow]);
 
   const loadReconciliationData = useCallback(async () => {
-    if (!selectedBankAccountId) return;
+    if (!selectedBankAccountId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError("");
 
@@ -349,23 +362,25 @@ export default function BankReconciliationPage() {
       );
       const [importsRes, reportRes, movementsRes, closingsRes] =
         await Promise.all([
-        apiFetch(
-          apiUrl(`/finance/bank-accounts/${selectedBankAccountId}/statements`),
-          { cache: "no-store" },
-        ),
-        apiFetch(apiUrl(`/finance/reconciliation/report?${periodQuery}`), {
-          cache: "no-store",
-        }),
-        apiFetch(apiUrl(`/finance/bank-movements?${periodQuery}`), {
-          cache: "no-store",
-        }),
-        apiFetch(
-          apiUrl(
-            `/finance/bank-reconciliation-closings?bankAccountId=${selectedBankAccountId}`,
+          apiFetch(
+            apiUrl(
+              `/finance/bank-accounts/${selectedBankAccountId}/statements`,
+            ),
+            { cache: "no-store" },
           ),
-          { cache: "no-store" },
-        ),
-      ]);
+          apiFetch(apiUrl(`/finance/reconciliation/report?${periodQuery}`), {
+            cache: "no-store",
+          }),
+          apiFetch(apiUrl(`/finance/bank-movements?${periodQuery}`), {
+            cache: "no-store",
+          }),
+          apiFetch(
+            apiUrl(
+              `/finance/bank-reconciliation-closings?bankAccountId=${selectedBankAccountId}`,
+            ),
+            { cache: "no-store" },
+          ),
+        ]);
 
       await readOrThrow(importsRes, "Nao foi possivel carregar extratos.");
       await readOrThrow(reportRes, "Nao foi possivel carregar conciliacao.");
@@ -377,16 +392,16 @@ export default function BankReconciliationPage() {
 
       const [nextImports, nextReport, movementPayload, nextClosings] =
         (await Promise.all([
-        importsRes.json(),
-        reportRes.json(),
-        movementsRes.json(),
-        closingsRes.json(),
-      ])) as [
-        BankStatementImport[],
-        ReconciliationReport,
-        { entries: BankMovement[] },
-        BankReconciliationClosing[],
-      ];
+          importsRes.json(),
+          reportRes.json(),
+          movementsRes.json(),
+          closingsRes.json(),
+        ])) as [
+          BankStatementImport[],
+          ReconciliationReport,
+          { entries: BankMovement[] },
+          BankReconciliationClosing[],
+        ];
 
       setStatementImports(nextImports);
       setReport(nextReport);
@@ -516,13 +531,14 @@ export default function BankReconciliationPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             dateWindowDays: 2,
-            profileId: selectedImport?.profileId || selectedProfileId || undefined,
+            profileId:
+              selectedImport?.profileId || selectedProfileId || undefined,
           }),
         },
       );
       if (!response.ok) {
         throw new Error(
-          await readApiErrorMessage(response, "Falha no matching automatico."),
+          await readApiErrorMessage(response, "Falha no matching automático."),
         );
       }
       const result = (await response.json()) as {
@@ -855,11 +871,11 @@ export default function BankReconciliationPage() {
     : [];
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
         eyebrow="Financeiro"
         title="Conciliação bancária"
-        description="Importação de extrato, matching com ledger, divergências rastreáveis e relatório do período."
+        description="Importe extratos, confira os lançamentos e resolva divergências."
         stats={stats}
       />
 
@@ -880,7 +896,7 @@ export default function BankReconciliationPage() {
 
       <SectionCard
         title="Conta e período"
-        description="O relatório cruza movimentos do ledger, lançamentos importados e divergências abertas."
+        description="Compare os movimentos da conta com os lançamentos importados e confira as divergências."
       >
         <div className="grid gap-3 md:grid-cols-[1.4fr_1fr_1fr_auto]">
           <FormField label="Conta">
@@ -907,7 +923,7 @@ export default function BankReconciliationPage() {
               }
             />
           </FormField>
-          <FormField label="Ate">
+          <FormField label="Até">
             <TextInput
               type="date"
               value={filters.to}
@@ -935,7 +951,7 @@ export default function BankReconciliationPage() {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
         <SectionCard
           title="Importar extrato"
-          description="CSV e OFX basico entram com checksum para evitar reprocessamento do mesmo arquivo."
+          description="Importe CSV ou OFX. O sistema identifica arquivos já processados para evitar duplicação."
           actions={
             <button
               type="button"
@@ -1021,11 +1037,34 @@ export default function BankReconciliationPage() {
               disabled={!selectedImportId || busyId === "auto-match"}
               onClick={() => void autoMatchStatement()}
             >
-              Auto matching
+              Conciliar automaticamente
             </button>
           }
         >
-          {loading ? (
+          {!selectedBankAccountId ? (
+            <EmptyState
+              title={loading ? "Carregando contas" : "Selecione uma conta"}
+              description={
+                loading
+                  ? "Consultando as contas disponíveis para seu usuário."
+                  : "Escolha uma conta acima para consultar e conciliar os extratos."
+              }
+              actions={
+                error ? (
+                  <button
+                    type="button"
+                    className="app-button app-button-secondary"
+                    onClick={() => {
+                      setLoading(true);
+                      void loadAccounts().catch(() => setLoading(false));
+                    }}
+                  >
+                    Tentar novamente
+                  </button>
+                ) : undefined
+              }
+            />
+          ) : loading ? (
             <EmptyState
               title="Carregando extratos"
               description="Buscando importações bancárias."
@@ -1089,7 +1128,12 @@ export default function BankReconciliationPage() {
             description="O extrato selecionado ainda não retornou entradas."
           />
         ) : (
-          <div className="overflow-x-auto">
+          <div
+            className="overflow-x-auto"
+            tabIndex={0}
+            role="region"
+            aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas."
+          >
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
                 <tr>
@@ -1294,7 +1338,7 @@ export default function BankReconciliationPage() {
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <SectionCard
           title="Resumo do período"
-          description="Leitura consolidada do ledger e das pendências de conciliação."
+          description="Saldos, lançamentos e pendências da conta selecionada."
           actions={
             report?.closing?.status === "CLOSED" ? (
               <button
@@ -1389,7 +1433,7 @@ export default function BankReconciliationPage() {
                   </FieldBox>
                   <FieldBox>
                     <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
-                      Diferenca ledger
+                      Diferença de saldo
                     </p>
                     <p
                       className={`mt-2 text-xl font-bold ${
@@ -1431,7 +1475,7 @@ export default function BankReconciliationPage() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="font-semibold text-slate-950">
-                        {issue.type}
+                        {commercialLabel(issue.type)}
                       </p>
                       <p className="mt-1 text-sm leading-5 text-slate-600">
                         {issue.reason}

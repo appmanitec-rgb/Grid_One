@@ -1,6 +1,7 @@
 ﻿import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -11,6 +12,7 @@ import {
   TicketStatus,
 } from '@prisma/client';
 import { DatabaseService } from 'src/database/database.service';
+import { proposalScope } from '../auth/rules/commercial-access';
 import { CreateGeneratorDto } from './dto/create-generator.dto';
 import { UpdateGeneratorDto } from './dto/update-generator.dto';
 import {
@@ -18,6 +20,9 @@ import {
   UpdateGeneratorModelDto,
 } from './dto/generator-model.dto';
 import { UpsertGeneratorBaseItemsDto } from './dto/generator-base-items.dto';
+
+import { EquipmentListPageDto } from '../../common/list-page.dto';
+import { equipmentPageIndex } from './equipment-list-page';
 
 const generatorTechnicalFields = [
   'application',
@@ -199,6 +204,7 @@ export class GeneratorsService {
       const createData: Prisma.GeneratorUncheckedCreateInput = {
         legacyCode: data.legacyCode?.trim() || undefined,
         name: data.name,
+        photoUrl: data.photoUrl,
         brand: data.brand,
         serialNumber: data.serialNumber,
         power: data.power,
@@ -231,6 +237,25 @@ export class GeneratorsService {
     });
   }
 
+  async listPage(query: EquipmentListPageDto) {
+    const index = await equipmentPageIndex(this.database, query);
+    const items = await this.database.generator.findMany({
+      where: { id: { in: index.ids } },
+      select: buildGeneratorListSelect(new Date()),
+    });
+    const byId = new Map(items.map((item) => [item.id, item]));
+    return {
+      total: index.total,
+      page: index.page,
+      pageSize: index.pageSize,
+      summary: index.summary,
+      items: index.ids.flatMap((id) => {
+        const item = byId.get(id);
+        return item ? [item] : [];
+      }),
+    };
+  }
+
   findAll() {
     const today = new Date();
     return this.database.generator.findMany({
@@ -239,7 +264,70 @@ export class GeneratorsService {
     });
   }
 
-  async findOne(id: string) {
+  async orderSummary(id: string, actorUserId: string) {
+    const actor = await this.database.user.findUnique({
+      where: { id: actorUserId },
+      select: {
+        role: true,
+        linkedClientId: true,
+        technicianProfile: { select: { id: true } },
+      },
+    });
+    if (!actor) throw new ForbiddenException('Usuario nao identificado.');
+    const generator = await this.database.generator.findUnique({
+      where: { id },
+      select: { id: true, clientId: true },
+    });
+    if (!generator) throw new NotFoundException('Gerador nao encontrado.');
+    if (actor.role === 'CLIENT' && actor.linkedClientId !== generator.clientId)
+      throw new NotFoundException('Gerador nao encontrado.');
+    if (actor.role === 'TECHNICIAN' && !actor.technicianProfile?.id)
+      throw new ForbiddenException('Perfil tecnico nao encontrado.');
+    const scope: Prisma.MaintenanceOrderWhereInput = {
+      generatorId: id,
+      ...(actor.role === 'TECHNICIAN'
+        ? { technicianId: actor.technicianProfile!.id }
+        : {}),
+    };
+    const pending: Prisma.MaintenanceOrderWhereInput = {
+      ...scope,
+      status: { in: ['OPEN', 'IN_PROGRESS'] },
+    };
+    const completed: Prisma.MaintenanceOrderWhereInput = {
+      ...scope,
+      status: 'COMPLETED',
+    };
+    const select = {
+      id: true,
+      title: true,
+      status: true,
+      scheduledTo: true,
+      finishedAt: true,
+    };
+    const [pendingTotal, completedTotal, pendingItems, completedItems] =
+      await Promise.all([
+        this.database.maintenanceOrder.count({ where: pending }),
+        this.database.maintenanceOrder.count({ where: completed }),
+        this.database.maintenanceOrder.findMany({
+          where: pending,
+          select,
+          orderBy: [{ scheduledTo: 'asc' }, { openedAt: 'desc' }],
+          take: 5,
+        }),
+        this.database.maintenanceOrder.findMany({
+          where: completed,
+          select,
+          orderBy: [{ finishedAt: 'desc' }, { openedAt: 'desc' }],
+          take: 5,
+        }),
+      ]);
+    return {
+      pending: { total: pendingTotal, items: pendingItems },
+      completed: { total: completedTotal, items: completedItems },
+    };
+  }
+
+  async findOne(id: string, actorUserId?: string) {
     const gen = await this.database.generator.findUnique({
       where: { id },
       include: {
@@ -257,6 +345,7 @@ export class GeneratorsService {
           orderBy: { createdAt: 'asc' },
         },
         proposals: {
+          where: await proposalScope(this.database, actorUserId),
           include: { client: true },
           orderBy: { createdAt: 'desc' },
           take: 5,
@@ -438,6 +527,8 @@ export class GeneratorsService {
 
     const updateData: Prisma.GeneratorUncheckedUpdateInput = {};
 
+    if (updateGeneratorDto.photoUrl !== undefined)
+      updateData.photoUrl = updateGeneratorDto.photoUrl;
     if (updateGeneratorDto.name !== undefined)
       updateData.name = updateGeneratorDto.name;
     if (updateGeneratorDto.brand !== undefined)

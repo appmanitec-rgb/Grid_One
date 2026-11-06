@@ -23,6 +23,7 @@ import {
 } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { VisualDocumentService } from '../documents/visual-document.service';
 import {
   FileStorageService,
   LoadedFile,
@@ -120,6 +121,8 @@ export class ServiceReportsService {
     private readonly fileStorageService?: FileStorageService,
     @Optional()
     private readonly serviceReportPdfService?: ServiceReportPdfService,
+    @Optional()
+    private readonly visualDocumentService?: VisualDocumentService,
   ) {}
 
   async findAll(query: ListServiceReportsQueryDto, actorUserId?: string) {
@@ -986,9 +989,34 @@ export class ServiceReportsService {
 
       const prepared = await this.ensureValidationToken(tx, current, actor.id);
       const template = await this.resolveTemplate(prepared, tx);
-      const pdfBuffer = pdfService.generate(
-        this.buildPdfInput(prepared, template),
+      const [company, client] = this.visualDocumentService
+        ? await Promise.all([
+            tx.companySettings.findFirst({ where: { isPrimary: true } }),
+            typeof prepared.clientId === 'string'
+              ? tx.client.findUnique({ where: { id: prepared.clientId } })
+              : Promise.resolve(null),
+          ])
+        : [null, null];
+      const visual = await this.visualDocumentService?.renderPublishedReportPdf(
+        {
+          ...prepared,
+          company: company || { companyName: 'MANITEC' },
+          client: client || prepared.client,
+          evidences: Array.isArray(prepared.evidences)
+            ? prepared.evidences.filter(
+                (evidence) => evidence.customerVisible && !evidence.deletedAt,
+              )
+            : [],
+        },
+        this.getValidationUrl(
+          typeof prepared.validationToken === 'string'
+            ? prepared.validationToken
+            : null,
+        ),
       );
+      const pdfBuffer =
+        visual?.buffer ??
+        pdfService.generate(this.buildPdfInput(prepared, template));
       const versionNumber =
         typeof prepared.versionNumber === 'number' ? prepared.versionNumber : 1;
       const fileName = `${this.safeFileSegment(prepared.code)}-v${versionNumber}.pdf`;
@@ -1000,6 +1028,9 @@ export class ServiceReportsService {
         stored,
         actor.id,
         now,
+        visual
+          ? { key: visual.templateKey, version: visual.templateVersion }
+          : undefined,
       );
 
       const updated = await tx.serviceReport.update({
@@ -2289,6 +2320,7 @@ export class ServiceReportsService {
     stored: StoredFile,
     actorUserId: string | undefined,
     now: Date,
+    visualTemplate?: { key: string; version: string },
   ) {
     const existingDocumentId =
       typeof report.generatedDocumentId === 'string'
@@ -2308,10 +2340,13 @@ export class ServiceReportsService {
       subject: `PDF Laudo tecnico ${this.safeText(report.code)}`,
       message: 'PDF final do laudo tecnico gerado pelo sistema.',
       provider: 'manitec-pdf',
-      payloadSnapshot: this.buildVersionSnapshot({
-        ...report,
-        documentHash: stored.checksumSha256,
-      }),
+      payloadSnapshot: {
+        ...(this.buildVersionSnapshot({
+          ...report,
+          documentHash: stored.checksumSha256,
+        }) as Record<string, unknown>),
+        ...(visualTemplate ? { visualTemplate } : {}),
+      } as Prisma.InputJsonValue,
       fileStorageKey: stored.storageKey,
       fileName: stored.fileName,
       mimeType: stored.mimeType,

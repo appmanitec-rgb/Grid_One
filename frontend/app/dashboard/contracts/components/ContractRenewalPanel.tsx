@@ -1,4 +1,5 @@
 "use client";
+import { formatCalendarDate } from "@/lib/formatters";
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -171,12 +172,12 @@ export default function ContractRenewalPanel({
 
   return (
     <SectionCard
-      eyebrow="Renovacao contratual"
-      title="Vigencia, reajuste e cobertura"
-      description="O processo preserva as condicoes anteriores e aplica a nova configuracao somente na conclusao."
+      eyebrow="Renovação contratual"
+      title="Vigência, reajuste e cobertura"
+      description="O processo preserva as condições anteriores e aplica a nova configuração somente na conclusao."
       actions={
         <Link href="/dashboard/contracts/renewals" className={SECONDARY_BUTTON}>
-          Carteira de renovacoes
+          Carteira de renovações
         </Link>
       }
     >
@@ -186,8 +187,8 @@ export default function ContractRenewalPanel({
       {!activeRenewal ? (
         <div className="mt-4">
           <EmptyState
-            title="Nenhuma renovacao em andamento"
-            description="Inicie o processo para registrar a proposta de vigencia, reajuste, pecas e observacoes sem alterar o contrato atual."
+            title="Nenhuma renovação em andamento"
+            description="Inicie o processo para registrar a proposta de vigência, reajuste, peças e observações sem alterar o contrato atual."
           />
           <div className="mt-4 flex justify-end">
             <button type="button" onClick={() => void startRenewal()} disabled={Boolean(busy)} className={PRIMARY_BUTTON}>
@@ -199,8 +200,8 @@ export default function ContractRenewalPanel({
         <div className="mt-4 space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
             <div>
-              <p className="text-sm font-semibold text-slate-900">Renovacao {activeRenewal.sequence}</p>
-              <p className="mt-1 text-xs text-slate-500">Aberta por {activeRenewal.createdByUser?.name || "Sistema"} em {formatDate(activeRenewal.createdAt)}</p>
+              <p className="text-sm font-semibold text-slate-900">Renovação {activeRenewal.sequence}</p>
+              <p className="mt-1 text-xs text-slate-500">Aberta por {activeRenewal.createdByUser?.name || "Sistema"} em {new Date(activeRenewal.createdAt).toLocaleDateString("pt-BR")}</p>
             </div>
             <DataPill tone={statusTone(activeRenewal.status)}>{statusLabel(activeRenewal.status)}</DataPill>
           </div>
@@ -218,20 +219,20 @@ export default function ContractRenewalPanel({
             <FormField label="Reajuste (%)">
               <TextInput type="number" step="0.01" value={form.adjustmentPercent} onChange={(event) => update("adjustmentPercent", event.target.value)} disabled={!isOpen(activeRenewal.status)} />
             </FormField>
-            <FormField label="Cobertura de pecas" className="md:col-span-2">
+            <FormField label="Cobertura de peças" className="md:col-span-2">
               <SelectInput value={form.proposedPartsCoverage} onChange={(event) => update("proposedPartsCoverage", event.target.value as PartsCoverage)} disabled={!isOpen(activeRenewal.status)}>
-                <option value="INCLUDED">Pecas inclusas na mensalidade</option>
-                <option value="BILLED_SEPARATELY">Pecas faturadas separadamente</option>
+                <option value="INCLUDED">Peças inclusas na mensalidade</option>
+                <option value="BILLED_SEPARATELY">Peças faturadas separadamente</option>
               </SelectInput>
             </FormField>
-            <FormField label="Detalhamento de pecas" className="md:col-span-2">
-              <TextAreaInput value={form.partsNotes} onChange={(event) => update("partsNotes", event.target.value)} placeholder="Pecas inclusas, limites, consumiveis e exclusoes." disabled={!isOpen(activeRenewal.status)} />
+            <FormField label="Detalhamento de peças" className="md:col-span-2">
+              <TextAreaInput value={form.partsNotes} onChange={(event) => update("partsNotes", event.target.value)} placeholder="Peças inclusas, limites, consumiveis e exclusoes." disabled={!isOpen(activeRenewal.status)} />
             </FormField>
-            <FormField label="Observacoes para o cliente" className="md:col-span-2">
-              <TextAreaInput value={form.customerNotes} onChange={(event) => update("customerNotes", event.target.value)} placeholder="Texto que pode acompanhar o documento de renovacao." disabled={!isOpen(activeRenewal.status)} />
+            <FormField label="Observações para o cliente" className="md:col-span-2">
+              <TextAreaInput value={form.customerNotes} onChange={(event) => update("customerNotes", event.target.value)} placeholder="Texto que pode acompanhar o documento de renovação." disabled={!isOpen(activeRenewal.status)} />
             </FormField>
-            <FormField label="Observacoes internas" className="md:col-span-2">
-              <TextAreaInput value={form.internalNotes} onChange={(event) => update("internalNotes", event.target.value)} placeholder="Negociacao, responsaveis, pendencias e proximos passos." disabled={!isOpen(activeRenewal.status)} />
+            <FormField label="Observações internas" className="md:col-span-2">
+              <TextAreaInput value={form.internalNotes} onChange={(event) => update("internalNotes", event.target.value)} placeholder="Negociacao, responsáveis, pendencias e próximos passos." disabled={!isOpen(activeRenewal.status)} />
             </FormField>
           </div>
 
@@ -259,11 +260,11 @@ export default function ContractRenewalPanel({
 
       {renewals.length > 1 || (renewals.length === 1 && !activeRenewal) ? (
         <div className="mt-6 border-t border-slate-200 pt-5">
-          <p className="text-sm font-semibold text-slate-900">Historico de renovacoes</p>
-          <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
+          <p className="text-sm font-semibold text-slate-900">Histórico de renovações</p>
+          <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
             <table className="w-full min-w-[720px] text-sm">
-              <thead className="bg-slate-50 text-left text-slate-500"><tr><th className="px-4 py-3">Ciclo</th><th className="px-4 py-3">Vigencia proposta</th><th className="px-4 py-3">Valor</th><th className="px-4 py-3">Pecas</th><th className="px-4 py-3">Status</th></tr></thead>
-              <tbody>{renewals.filter((item) => item.id !== activeRenewal?.id).map((item) => <tr key={item.id} className="border-t border-slate-100"><td className="px-4 py-3">Renovacao {item.sequence}</td><td className="px-4 py-3">{formatDate(item.proposedStartDate)} a {formatDate(item.proposedEndDate)}</td><td className="px-4 py-3">{formatCurrency(item.proposedRecurringAmount)}</td><td className="px-4 py-3">{item.proposedPartsCoverage === "INCLUDED" ? "Inclusas" : "Separadas"}</td><td className="px-4 py-3"><DataPill tone={statusTone(item.status)}>{statusLabel(item.status)}</DataPill></td></tr>)}</tbody>
+              <thead className="bg-slate-50 text-left text-slate-500"><tr><th className="px-4 py-3">Ciclo</th><th className="px-4 py-3">Vigência proposta</th><th className="px-4 py-3">Valor</th><th className="px-4 py-3">Peças</th><th className="px-4 py-3">Status</th></tr></thead>
+              <tbody>{renewals.filter((item) => item.id !== activeRenewal?.id).map((item) => <tr key={item.id} className="border-t border-slate-100"><td className="px-4 py-3">Renovação {item.sequence}</td><td className="px-4 py-3">{formatDate(item.proposedStartDate)} a {formatDate(item.proposedEndDate)}</td><td className="px-4 py-3">{formatCurrency(item.proposedRecurringAmount)}</td><td className="px-4 py-3">{item.proposedPartsCoverage === "INCLUDED" ? "Inclusas" : "Separadas"}</td><td className="px-4 py-3"><DataPill tone={statusTone(item.status)}>{statusLabel(item.status)}</DataPill></td></tr>)}</tbody>
             </table>
           </div>
         </div>
@@ -302,7 +303,7 @@ function nextActions(status: RenewalStatus) {
     DRAFT: [{ status: "IN_ANALYSIS", label: "Enviar para analise" }, { status: "CANCELED", label: "Cancelar", danger: true }],
     IN_ANALYSIS: [{ status: "DOCUMENT_READY", label: "Documento pronto" }, { status: "CANCELED", label: "Cancelar", danger: true }],
     DOCUMENT_READY: [{ status: "SENT", label: "Registrar envio" }, { status: "CANCELED", label: "Cancelar", danger: true }],
-    SENT: [{ status: "APPROVED", label: "Registrar aprovacao" }, { status: "REJECTED", label: "Registrar recusa", danger: true }],
+    SENT: [{ status: "APPROVED", label: "Registrar aprovação" }, { status: "REJECTED", label: "Registrar recusa", danger: true }],
     APPROVED: [{ status: "COMPLETED", label: "Concluir e aplicar" }],
   };
   return actions[status] || [];
@@ -319,5 +320,7 @@ function statusTone(status: RenewalStatus): "blue" | "emerald" | "amber" | "rose
   return "amber";
 }
 
-function formatDate(value: string) { return new Date(value).toLocaleDateString("pt-BR"); }
+function formatDate(value?: string | null) {
+  return formatCalendarDate(value);
+}
 function formatCurrency(value: number) { return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value || 0); }

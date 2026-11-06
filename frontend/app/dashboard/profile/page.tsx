@@ -1,7 +1,13 @@
 "use client";
 
+import { PageHeader } from "../components/DashboardPageKit";
+import ProfilePhotoField from "./ProfilePhotoField";
+import { publishProfileUpdate } from "@/lib/profile-events";
+import { clearAuthSession } from "@/lib/auth-session";
+
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
+import { commercialLabel } from "@/lib/commercial-labels";
 
 type Profile = {
   id: string;
@@ -43,29 +49,40 @@ export default function ProfilePage() {
     profilePhotoUrl: "",
   });
   const [password, setPassword] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [readingPhoto, setReadingPhoto] = useState(false);
 
   useEffect(() => {
+    let active = true;
     async function load() {
-      const res = await apiFetch("/users/me", { cache: "no-store" });
-      if (!res.ok) {
-        setError("Nao foi possivel carregar perfil.");
-        return;
+      try {
+        const res = await apiFetch("/users/me", { cache: "no-store" });
+        if (!active) return;
+        if (!res.ok) {
+          setError("Não foi possível carregar o perfil.");
+          return;
+        }
+        const payload = (await res.json()) as Profile;
+        if (!active) return;
+        setProfile(payload);
+        setForm({
+          name: payload.name || "",
+          email: payload.email || "",
+          department: payload.department || "",
+          branch: payload.branch || "",
+          profilePhotoUrl: payload.profilePhotoUrl || "",
+        });
+      } catch (issue) {
+        if (active) setError(issue instanceof Error ? issue.message : "Não foi possível carregar o perfil.");
       }
-      const payload = (await res.json()) as Profile;
-      setProfile(payload);
-      setForm({
-        name: payload.name || "",
-        email: payload.email || "",
-        department: payload.department || "",
-        branch: payload.branch || "",
-        profilePhotoUrl: payload.profilePhotoUrl || "",
-      });
     }
 
     void load();
+    return () => { active = false; };
   }, []);
 
   const initials = useMemo(() => {
@@ -91,24 +108,37 @@ export default function ProfilePage() {
       branch: form.branch || null,
       profilePhotoUrl: form.profilePhotoUrl || null,
     };
-    if (password) body.password = password;
-
-    const res = await apiFetch("/users/me", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-
-    setSaving(false);
-    if (!res.ok) {
-      setError(await readApiErrorMessage(res, "Falha ao salvar perfil."));
-      return;
+    if (password) {
+      if (password.length < 12 || new TextEncoder().encode(password).length > 72) { setError("Use pelo menos 12 caracteres e no máximo 72 bytes na nova senha."); setSaving(false); return; }
+      if (!currentPassword || password !== confirmPassword) { setError("Informe a senha atual e confirme a nova senha corretamente."); setSaving(false); return; }
+      Object.assign(body, { password, currentPassword, confirmPassword });
     }
 
-    const updated = (await res.json()) as Profile;
-    setProfile(updated);
-    setPassword("");
-    setMessage("Perfil atualizado com sucesso.");
+    try {
+      const res = await apiFetch("/users/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        setError(await readApiErrorMessage(res, "Falha ao salvar perfil."));
+        return;
+      }
+      const updated = (await res.json()) as Profile;
+      if (password) {
+        clearAuthSession();
+        window.location.assign("/?passwordChanged=1");
+        return;
+      }
+      setProfile(updated);
+      publishProfileUpdate(updated);
+      setPassword("");
+      setMessage("Perfil atualizado com sucesso.");
+    } catch (issue) {
+      setError(issue instanceof Error ? issue.message : "Não foi possível salvar o perfil. Tente novamente.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (!profile) {
@@ -121,30 +151,23 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
-      <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex min-w-0 items-center gap-4">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-slate-950 text-xl font-bold text-white">
-            {profile.profilePhotoUrl ? (
+    <div className="dashboard-page space-y-5">
+      <PageHeader eyebrow="Minha conta" title="Meu Perfil" description="Atualize seus dados pessoais, senha e preferências." actions={<>
+<div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-slate-950 text-xl font-bold text-white">
+            {form.profilePhotoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={profile.profilePhotoUrl} alt="" className="h-full w-full object-cover" />
+              <img src={form.profilePhotoUrl} alt="" className="h-full w-full object-cover" />
             ) : (
               initials
             )}
           </div>
-          <div className="min-w-0">
-            <h1 className="truncate text-2xl font-bold text-slate-950">Meu Perfil</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Dados pessoais, segurança da conta e preferências visíveis do usuário.
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
+</>} meta={<>
+<div className="flex flex-wrap gap-2">
           <Badge>{roleLabels[profile.role] || profile.role}</Badge>
           <Badge>{profile.isActive ? "Conta ativa" : "Conta inativa"}</Badge>
           <Badge>MFA hibernado</Badge>
         </div>
-      </div>
+</>} />
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.75fr)]">
         <form onSubmit={save} className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -159,11 +182,19 @@ export default function ProfilePage() {
             <Input label="Nome" value={form.name} onChange={(value) => setForm((prev) => ({ ...prev, name: value }))} />
             <Input label="E-mail" value={form.email} onChange={(value) => setForm((prev) => ({ ...prev, email: value }))} type="email" />
             <ReadOnly label="Cargo/função" value={roleLabels[profile.role] || profile.role} />
-            <ReadOnly label="Status operacional" value={profile.availabilityStatus || "Nao informado"} />
+            <ReadOnly label="Status operacional" value={commercialLabel(profile.availabilityStatus)} />
             <Input label="Departamento" value={form.department} onChange={(value) => setForm((prev) => ({ ...prev, department: value }))} placeholder="Ex: Operação" />
             <Input label="Filial" value={form.branch} onChange={(value) => setForm((prev) => ({ ...prev, branch: value }))} placeholder="Ex: Matriz" />
-            <Input label="Foto/avatar (URL)" value={form.profilePhotoUrl} onChange={(value) => setForm((prev) => ({ ...prev, profilePhotoUrl: value }))} placeholder="https://..." />
-            <Input label="Nova senha" value={password} onChange={setPassword} type="password" placeholder="Preencha apenas se quiser alterar" />
+            <ProfilePhotoField value={form.profilePhotoUrl} onChange={(value) => { setForm((prev) => ({ ...prev, profilePhotoUrl: value })); setMessage(""); }} initials={initials} disabled={saving} onBusyChange={setReadingPhoto} />
+            <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
+              <h3 className="font-bold text-slate-900">Alterar senha</h3>
+              <p className="text-sm font-normal text-slate-600">Opcional. Use pelo menos 12 caracteres. Após salvar, entre novamente com a nova senha; os acessos anteriores serão encerrados.</p>
+              <div className="grid gap-4 md:grid-cols-3">
+                <Input label="Senha atual" value={currentPassword} onChange={setCurrentPassword} type="password" autoComplete="current-password" />
+                <Input label="Nova senha" value={password} onChange={setPassword} type="password" autoComplete="new-password" />
+                <Input label="Confirmar nova senha" value={confirmPassword} onChange={setConfirmPassword} type="password" autoComplete="new-password" />
+              </div>
+            </div>
           </div>
 
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -176,7 +207,7 @@ export default function ProfilePage() {
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || readingPhoto}
               className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
             >
               {saving ? "Salvando..." : "Salvar perfil"}
@@ -216,12 +247,14 @@ function Input({
   onChange,
   type = "text",
   placeholder,
+  autoComplete,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
   placeholder?: string;
+  autoComplete?: string;
 }) {
   return (
     <label className="block min-w-0 text-sm font-semibold text-slate-700">
@@ -230,6 +263,7 @@ function Input({
         type={type}
         value={value}
         placeholder={placeholder}
+        autoComplete={autoComplete}
         onChange={(event) => onChange(event.target.value)}
         className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none transition focus:border-slate-600"
       />

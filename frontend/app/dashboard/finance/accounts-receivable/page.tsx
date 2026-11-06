@@ -1,6 +1,10 @@
 "use client";
+import { formatCalendarDate } from "@/lib/formatters";
+import { getAccessFromToken, canAccessDashboardPath } from "@/lib/access";
+import { commercialLabel } from "@/lib/commercial-labels";
 
 import Link from "next/link";
+import ProposalPaymentsQueue from "./ProposalPaymentsQueue";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
@@ -21,7 +25,12 @@ import {
 type Tone = "blue" | "emerald" | "amber" | "rose" | "slate";
 type ReceivableStatus = "OPEN" | "PARTIAL" | "OVERDUE" | "PAID" | "CANCELED";
 type PaymentMethod = "PIX" | "BOLETO" | "TRANSFER" | "CASH" | "CARD" | "OTHER";
-type ReceivableSource = "CONTRACT" | "ORDER" | "MANUAL";
+type ReceivableSource =
+  | "CONTRACT"
+  | "ORDER"
+  | "SALES_ORDER"
+  | "PROPOSAL"
+  | "MANUAL";
 
 type BankAccount = {
   id: string;
@@ -63,6 +72,16 @@ type Receivable = {
   client?: { id: string; companyName?: string | null } | null;
   contract?: { id: string; code?: string | null } | null;
   maintenanceOrder?: { id: string; title?: string | null } | null;
+  salesOrder?: { id: string; code?: string | null } | null;
+  sourceProposal?: {
+    id: string;
+    code: string;
+    downPaymentConfirmedAt?: string | null;
+  } | null;
+  proposalPaymentStage?: string | null;
+  executionBillingCategory?: "PARTS" | "SERVICES" | null;
+  installmentNumber?: number | null;
+  installmentCount?: number | null;
   costCenter?: {
     id: string;
     code?: string | null;
@@ -80,12 +99,9 @@ type PaymentDraft = {
   cancelReason: string;
 };
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
-const DANGER_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:border-rose-300 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
+const DANGER_BUTTON = "app-button app-button-danger";
 
 const STATUS_META: Record<
   ReceivableStatus,
@@ -94,17 +110,17 @@ const STATUS_META: Record<
   OPEN: {
     label: "Em aberto",
     tone: "blue",
-    helper: "Titulo sem recebimento registrado.",
+    helper: "Título sem recebimento registrado.",
   },
   PARTIAL: {
     label: "Parcial",
     tone: "amber",
-    helper: "Ja existe baixa parcial e saldo remanescente.",
+    helper: "Já existe baixa parcial e saldo remanescente.",
   },
   OVERDUE: {
     label: "Vencido",
     tone: "rose",
-    helper: "Juros e multa ja podem impactar o saldo total.",
+    helper: "Juros e multa já podem impactar o saldo total.",
   },
   PAID: {
     label: "Quitado",
@@ -114,14 +130,16 @@ const STATUS_META: Record<
   CANCELED: {
     label: "Cancelado",
     tone: "slate",
-    helper: "Titulo baixado sem gerar mais cobranca.",
+    helper: "Título baixado sem gerar mais cobranca.",
   },
 };
 
 const SOURCE_META: Record<ReceivableSource, { label: string; tone: Tone }> = {
   CONTRACT: { label: "Contrato", tone: "blue" },
   ORDER: { label: "O.S. avulsa", tone: "amber" },
+  SALES_ORDER: { label: "Venda de peças", tone: "blue" },
   MANUAL: { label: "Manual", tone: "slate" },
+  PROPOSAL: { label: "Proposta", tone: "blue" },
 };
 
 const METHOD_LABELS: Record<PaymentMethod, string> = {
@@ -177,8 +195,10 @@ function parseMoneyInput(value: string) {
 }
 
 function getReceivableSource(item: Receivable): ReceivableSource {
+  if (item.sourceProposal?.id) return "PROPOSAL";
   if (item.contract?.id) return "CONTRACT";
   if (item.maintenanceOrder?.id) return "ORDER";
+  if (item.salesOrder?.id) return "SALES_ORDER";
   return "MANUAL";
 }
 
@@ -226,6 +246,7 @@ function describeReceivable(item: Receivable) {
     item.description || "",
     item.contract?.code || "",
     item.maintenanceOrder?.title || "",
+    item.salesOrder?.code || "",
     item.costCenter?.code || "",
     item.costCenter?.name || "",
     STATUS_META[item.status].label,
@@ -297,7 +318,17 @@ export default function AccountsReceivablePage() {
     try {
       const [receivablesRes, bankAccountsRes] = await Promise.all([
         apiFetch(apiUrl("/finance/receivables"), { cache: "no-store" }),
-        apiFetch(apiUrl("/finance/bank-accounts"), { cache: "no-store" }),
+        apiFetch(
+          apiUrl(
+            canAccessDashboardPath(
+              "/dashboard/finance/bank-accounts",
+              getAccessFromToken().pages,
+            )
+              ? "/finance/bank-accounts"
+              : "/finance/bank-account-options",
+          ),
+          { cache: "no-store" },
+        ),
       ]);
 
       const failed = [
@@ -514,7 +545,7 @@ export default function AccountsReceivablePage() {
         throw new Error(
           await readApiErrorMessage(
             response,
-            "Falha ao atualizar os titulos vencidos.",
+            "Falha ao atualizar os títulos vencidos.",
           ),
         );
       }
@@ -549,7 +580,7 @@ export default function AccountsReceivablePage() {
 
     if (amount - outstanding > 0.009) {
       setError(
-        "O valor informado nao pode ultrapassar o saldo em aberto do titulo.",
+        "O valor informado não pode ultrapassar o saldo em aberto do título.",
       );
       return;
     }
@@ -613,7 +644,7 @@ export default function AccountsReceivablePage() {
 
   async function reversePayment(item: Receivable, payment: ReceivablePayment) {
     if (Number(payment.amount || 0) <= 0) {
-      setError("Lancamentos de estorno nao podem ser estornados novamente.");
+      setError("Lancamentos de estorno não podem ser estornados novamente.");
       return;
     }
 
@@ -647,7 +678,7 @@ export default function AccountsReceivablePage() {
         );
       }
 
-      setSuccessMessage("Baixa estornada e saldo do titulo recalculado.");
+      setSuccessMessage("Baixa estornada e saldo do título recalculado.");
       await loadData();
     } catch (reverseError: unknown) {
       setError(
@@ -666,22 +697,20 @@ export default function AccountsReceivablePage() {
 
     if (item.contract?.id) {
       setError(
-        "Titulos de contrato devem ser ajustados na origem contratual antes do cancelamento.",
+        "Títulos de contrato devem ser ajustados na origem contratual antes do cancelamento.",
       );
       return;
     }
 
     if (Number(item.paidAmount || 0) > 0) {
       setError(
-        "Titulos com recebimento parcial devem ser tratados no financeiro antes de cancelar.",
+        "Títulos com recebimento parcial devem ser tratados no financeiro antes de cancelar.",
       );
       return;
     }
 
     if (reason.length < 4) {
-      setError(
-        "Descreva o motivo do cancelamento para manter a trilha financeira consistente.",
-      );
+      setError("Informe o motivo do cancelamento.");
       return;
     }
 
@@ -702,11 +731,11 @@ export default function AccountsReceivablePage() {
       if (await handleUnauthorized(response)) return;
       if (!response.ok) {
         throw new Error(
-          await readApiErrorMessage(response, "Falha ao cancelar titulo."),
+          await readApiErrorMessage(response, "Falha ao cancelar título."),
         );
       }
 
-      setSuccessMessage("Titulo cancelado e retirado da esteira de cobranca.");
+      setSuccessMessage("Título cancelado.");
       setExpandedId(null);
       await loadData();
     } catch (cancelError: unknown) {
@@ -721,14 +750,14 @@ export default function AccountsReceivablePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
-        eyebrow="Financeiro e cobranca"
-        title="Contas a receber com fluxo real de contrato, O.S. avulsa e baixa bancaria."
-        description="A carteira agora mostra origem do titulo, saldo em aberto, historico de recebimentos e as acoes que realmente fecham o ciclo financeiro sem perder o vinculo com contrato e operacao."
+        eyebrow="Financeiro"
+        title="Contas a receber"
+        description="Acompanhe saldos em aberto, cobranças e recebimentos por cliente."
         stats={[
           {
-            label: "Titulos ativos",
+            label: "Títulos ativos",
             value: String(stats.activeCount),
             helper:
               "Itens em aberto, parcial ou vencidos aguardando tratativa.",
@@ -743,18 +772,24 @@ export default function AccountsReceivablePage() {
           {
             label: "Carteira vencida",
             value: formatCurrency(stats.overdueAmount),
-            helper: "Montante que ja exige resposta mais rapida da cobranca.",
+            helper: "Montante que já exige resposta mais rapida da cobranca.",
             tone: "rose",
           },
           {
             label: "Recebimento parcial",
             value: String(stats.partialCount),
-            helper: "Titulos que ja tiveram baixa, mas ainda possuem saldo.",
+            helper: "Títulos que já tiveram baixa, mas ainda possuem saldo.",
             tone: "emerald",
           },
         ]}
         actions={
           <>
+            <Link
+              href="/dashboard/finance/collections"
+              className={SECONDARY_BUTTON}
+            >
+              Cobrança Santander
+            </Link>
             <button
               type="button"
               onClick={() => void syncContractInvoices()}
@@ -787,52 +822,56 @@ export default function AccountsReceivablePage() {
                 <div>
                   <p className="text-xs text-slate-500">Origem contratual</p>
                   <p className="mt-1 text-lg font-bold text-slate-950">
-                    {stats.contractCount} titulo(s)
+                    {stats.contractCount} título(s)
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-500">O.S. avulsas</p>
                   <p className="mt-1 text-lg font-bold text-slate-950">
-                    {sourceMix.order} titulo(s)
+                    {sourceMix.order} título(s)
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-500">Contas manuais</p>
                   <p className="mt-1 text-lg font-bold text-slate-950">
-                    {sourceMix.manual} titulo(s)
+                    {sourceMix.manual} título(s)
                   </p>
                 </div>
               </div>
             </FieldBox>
-
-            <StatusBanner
-              tone={activeBankAccounts.length > 0 ? "blue" : "amber"}
-            >
-              {activeBankAccounts.length > 0
-                ? `${activeBankAccounts.length} conta(s) bancarias ativa(s) disponivel(is) para baixa.`
-                : "Nenhuma conta bancaria ativa encontrada. Cadastre ou reative uma conta/caixa antes de registrar baixas."}
-            </StatusBanner>
           </div>
         }
       />
+      <StatusBanner tone={activeBankAccounts.length > 0 ? "blue" : "amber"}>
+        {activeBankAccounts.length > 0
+          ? `${activeBankAccounts.length} conta(s) bancarias ativa(s) disponivel(is) para baixa.`
+          : "Nenhuma conta bancaria ativa encontrada. Cadastre ou reative uma conta/caixa antes de registrar baixas."}
+      </StatusBanner>
 
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
       {successMessage ? (
         <StatusBanner tone="emerald">{successMessage}</StatusBanner>
       ) : null}
 
+      <ProposalPaymentsQueue
+        refreshKey={receivables
+          .map((item) => item.id + ":" + item.paidAmount + ":" + item.status)
+          .join("|")}
+        onUpdated={loadData}
+      />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.75fr)_360px]">
         <SectionCard
-          eyebrow="Carteira viva"
-          title="Recebimentos com leitura operacional"
-          description="Filtre por origem, status e cliente para atuar na cobranca certa sem perder o contexto de contrato, ordem de servico e historico financeiro."
+          eyebrow="Recebimentos"
+          title="Títulos a receber"
+          description="Filtre por cliente, origem e situação para consultar cobranças e registrar recebimentos."
         >
           <div className="grid gap-3 md:grid-cols-3">
             <FormField label="Busca">
               <TextInput
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Cliente, contrato, O.S. ou descricao"
+                aria-label="Pesquisar títulos"
+                placeholder="Cliente, contrato, O.S. ou descrição"
               />
             </FormField>
 
@@ -867,14 +906,16 @@ export default function AccountsReceivablePage() {
                 <option value="ALL">Todas</option>
                 <option value="CONTRACT">Contrato</option>
                 <option value="ORDER">O.S. avulsa</option>
+                <option value="SALES_ORDER">Venda de peças</option>
                 <option value="MANUAL">Manual</option>
+                <option value="PROPOSAL">Proposta</option>
               </SelectInput>
             </FormField>
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
             <DataPill tone="blue">
-              {filteredReceivables.length} titulo(s) na visao atual
+              {filteredReceivables.length} título(s) na visão atual
             </DataPill>
             <DataPill tone="amber">
               {formatCurrency(stats.outstandingAmount)} em aberto
@@ -902,8 +943,8 @@ export default function AccountsReceivablePage() {
               ))
             ) : filteredReceivables.length === 0 ? (
               <EmptyState
-                title="Nenhum titulo encontrado nessa visao"
-                description="Ajuste os filtros ou sincronize a carteira contratual para repovoar a central."
+                title="Nenhum título encontrado"
+                description="Ajuste os filtros ou sincronize os recebimentos dos contratos."
               />
             ) : (
               filteredReceivables.map((item) => {
@@ -937,6 +978,19 @@ export default function AccountsReceivablePage() {
                           <DataPill tone={sourceMeta.tone}>
                             {sourceMeta.label}
                           </DataPill>
+                          {item.sourceProposal ? (
+                            <Link
+                              href={
+                                "/dashboard/proposals/" + item.sourceProposal.id
+                              }
+                              className="text-xs font-semibold text-blue-700"
+                            >
+                              {item.sourceProposal.code} ·{" "}
+                              {item.proposalPaymentStage === "DOWN_PAYMENT"
+                                ? "Entrada"
+                                : "Parcela do saldo"}
+                            </Link>
+                          ) : null}
                           {dueInDays !== null && dueInDays < 0 ? (
                             <DataPill tone="rose">{`${Math.abs(dueInDays)} dia(s) em atraso`}</DataPill>
                           ) : null}
@@ -977,6 +1031,26 @@ export default function AccountsReceivablePage() {
                               O.S.{" "}
                               {item.maintenanceOrder.title ||
                                 item.maintenanceOrder.id.slice(0, 8)}
+                            </Link>
+                          ) : null}
+                          {item.executionBillingCategory ? (
+                            <span className="rounded-full bg-blue-50 px-2 py-0.5 font-semibold text-blue-800">
+                              {item.executionBillingCategory === "PARTS"
+                                ? "Peças"
+                                : "Serviços"}
+                              {item.installmentNumber && item.installmentCount
+                                ? ` · ${item.installmentNumber}/${item.installmentCount}`
+                                : ""}
+                            </span>
+                          ) : null}
+                          {item.salesOrder?.id ? (
+                            <Link
+                              href={`/dashboard/sales-orders?orderId=${item.salesOrder.id}`}
+                              className="font-semibold text-slate-700 underline-offset-4 hover:text-slate-950 hover:underline"
+                            >
+                              Pedido{" "}
+                              {item.salesOrder.code ||
+                                item.salesOrder.id.slice(0, 8)}
                             </Link>
                           ) : null}
                           {item.costCenter?.id ? (
@@ -1028,7 +1102,7 @@ export default function AccountsReceivablePage() {
                           Vencimento
                         </p>
                         <p className="mt-2 text-sm font-semibold text-slate-900">
-                          {formatDate(item.dueDate)}
+                          {formatCalendarDate(item.dueDate)}
                         </p>
                       </FieldBox>
                       <FieldBox>
@@ -1105,11 +1179,11 @@ export default function AccountsReceivablePage() {
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <div>
                             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                              Historico recente
+                              Histórico recente
                             </p>
                             <p className="mt-1 text-sm text-slate-600">
-                              Ate 3 ultimos recebimentos registrados para este
-                              titulo.
+                              Até 3 ultimos recebimentos registrados para este
+                              título.
                             </p>
                           </div>
                           <DataPill tone="slate">
@@ -1175,7 +1249,7 @@ export default function AccountsReceivablePage() {
                     ) : null}
 
                     {expandedId === item.id && canReceive ? (
-                      <div className="mt-4 rounded-[26px] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-4">
+                      <div className="mt-4 rounded-[26px] border border-slate-200 dashboard-tinted-surface bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-4">
                         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                           <FormField
                             label="Valor recebido"
@@ -1196,6 +1270,7 @@ export default function AccountsReceivablePage() {
 
                           <FormField label="Metodo">
                             <SelectInput
+                              aria-label="Metodo"
                               value={draft.method}
                               onChange={(event) =>
                                 updateDraft(item.id, {
@@ -1215,6 +1290,7 @@ export default function AccountsReceivablePage() {
 
                           <FormField label="Conta destino">
                             <SelectInput
+                              aria-label="Conta destino"
                               value={draft.bankAccountId}
                               onChange={(event) =>
                                 updateDraft(item.id, {
@@ -1250,7 +1326,7 @@ export default function AccountsReceivablePage() {
                         </div>
 
                         <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_220px]">
-                          <FormField label="Observacoes">
+                          <FormField label="Observações">
                             <TextAreaInput
                               value={draft.notes}
                               onChange={(event) =>
@@ -1322,7 +1398,7 @@ export default function AccountsReceivablePage() {
                                     cancelReason: event.target.value,
                                   })
                                 }
-                                placeholder="Descreva a justificativa para trilha de auditoria."
+                                placeholder="Informe a justificativa."
                               />
                             </FormField>
 
@@ -1355,7 +1431,7 @@ export default function AccountsReceivablePage() {
           <SectionCard
             eyebrow="Prioridades"
             title="Vencimento e cobranca"
-            description="Titulos que merecem atuacao imediata para evitar envelhecimento da carteira."
+            description="Títulos vencidos ou com vencimento nos próximos 7 dias."
           >
             <div className="space-y-3">
               {loading ? (
@@ -1366,7 +1442,7 @@ export default function AccountsReceivablePage() {
               ) : dueSoon.length === 0 ? (
                 <EmptyState
                   title="Nenhum vencimento urgente"
-                  description="A carteira atual nao possui titulos ativos vencendo nos proximos 7 dias."
+                  description="A carteira atual não possui títulos ativos vencendo nos próximos 7 dias."
                 />
               ) : (
                 dueSoon.map((item) => {
@@ -1412,9 +1488,9 @@ export default function AccountsReceivablePage() {
           </SectionCard>
 
           <SectionCard
-            eyebrow="Conexao de fluxo"
-            title="Esteira validada"
-            description="A cobranca agora conversa com os modulos que ja foram refatorados, em vez de funcionar isolada."
+            eyebrow="Consultas relacionadas"
+            title="Contratos e documentos"
+            description="Consulte os contratos, ordens e documentos associados aos recebimentos."
           >
             <div className="space-y-3">
               <FieldBox>
@@ -1422,9 +1498,8 @@ export default function AccountsReceivablePage() {
                   Contrato -&gt; faturamento -&gt; recebimento
                 </p>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  A sincronizacao de contratos alimenta a carteira financeira e
-                  a quitacao de um titulo contratual continua refletindo a
-                  fatura correspondente no backend.
+                  As faturas de contrato aparecem nesta carteira. Ao registrar o
+                  recebimento, a fatura vinculada também é atualizada.
                 </p>
               </FieldBox>
 
@@ -1433,7 +1508,7 @@ export default function AccountsReceivablePage() {
                   O.S. avulsa -&gt; faturamento -&gt; baixa
                 </p>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Os titulos de ordem continuam rastreaveis por link direto para
+                  Os títulos de ordem continuam rastreaveis por link direto para
                   a O.S., o que facilita cobrar sem perder o contexto da
                   execucao.
                 </p>
@@ -1441,10 +1516,10 @@ export default function AccountsReceivablePage() {
 
               <FieldBox>
                 <p className="text-sm font-semibold text-slate-900">
-                  Seguranca de operacao
+                  Segurança de operação
                 </p>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Cancelamento de titulo contratual ou parcialmente recebido foi
+                  Cancelamento de título contratual ou parcialmente recebido foi
                   bloqueado na interface para evitar desalinhamento entre
                   cobranca, conciliacao e origem comercial.
                 </p>
@@ -1474,10 +1549,14 @@ export default function AccountsReceivablePage() {
                     </p>
                     <p className="mt-1 text-sm text-slate-500">
                       {account.bankName || "Banco nao informado"}
-                      {account.type ? ` / ${account.type}` : ""}
+                      {account.type
+                        ? ` / ${commercialLabel(account.type)}`
+                        : ""}
                     </p>
                     <p className="mt-3 text-lg font-bold text-slate-950">
-                      {formatCurrency(Number(account.currentBalance || 0))}
+                      {account.currentBalance == null
+                        ? "Saldo restrito neste acesso"
+                        : formatCurrency(Number(account.currentBalance))}
                     </p>
                   </div>
                 ))

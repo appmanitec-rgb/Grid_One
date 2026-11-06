@@ -1,7 +1,10 @@
+import { ServiceUnavailableException } from '@nestjs/common';
+import { createHash } from 'crypto';
 import {
   DeliveryDocumentType,
   DocumentAccessChannel,
   DocumentAccessType,
+  ProposalStatus,
   UserRole,
 } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service';
@@ -13,6 +16,9 @@ import { ProposalPdfService } from './proposal-pdf.service';
 describe('DocumentsService', () => {
   let service: DocumentsService;
   let prisma: {
+    controlOption: { findMany: jest.Mock };
+    systemAuditLog: { findMany: jest.Mock };
+    proposalDocumentSnapshot: { findUnique: jest.Mock };
     user: { findUnique: jest.Mock };
     companySettings: { findFirst: jest.Mock };
     proposal: { findUnique: jest.Mock };
@@ -23,12 +29,18 @@ describe('DocumentsService', () => {
   let documentGenerationService: {
     generateDocx: jest.Mock;
     generatePdfFromDocx: jest.Mock;
+    convertRenderedDocxToPdf: jest.Mock;
     pdfFromDocxStatus: jest.Mock;
   };
   let fileStorage: { saveDocumentPdf: jest.Mock; saveDocumentFile: jest.Mock };
 
   beforeEach(() => {
     prisma = {
+      controlOption: { findMany: jest.fn().mockResolvedValue([]) },
+      systemAuditLog: { findMany: jest.fn().mockResolvedValue([]) },
+      proposalDocumentSnapshot: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
       user: { findUnique: jest.fn() },
       companySettings: { findFirst: jest.fn() },
       proposal: { findUnique: jest.fn() },
@@ -42,6 +54,26 @@ describe('DocumentsService', () => {
     documentGenerationService = {
       generateDocx: jest.fn(),
       generatePdfFromDocx: jest.fn(),
+      convertRenderedDocxToPdf: jest
+        .fn()
+        .mockImplementation(
+          (docx: {
+            buffer: Buffer;
+            fileName: string;
+            templateKey: string;
+            templateVersion: string;
+          }) => ({
+            buffer: Buffer.from('%PDF-1.4\nLayout do Word\n%%EOF'),
+            fileName: docx.fileName.replace(/\.docx$/i, '.pdf'),
+            mimeType: 'application/pdf',
+            templateKey: docx.templateKey,
+            templateVersion: docx.templateVersion,
+            checksumSha256: 'converted-pdf-hash',
+            sourceDocxChecksumSha256: createHash('sha256')
+              .update(docx.buffer)
+              .digest('hex'),
+          }),
+        ),
       pdfFromDocxStatus: jest.fn().mockReturnValue({
         available: false,
         reason: 'Conversao DOCX para PDF indisponivel.',
@@ -134,6 +166,56 @@ describe('DocumentsService', () => {
     });
   });
 
+  it('projects only saved public payment data and includes the commercial customer code', async () => {
+    prisma.proposal.findUnique.mockResolvedValue({
+      ...makeProposal(),
+      client: { ...makeProposal().client, code: '2020CLI' },
+      paymentSelections: [
+        {
+          purpose: 'PARTS',
+          beneficiary: 'Emitente Peças',
+          beneficiaryDocument: 'DOC',
+          issuerCompanyName: 'Empresa',
+          pixKey: 'pix@example.test',
+          id: 'private-profile-id',
+          internalNotes: 'SEGREDO',
+          accountNumber: { injected: true },
+        },
+        null,
+      ],
+    });
+    const payload = await service.getProposalDocument('proposal-1', 'user-1');
+    expect(payload.client.code).toBe('2020CLI');
+    expect(payload.document.paymentSelections).toEqual([
+      {
+        purpose: 'PARTS',
+        beneficiary: 'Emitente Peças',
+        beneficiaryDocument: 'DOC',
+        issuerCompanyName: 'Empresa',
+        pixKey: 'pix@example.test',
+      },
+    ]);
+    expect(JSON.stringify(payload)).not.toContain('SEGREDO');
+    expect(prisma.proposal.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          client: { select: expect.objectContaining({ code: true }) },
+        }),
+      }),
+    );
+  });
+
+  it('blocks document access while the proposal is still a draft', async () => {
+    prisma.proposal.findUnique.mockResolvedValue({
+      ...makeProposal(),
+      status: ProposalStatus.DRAFT,
+    });
+
+    await expect(
+      service.getProposalDocument('proposal-1', 'user-1'),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(prisma.documentDelivery.findFirst).not.toHaveBeenCalled();
+  });
   it('stores generated proposal PDF with template metadata and audit trail', async () => {
     const file = await service.downloadProposalPdf('proposal-1', 'user-1');
 
@@ -142,7 +224,7 @@ describe('DocumentsService', () => {
     expect(file.templateKey).toBe('proposal/manitec-default-v1');
     expect(fileStorage.saveDocumentPdf).toHaveBeenCalledWith(
       'proposal-pdfs',
-      'proposta-PROP-1.pdf',
+      'proposal-PROP-1.pdf',
       expect.any(Buffer),
     );
     expect(prisma.documentDelivery.create).toHaveBeenCalledWith({
@@ -168,6 +250,164 @@ describe('DocumentsService', () => {
         channel: DocumentAccessChannel.INTERNAL,
       }),
     });
+  });
+
+  it('does not replace a failed institutional conversion with a different textual PDF', async () => {
+    Object.assign(service, {
+      visualDocuments: {
+        getPublished: jest
+          .fn()
+          .mockResolvedValue({ version: { format: 'WORD' } }),
+      },
+    });
+    documentGenerationService.generatePdfFromDocx.mockRejectedValueOnce(
+      new ServiceUnavailableException('Conversor indisponivel.'),
+    );
+
+    await expect(
+      service.downloadProposalInstitutionalPdf('proposal-1', 'user-1'),
+    ).rejects.toThrow('Conversor indisponivel.');
+    expect(proposalPdfService.generate).not.toHaveBeenCalled();
+    expect(documentGenerationService.generatePdfFromDocx).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(fileStorage.saveDocumentPdf).not.toHaveBeenCalled();
+  });
+
+  it('does not silently replace a published Word template if conversion fails', async () => {
+    Object.assign(service, {
+      visualDocuments: {
+        getPublished: jest
+          .fn()
+          .mockResolvedValue({ version: { format: 'WORD' } }),
+      },
+    });
+    documentGenerationService.convertRenderedDocxToPdf.mockRejectedValueOnce(
+      new ServiceUnavailableException('Conversor indisponivel.'),
+    );
+
+    await expect(
+      service.downloadProposalPdf('proposal-1', 'user-1'),
+    ).rejects.toThrow('Conversor indisponivel.');
+    expect(proposalPdfService.generate).not.toHaveBeenCalled();
+    expect(fileStorage.saveDocumentPdf).not.toHaveBeenCalled();
+  });
+
+  it('converts the institutional DOCX even without a published Studio model', async () => {
+    const file = await service.downloadProposalPdf('proposal-1', 'user-1');
+    expect(file.buffer.toString()).toContain('Layout do Word');
+    expect(documentGenerationService.generateDocx).toHaveBeenCalledTimes(1);
+    const renderedDocx =
+      await documentGenerationService.generateDocx.mock.results[0].value;
+    expect(
+      documentGenerationService.convertRenderedDocxToPdf,
+    ).toHaveBeenCalledWith(renderedDocx);
+    expect(proposalPdfService.generate).not.toHaveBeenCalled();
+  });
+
+  it('derives a separately named PDF from the frozen Word, preserving both originals', async () => {
+    const word = {
+      buffer: Buffer.from('Word aprovado'),
+      fileName: 'approved.docx',
+      templateKey: 'frozen-template',
+      templateVersion: '1',
+    };
+    const bytesBefore = Buffer.from(word.buffer);
+    jest
+      .spyOn(
+        service as unknown as {
+          frozenFile: (...args: unknown[]) => Promise<unknown>;
+        },
+        'frozenFile',
+      )
+      .mockResolvedValue(word);
+    const file = await service.downloadProposalApprovedWordPdfCopy(
+      'proposal-1',
+      'user-1',
+    );
+    expect(
+      documentGenerationService.convertRenderedDocxToPdf,
+    ).toHaveBeenCalledWith({
+      ...word,
+      fileName: 'proposta-PROP-1-copia-word.docx',
+    });
+    expect(documentGenerationService.generateDocx).not.toHaveBeenCalled();
+    expect(word.buffer.equals(bytesBefore)).toBe(true);
+    expect(file.buffer.toString()).toContain('Layout do Word');
+    expect(prisma.documentDelivery.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        payloadSnapshot: expect.objectContaining({
+          generatedFrom: 'DOCX',
+          sourceDocxChecksumSha256: createHash('sha256')
+            .update(word.buffer)
+            .digest('hex'),
+        }),
+      }),
+    });
+  });
+
+  it('does not convert a draft or replace missing approved Word with the current template', async () => {
+    prisma.proposal.findUnique.mockResolvedValueOnce({
+      ...makeProposal(),
+      status: ProposalStatus.DRAFT,
+    });
+    await expect(
+      service.downloadProposalApprovedWordPdfCopy('proposal-1', 'user-1'),
+    ).rejects.toMatchObject({ status: 403 });
+    jest
+      .spyOn(
+        service as unknown as {
+          frozenFile: (...args: unknown[]) => Promise<unknown>;
+        },
+        'frozenFile',
+      )
+      .mockResolvedValue(null);
+    await expect(
+      service.downloadProposalApprovedWordPdfCopy('proposal-1', 'user-1'),
+    ).rejects.toThrow('Não há Word aprovado');
+    expect(
+      documentGenerationService.convertRenderedDocxToPdf,
+    ).not.toHaveBeenCalled();
+    expect(fileStorage.saveDocumentPdf).not.toHaveBeenCalled();
+  });
+
+  it('keeps the historical PDF download byte for byte instead of regenerating it', async () => {
+    const approvedPdf = {
+      buffer: Buffer.from('%PDF aprovado original'),
+      fileName: 'original.pdf',
+      templateKey: 'approved-template',
+      templateVersion: '1',
+    };
+    jest
+      .spyOn(
+        service as unknown as {
+          frozenFile: (...args: unknown[]) => Promise<unknown>;
+        },
+        'frozenFile',
+      )
+      .mockResolvedValue(approvedPdf);
+    const file = await service.downloadProposalInstitutionalPdf(
+      'proposal-1',
+      'user-1',
+    );
+    expect(file.buffer.equals(approvedPdf.buffer)).toBe(true);
+    expect(
+      documentGenerationService.convertRenderedDocxToPdf,
+    ).not.toHaveBeenCalled();
+    expect(
+      documentGenerationService.generatePdfFromDocx,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('preserves unexpected PDF generation errors', async () => {
+    documentGenerationService.generatePdfFromDocx.mockRejectedValueOnce(
+      new Error('Erro ao carregar dados da proposta.'),
+    );
+
+    await expect(
+      service.downloadProposalInstitutionalPdf('proposal-1', 'user-1'),
+    ).rejects.toThrow('Erro ao carregar dados da proposta.');
+    expect(proposalPdfService.generate).not.toHaveBeenCalled();
   });
 
   it('stores generated proposal DOCX with institutional template metadata', async () => {

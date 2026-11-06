@@ -205,12 +205,12 @@ export class HrAdminController {
     return this.hrAdminService.releaseVehicle(id, dto.endKm);
   }
 
-  private extractUserId(req: Request) {
+  private extractUserId(req: Request & { user?: unknown }) {
     const authUser = req.user as { sub?: string } | undefined;
     return authUser?.sub;
   }
 
-  private extractActor(req: Request): AccessActor {
+  private extractActor(req: Request & { user?: unknown }): AccessActor {
     const authUser = req.user as
       | {
           role?: UserRole;

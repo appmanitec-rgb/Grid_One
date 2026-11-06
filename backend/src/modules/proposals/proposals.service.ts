@@ -1,9 +1,31 @@
+import { assertProposalPaymentProfile } from './proposal-payment-profile';
+import {
+  assertProposalConference,
+  auditProposalConference,
+  conferenceActor,
+  phase1Enabled,
+  phase1Type,
+} from './proposal-conference';
+import { exactLineValue, exactExpenseValue } from './proposal-review.domain';
+import { assertPortfolio } from '../auth/rules/access-rules';
+import { persistProposalTechnicalScope } from '../technical-scopes/technical-scope-integration';
+import {
+  portfolioForProposal,
+  portfolioForPipeline,
+} from '../auth/rules/access-rules';
+import {
+  proposalScope,
+  checkProposalType,
+  checkCommercialSeller,
+  checkProposalPricing,
+} from '../auth/rules/commercial-access';
 import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   AccountsReceivableStatus,
@@ -22,9 +44,12 @@ import {
   PartsCoverageType,
   PreventiveRecurrence,
   Prisma,
+  Proposal,
   ProposalHourType,
   ProposalItemKind,
   ProposalOrigin,
+  ProposalPaymentMethod,
+  ProposalPaymentPurpose,
   ProposalStatus,
   ProposalTechnicianType,
   ProposalType,
@@ -32,16 +57,30 @@ import {
   SalesOpportunityStage,
   UserRole,
 } from '@prisma/client';
+import { publishProposalWon } from '../team/team-automation';
+import { toDataURL } from 'qrcode';
+import { createHash } from 'node:crypto';
 import { DatabaseService } from '../../database/database.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { FileStorageService } from '../file-storage/file-storage.service';
+import { DocumentsService } from '../documents/documents.service';
 import {
   CreateProposalDto,
   QuickProposalGeneratorDto,
 } from './dto/create-proposal.dto';
 import { UpdateProposalDto } from './dto/update-proposal.dto';
 import { ConvertGeneratorPostSaleDto } from './dto/convert-generator-post-sale.dto';
+import { createApprovedProposalOrder } from './proposal-work-order';
+import {
+  assertProposalFinancialRelease,
+  proposalEntryPending,
+} from './proposal-financial-gate';
+import {
+  paymentPresetLabel,
+  ProposalPaymentPlan,
+  resolvePaymentPlan,
+} from './proposal-payment-plan';
 
 const COMMERCIAL_GENERATOR_PROPOSAL_SELECT = {
   id: true,
@@ -97,10 +136,29 @@ export class ProposalsService {
     private readonly approvalsService: ApprovalsService,
     private readonly auditLogsService: AuditLogsService,
     private readonly fileStorageService: FileStorageService,
+    @Optional() private readonly documentsService?: DocumentsService,
   ) {}
 
+  async getAccessoryRules() {
+    return this.prisma.controlOption.findMany({
+      where: { type: 'PROPOSAL_ACCESSORY_RULE', isActive: true },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        description: true,
+        sortOrder: true,
+      },
+      orderBy: [{ name: 'asc' }],
+    });
+  }
+
   async create(createProposalDto: CreateProposalDto, actorUserId?: string) {
+    const editorPayloadHash = createHash('sha256')
+      .update(JSON.stringify(createProposalDto))
+      .digest('hex');
     await this.assertInternalActor(actorUserId);
+    await checkProposalType(this.prisma, actorUserId, createProposalDto.type);
     const origin = createProposalDto.origin ?? ProposalOrigin.MANITEC;
 
     if (
@@ -113,257 +171,455 @@ export class ProposalsService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const linkedOpportunity = createProposalDto.salesOpportunityId
-        ? await tx.salesOpportunity.findUnique({
-            where: { id: createProposalDto.salesOpportunityId },
-            select: {
-              id: true,
-              clientId: true,
-              stage: true,
-              assignedSellerId: true,
-              pipeline: true,
-              opportunityType: true,
-            },
-          })
-        : null;
+    if (createProposalDto.paymentPlan)
+      createProposalDto.paymentTerm =
+        paymentPresetLabel(createProposalDto.paymentPlan) ||
+        createProposalDto.paymentTerm;
+    return this.prisma.$transaction(
+      async (tx) => {
+        let editorDraft: {
+          id: string;
+          ownerUserId: string;
+          proposalId: string | null;
+        } | null = null;
+        if (createProposalDto.editingDraftId) {
+          if (!phase1Type(createProposalDto.type, createProposalDto.origin))
+            throw new BadRequestException(
+              'A edicao assistida nao esta ativa para este tipo de proposta.',
+            );
+          await tx.$executeRawUnsafe(
+            'SELECT pg_advisory_xact_lock(hashtext($1))',
+            'proposal-editor:' + createProposalDto.editingDraftId,
+          );
+          editorDraft = await tx.proposalEditingDraft.findUnique({
+            where: { id: createProposalDto.editingDraftId },
+          });
+          if (!editorDraft || editorDraft.ownerUserId !== actorUserId)
+            throw new ForbiddenException('Rascunho de edicao indisponivel.');
+          if (editorDraft.proposalId) {
+            const promotion = await tx.systemAuditLog.findFirst({
+              where: {
+                domain: AuditDomain.PROPOSALS,
+                entityType: 'PROPOSAL_EDITOR_PROMOTION',
+                entityId: editorDraft.id,
+                action: 'PROMOTE',
+              },
+              orderBy: { createdAt: 'desc' },
+            });
+            const recorded = promotion?.afterPayload as
+              | { payloadHash?: string }
+              | undefined;
+            if (recorded?.payloadHash !== editorPayloadHash)
+              throw new ConflictException(
+                'Este rascunho já originou uma proposta com outro conteúdo. Reabra a versão salva para continuar.',
+              );
+            return tx.proposal.findUnique({
+              where: { id: editorDraft.proposalId },
+              include: { items: { include: { catalogItem: true } } },
+            });
+          }
+        }
 
-      if (createProposalDto.salesOpportunityId && !linkedOpportunity) {
-        throw new NotFoundException('Oportunidade comercial nao encontrada.');
-      }
+        const linkedOpportunity = createProposalDto.salesOpportunityId
+          ? await tx.salesOpportunity.findUnique({
+              where: { id: createProposalDto.salesOpportunityId },
+              select: {
+                id: true,
+                clientId: true,
+                stage: true,
+                assignedSellerId: true,
+                pipeline: true,
+                opportunityType: true,
+              },
+            })
+          : null;
 
-      if (
-        linkedOpportunity &&
-        linkedOpportunity.clientId !== createProposalDto.clientId
-      ) {
-        throw new BadRequestException(
-          'Cliente da proposta difere do cliente da oportunidade vinculada.',
-        );
-      }
+        if (createProposalDto.salesOpportunityId && !linkedOpportunity) {
+          throw new NotFoundException('Oportunidade comercial nao encontrada.');
+        }
 
-      await this.assertCommercialEligibility(
-        tx,
-        createProposalDto.clientId,
-        createProposalDto.paymentTerm,
-      );
-      await this.assertGeneratorBelongsToClient(
-        tx,
-        createProposalDto.generatorId,
-        createProposalDto.clientId,
-      );
-      const commercialGenerator = createProposalDto.commercialGeneratorId
-        ? await tx.commercialGenerator.findFirst({
-            where: {
-              id: createProposalDto.commercialGeneratorId,
-              isActive: true,
-            },
-          })
-        : null;
-      if (
-        createProposalDto.type === ProposalType.GENERATOR_SALE &&
-        origin === ProposalOrigin.MANITEC &&
-        !commercialGenerator
-      ) {
-        throw new BadRequestException(
-          'Selecione um gerador Generac ativo do catalogo comercial.',
-        );
-      }
-      if (
-        createProposalDto.type === ProposalType.GENERATOR_SALE &&
-        createProposalDto.generatorId
-      ) {
-        throw new BadRequestException(
-          'Venda de gerador nao pode usar um equipamento instalado no cliente.',
-        );
-      }
-      if (
-        createProposalDto.type !== ProposalType.GENERATOR_SALE &&
-        createProposalDto.commercialGeneratorId
-      ) {
-        throw new BadRequestException(
-          'Gerador comercial so pode ser vinculado a proposta de venda de gerador.',
-        );
-      }
-      if (
-        linkedOpportunity &&
-        createProposalDto.type === ProposalType.GENERATOR_SALE &&
-        linkedOpportunity.opportunityType !==
-          SalesOpportunityType.GENERATOR_SALE
-      ) {
-        throw new BadRequestException(
-          'A oportunidade vinculada nao e do tipo venda de gerador.',
-        );
-      }
+        if (
+          linkedOpportunity &&
+          linkedOpportunity.clientId !== createProposalDto.clientId
+        ) {
+          throw new BadRequestException(
+            'Cliente da proposta difere do cliente da oportunidade vinculada.',
+          );
+        }
 
-      const sellerUserId =
-        linkedOpportunity?.assignedSellerId ?? createProposalDto.userId;
-      if (!sellerUserId) {
-        throw new BadRequestException(
-          'Informe um vendedor comercial para a proposta.',
+        if (
+          linkedOpportunity &&
+          portfolioForProposal(createProposalDto.type) !==
+            portfolioForPipeline(linkedOpportunity.pipeline)
+        )
+          throw new BadRequestException(
+            'A proposta deve pertencer à mesma carteira da oportunidade.',
+          );
+        await this.assertCommercialEligibility(
+          tx,
+          createProposalDto.clientId,
+          createProposalDto.paymentTerm,
+          undefined,
+          createProposalDto.paymentPlan,
         );
-      }
-      await this.assertProposalSeller(tx, sellerUserId);
-
-      const normalizedItems = await this.prepareProposalItems(
-        tx,
-        createProposalDto.items,
-      );
-      const operationalExpenses = await this.prepareOperationalExpenses(
-        tx,
-        createProposalDto.operationalExpenses,
-      );
-      const itemsSubtotal = this.roundCurrency(
-        this.calculateTotal(normalizedItems),
-      );
-      const subtotal = this.roundCurrency(
-        itemsSubtotal + operationalExpenses.total,
-      );
-      const allowOperationalExpenseDiscount = Boolean(
-        createProposalDto.allowOperationalExpenseDiscount,
-      );
-      const discountableSubtotal = allowOperationalExpenseDiscount
-        ? subtotal
-        : itemsSubtotal;
-      const discountValue = this.roundCurrency(
-        Math.max(0, Number(createProposalDto.discount || 0)),
-      );
-      if (
-        !Number.isFinite(discountValue) ||
-        discountValue > discountableSubtotal
-      ) {
-        throw new BadRequestException(
-          allowOperationalExpenseDiscount
-            ? 'O desconto geral nao pode superar o subtotal da proposta.'
-            : 'O desconto nao pode superar o subtotal de pecas e servicos quando as despesas operacionais estiverem protegidas.',
+        await this.assertGeneratorBelongsToClient(
+          tx,
+          createProposalDto.generatorId,
+          createProposalDto.clientId,
         );
-      }
-      const calculatedTotal = this.roundCurrency(subtotal - discountValue);
-      this.validateCommercialTerms(createProposalDto, calculatedTotal);
+        const commercialGenerator = createProposalDto.commercialGeneratorId
+          ? await tx.commercialGenerator.findFirst({
+              where: {
+                id: createProposalDto.commercialGeneratorId,
+                isActive: true,
+              },
+            })
+          : null;
+        if (
+          createProposalDto.type === ProposalType.GENERATOR_SALE &&
+          origin === ProposalOrigin.MANITEC &&
+          !commercialGenerator
+        ) {
+          throw new BadRequestException(
+            'Selecione um gerador Generac ativo do catalogo comercial.',
+          );
+        }
+        if (
+          createProposalDto.type === ProposalType.GENERATOR_SALE &&
+          createProposalDto.generatorId
+        ) {
+          throw new BadRequestException(
+            'Venda de gerador nao pode usar um equipamento instalado no cliente.',
+          );
+        }
+        if (
+          createProposalDto.type !== ProposalType.GENERATOR_SALE &&
+          createProposalDto.commercialGeneratorId
+        ) {
+          throw new BadRequestException(
+            'Gerador comercial so pode ser vinculado a proposta de venda de gerador.',
+          );
+        }
+        if (
+          linkedOpportunity &&
+          createProposalDto.type === ProposalType.GENERATOR_SALE &&
+          linkedOpportunity.opportunityType !==
+            SalesOpportunityType.GENERATOR_SALE
+        ) {
+          throw new BadRequestException(
+            'A oportunidade vinculada nao e do tipo venda de gerador.',
+          );
+        }
 
-      const nextCode = await this.generateNextNewCode(tx);
-      const parsed = this.parseProposalCode(nextCode);
+        const sellerUserId =
+          linkedOpportunity?.assignedSellerId ?? createProposalDto.userId;
+        if (!sellerUserId) {
+          throw new BadRequestException(
+            'Informe um vendedor comercial para a proposta.',
+          );
+        }
+        await checkCommercialSeller(
+          this.prisma,
+          actorUserId,
+          createProposalDto.type,
+          sellerUserId,
+        );
+        await this.assertProposalSeller(
+          tx,
+          sellerUserId,
+          createProposalDto.type,
+        );
 
-      const proposal = await tx.proposal.create({
-        data: {
-          code: nextCode,
-          baseSequence: parsed?.sequence,
-          revision: 0,
-          status: ProposalStatus.DRAFT,
-          clientId: createProposalDto.clientId,
-          salesOpportunityId: linkedOpportunity?.id,
-          generatorId: createProposalDto.generatorId,
-          commercialGeneratorId: commercialGenerator?.id,
-          sizingSnapshot: createProposalDto.sizingSnapshot as
-            | Prisma.InputJsonValue
-            | undefined,
-          commercialSnapshot: this.buildCommercialSnapshot({
-            origin,
-            dto: createProposalDto,
-            generator: commercialGenerator,
-            items: normalizedItems,
-            operationalExpenses: operationalExpenses.items,
-            itemsSubtotal,
-            subtotal,
+        const normalizedItems = await this.prepareProposalItems(
+          tx,
+          createProposalDto.items,
+        );
+        const usesManagedPayment =
+          origin === ProposalOrigin.MANITEC &&
+          (createProposalDto.type === ProposalType.PARTS_AND_SERVICES ||
+            createProposalDto.type === ProposalType.CONTRACT);
+        if (usesManagedPayment) {
+          await this.requireAvailablePaymentProfiles(
+            tx,
+            normalizedItems,
+            createProposalDto,
+          );
+        }
+        const paymentSelection = await this.preparePaymentSelections(
+          tx,
+          createProposalDto,
+        );
+        const paymentDetails =
+          paymentSelection?.details ??
+          (usesManagedPayment
+            ? null
+            : (createProposalDto.paymentDetails ?? null));
+        const operationalExpenses = await this.prepareOperationalExpenses(
+          tx,
+          createProposalDto.operationalExpenses,
+        );
+        const itemsSubtotal = this.roundCurrency(
+          this.calculateTotal(normalizedItems),
+        );
+        const subtotal = this.roundCurrency(
+          itemsSubtotal + operationalExpenses.total,
+        );
+        const allowOperationalExpenseDiscount = Boolean(
+          createProposalDto.allowOperationalExpenseDiscount,
+        );
+        const discountableSubtotal = allowOperationalExpenseDiscount
+          ? subtotal
+          : itemsSubtotal;
+        const discountValue = this.roundCurrency(
+          Math.max(0, Number(createProposalDto.discount || 0)),
+        );
+        if (
+          !Number.isFinite(discountValue) ||
+          discountValue > discountableSubtotal
+        ) {
+          throw new BadRequestException(
+            allowOperationalExpenseDiscount
+              ? 'O desconto geral nao pode superar o subtotal da proposta.'
+              : 'O desconto nao pode superar o subtotal de pecas e servicos quando as despesas operacionais estiverem protegidas.',
+          );
+        }
+        if (!editorDraft)
+          await checkProposalPricing(
+            this.prisma,
+            actorUserId,
+            normalizedItems,
             discountValue,
+            createProposalDto.commercialGeneratorId,
+          );
+        const calculatedTotal = this.roundCurrency(subtotal - discountValue);
+        if (createProposalDto.paymentPlan) {
+          const payment = resolvePaymentPlan(
+            createProposalDto.paymentPlan,
             calculatedTotal,
-          }),
-          userId: sellerUserId,
-          type: createProposalDto.type,
-          origin,
-          externalReference: createProposalDto.externalReference?.trim(),
-          externalCurrency:
-            createProposalDto.externalCurrency?.trim().toUpperCase() || 'BRL',
-          totalValue: calculatedTotal,
-          operationalExpenses:
-            operationalExpenses.items as unknown as Prisma.InputJsonValue,
-          operationalExpensesTotal: operationalExpenses.total,
-          allowOperationalExpenseDiscount,
-          validUntil: createProposalDto.validUntil
-            ? new Date(createProposalDto.validUntil)
-            : null,
-          scope: createProposalDto.scope,
-          freight: createProposalDto.freight,
-          paymentTerm: createProposalDto.paymentTerm,
-          deliveryLeadTimeDays: createProposalDto.deliveryLeadTimeDays,
-          paymentDetails: createProposalDto.paymentDetails,
-          hasDownPayment: Boolean(createProposalDto.hasDownPayment),
-          downPaymentAmount: createProposalDto.hasDownPayment
-            ? createProposalDto.downPaymentAmount
-            : null,
-          installmentCount: createProposalDto.installmentCount,
-          installmentIntervalDays:
-            createProposalDto.installmentIntervalDays ?? 30,
-          firstDueDate: createProposalDto.firstDueDate
-            ? new Date(createProposalDto.firstDueDate)
-            : null,
-          internalNotes: createProposalDto.internalNotes,
-          externalNotes: createProposalDto.externalNotes,
-          discount: discountValue,
-          items: {
-            create: normalizedItems.map((item) => ({
-              kind: item.kind,
-              description: item.description,
-              catalogItemId: item.catalogItemId,
-              quantity: item.quantity,
-              hours: item.hours,
-              unitPrice: item.unitPrice,
-              discountPercent: item.discountPercent,
-              hourType: item.hourType,
-              technicianType: item.technicianType,
-              totalPrice: item.totalPrice,
-            })),
-          },
-        },
-      });
+          );
+          createProposalDto.paymentPlan = payment.plan;
+          createProposalDto.hasDownPayment = payment.hasDownPayment;
+          createProposalDto.downPaymentAmount = payment.downPaymentAmount;
+          createProposalDto.installmentCount = payment.installmentCount;
+          createProposalDto.firstDueDate = undefined;
+          createProposalDto.installmentIntervalDays = undefined;
+        }
+        this.validateCommercialTerms(createProposalDto, calculatedTotal);
 
-      await this.createMovement(
-        tx,
-        proposal.id,
-        actorUserId ?? sellerUserId,
-        'CREATE_DRAFT',
-        null,
-        ProposalStatus.DRAFT,
-        'Proposta criada em rascunho.',
-      );
-      await this.auditLogsService.record(
-        {
-          domain: AuditDomain.PROPOSALS,
-          entityType: 'PROPOSAL',
-          entityId: proposal.id,
-          action: 'CREATE',
-          actorUserId: actorUserId ?? sellerUserId,
-          afterPayload: {
+        const nextCode = await this.generateNextNewCode(tx);
+        const parsed = this.parseProposalCode(nextCode);
+
+        const proposal = await tx.proposal.create({
+          data: {
+            code: nextCode,
+            baseSequence: parsed?.sequence,
+            revision: 0,
             status: ProposalStatus.DRAFT,
-            totalValue: calculatedTotal,
             clientId: createProposalDto.clientId,
-            salesOpportunityId: linkedOpportunity?.id ?? null,
-            sellerUserId,
-          },
-        },
-        tx,
-      );
-
-      return tx.proposal.findUnique({
-        where: { id: proposal.id },
-        include: {
-          client: true,
-          commercialGenerator: {
-            select: COMMERCIAL_GENERATOR_PROPOSAL_SELECT,
-          },
-          postSaleGenerator: { select: { id: true, name: true } },
-          items: { include: { catalogItem: true } },
-          salesOpportunity: {
-            select: {
-              id: true,
-              title: true,
-              stage: true,
-              pipeline: true,
-              opportunityType: true,
+            salesOpportunityId: linkedOpportunity?.id,
+            generatorId: createProposalDto.generatorId,
+            commercialGeneratorId: commercialGenerator?.id,
+            sizingSnapshot: createProposalDto.sizingSnapshot as
+              | Prisma.InputJsonValue
+              | undefined,
+            commercialSnapshot: this.buildCommercialSnapshot({
+              origin,
+              dto: {
+                ...createProposalDto,
+                paymentDetails: paymentDetails ?? undefined,
+              },
+              generator: commercialGenerator,
+              items: normalizedItems,
+              operationalExpenses: operationalExpenses.items,
+              itemsSubtotal,
+              subtotal,
+              discountValue,
+              calculatedTotal,
+            }),
+            userId: sellerUserId,
+            type: createProposalDto.type,
+            origin,
+            externalReference: createProposalDto.externalReference?.trim(),
+            externalCurrency:
+              createProposalDto.externalCurrency?.trim().toUpperCase() || 'BRL',
+            totalValue: calculatedTotal,
+            operationalExpenses:
+              operationalExpenses.items as unknown as Prisma.InputJsonValue,
+            operationalExpensesTotal: operationalExpenses.total,
+            allowOperationalExpenseDiscount,
+            validUntil: createProposalDto.validUntil
+              ? new Date(createProposalDto.validUntil)
+              : null,
+            scope: createProposalDto.scope,
+            freight: createProposalDto.freight,
+            paymentTerm: createProposalDto.paymentTerm,
+            deliveryLeadTimeDays: createProposalDto.deliveryLeadTimeDays,
+            paymentDetails,
+            paymentSelections: paymentSelection?.snapshots as unknown as
+              | Prisma.InputJsonValue
+              | undefined,
+            paymentPlan: createProposalDto.paymentPlan as unknown as
+              | Prisma.InputJsonValue
+              | undefined,
+            hasDownPayment: Boolean(createProposalDto.hasDownPayment),
+            downPaymentAmount: createProposalDto.hasDownPayment
+              ? createProposalDto.downPaymentAmount
+              : null,
+            installmentCount: createProposalDto.installmentCount,
+            installmentIntervalDays:
+              createProposalDto.installmentIntervalDays ?? 30,
+            firstDueDate: createProposalDto.firstDueDate
+              ? new Date(createProposalDto.firstDueDate)
+              : null,
+            internalNotes: createProposalDto.internalNotes,
+            externalNotes: createProposalDto.externalNotes,
+            discount: discountValue,
+            items: {
+              create: normalizedItems.map((item) => ({
+                kind: item.kind,
+                description: item.description,
+                catalogItemId: item.catalogItemId,
+                quantity: item.quantity,
+                hours: item.hours,
+                unitPrice: item.unitPrice,
+                discountPercent: item.discountPercent,
+                hourType: item.hourType,
+                technicianType: item.technicianType,
+                totalPrice: item.totalPrice,
+              })),
             },
           },
-        },
-      });
-    });
+        });
+
+        if (
+          createProposalDto.technicalScopeReview ||
+          (phase1Type(createProposalDto.type, createProposalDto.origin) &&
+            createProposalDto.technicalScopeClassifications?.length)
+        ) {
+          const technicalScopeSnapshot = await persistProposalTechnicalScope(
+            tx,
+            {
+              proposalId: proposal.id,
+              actorUserId: actorUserId ?? sellerUserId,
+              items: normalizedItems,
+              clientId: createProposalDto.clientId,
+              generatorId: createProposalDto.generatorId,
+              type: createProposalDto.type,
+              scope: createProposalDto.scope,
+              review: createProposalDto.technicalScopeReview,
+              technicalScopeClassifications:
+                createProposalDto.technicalScopeClassifications,
+            },
+          );
+          if (technicalScopeSnapshot !== undefined) {
+            await tx.proposal.update({
+              where: { id: proposal.id },
+              data: { technicalScopeSnapshot },
+            });
+          }
+        }
+
+        await this.createMovement(
+          tx,
+          proposal.id,
+          actorUserId ?? sellerUserId,
+          'CREATE_DRAFT',
+          null,
+          ProposalStatus.DRAFT,
+          'Proposta criada em rascunho.',
+        );
+        await this.auditLogsService.record(
+          {
+            domain: AuditDomain.PROPOSALS,
+            entityType: 'PROPOSAL',
+            entityId: proposal.id,
+            action: 'CREATE',
+            actorUserId: actorUserId ?? sellerUserId,
+            afterPayload: {
+              status: ProposalStatus.DRAFT,
+              totalValue: calculatedTotal,
+              clientId: createProposalDto.clientId,
+              salesOpportunityId: linkedOpportunity?.id ?? null,
+              sellerUserId,
+            },
+          },
+          tx,
+        );
+
+        if (phase1Type(proposal.type, proposal.origin)) {
+          const report = await auditProposalConference(
+            tx,
+            proposal.id,
+            actorUserId,
+            createProposalDto.reviewAcknowledgements,
+          );
+          if (editorDraft) {
+            await tx.systemAuditLog.create({
+              data: {
+                domain: AuditDomain.PROPOSALS,
+                entityType: 'PROPOSAL_EDITOR_PROMOTION',
+                entityId: editorDraft.id,
+                action: 'PROMOTE',
+                actorUserId,
+                afterPayload: {
+                  proposalId: proposal.id,
+                  payloadHash: editorPayloadHash,
+                },
+              },
+            });
+            const ready = report?.blocks('submit').length === 0;
+            const row = await tx.proposalEditingDraft.update({
+              where: { id: editorDraft.id },
+              data: {
+                proposalId: proposal.id,
+                firstReadyAt: ready ? new Date() : undefined,
+              },
+            });
+            if (ready)
+              await tx.systemAuditLog.create({
+                data: {
+                  domain: AuditDomain.PROPOSALS,
+                  entityType: 'PROPOSAL_EDITOR_METRICS',
+                  entityId: row.id,
+                  action: 'FIRST_READY',
+                  actorUserId,
+                  afterPayload: {
+                    proposalId: proposal.id,
+                    elapsedMs:
+                      row.firstReadyAt!.getTime() - row.createdAt.getTime(),
+                    clicks: row.clicks,
+                    edits: row.edits,
+                    proposalType: proposal.type,
+                  },
+                },
+              });
+          }
+        }
+        return tx.proposal.findUnique({
+          where: { id: proposal.id },
+          include: {
+            client: true,
+            commercialGenerator: {
+              select: COMMERCIAL_GENERATOR_PROPOSAL_SELECT,
+            },
+            postSaleGenerator: { select: { id: true, name: true } },
+            items: { include: { catalogItem: true } },
+            salesOpportunity: {
+              select: {
+                id: true,
+                title: true,
+                stage: true,
+                pipeline: true,
+                opportunityType: true,
+              },
+            },
+          },
+        });
+      },
+      phase1Type(createProposalDto.type, origin)
+        ? { maxWait: 10000, timeout: 30000 }
+        : undefined,
+    );
   }
 
   async revise(id: string, revisedByUserId?: string, reason?: string) {
@@ -406,6 +662,8 @@ export class ProposalsService {
         tx,
         source.clientId,
         source.paymentTerm,
+        source.id,
+        source.paymentPlan,
       );
 
       const sequence =
@@ -439,10 +697,13 @@ export class ProposalsService {
           totalValue: source.totalValue,
           validUntil: source.validUntil,
           scope: source.scope,
+          technicalScopeSnapshot: source.technicalScopeSnapshot ?? undefined,
           freight: source.freight,
           paymentTerm: source.paymentTerm,
           deliveryLeadTimeDays: source.deliveryLeadTimeDays,
           paymentDetails: source.paymentDetails,
+          paymentSelections: source.paymentSelections ?? undefined,
+          paymentPlan: source.paymentPlan ?? Prisma.JsonNull,
           hasDownPayment: source.hasDownPayment,
           downPaymentAmount: source.downPaymentAmount,
           installmentCount: source.installmentCount,
@@ -533,7 +794,7 @@ export class ProposalsService {
     await this.assertInternalActor(actorUserId);
     const proposal = await this.requireProposal(id, actorUserId);
     if (proposal.status !== ProposalStatus.DRAFT) {
-      throw new Error(
+      throw new BadRequestException(
         'Somente a revisao atual em rascunho pode ir para analise da diretoria.',
       );
     }
@@ -543,14 +804,18 @@ export class ProposalsService {
       proposal.clientId,
       proposal.paymentTerm,
       proposal.id,
+      proposal.paymentPlan,
     );
 
+    await assertProposalConference(this.prisma, id, actorUserId, 'submit');
     const updated = await this.changeStatus(
       id,
       ProposalStatus.BOARD_REVIEW,
       actorUserId,
       'SUBMIT_BOARD_REVIEW',
       'Encaminhada para analise da diretoria.',
+      undefined,
+      ProposalStatus.DRAFT,
     );
 
     if (proposal.type === ProposalType.GENERATOR_SALE && actorUserId) {
@@ -569,15 +834,21 @@ export class ProposalsService {
   async boardApprove(id: string, actorUserId?: string) {
     await this.assertInternalActor(actorUserId);
     const proposal = await this.requireProposal(id, actorUserId);
+    if (phase1Type(proposal.type, proposal.origin))
+      await conferenceActor(this.prisma, actorUserId || '', 'approve');
     if (proposal.status !== ProposalStatus.BOARD_REVIEW) {
-      throw new Error('A proposta precisa estar em analise da diretoria.');
+      throw new BadRequestException(
+        'A proposta precisa estar em analise da diretoria.',
+      );
     }
 
+    await assertProposalConference(this.prisma, id, actorUserId, 'approve');
     await this.assertCommercialEligibility(
       this.prisma,
       proposal.clientId,
       proposal.paymentTerm,
       proposal.id,
+      proposal.paymentPlan,
     );
 
     if (proposal.type === ProposalType.GENERATOR_SALE && actorUserId) {
@@ -606,6 +877,8 @@ export class ProposalsService {
       actorUserId,
       'BOARD_APPROVE',
       'Diretoria aprovou e liberou para analise do cliente.',
+      undefined,
+      ProposalStatus.BOARD_REVIEW,
     );
   }
 
@@ -621,7 +894,9 @@ export class ProposalsService {
     );
     const proposal = await this.requireProposal(id, actorUserId);
     if (proposal.status !== ProposalStatus.BOARD_REVIEW) {
-      throw new Error('A proposta precisa estar em analise da diretoria.');
+      throw new BadRequestException(
+        'A proposta precisa estar em analise da diretoria.',
+      );
     }
 
     if (proposal.type === ProposalType.GENERATOR_SALE && actorUserId) {
@@ -658,7 +933,9 @@ export class ProposalsService {
     const rejectionReason = this.requireActionReason(reason, 'reprovacao');
     const proposal = await this.requireProposal(id, actorUserId);
     if (proposal.status !== ProposalStatus.BOARD_REVIEW) {
-      throw new Error('A proposta precisa estar em analise da diretoria.');
+      throw new BadRequestException(
+        'A proposta precisa estar em analise da diretoria.',
+      );
     }
 
     if (proposal.type === ProposalType.GENERATOR_SALE && actorUserId) {
@@ -693,39 +970,41 @@ export class ProposalsService {
   async clientApprove(id: string, actorUserId?: string) {
     const proposal = await this.requireProposal(id, actorUserId);
     if (proposal.status !== ProposalStatus.CLIENT_REVIEW) {
-      throw new Error('A proposta precisa estar em analise do cliente.');
+      throw new BadRequestException(
+        'A proposta precisa estar em analise do cliente.',
+      );
     }
 
+    let ordemDeServico: Awaited<
+      ReturnType<typeof createApprovedProposalOrder>
+    > = null;
     const updated = await this.changeStatus(
       id,
       ProposalStatus.WON,
       actorUserId,
       'CLIENT_APPROVE',
       'Cliente aprovou a proposta.',
+      async (tx, approvedProposal) => {
+        ordemDeServico = await createApprovedProposalOrder(
+          tx,
+          approvedProposal,
+        );
+      },
+      ProposalStatus.CLIENT_REVIEW,
     );
 
-    if (
-      proposal.generatorId &&
-      (proposal.type === ProposalType.PARTS_AND_SERVICES ||
-        proposal.type === ProposalType.SERVICES)
-    ) {
-      const os = await this.prisma.maintenanceOrder.create({
-        data: {
-          title: `OS Automatica - Proposta ${proposal.code}`,
-          description: `Ordem gerada automaticamente apos aprovacao do cliente. Valor: R$ ${proposal.totalValue}`,
-          generatorId: proposal.generatorId,
-        },
-      });
-
+    if (ordemDeServico) {
       return {
         message: 'Proposta aprovada pelo cliente e O.S. criada.',
         proposal: updated,
-        ordemDeServico: os,
+        ordemDeServico,
       };
     }
 
     return {
-      message: 'Proposta aprovada pelo cliente.',
+      message: (await proposalEntryPending(this.prisma, id))
+        ? 'Proposta aprovada. Aguardando confirmação da entrada pelo financeiro.'
+        : 'Proposta aprovada pelo cliente.',
       proposal: updated,
     };
   }
@@ -733,7 +1012,9 @@ export class ProposalsService {
   async clientReject(id: string, actorUserId?: string, note?: string) {
     const proposal = await this.requireProposal(id, actorUserId);
     if (proposal.status !== ProposalStatus.CLIENT_REVIEW) {
-      throw new Error('A proposta precisa estar em analise do cliente.');
+      throw new BadRequestException(
+        'A proposta precisa estar em analise do cliente.',
+      );
     }
 
     return this.changeStatus(
@@ -754,17 +1035,20 @@ export class ProposalsService {
     await this.assertInternalActor(actorUserId);
     const proposal = await this.requireProposal(id, actorUserId);
     if (proposal.status !== ProposalStatus.CLIENT_REVIEW) {
-      throw new Error(
+      throw new BadRequestException(
         'Somente propostas em analise do cliente podem solicitar desconto.',
       );
     }
 
-    if (!actorUserId) throw new Error('Usuario solicitante nao identificado.');
-    if (discountPercent <= 0) {
-      throw new Error('Percentual de desconto deve ser maior que zero.');
+    if (!actorUserId)
+      throw new BadRequestException('Usuario solicitante nao identificado.');
+    if (!Number.isFinite(discountPercent) || discountPercent <= 0) {
+      throw new BadRequestException(
+        'Percentual de desconto deve ser maior que zero.',
+      );
     }
     if (discountPercent > 100) {
-      throw new Error('Percentual de desconto invalido.');
+      throw new BadRequestException('Percentual de desconto invalido.');
     }
 
     const actor = await this.prisma.user.findUnique({
@@ -772,11 +1056,17 @@ export class ProposalsService {
       select: {
         id: true,
         approvalDiscountLimit: true,
+        role: true,
+        isSystemMaster: true,
       },
     });
-    if (!actor) throw new Error('Usuario solicitante nao encontrado.');
+    if (!actor)
+      throw new BadRequestException('Usuario solicitante nao encontrado.');
 
-    const approvalLimit = Number(actor.approvalDiscountLimit ?? 7);
+    const approvalLimit =
+      actor.role === UserRole.ADMIN || actor.isSystemMaster
+        ? 100
+        : Number(actor.approvalDiscountLimit ?? 0);
     const requiresApproval = discountPercent > approvalLimit;
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -859,7 +1149,7 @@ export class ProposalsService {
 
       if (!proposal) throw new NotFoundException('Proposta nao encontrada.');
       if (proposal.status !== ProposalStatus.WON) {
-        throw new Error(
+        throw new BadRequestException(
           'Apenas propostas ganhas podem ser convertidas em contrato.',
         );
       }
@@ -869,7 +1159,7 @@ export class ProposalsService {
         );
       }
       if (!proposal.generatorId) {
-        throw new Error(
+        throw new BadRequestException(
           'A proposta precisa ter equipamento vinculado para gerar contrato.',
         );
       }
@@ -878,6 +1168,7 @@ export class ProposalsService {
           'A proposta precisa ter valor maior que zero para gerar contrato.',
         );
       }
+      await assertProposalFinancialRelease(tx, proposal.id);
       if (proposal.generatedContract) {
         return {
           message: 'Contrato ja havia sido gerado para esta proposta.',
@@ -963,8 +1254,14 @@ export class ProposalsService {
     });
   }
 
-  getPricingOptions() {
+  async getPricingOptions() {
+    const rates = await this.prisma.proposalHourlyRate.findMany({
+      where: { isActive: true },
+      select: { hourType: true, technicianType: true, unitPrice: true },
+      orderBy: [{ sortOrder: 'asc' }, { technicianType: 'asc' }],
+    });
     return {
+      rates,
       hourTypes: [
         {
           value: ProposalHourType.ONE_OFF,
@@ -993,6 +1290,10 @@ export class ProposalsService {
         },
       ],
       technicianTypes: [
+        {
+          value: ProposalTechnicianType.ASSISTANT,
+          label: 'Assistente',
+        },
         {
           value: ProposalTechnicianType.JUNIOR_TECHNICIAN,
           label: 'Tecnico junior',
@@ -1037,11 +1338,69 @@ export class ProposalsService {
         category: true,
         description: true,
         scopeText: true,
+        sourceFileName: true,
         tags: true,
         compatibleOpportunityTypes: true,
       },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
+  }
+
+  async importScopeTemplate(file?: { originalname?: string; buffer?: Buffer }) {
+    if (!file?.buffer || !/\.txt$/i.test(file.originalname || '')) {
+      throw new BadRequestException('Selecione um arquivo .txt valido.');
+    }
+    if (file.buffer.length === 0 || file.buffer.length > 256 * 1024) {
+      throw new BadRequestException('O TXT deve ter entre 1 byte e 256 KB.');
+    }
+    let content: string;
+    if (file.buffer[0] === 0xff && file.buffer[1] === 0xfe) {
+      content = new TextDecoder('utf-16le').decode(file.buffer.subarray(2));
+    } else {
+      try {
+        content = new TextDecoder('utf-8', { fatal: true }).decode(file.buffer);
+      } catch {
+        content = new TextDecoder('windows-1252').decode(file.buffer);
+      }
+    }
+    const scopeText = content.replace(/^\uFEFF/, '').trim();
+    const hasInvalidControls = Array.from(scopeText).some((character) => {
+      const code = character.charCodeAt(0);
+      return code <= 8 || code === 11 || (code >= 14 && code <= 31);
+    });
+    if (scopeText.length < 10 || hasInvalidControls) {
+      throw new BadRequestException(
+        'O arquivo nao contem um escopo em texto valido.',
+      );
+    }
+    const sourceFileName = (file.originalname || '').slice(0, 240);
+    return this.prisma.proposalScopeTemplate.create({
+      data: {
+        name:
+          sourceFileName.replace(/\.txt$/i, '').trim() || 'Escopo importado',
+        category: 'Arquivo TXT',
+        sourceFileName,
+        scopeText,
+        active: true,
+      },
+    });
+  }
+
+  async getPaymentProfiles() {
+    const profiles = await this.prisma.proposalPaymentProfile.findMany({
+      where: { isActive: true },
+      orderBy: [{ purpose: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
+      include: { issuerCompany: { select: { id: true, companyName: true } } },
+    });
+    return Promise.all(
+      profiles.map(async (profile) => ({
+        ...profile,
+        qrCodeDataUrl:
+          profile.method === ProposalPaymentMethod.PIX && profile.pixCopyPaste
+            ? await toDataURL(profile.pixCopyPaste, { margin: 1, width: 180 })
+            : null,
+      })),
+    );
   }
 
   async lookupGenerators(query?: string, take?: string, clientId?: string) {
@@ -1192,7 +1551,7 @@ export class ProposalsService {
       where:
         scope?.role === UserRole.CLIENT
           ? { clientId: this.requireLinkedClientId(scope) }
-          : undefined,
+          : await proposalScope(this.prisma, actorUserId),
       include: {
         items: true,
         client: true,
@@ -1221,10 +1580,24 @@ export class ProposalsService {
 
   async findOne(id: string, actorUserId?: string) {
     const proposal = await this.prisma.proposal.findUnique({
-      where: { id },
+      where: { id, AND: [await proposalScope(this.prisma, actorUserId)] },
       include: {
         items: {
-          include: { catalogItem: true },
+          include: {
+            catalogItem: {
+              select: {
+                id: true,
+                name: true,
+                sku: true,
+                type: true,
+                unit: true,
+                basePrice: true,
+                description: true,
+                commercialDescription: true,
+                manufacturerPartNumber: true,
+              },
+            },
+          },
         },
         client: true,
         generator: true,
@@ -1400,6 +1773,7 @@ export class ProposalsService {
           'Somente uma proposta ganha de gerador pode seguir para o pos-venda.',
         );
       }
+      await assertProposalFinancialRelease(tx, proposal.id);
       if (proposal.postSaleGenerator) {
         return {
           message: 'Equipamento de pos-venda ja havia sido criado.',
@@ -1488,7 +1862,7 @@ export class ProposalsService {
       : null;
 
     if (!actor || actor.role !== UserRole.ADMIN) {
-      throw new Error(
+      throw new ForbiddenException(
         'Apenas diretoria/administrador pode acessar este painel.',
       );
     }
@@ -1550,7 +1924,46 @@ export class ProposalsService {
     actorUserId?: string,
   ) {
     await this.assertInternalActor(actorUserId);
+    if (updateProposalDto.paymentPlan)
+      updateProposalDto.paymentTerm =
+        paymentPresetLabel(updateProposalDto.paymentPlan) ||
+        updateProposalDto.paymentTerm;
     const current = await this.requireProposal(id, actorUserId);
+    if (
+      phase1Type(current.type, current.origin) &&
+      updateProposalDto.status &&
+      updateProposalDto.status !== current.status
+    ) {
+      if (Object.keys(updateProposalDto).some((key) => key !== 'status'))
+        throw new BadRequestException(
+          'Salve o conteúdo antes de executar uma ação de aprovação.',
+        );
+      if (
+        updateProposalDto.status === ProposalStatus.BOARD_REVIEW &&
+        current.status === ProposalStatus.DRAFT
+      )
+        return this.submitForBoardReview(id, actorUserId);
+      if (
+        updateProposalDto.status === ProposalStatus.CLIENT_REVIEW &&
+        current.status === ProposalStatus.BOARD_REVIEW
+      )
+        return this.boardApprove(id, actorUserId);
+      if (
+        updateProposalDto.status === ProposalStatus.WON &&
+        current.status === ProposalStatus.CLIENT_REVIEW
+      ) {
+        await conferenceActor(this.prisma, actorUserId || '', 'approve');
+        return (await this.clientApprove(id, actorUserId)).proposal;
+      }
+      if (
+        updateProposalDto.status === ProposalStatus.LOST &&
+        current.status === ProposalStatus.CLIENT_REVIEW
+      )
+        return this.clientReject(id, actorUserId);
+      throw new BadRequestException(
+        'Use as ações de aprovação e revisão desta proposta.',
+      );
+    }
     const contentFields = Object.keys(updateProposalDto).filter(
       (field) => field !== 'status',
     );
@@ -1589,8 +2002,8 @@ export class ProposalsService {
       if (current.status !== nextStatus) {
         const allowed = this.kanbanTransitions[current.status] || [];
         if (!allowed.includes(nextStatus)) {
-          throw new Error(
-            `Transicao invalida no fluxo: ${current.status} -> ${nextStatus}.`,
+          throw new BadRequestException(
+            'Transicao invalida no fluxo. Use as acoes de aprovacao e revisao da proposta.',
           );
         }
       }
@@ -1600,133 +2013,414 @@ export class ProposalsService {
       ...updateProposalDto,
     } as Prisma.ProposalUncheckedUpdateInput;
     delete (header as { items?: unknown }).items;
+    delete (header as { editingDraftId?: unknown }).editingDraftId;
+    delete (header as { expectedUpdatedAt?: unknown }).expectedUpdatedAt;
+    delete (header as { reviewAcknowledgements?: unknown })
+      .reviewAcknowledgements;
+    delete (header as { technicalScopeReview?: unknown }).technicalScopeReview;
+    delete (header as { technicalScopeClassifications?: unknown })
+      .technicalScopeClassifications;
     delete (header as { operationalExpenses?: unknown }).operationalExpenses;
+    delete (header as { partsPaymentProfileId?: unknown })
+      .partsPaymentProfileId;
+    delete (header as { servicesPaymentProfileId?: unknown })
+      .servicesPaymentProfileId;
 
-    return this.prisma.$transaction(async (tx) => {
-      const before = await tx.proposal.findUnique({
-        where: { id },
-      });
-
-      if (
-        updateProposalDto.clientId !== undefined ||
-        updateProposalDto.paymentTerm !== undefined
-      ) {
-        await this.assertCommercialEligibility(
-          tx,
-          updateProposalDto.clientId ?? current.clientId,
-          updateProposalDto.paymentTerm ?? current.paymentTerm,
-          id,
-        );
-      }
-      await this.assertGeneratorBelongsToClient(
-        tx,
-        updateProposalDto.generatorId ?? current.generatorId,
-        updateProposalDto.clientId ?? current.clientId,
-      );
-
-      if (
-        updateProposalDto.type !== undefined ||
-        updateProposalDto.origin !== undefined ||
-        updateProposalDto.generatorId !== undefined ||
-        updateProposalDto.commercialGeneratorId !== undefined
-      ) {
-        const nextType = updateProposalDto.type ?? current.type;
-        const nextOrigin = updateProposalDto.origin ?? current.origin;
-        const nextInstalledGeneratorId =
-          updateProposalDto.generatorId ?? current.generatorId;
-        const nextCommercialGeneratorId =
-          updateProposalDto.commercialGeneratorId ??
-          current.commercialGeneratorId;
-
-        if (
-          nextOrigin === ProposalOrigin.EXTERNAL &&
-          (nextCommercialGeneratorId || current.sizingSnapshot)
-        ) {
-          throw new BadRequestException(
-            'Proposta externa nao utiliza dimensionamento ou catalogo comercial da Manitec.',
+    return this.prisma.$transaction(
+      async (tx) => {
+        if (updateProposalDto.expectedUpdatedAt || phase1Enabled()) {
+          await tx.$executeRawUnsafe(
+            'SELECT pg_advisory_xact_lock(hashtext($1))',
+            'proposal-write:' + id,
           );
-        }
-
-        if (
-          nextType === ProposalType.GENERATOR_SALE &&
-          nextInstalledGeneratorId
-        ) {
-          throw new BadRequestException(
-            'Venda de gerador nao pode usar um equipamento instalado no cliente.',
-          );
-        }
-
-        if (
-          nextType === ProposalType.GENERATOR_SALE &&
-          nextOrigin === ProposalOrigin.MANITEC
-        ) {
-          if (!nextCommercialGeneratorId) {
-            throw new BadRequestException(
-              'Selecione um gerador Generac ativo do catalogo comercial.',
+          const latest = await tx.proposal.findUnique({ where: { id } });
+          if (
+            !latest ||
+            latest.updatedAt.getTime() !== current.updatedAt.getTime() ||
+            (updateProposalDto.expectedUpdatedAt &&
+              latest.updatedAt.getTime() !==
+                new Date(updateProposalDto.expectedUpdatedAt).getTime()) ||
+            latest.status !== current.status
+          )
+            throw new ConflictException(
+              'A proposta mudou em outra aba. Seu preenchimento foi preservado; atualize a versao antes de salvar.',
             );
-          }
-          const commercialGenerator = await tx.commercialGenerator.findFirst({
-            where: { id: nextCommercialGeneratorId, isActive: true },
-            select: { id: true },
+        }
+        let editorDraftAuthorized = false;
+        if (
+          updateProposalDto.editingDraftId &&
+          phase1Type(current.type, current.origin)
+        ) {
+          const draft = await tx.proposalEditingDraft.findFirst({
+            where: {
+              id: updateProposalDto.editingDraftId,
+              ownerUserId: actorUserId,
+              proposalId: id,
+            },
           });
-          if (!commercialGenerator) {
-            throw new BadRequestException(
-              'Selecione um gerador Generac ativo do catalogo comercial.',
-            );
-          }
-        } else if (
-          nextType !== ProposalType.GENERATOR_SALE &&
-          nextCommercialGeneratorId
+          if (!draft)
+            throw new ForbiddenException('Rascunho de edicao indisponivel.');
+          editorDraftAuthorized = true;
+        }
+
+        const before = await tx.proposal.findUnique({
+          where: { id },
+        });
+
+        if (
+          updateProposalDto.clientId !== undefined ||
+          updateProposalDto.paymentTerm !== undefined ||
+          updateProposalDto.paymentPlan !== undefined
         ) {
-          throw new BadRequestException(
-            'Gerador comercial so pode ser vinculado a proposta de venda de gerador.',
+          await this.assertCommercialEligibility(
+            tx,
+            updateProposalDto.clientId ?? current.clientId,
+            updateProposalDto.paymentTerm ?? current.paymentTerm,
+            id,
+            updateProposalDto.paymentPlan ?? current.paymentPlan,
           );
         }
-      }
-
-      const updated = await tx.proposal.update({
-        where: { id },
-        data: header,
-      });
-
-      if (
-        updateProposalDto.status &&
-        current.status !== updateProposalDto.status
-      ) {
-        await this.createMovement(
+        await this.assertGeneratorBelongsToClient(
           tx,
-          id,
-          actorUserId,
-          actorIsAdmin ? 'ADMIN_MANUAL_STATUS_UPDATE' : 'MANUAL_STATUS_UPDATE',
-          current.status,
-          updateProposalDto.status,
-          actorIsAdmin
-            ? 'Status alterado manualmente por administrador.'
-            : 'Status alterado manualmente no kanban.',
+          updateProposalDto.generatorId ?? current.generatorId,
+          updateProposalDto.clientId ?? current.clientId,
         );
 
-        await this.syncOpportunityFromProposalStatus(
+        if (
+          updateProposalDto.type !== undefined ||
+          updateProposalDto.origin !== undefined ||
+          updateProposalDto.generatorId !== undefined ||
+          updateProposalDto.commercialGeneratorId !== undefined
+        ) {
+          const nextType = updateProposalDto.type ?? current.type;
+          const nextOrigin = updateProposalDto.origin ?? current.origin;
+          const nextInstalledGeneratorId =
+            updateProposalDto.generatorId ?? current.generatorId;
+          const nextCommercialGeneratorId =
+            updateProposalDto.commercialGeneratorId ??
+            current.commercialGeneratorId;
+
+          if (
+            nextOrigin === ProposalOrigin.EXTERNAL &&
+            (nextCommercialGeneratorId || current.sizingSnapshot)
+          ) {
+            throw new BadRequestException(
+              'Proposta externa nao utiliza dimensionamento ou catalogo comercial da Manitec.',
+            );
+          }
+
+          if (
+            nextType === ProposalType.GENERATOR_SALE &&
+            nextInstalledGeneratorId
+          ) {
+            throw new BadRequestException(
+              'Venda de gerador nao pode usar um equipamento instalado no cliente.',
+            );
+          }
+
+          if (
+            nextType === ProposalType.GENERATOR_SALE &&
+            nextOrigin === ProposalOrigin.MANITEC
+          ) {
+            if (!nextCommercialGeneratorId) {
+              throw new BadRequestException(
+                'Selecione um gerador Generac ativo do catalogo comercial.',
+              );
+            }
+            const commercialGenerator = await tx.commercialGenerator.findFirst({
+              where: { id: nextCommercialGeneratorId, isActive: true },
+              select: { id: true },
+            });
+            if (!commercialGenerator) {
+              throw new BadRequestException(
+                'Selecione um gerador Generac ativo do catalogo comercial.',
+              );
+            }
+          } else if (
+            nextType !== ProposalType.GENERATOR_SALE &&
+            nextCommercialGeneratorId
+          ) {
+            throw new BadRequestException(
+              'Gerador comercial so pode ser vinculado a proposta de venda de gerador.',
+            );
+          }
+        }
+
+        let updated: Proposal;
+        if (updateProposalDto.items !== undefined) {
+          const editDto = {
+            ...updateProposalDto,
+            clientId: updateProposalDto.clientId ?? current.clientId,
+            type: updateProposalDto.type ?? current.type,
+            origin: updateProposalDto.origin ?? current.origin,
+            items: updateProposalDto.items,
+          } as CreateProposalDto;
+          const sellerUserId = editDto.userId ?? current.userId;
+          if (!sellerUserId) {
+            throw new BadRequestException(
+              'Informe um vendedor comercial para a proposta.',
+            );
+          }
+          await checkCommercialSeller(
+            this.prisma,
+            actorUserId,
+            current.type,
+            sellerUserId,
+          );
+          await this.assertProposalSeller(tx, sellerUserId);
+          const normalizedItems = await this.prepareProposalItems(
+            tx,
+            editDto.items,
+          );
+          const usesManagedPayment =
+            editDto.origin === ProposalOrigin.MANITEC &&
+            (editDto.type === ProposalType.PARTS_AND_SERVICES ||
+              editDto.type === ProposalType.CONTRACT);
+          if (usesManagedPayment) {
+            await this.requireAvailablePaymentProfiles(
+              tx,
+              normalizedItems,
+              editDto,
+            );
+          }
+          const paymentSelection = await this.preparePaymentSelections(
+            tx,
+            editDto,
+          );
+          const paymentDetails =
+            paymentSelection?.details ??
+            (usesManagedPayment
+              ? null
+              : (editDto.paymentDetails ?? current.paymentDetails));
+          const operationalExpenses = await this.prepareOperationalExpenses(
+            tx,
+            editDto.operationalExpenses ?? [],
+          );
+          const itemsSubtotal = this.roundCurrency(
+            this.calculateTotal(normalizedItems),
+          );
+          const subtotal = this.roundCurrency(
+            itemsSubtotal + operationalExpenses.total,
+          );
+          const allowOperationalExpenseDiscount = Boolean(
+            editDto.allowOperationalExpenseDiscount,
+          );
+          const discountValue = this.roundCurrency(
+            Number(editDto.discount ?? current.discount ?? 0),
+          );
+          const discountableSubtotal = allowOperationalExpenseDiscount
+            ? subtotal
+            : itemsSubtotal;
+          if (
+            !Number.isFinite(discountValue) ||
+            discountValue < 0 ||
+            discountValue > discountableSubtotal
+          ) {
+            throw new BadRequestException(
+              'O desconto nao pode superar o subtotal elegivel da proposta.',
+            );
+          }
+          if (!editorDraftAuthorized)
+            await checkProposalPricing(
+              this.prisma,
+              actorUserId,
+              normalizedItems,
+              discountValue,
+              current.commercialGeneratorId,
+            );
+          const calculatedTotal = this.roundCurrency(subtotal - discountValue);
+          if (editDto.paymentPlan) {
+            const payment = resolvePaymentPlan(
+              editDto.paymentPlan,
+              calculatedTotal,
+            );
+            editDto.paymentPlan = payment.plan;
+            editDto.paymentTerm =
+              paymentPresetLabel(payment.plan) || editDto.paymentTerm;
+            editDto.hasDownPayment = payment.hasDownPayment;
+            editDto.downPaymentAmount = payment.downPaymentAmount;
+            editDto.installmentCount = payment.installmentCount;
+            editDto.firstDueDate = undefined;
+            editDto.installmentIntervalDays = undefined;
+          }
+          this.validateCommercialTerms(editDto, calculatedTotal);
+          const commercialGenerator = current.commercialGeneratorId
+            ? await tx.commercialGenerator.findUnique({
+                where: { id: current.commercialGeneratorId },
+              })
+            : null;
+
+          await tx.proposalItem.deleteMany({ where: { proposalId: id } });
+          updated = await tx.proposal.update({
+            where: { id },
+            data: {
+              clientId: editDto.clientId,
+              generatorId: editDto.generatorId ?? null,
+              userId: sellerUserId,
+              type: editDto.type,
+              totalValue: calculatedTotal,
+              operationalExpenses:
+                operationalExpenses.items as unknown as Prisma.InputJsonValue,
+              operationalExpensesTotal: operationalExpenses.total,
+              allowOperationalExpenseDiscount,
+              commercialSnapshot: this.buildCommercialSnapshot({
+                origin: editDto.origin ?? current.origin,
+                dto: {
+                  ...editDto,
+                  paymentDetails: paymentDetails ?? undefined,
+                },
+                generator: commercialGenerator,
+                items: normalizedItems,
+                operationalExpenses: operationalExpenses.items,
+                itemsSubtotal,
+                subtotal,
+                discountValue,
+                calculatedTotal,
+              }),
+              validUntil: editDto.validUntil
+                ? new Date(editDto.validUntil)
+                : null,
+              scope: editDto.scope ?? null,
+              freight: editDto.freight ?? null,
+              paymentTerm: editDto.paymentTerm ?? null,
+              deliveryLeadTimeDays: editDto.deliveryLeadTimeDays ?? null,
+              paymentDetails,
+              paymentSelections:
+                (paymentSelection?.snapshots as unknown as Prisma.InputJsonValue) ??
+                Prisma.JsonNull,
+              paymentPlan:
+                (editDto.paymentPlan as unknown as Prisma.InputJsonValue) ??
+                Prisma.JsonNull,
+              hasDownPayment: Boolean(editDto.hasDownPayment),
+              downPaymentAmount: editDto.hasDownPayment
+                ? editDto.downPaymentAmount
+                : null,
+              installmentCount: editDto.installmentCount ?? 1,
+              installmentIntervalDays: editDto.installmentIntervalDays ?? 30,
+              firstDueDate: editDto.firstDueDate
+                ? new Date(editDto.firstDueDate)
+                : null,
+              internalNotes: editDto.internalNotes ?? null,
+              externalNotes: editDto.externalNotes ?? null,
+              discount: discountValue,
+              items: {
+                create: normalizedItems.map((item) => ({
+                  kind: item.kind,
+                  description: item.description,
+                  catalogItemId: item.catalogItemId,
+                  quantity: item.quantity,
+                  hours: item.hours,
+                  unitPrice: item.unitPrice,
+                  discountPercent: item.discountPercent,
+                  hourType: item.hourType,
+                  technicianType: item.technicianType,
+                  totalPrice: item.totalPrice,
+                })),
+              },
+            },
+          });
+        } else {
+          updated = await tx.proposal.update({
+            where: { id },
+            data: header,
+          });
+        }
+
+        if (
+          current.status === ProposalStatus.DRAFT &&
+          contentFields.length > 0 &&
+          (updateProposalDto.technicalScopeReview ||
+            updateProposalDto.technicalScopeClassifications?.length ||
+            current.technicalScopeSnapshot)
+        ) {
+          const technicalItems = await tx.proposalItem.findMany({
+            where: { proposalId: id },
+          });
+          const technicalScopeSnapshot = await persistProposalTechnicalScope(
+            tx,
+            {
+              proposalId: id,
+              actorUserId: actorUserId ?? current.userId,
+              items: technicalItems,
+              clientId: updated.clientId,
+              generatorId: updated.generatorId ?? undefined,
+              type: updated.type,
+              scope: updated.scope ?? undefined,
+              review: updateProposalDto.technicalScopeReview,
+              technicalScopeClassifications:
+                updateProposalDto.technicalScopeClassifications,
+              previousSnapshot: current.technicalScopeSnapshot,
+            },
+          );
+          if (technicalScopeSnapshot !== undefined) {
+            updated = await tx.proposal.update({
+              where: { id },
+              data: { technicalScopeSnapshot },
+            });
+          }
+        }
+
+        if (phase1Type(updated.type, updated.origin) && contentFields.length)
+          await auditProposalConference(
+            tx,
+            id,
+            actorUserId,
+            updateProposalDto.reviewAcknowledgements,
+          );
+        if (updateProposalDto.status && updateProposalDto.status !== 'DRAFT')
+          await assertProposalConference(
+            tx,
+            id,
+            actorUserId,
+            updateProposalDto.status === 'BOARD_REVIEW' ? 'submit' : 'approve',
+          );
+        if (
+          updateProposalDto.status &&
+          current.status !== updateProposalDto.status
+        ) {
+          await this.createMovement(
+            tx,
+            id,
+            actorUserId,
+            actorIsAdmin
+              ? 'ADMIN_MANUAL_STATUS_UPDATE'
+              : 'MANUAL_STATUS_UPDATE',
+            current.status,
+            updateProposalDto.status,
+            actorIsAdmin
+              ? 'Status alterado manualmente por administrador.'
+              : 'Status alterado manualmente no kanban.',
+          );
+
+          await this.syncOpportunityFromProposalStatus(
+            tx,
+            current.salesOpportunityId,
+            updateProposalDto.status,
+          );
+          if (updateProposalDto.status === ProposalStatus.WON) {
+            await publishProposalWon(tx, id);
+          }
+        }
+
+        await this.auditLogsService.record(
+          {
+            domain: AuditDomain.PROPOSALS,
+            entityType: 'PROPOSAL',
+            entityId: id,
+            action: 'UPDATE',
+            actorUserId,
+            beforePayload: before as unknown as Prisma.InputJsonValue,
+            afterPayload: updated as unknown as Prisma.InputJsonValue,
+          },
           tx,
-          current.salesOpportunityId,
-          updateProposalDto.status,
         );
-      }
 
-      await this.auditLogsService.record(
-        {
-          domain: AuditDomain.PROPOSALS,
-          entityType: 'PROPOSAL',
-          entityId: id,
-          action: 'UPDATE',
-          actorUserId,
-          beforePayload: before as unknown as Prisma.InputJsonValue,
-          afterPayload: updated as unknown as Prisma.InputJsonValue,
-        },
-        tx,
-      );
-
-      return updated;
-    });
+        return updated;
+      },
+      phase1Type(current.type, current.origin)
+        ? { maxWait: 10000, timeout: 30000 }
+        : undefined,
+    );
   }
 
   async remove(id: string, actorUserId?: string) {
@@ -1759,54 +2453,112 @@ export class ProposalsService {
     actorUserId: string | undefined,
     action: string,
     note?: string,
+    afterChange?: (
+      tx: Prisma.TransactionClient,
+      proposal: {
+        id: string;
+        code: string;
+        generatorId: string | null;
+        type: ProposalType;
+        totalValue: number;
+      },
+    ) => Promise<void>,
+    expectedStatus?: ProposalStatus,
   ) {
-    return this.prisma.$transaction(async (tx) => {
-      const proposal = await tx.proposal.findUnique({ where: { id } });
-      if (!proposal) {
-        throw new NotFoundException('Proposta nao encontrada.');
-      }
+    return this.prisma.$transaction(
+      async (tx) => {
+        if (phase1Enabled())
+          await tx.$executeRawUnsafe(
+            'SELECT pg_advisory_xact_lock(hashtext($1))',
+            'proposal-write:' + id,
+          );
+        const proposal = await tx.proposal.findUnique({ where: { id } });
+        if (!proposal) {
+          throw new NotFoundException('Proposta nao encontrada.');
+        }
+        if (expectedStatus && proposal.status !== expectedStatus) {
+          throw new ConflictException(
+            'A proposta ja mudou de estado. Atualize a pagina.',
+          );
+        }
 
-      const updated = await tx.proposal.update({
-        where: { id },
-        data: {
-          status: toStatus,
-          requestedDiscountPercent: null,
-          requestedDiscountReason: null,
-        },
-      });
+        // Validate the locked version that will transition, rather than an earlier read.
+        const operation =
+          toStatus === ProposalStatus.BOARD_REVIEW
+            ? 'submit'
+            : toStatus === ProposalStatus.CLIENT_REVIEW
+              ? 'approve'
+              : toStatus === ProposalStatus.WON
+                ? 'accept'
+                : null;
+        if (operation)
+          await assertProposalConference(tx, id, actorUserId, operation);
+        if (
+          toStatus === ProposalStatus.CLIENT_REVIEW &&
+          phase1Type(proposal.type, proposal.origin)
+        ) {
+          if (!this.documentsService || !actorUserId)
+            throw new BadRequestException(
+              'A geração do documento aprovado não está disponível.',
+            );
+          await this.documentsService.freezeApprovedProposal(
+            id,
+            actorUserId,
+            tx,
+          );
+        }
 
-      await this.createMovement(
-        tx,
-        id,
-        actorUserId,
-        action,
-        proposal.status,
-        toStatus,
-        note,
-      );
+        const updated = await tx.proposal.update({
+          where: { id, ...(expectedStatus ? { status: expectedStatus } : {}) },
+          data: {
+            status: toStatus,
+            requestedDiscountPercent: null,
+            requestedDiscountReason: null,
+          },
+        });
 
-      await this.syncOpportunityFromProposalStatus(
-        tx,
-        proposal.salesOpportunityId,
-        toStatus,
-      );
-
-      await this.auditLogsService.record(
-        {
-          domain: AuditDomain.PROPOSALS,
-          entityType: 'PROPOSAL',
-          entityId: id,
-          action: `STATUS_${toStatus}`,
+        await this.createMovement(
+          tx,
+          id,
           actorUserId,
-          beforePayload: { status: proposal.status },
-          afterPayload: { status: toStatus },
-          reason: note,
-        },
-        tx,
-      );
+          action,
+          proposal.status,
+          toStatus,
+          note,
+        );
 
-      return updated;
-    });
+        await this.syncOpportunityFromProposalStatus(
+          tx,
+          proposal.salesOpportunityId,
+          toStatus,
+        );
+        if (
+          toStatus === ProposalStatus.WON &&
+          proposal.status !== ProposalStatus.WON
+        ) {
+          await publishProposalWon(tx, id);
+        }
+
+        await this.auditLogsService.record(
+          {
+            domain: AuditDomain.PROPOSALS,
+            entityType: 'PROPOSAL',
+            entityId: id,
+            action: `STATUS_${toStatus}`,
+            actorUserId,
+            beforePayload: { status: proposal.status },
+            afterPayload: { status: toStatus },
+            reason: note,
+          },
+          tx,
+        );
+
+        if (afterChange) await afterChange(tx, updated);
+
+        return updated;
+      },
+      { timeout: 60000 },
+    );
   }
 
   private async requireProposal(id: string, actorUserId?: string) {
@@ -1823,6 +2575,7 @@ export class ProposalsService {
     clientId: string,
     paymentTerm?: string | null,
     excludeProposalId?: string,
+    paymentPlan?: Prisma.JsonValue | ProposalPaymentPlan | null,
   ) {
     const client = await tx.client.findUnique({
       where: { id: clientId },
@@ -1849,12 +2602,31 @@ export class ProposalsService {
     }
 
     const normalizedPaymentTerm = this.normalizeCommercialTerm(paymentTerm);
-    if (!normalizedPaymentTerm) return;
+    const preset =
+      paymentPlan && typeof paymentPlan === 'object' && 'preset' in paymentPlan
+        ? paymentPlan.preset
+        : undefined;
+    if (!normalizedPaymentTerm) {
+      if (preset)
+        throw new BadRequestException('Informe a condição de pagamento.');
+      return;
+    }
+    const aliases = new Set([normalizedPaymentTerm]);
+    const presetAliases: Record<string, string[]> = {
+      CASH: ['CASH', 'A_VISTA', 'À vista'],
+      '50_50': ['50_50', '50/50'],
+      '30_70': ['30_70', '30/70'],
+      PREPAID: ['PREPAID', '100% antecipado'],
+    };
+    if (typeof preset === 'string') {
+      for (const alias of presetAliases[preset] ?? [])
+        aliases.add(this.normalizeCommercialTerm(alias));
+    }
 
     const clientBlockedTerms = (client.blockedPaymentTerms ?? []).map((term) =>
       this.normalizeCommercialTerm(term),
     );
-    if (clientBlockedTerms.includes(normalizedPaymentTerm)) {
+    if (clientBlockedTerms.some((term) => aliases.has(term))) {
       throw new ForbiddenException(
         `A condicao de pagamento "${paymentTerm}" esta bloqueada para ${client.companyName}.`,
       );
@@ -1863,18 +2635,36 @@ export class ProposalsService {
     const availablePaymentTerms = await tx.controlOption.findMany({
       where: {
         type: 'PAYMENT_TERM',
-        isActive: true,
       },
-      select: { code: true, name: true, isBlockedForNewClients: true },
+      select: {
+        code: true,
+        name: true,
+        isActive: true,
+        isBlockedForNewClients: true,
+      },
     });
     const selectedPaymentTerm = availablePaymentTerms.find(
       (term) =>
-        this.normalizeCommercialTerm(term.code) === normalizedPaymentTerm ||
-        this.normalizeCommercialTerm(term.name) === normalizedPaymentTerm,
+        aliases.has(this.normalizeCommercialTerm(term.code)) ||
+        aliases.has(this.normalizeCommercialTerm(term.name)),
     );
     if (!selectedPaymentTerm) {
+      // Standard presets and explicitly negotiated conditions are built in.
+      // Studio and client restrictions still take precedence when present.
+      if (
+        typeof preset === 'string' &&
+        (preset in presetAliases || preset === 'CUSTOM')
+      )
+        return;
       throw new BadRequestException(
         `A condicao de pagamento "${paymentTerm}" nao esta ativa nas tabelas de controle.`,
+      );
+    }
+    if (selectedPaymentTerm.isActive === false) {
+      throw new BadRequestException(
+        'A condição de pagamento "' +
+          paymentTerm +
+          '" está desativada nas tabelas de controle.',
       );
     }
     if (!selectedPaymentTerm.isBlockedForNewClients) return;
@@ -1959,11 +2749,133 @@ export class ProposalsService {
   }
 
   private calculateTotal(items: Array<{ totalPrice: number }>) {
-    return items.reduce((acc, item) => acc + item.totalPrice, 0);
+    return new Prisma.Decimal(
+      items.reduce(
+        (acc, item) => new Prisma.Decimal(acc).plus(item.totalPrice).toString(),
+        '0',
+      ),
+    ).toNumber();
   }
 
   private roundCurrency(value: number) {
     return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+  }
+
+  private async requireAvailablePaymentProfiles(
+    tx: Prisma.TransactionClient,
+    items: Array<{ kind: ProposalItemKind }>,
+    dto: CreateProposalDto,
+  ) {
+    const purposes = await tx.proposalPaymentProfile.findMany({
+      where: { isActive: true },
+      select: { purpose: true },
+    });
+    const hasParts = items.some(
+      (item) => item.kind === ProposalItemKind.PART_MATERIAL,
+    );
+    const hasServices = items.some(
+      (item) => item.kind !== ProposalItemKind.PART_MATERIAL,
+    );
+    if (
+      hasParts &&
+      purposes.some(
+        (profile) => profile.purpose === ProposalPaymentPurpose.PARTS,
+      ) &&
+      !dto.partsPaymentProfileId
+    ) {
+      throw new BadRequestException('Selecione a conta de pagamento de pecas.');
+    }
+    if (
+      hasServices &&
+      purposes.some(
+        (profile) => profile.purpose === ProposalPaymentPurpose.SERVICES,
+      ) &&
+      !dto.servicesPaymentProfileId
+    ) {
+      throw new BadRequestException(
+        'Selecione a conta de pagamento de servicos.',
+      );
+    }
+  }
+
+  private async preparePaymentSelections(
+    tx: Prisma.TransactionClient,
+    dto: CreateProposalDto,
+  ) {
+    const requested = [
+      { id: dto.partsPaymentProfileId, purpose: ProposalPaymentPurpose.PARTS },
+      {
+        id: dto.servicesPaymentProfileId,
+        purpose: ProposalPaymentPurpose.SERVICES,
+      },
+    ].filter(
+      (entry): entry is { id: string; purpose: ProposalPaymentPurpose } =>
+        Boolean(entry.id),
+    );
+    if (!requested.length) return null;
+
+    const profiles = await tx.proposalPaymentProfile.findMany({
+      where: { id: { in: requested.map((entry) => entry.id) }, isActive: true },
+      include: {
+        issuerCompany: { select: { id: true, companyName: true, cnpj: true } },
+      },
+    });
+    const profileById = new Map(
+      profiles.map((profile) => [profile.id, profile]),
+    );
+    const snapshots = await Promise.all(
+      requested.map(async ({ id, purpose }) => {
+        const profile = profileById.get(id);
+        assertProposalPaymentProfile(profile, purpose);
+        return {
+          id: profile.id,
+          issuerCompanyId: profile.issuerCompanyId,
+          issuerCompanyName: profile.issuerCompany?.companyName ?? null,
+          name: profile.name,
+          purpose: profile.purpose,
+          method: profile.method,
+          beneficiary: profile.beneficiary,
+          beneficiaryDocument: profile.beneficiaryDocument,
+          bankName: profile.bankName,
+          agency: profile.agency,
+          accountNumber: profile.accountNumber,
+          pixKey: profile.pixKey,
+          pixCopyPaste: profile.pixCopyPaste,
+          boletoInstructions: profile.boletoInstructions,
+          qrCodeDataUrl:
+            profile.method === ProposalPaymentMethod.PIX && profile.pixCopyPaste
+              ? await toDataURL(profile.pixCopyPaste, { margin: 1, width: 180 })
+              : null,
+        };
+      }),
+    );
+    const details = snapshots
+      .map((profile) =>
+        [
+          profile.purpose === ProposalPaymentPurpose.PARTS
+            ? 'Pecas'
+            : 'Servicos',
+          profile.method === ProposalPaymentMethod.PIX ? 'PIX' : 'Boleto',
+          `Favorecido: ${profile.beneficiary}`,
+          profile.beneficiaryDocument
+            ? `CPF/CNPJ: ${profile.beneficiaryDocument}`
+            : null,
+          profile.bankName ? `Banco: ${profile.bankName}` : null,
+          profile.agency ? `Agencia: ${profile.agency}` : null,
+          profile.accountNumber ? `Conta: ${profile.accountNumber}` : null,
+          profile.pixKey ? `Chave PIX: ${profile.pixKey}` : null,
+          profile.pixCopyPaste
+            ? `PIX copia e cola: ${profile.pixCopyPaste}`
+            : null,
+          profile.boletoInstructions
+            ? `Boleto: ${profile.boletoInstructions}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' | '),
+      )
+      .join('\n');
+    return { snapshots, details };
   }
 
   private async prepareProposalItems(
@@ -1985,10 +2897,21 @@ export class ProposalsService {
       catalogIds.length > 0
         ? await tx.catalogItem.findMany({
             where: { id: { in: catalogIds }, isActive: true },
-            select: { id: true, type: true, name: true },
+            select: { id: true, type: true, name: true, basePrice: true },
           })
         : [];
     const catalogById = new Map(catalogItems.map((item) => [item.id, item]));
+    const hourlyRates = items.some(
+      (item) => item.kind === ProposalItemKind.HOURLY_SERVICE,
+    )
+      ? await tx.proposalHourlyRate.findMany({ where: { isActive: true } })
+      : [];
+    const rateByCombination = new Map(
+      hourlyRates.map((rate) => [
+        `${rate.hourType}:${rate.technicianType}`,
+        rate.unitPrice,
+      ]),
+    );
 
     return items.map((item, index) => {
       const catalogItem = item.catalogItemId
@@ -2018,8 +2941,28 @@ export class ProposalsService {
         );
       }
 
+      if (
+        catalogItem?.type === 'SERVICE' &&
+        kind !== ProposalItemKind.CATALOG_SERVICE
+      ) {
+        throw new BadRequestException(
+          `Item ${index + 1}: servicos do catalogo devem manter seu tipo e preco cadastrado.`,
+        );
+      }
+      if (
+        kind === ProposalItemKind.CATALOG_SERVICE &&
+        catalogItem?.type !== 'SERVICE'
+      ) {
+        throw new BadRequestException(
+          `Item ${index + 1}: selecione um servico valido do catalogo.`,
+        );
+      }
+
       if (kind === ProposalItemKind.HOURLY_SERVICE) {
-        return this.prepareHourlyItem(item, index);
+        const rate = rateByCombination.get(
+          `${item.hourType ?? ProposalHourType.ONE_OFF}:${item.technicianType}`,
+        );
+        return this.prepareHourlyItem(item, index, rate);
       }
 
       if (kind === ProposalItemKind.OTHER && !item.description?.trim()) {
@@ -2029,12 +2972,19 @@ export class ProposalsService {
       }
 
       const quantity = Number(item.quantity ?? 1);
-      const unitPrice = Number(item.unitPrice ?? 0);
-      const discountPercent = this.normalizeDiscountPercent(
-        item.discountPercent ?? 0,
-        index,
-      );
-      if (!Number.isFinite(quantity) || quantity <= 0) {
+      const unitPrice =
+        kind === ProposalItemKind.CATALOG_SERVICE
+          ? Number(catalogItem?.basePrice ?? 0)
+          : Number(item.unitPrice ?? 0);
+      const discountPercent =
+        kind === ProposalItemKind.CATALOG_SERVICE
+          ? 0
+          : this.normalizeDiscountPercent(item.discountPercent ?? 0, index);
+      if (
+        !Number.isFinite(quantity) ||
+        quantity <= 0 ||
+        !Number.isInteger(quantity)
+      ) {
         throw new BadRequestException(
           `Item ${index + 1}: quantidade deve ser maior que zero.`,
         );
@@ -2042,6 +2992,11 @@ export class ProposalsService {
       if (!Number.isFinite(unitPrice) || unitPrice < 0) {
         throw new BadRequestException(
           `Item ${index + 1}: valor de venda invalido.`,
+        );
+      }
+      if (kind === ProposalItemKind.CATALOG_SERVICE && unitPrice <= 0) {
+        throw new BadRequestException(
+          `Item ${index + 1}: o servico precisa de um preco de venda no catalogo.`,
         );
       }
 
@@ -2055,7 +3010,12 @@ export class ProposalsService {
         discountPercent,
         hourType: null,
         technicianType: null,
-        totalPrice: quantity * unitPrice * (1 - discountPercent / 100),
+        totalPrice: exactLineValue({
+          kind,
+          quantity,
+          unitPrice,
+          discountPercent,
+        }),
       };
     });
   }
@@ -2117,7 +3077,7 @@ export class ProposalsService {
         unitLabel: rate.unitLabel,
         quantity,
         unitPrice: Number(rate.unitPrice),
-        total: this.roundCurrency(quantity * Number(rate.unitPrice)),
+        total: exactExpenseValue(quantity, Number(rate.unitPrice)),
       };
     });
 
@@ -2132,14 +3092,12 @@ export class ProposalsService {
   private prepareHourlyItem(
     item: CreateProposalDto['items'][number],
     index: number,
+    configuredRate?: number,
   ) {
     const hours = Number(item.hours ?? item.quantity ?? 0);
-    const unitPrice = Number(item.unitPrice ?? 0);
+    const unitPrice = Number(configuredRate ?? 0);
     const hourType = item.hourType ?? ProposalHourType.ONE_OFF;
-    const discountPercent = this.normalizeDiscountPercent(
-      item.discountPercent ?? (hourType === ProposalHourType.CONTRACT ? 20 : 0),
-      index,
-    );
+    const discountPercent = hourType === ProposalHourType.CONTRACT ? 20 : 0;
 
     if (!Number.isFinite(hours) || hours <= 0) {
       throw new BadRequestException(
@@ -2148,7 +3106,7 @@ export class ProposalsService {
     }
     if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
       throw new BadRequestException(
-        `Item ${index + 1}: informe valor hora de venda maior que zero.`,
+        `Item ${index + 1}: configure e ative a tarifa desta hora no Manitec Studio.`,
       );
     }
     if (!item.technicianType) {
@@ -2169,7 +3127,13 @@ export class ProposalsService {
       discountPercent,
       hourType,
       technicianType: item.technicianType,
-      totalPrice: hours * unitPrice * (1 - discountPercent / 100),
+      totalPrice: exactLineValue({
+        kind: ProposalItemKind.HOURLY_SERVICE,
+        quantity: 1,
+        hours,
+        unitPrice,
+        discountPercent,
+      }),
     };
   }
 
@@ -2186,16 +3150,26 @@ export class ProposalsService {
   private async assertProposalSeller(
     tx: Prisma.TransactionClient,
     userId: string,
+    type?: string,
   ) {
     const seller = await tx.user.findFirst({
-      where: { id: userId, role: UserRole.SALES, isActive: true },
-      select: { id: true },
+      where: {
+        id: userId,
+        role: { in: [UserRole.SALES, UserRole.MANAGER, UserRole.ADMIN] },
+        isActive: true,
+      },
+      select: { id: true, role: true, isSystemMaster: true, accessRules: true },
     });
     if (!seller) {
       throw new BadRequestException(
-        'Vendedor da proposta deve ser um usuario comercial ativo.',
+        'O responsável pela proposta deve ser um usuário comercial ou gestor ativo.',
       );
     }
+    if (seller.role && type)
+      assertPortfolio(
+        { ...seller, sub: seller.id },
+        portfolioForProposal(type),
+      );
   }
 
   private async assertGeneratorBelongsToClient(
@@ -2376,6 +3350,7 @@ export class ProposalsService {
     const sanitized = { ...proposal } as Record<string, unknown>;
     delete sanitized.internalNotes;
     delete sanitized.commercialSnapshot;
+    delete sanitized.technicalScopeSnapshot;
     delete sanitized.operationalExpenses;
     delete sanitized.allowOperationalExpenseDiscount;
     delete sanitized.externalDocumentStorageKey;
@@ -2591,7 +3566,14 @@ export class ProposalsService {
       where: { id: contractId },
       include: {
         equipments: true,
-        sourceProposal: { select: { userId: true } },
+        sourceProposal: {
+          select: {
+            id: true,
+            userId: true,
+            paymentPlan: true,
+            hasDownPayment: true,
+          },
+        },
       },
     });
 
@@ -2621,6 +3603,50 @@ export class ProposalsService {
       });
 
       for (const invoice of invoiceData) {
+        if (
+          invoice === invoiceData[0] &&
+          contract.sourceProposal &&
+          (contract.sourceProposal.paymentPlan ||
+            contract.sourceProposal.hasDownPayment)
+        ) {
+          const initialPayments = await tx.accountsReceivable.findMany({
+            where: {
+              sourceProposalId: contract.sourceProposal.id,
+              status: { not: AccountsReceivableStatus.CANCELED },
+            },
+            select: { id: true, paidAmount: true, dueDate: true },
+          });
+          await tx.accountsReceivable.updateMany({
+            where: { sourceProposalId: contract.sourceProposal.id },
+            data: {
+              contractId,
+              competenceDate: invoice.competenceDate,
+              costCenterId: contract.costCenterId,
+            },
+          });
+          if (initialPayments.length) {
+            const settled =
+              initialPayments.reduce(
+                (sum, row) => sum + Math.round(row.paidAmount * 100),
+                0,
+              ) >= Math.round(invoice.amount * 100);
+            const dueDate = initialPayments.reduce(
+              (latest, row) => (row.dueDate > latest ? row.dueDate : latest),
+              initialPayments[0].dueDate,
+            );
+            await tx.contractInvoice.updateMany({
+              where: { contractId, competenceDate: invoice.competenceDate },
+              data: {
+                dueDate,
+                status: settled
+                  ? ContractInvoiceStatus.PAID
+                  : ContractInvoiceStatus.PENDING,
+                paidAt: settled ? new Date() : null,
+              },
+            });
+          }
+          continue;
+        }
         await this.syncReceivableFromContractInvoice(tx, {
           contractId,
           clientId: contract.clientId,

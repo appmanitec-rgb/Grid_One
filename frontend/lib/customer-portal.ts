@@ -1,3 +1,4 @@
+import { commercialLabel } from "./commercial-labels";
 import { apiFetch, readApiErrorMessage } from "./api";
 
 export type PortalClient = {
@@ -13,6 +14,7 @@ export type PortalClient = {
 };
 
 export type PortalDashboard = {
+  permissions: string[];
   client: PortalClient;
   stats: {
     equipmentCount: number;
@@ -63,7 +65,23 @@ export type PortalEquipment = {
   }>;
 };
 
+export type PortalContract = {
+  id: string;
+  code: string;
+  title?: string | null;
+  status: string;
+  startDate: string;
+  endDate: string;
+  preventiveRecurrence: string;
+  responseTimeHours?: number | null;
+  partsCoverage: string;
+  equipments: Array<{
+    generator: { id: string; name: string; serialNumber?: string | null };
+  }>;
+};
+
 export type PortalProposal = {
+  paymentSummary?: string | null;
   id: string;
   code: string;
   status: string;
@@ -271,5 +289,5 @@ export function statusLabel(status?: string | null) {
     PROPOSAL_SENT: "Proposta",
     NEGOTIATION: "Negociacao",
   };
-  return status ? labels[status] || status : "-";
+  return status ? labels[status] || commercialLabel(status) : "-";
 }

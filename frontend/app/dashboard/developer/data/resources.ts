@@ -1,4 +1,15 @@
-export type StudioFieldType = "text" | "number" | "select" | "boolean";
+import {
+  formatCalendarDate,
+  formatCurrency,
+  formatPercent,
+  formatQuantity,
+} from "@/lib/formatters";
+export type StudioFieldType =
+  | "text"
+  | "number"
+  | "select"
+  | "boolean"
+  | "textarea";
 
 export type StudioField = {
   key: string;
@@ -18,6 +29,7 @@ export type StudioField = {
   sensitive?: boolean;
   options?: Array<{ value: string; label: string }>;
   render?: (row: StudioRecord) => string;
+  format?: "currency" | "percent" | "date";
 };
 
 export type StudioRecord = Record<string, any>;
@@ -54,7 +66,7 @@ export type StudioResource = {
 
 const yesNoOptions = [
   { value: "true", label: "Sim" },
-  { value: "false", label: "Nao" },
+  { value: "false", label: "Não" },
 ];
 
 const clientImportExamples: StudioRecord[] = [
@@ -584,7 +596,7 @@ const catalogImportExamples: StudioRecord[] = [
     unit: "KIT",
     acquisitionOrigin: "Comprado",
     brand: "CUMMINS",
-    description: "Kit de juntas e aneis para manutencao do motor",
+    description: "Kit de juntas e aneis para manutenção do motor",
     legacySequence: "EXEMPLO-SEQ-PX-0004",
     radarCode: "EXEMPLO-RADAR-0004",
     ncm: "84849000",
@@ -606,7 +618,7 @@ const catalogImportExamples: StudioRecord[] = [
     unit: "SERV",
     acquisitionOrigin: "Fabricado",
     brand: "MANITEC",
-    description: "Inspecao, testes e revisao preventiva do gerador",
+    description: "Inspecao, testes e revisão preventiva do gerador",
     legacySequence: "EXEMPLO-SEQ-PX-0005",
     radarCode: "EXEMPLO-RADAR-0005",
     ncm: "",
@@ -658,7 +670,7 @@ function contactPart(row: StudioRecord, index: number, key: string) {
 const controlOptionFields: StudioField[] = [
   {
     key: "code",
-    label: "Codigo",
+    label: "Código",
     searchable: true,
     sortable: true,
     editable: true,
@@ -672,7 +684,7 @@ const controlOptionFields: StudioField[] = [
     editable: true,
     required: true,
   },
-  { key: "description", label: "Descricao", searchable: true, editable: true },
+  { key: "description", label: "Descrição", searchable: true, editable: true },
   {
     key: "sortOrder",
     label: "Ordem",
@@ -722,30 +734,114 @@ function controlResource({
     canExport: true,
     importMode: "DISABLED",
     fields:
-      type === "PAYMENT_TERM"
+      type === "PROPOSAL_EXPENSE_REVIEW_RULE"
         ? [
-            ...controlOptionFields,
             {
-              key: "isBlockedForNewClients",
-              label: "Bloquear cliente novo",
-              type: "boolean",
-              sortable: true,
+              key: "code",
+              label: "Tipo: MEAL, PARKING, DISPLACEMENT, TOLL ou LODGING",
               editable: true,
-              defaultValue: false,
+              required: true,
+            },
+            {
+              key: "name",
+              label: "Título do aviso",
+              editable: true,
+              required: true,
+            },
+            {
+              key: "description",
+              label: "Orientacao de conferência",
+              type: "textarea",
+              editable: true,
+            },
+            {
+              key: "sortOrder",
+              label: "Conferir a partir desta quantidade",
+              type: "number",
+              editable: true,
+              required: true,
+              defaultValue: 100,
+            },
+            {
+              key: "isActive",
+              label: "Ativo",
+              type: "boolean",
+              editable: true,
+              defaultValue: true,
             },
           ]
-        : controlOptionFields,
+        : type === "PROPOSAL_ACCESSORY_RULE"
+          ? [
+              {
+                key: "code",
+                label: "Quando o item contém",
+                editable: true,
+                required: true,
+                searchable: true,
+              },
+              {
+                key: "name",
+                label: "Acessório a conferir",
+                editable: true,
+                required: true,
+                searchable: true,
+              },
+              {
+                key: "description",
+                label: "Pergunta ao vendedor",
+                type: "textarea",
+                editable: true,
+                required: true,
+              },
+              {
+                key: "sortOrder",
+                label: "Qtd. por unidade",
+                type: "number",
+                editable: true,
+                required: true,
+                defaultValue: 1,
+              },
+              {
+                key: "isActive",
+                label: "Ativo",
+                type: "boolean",
+                editable: true,
+                defaultValue: true,
+              },
+            ]
+          : type === "PAYMENT_TERM"
+            ? [
+                ...controlOptionFields,
+                {
+                  key: "isBlockedForNewClients",
+                  label: "Bloquear cliente novo",
+                  type: "boolean",
+                  sortable: true,
+                  editable: true,
+                  defaultValue: false,
+                },
+              ]
+            : controlOptionFields,
   };
 }
 
 export const STUDIO_RESOURCES: StudioResource[] = [
+  controlResource({
+    key: "proposalExpenseReviewRules",
+    label: "Regra de conferência",
+    pluralLabel: "Conferencia de despesas de propostas",
+    category: "Comercial",
+    description:
+      "Limites para avisar quantidades atipicas; não bloqueiam despesas legitimas.",
+    type: "PROPOSAL_EXPENSE_REVIEW_RULE",
+  }),
   {
     key: "clients",
     label: "Cliente",
     pluralLabel: "Clientes",
     category: "Comercial",
     description:
-      "Empresas, contatos principais, retencoes e situacao comercial.",
+      "Empresas, contatos principais, retencoes e situação comercial.",
     endpoint: "/clients",
     updateEndpoint: (id) => `/clients/${id}`,
     createHref: "/dashboard/clients/new",
@@ -765,14 +861,14 @@ export const STUDIO_RESOURCES: StudioResource[] = [
     fields: [
       {
         key: "code",
-        label: "Codigo",
+        label: "Código",
         searchable: true,
         sortable: true,
         importable: false,
       },
       {
         key: "legacyCode",
-        label: "Codigo legado",
+        label: "Código legado",
         searchable: true,
         sortable: true,
         editable: true,
@@ -820,7 +916,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "address",
-        label: "Endereco resumido",
+        label: "Endereço resumido",
         searchable: true,
         editable: true,
         hiddenByDefault: true,
@@ -883,7 +979,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "notes",
-        label: "Observacoes",
+        label: "Observações",
         searchable: true,
         editable: true,
         hiddenByDefault: true,
@@ -917,14 +1013,14 @@ export const STUDIO_RESOURCES: StudioResource[] = [
         editable: true,
         hiddenByDefault: true,
         options: [
-          { value: "LEGAL_ENTITY", label: "Juridica" },
-          { value: "INDIVIDUAL", label: "Fisica" },
+          { value: "LEGAL_ENTITY", label: "Jurídica" },
+          { value: "INDIVIDUAL", label: "Física" },
         ],
         importHeader: "TIPO DE PESSOA",
       },
       {
         key: "paymentTermDefault",
-        label: "Condicao padrao",
+        label: "Condição padrão",
         searchable: true,
         editable: true,
         hiddenByDefault: true,
@@ -941,7 +1037,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "priceTableCode",
-        label: "Tabela preco",
+        label: "Tabela preço",
         searchable: true,
         editable: true,
         hiddenByDefault: true,
@@ -980,7 +1076,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "primaryNumber",
-        label: "Numero principal",
+        label: "Número principal",
         searchable: true,
         importable: true,
         hiddenByDefault: true,
@@ -1034,7 +1130,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "billingAddress",
-        label: "Endereco cobranca",
+        label: "Endereço cobranca",
         searchable: true,
         sortable: true,
         hiddenByDefault: true,
@@ -1051,7 +1147,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "billingNumber",
-        label: "Numero cobranca",
+        label: "Número cobranca",
         searchable: true,
         importable: true,
         hiddenByDefault: true,
@@ -1105,7 +1201,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "installationAddress",
-        label: "Endereco instalacao",
+        label: "Endereço instalacao",
         searchable: true,
         sortable: true,
         hiddenByDefault: true,
@@ -1122,7 +1218,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "installationNumber",
-        label: "Numero entrega",
+        label: "Número entrega",
         searchable: true,
         importable: true,
         hiddenByDefault: true,
@@ -1342,7 +1438,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
     pluralLabel: "Tarifas Operacionais",
     category: "Financeiro",
     description:
-      "Valores padrao de deslocamento, alimentacao, pedagio, hospedagem e estacionamento usados nas propostas.",
+      "Valores padrão de deslocamento, alimentação, pedágio, hospedagem e estacionamento usados nas propostas.",
     endpoint: "/studio/data/operationalExpenseRates",
     updateEndpoint: (id) => `/studio/data/operationalExpenseRates/${id}`,
     entityType: "OperationalExpenseRate",
@@ -1363,8 +1459,8 @@ export const STUDIO_RESOURCES: StudioResource[] = [
         sortable: true,
         options: [
           { value: "DISPLACEMENT", label: "Deslocamento" },
-          { value: "MEAL", label: "Alimentacao" },
-          { value: "TOLL", label: "Pedagio" },
+          { value: "MEAL", label: "Alimentação" },
+          { value: "TOLL", label: "Pedágio" },
           { value: "LODGING", label: "Hospedagem" },
           { value: "PARKING", label: "Estacionamento" },
         ],
@@ -1387,6 +1483,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
         key: "unitPrice",
         label: "Valor unitario",
         type: "number",
+        format: "currency",
         editable: true,
         required: true,
         sortable: true,
@@ -1409,10 +1506,192 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "notes",
-        label: "Observacoes",
+        label: "Observações",
         editable: true,
         hiddenByDefault: true,
         importHeader: "SEGMENTO",
+      },
+    ],
+  },
+  {
+    key: "proposalHourlyRates",
+    label: "Tarifa de Hora",
+    pluralLabel: "Tarifas de Hora",
+    category: "Comercial",
+    description:
+      "Valores de venda por tipo de hora e profissional usados nas propostas. Configure os valores reais e ative cada tarifa.",
+    endpoint: "/studio/data/proposalHourlyRates",
+    entityType: "ProposalHourlyRate",
+    editable: true,
+    canCreate: true,
+    canEdit: true,
+    canDelete: false,
+    canImport: false,
+    canExport: true,
+    importMode: "DISABLED",
+    fields: [
+      {
+        key: "hourType",
+        label: "Tipo de hora",
+        type: "select",
+        editable: true,
+        required: true,
+        options: [
+          { value: "ONE_OFF", label: "Hora avulsa" },
+          { value: "CONTRACT", label: "Hora contrato" },
+          { value: "EMERGENCY", label: "Emergencia" },
+          { value: "TRAVEL", label: "Deslocamento" },
+          { value: "ENGINEERING", label: "Engenharia" },
+        ],
+      },
+      {
+        key: "technicianType",
+        label: "Profissional",
+        type: "select",
+        editable: true,
+        required: true,
+        options: [
+          { value: "ASSISTANT", label: "Assistente" },
+          { value: "JUNIOR_TECHNICIAN", label: "Técnico júnior" },
+          { value: "MID_LEVEL_TECHNICIAN", label: "Técnico pleno" },
+          { value: "SENIOR_TECHNICIAN", label: "Técnico sênior" },
+          { value: "APPLICATION_ENGINEER", label: "Engenheiro de aplicação" },
+          { value: "SPECIALIST", label: "Especialista" },
+        ],
+      },
+      {
+        key: "unitPrice",
+        label: "Valor da hora (R$)",
+        type: "number",
+        format: "currency",
+        editable: true,
+        required: true,
+      },
+      {
+        key: "isActive",
+        label: "Ativa",
+        type: "boolean",
+        editable: true,
+        defaultValue: false,
+      },
+      {
+        key: "sortOrder",
+        label: "Ordem",
+        type: "number",
+        editable: true,
+        defaultValue: 0,
+      },
+      {
+        key: "notes",
+        label: "Observações",
+        editable: true,
+        hiddenByDefault: true,
+      },
+    ],
+  },
+  {
+    key: "proposalPaymentProfiles",
+    label: "Conta para Proposta",
+    pluralLabel: "Contas para Propostas",
+    category: "Financeiro",
+    description:
+      "Cadastre as contas de peças e serviços por empresa. No PIX, o CNPJ da empresa sera a chave automaticamente.",
+    endpoint: "/studio/data/proposalPaymentProfiles",
+    entityType: "ProposalPaymentProfile",
+    editable: true,
+    canCreate: true,
+    canEdit: true,
+    canDelete: false,
+    canImport: false,
+    canExport: false,
+    importMode: "DISABLED",
+    fields: [
+      {
+        key: "issuerCompany.companyName",
+        label: "Empresa emitente",
+        searchable: true,
+        sortable: true,
+        readOnly: true,
+      },
+      {
+        key: "issuerCompanyId",
+        label: "Empresa emitente (CNPJ)",
+        type: "select",
+        editable: true,
+        hiddenByDefault: true,
+      },
+      {
+        key: "name",
+        label: "Nome do perfil",
+        editable: true,
+        required: true,
+        searchable: true,
+      },
+      {
+        key: "purpose",
+        label: "Destino",
+        type: "select",
+        editable: true,
+        required: true,
+        options: [
+          { value: "PARTS", label: "Peças" },
+          { value: "SERVICES", label: "Serviços" },
+        ],
+      },
+      {
+        key: "method",
+        label: "Meio",
+        type: "select",
+        editable: true,
+        required: true,
+        options: [
+          { value: "PIX", label: "PIX" },
+          { value: "BOLETO", label: "Boleto" },
+        ],
+      },
+      {
+        key: "beneficiary",
+        label: "Nome do favorecido",
+        editable: true,
+        required: true,
+      },
+      {
+        key: "beneficiaryDocument",
+        label: "CPF/CNPJ do favorecido",
+        editable: true,
+        hiddenByDefault: true,
+      },
+      { key: "bankName", label: "Banco", editable: true },
+      { key: "agency", label: "Agencia", editable: true },
+      { key: "accountNumber", label: "Conta", editable: true },
+      { key: "pixKey", label: "Chave PIX", editable: true },
+      {
+        key: "pixCopyPaste",
+        label: "PIX copia e cola (opcional, para QR Code)",
+        type: "textarea",
+        editable: true,
+        hiddenByDefault: true,
+      },
+      {
+        key: "boletoInstructions",
+        label: "Instrucoes de boleto",
+        type: "textarea",
+        editable: true,
+        hiddenByDefault: true,
+      },
+      {
+        key: "isActive",
+        label: "Ativo",
+        type: "boolean",
+        editable: true,
+        defaultValue: false,
+      },
+      {
+        key: "sortOrder",
+        label: "Ordem",
+        type: "number",
+        editable: true,
+        defaultValue: 0,
       },
     ],
   },
@@ -1422,7 +1701,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
     pluralLabel: "Geradores para Venda",
     category: "Comercial",
     description:
-      "Catalogo exclusivo de geradores Generac novos, com ficha tecnica, precos, estoque e prazo.",
+      "Catalogo exclusivo de geradores Generac novos, com ficha técnica, preços, estoque e prazo.",
     endpoint: "/studio/data/commercialGenerators",
     entityType: "CommercialGenerator",
     editable: true,
@@ -1435,7 +1714,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
     fields: [
       {
         key: "internalCode",
-        label: "Codigo interno",
+        label: "Código interno",
         searchable: true,
         sortable: true,
         editable: true,
@@ -1465,7 +1744,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "shortDescription",
-        label: "Descricao curta",
+        label: "Descrição curta",
         searchable: true,
         editable: true,
         hiddenByDefault: true,
@@ -1604,9 +1883,9 @@ export const STUDIO_RESOURCES: StudioResource[] = [
         defaultValue: "ON_REQUEST",
         options: [
           { value: "IN_STOCK", label: "Em estoque" },
-          { value: "AVAILABLE_TO_ORDER", label: "Disponivel para pedido" },
+          { value: "AVAILABLE_TO_ORDER", label: "Disponível para pedido" },
           { value: "ON_REQUEST", label: "Sob consulta" },
-          { value: "UNAVAILABLE", label: "Indisponivel" },
+          { value: "UNAVAILABLE", label: "Indisponível" },
         ],
       },
       {
@@ -1636,6 +1915,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
         key: "costPrice",
         label: "Custo",
         type: "number",
+        format: "currency",
         sortable: true,
         editable: true,
         defaultValue: 0,
@@ -1643,15 +1923,16 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "basePrice",
-        label: "Preco base",
+        label: "Preço base",
         type: "number",
+        format: "currency",
         sortable: true,
         editable: true,
         defaultValue: 0,
       },
       {
         key: "suggestedPrice",
-        label: "Preco sugerido",
+        label: "Preço sugerido",
         type: "number",
         sortable: true,
         editable: true,
@@ -1659,7 +1940,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "minimumPrice",
-        label: "Preco minimo",
+        label: "Preço minimo",
         type: "number",
         sortable: true,
         editable: true,
@@ -1676,35 +1957,35 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "engineDescription",
-        label: "Descricao do motor",
+        label: "Descrição do motor",
         searchable: true,
         editable: true,
         hiddenByDefault: true,
       },
       {
         key: "alternatorDescription",
-        label: "Descricao do alternador",
+        label: "Descrição do alternador",
         searchable: true,
         editable: true,
         hiddenByDefault: true,
       },
       {
         key: "controllerDescription",
-        label: "Descricao do controlador",
+        label: "Descrição do controlador",
         searchable: true,
         editable: true,
         hiddenByDefault: true,
       },
       {
         key: "enclosureDescription",
-        label: "Descricao da carenagem",
+        label: "Descrição da carenagem",
         searchable: true,
         editable: true,
         hiddenByDefault: true,
       },
       {
         key: "standardAccessories",
-        label: "Acessorios padrao",
+        label: "Acessorios padrão",
         searchable: true,
         editable: true,
         hiddenByDefault: true,
@@ -1718,7 +1999,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "technicalNotes",
-        label: "Notas tecnicas",
+        label: "Notas técnicas",
         searchable: true,
         editable: true,
         hiddenByDefault: true,
@@ -1744,7 +2025,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
     fields: [
       {
         key: "code",
-        label: "Codigo",
+        label: "Código",
         searchable: true,
         sortable: true,
       },
@@ -1768,7 +2049,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "isDefault",
-        label: "Padrao",
+        label: "Padrão",
         type: "boolean",
         sortable: true,
         editable: true,
@@ -1784,14 +2065,14 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "defaultPowerFactor",
-        label: "Fator de potencia padrao",
+        label: "Fator de potencia padrão",
         type: "number",
         editable: true,
         defaultValue: 0.8,
       },
       {
         key: "standardMarginPercent",
-        label: "Margem padrao %",
+        label: "Margem padrão %",
         type: "number",
         sortable: true,
         editable: true,
@@ -1848,7 +2129,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "unknownLoadMarginPercent",
-        label: "Nao informada %",
+        label: "Não informada %",
         type: "number",
         editable: true,
         defaultValue: 30,
@@ -1914,7 +2195,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
     fields: [
       {
         key: "legacyCode",
-        label: "Codigo legado",
+        label: "Código legado",
         searchable: true,
         sortable: true,
         editable: true,
@@ -1962,7 +2243,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "address",
-        label: "Endereco",
+        label: "Endereço",
         searchable: true,
         editable: true,
         hiddenByDefault: true,
@@ -2009,7 +2290,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "notes",
-        label: "Observacoes",
+        label: "Observações",
         searchable: true,
         editable: true,
         hiddenByDefault: true,
@@ -2038,7 +2319,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
     pluralLabel: "Equipamentos",
     category: "Ativos",
     description:
-      "Geradores por cliente, serie, criticidade e status operacional.",
+      "Geradores por cliente, série, criticidade e status operacional.",
     endpoint: "/generators",
     updateEndpoint: (id) => `/generators/${id}`,
     createHref: "/dashboard/equipments/new",
@@ -2058,7 +2339,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
     fields: [
       {
         key: "legacyCode",
-        label: "Codigo legado",
+        label: "Código legado",
         searchable: true,
         sortable: true,
         editable: true,
@@ -2084,7 +2365,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "clientLegacyCode",
-        label: "Codigo legado cliente",
+        label: "Código legado cliente",
         importable: true,
         readOnly: true,
         hiddenByDefault: true,
@@ -2116,7 +2397,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       { key: "model.name", label: "Modelo", searchable: true, sortable: true },
       {
         key: "serialNumber",
-        label: "Serie",
+        label: "Série",
         searchable: true,
         sortable: true,
         editable: true,
@@ -2168,7 +2449,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
         editable: true,
         options: [
           { value: "OPERATING", label: "Operando" },
-          { value: "IN_MAINTENANCE", label: "Em manutencao" },
+          { value: "IN_MAINTENANCE", label: "Em manutenção" },
           { value: "STOPPED_BY_FAILURE", label: "Parado por falha" },
           { value: "DEACTIVATED", label: "Desativado" },
         ],
@@ -2183,7 +2464,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "condition",
-        label: "Condicao",
+        label: "Condição",
         searchable: true,
         editable: true,
         hiddenByDefault: true,
@@ -2215,7 +2496,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "engineSerialNumber",
-        label: "Serie do motor",
+        label: "Série do motor",
         searchable: true,
         editable: true,
         hiddenByDefault: true,
@@ -2248,7 +2529,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "alternatorSerialNumber",
-        label: "Serie do alternador",
+        label: "Série do alternador",
         searchable: true,
         editable: true,
         hiddenByDefault: true,
@@ -2319,7 +2600,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
     label: "Modelo",
     pluralLabel: "Modelos",
     category: "Ativos",
-    description: "Modelos tecnicos usados como base para novos equipamentos.",
+    description: "Modelos técnicos usados como base para novos equipamentos.",
     endpoint: "/generators/models",
     updateEndpoint: (id) => `/generators/models/${id}`,
     createHref: "/dashboard/equipments/models",
@@ -2398,7 +2679,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
     pluralLabel: "Fabricantes",
     category: "Ativos",
     description:
-      "Fabricantes por familia tecnica: gerador, motor, alternador, radiador e componentes.",
+      "Fabricantes por família técnica: gerador, motor, alternador, radiador e componentes.",
     endpoint: "/manufacturers",
     entityType: "Manufacturer",
     editable: true,
@@ -2429,7 +2710,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
           { value: "ENGINE", label: "Motor" },
           { value: "ALTERNATOR", label: "Alternador" },
           { value: "RADIATOR", label: "Radiador" },
-          { value: "TRANSFER_SWITCH", label: "QTA/Transferencia" },
+          { value: "TRANSFER_SWITCH", label: "QTA/Transferência" },
           { value: "BATTERY", label: "Bateria" },
           { value: "CONTROLLER", label: "Controlador" },
           { value: "OTHER", label: "Outro" },
@@ -2478,7 +2759,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
     pluralLabel: "Catalogo",
     category: "Suprimentos",
     description:
-      "Pecas, servicos, classificacao, precificacao e parametros de estoque.",
+      "Peças, serviços, classificacao, precificacao e parâmetros de estoque.",
     endpoint: "/catalogs",
     updateEndpoint: (id) => `/catalogs/${id}`,
     createHref: "/dashboard/catalog/new",
@@ -2515,7 +2796,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "legacyCode",
-        label: "Codigo PX (legado)",
+        label: "Código PX (legado)",
         searchable: true,
         sortable: true,
         importable: true,
@@ -2533,8 +2814,8 @@ export const STUDIO_RESOURCES: StudioResource[] = [
         defaultValue: "PART",
         importHeader: "TIPO DO ITEM",
         options: [
-          { value: "PART", label: "Peca" },
-          { value: "SERVICE", label: "Servico" },
+          { value: "PART", label: "Peça" },
+          { value: "SERVICE", label: "Serviço" },
         ],
       },
       {
@@ -2582,7 +2863,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "description",
-        label: "Descricao complementar",
+        label: "Descrição complementar",
         searchable: true,
         editable: true,
         importHeader: "DESCRICAO COMPLEMENTAR",
@@ -2599,7 +2880,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "radarCode",
-        label: "Codigo Radar (legado)",
+        label: "Código Radar (legado)",
         searchable: true,
         importable: true,
         readOnly: true,
@@ -2615,7 +2896,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "alternativeCode",
-        label: "Codigo alternativo/paralelo",
+        label: "Código alternativo/paralelo",
         importable: true,
         readOnly: true,
         hiddenByDefault: true,
@@ -2632,15 +2913,16 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "commercialDescription",
-        label: "Descricao de faturamento",
+        label: "Descrição de faturamento",
         searchable: true,
         editable: true,
         importHeader: "DESCRICAO FATURAMENTO",
       },
       {
         key: "costPrice",
-        label: "Preco de compra",
+        label: "Preço de compra",
         type: "number",
+        format: "currency",
         sortable: true,
         importable: true,
         readOnly: true,
@@ -2650,6 +2932,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
         key: "basePrice",
         label: "Venda sugerida",
         type: "number",
+        format: "currency",
         sortable: true,
         readOnly: true,
         importable: false,
@@ -2696,11 +2979,11 @@ export const STUDIO_RESOURCES: StudioResource[] = [
   },
   {
     key: "pricingPolicies",
-    label: "Politica de Preco",
+    label: "Politica de Preço",
     pluralLabel: "Politicas de Preco",
     category: "Suprimentos",
     description:
-      "Percentuais padrao para comissao, margem, custos operacionais e calculo de pecas/servicos.",
+      "Percentuais padrão para comissão, margem, custos operacionais e calculo de peças/serviços.",
     endpoint: "/catalogs/pricing-policies",
     updateEndpoint: (id) => `/studio/data/pricingPolicies/${id}`,
     entityType: "CatalogPricingPolicy",
@@ -2728,8 +3011,8 @@ export const STUDIO_RESOURCES: StudioResource[] = [
         editable: true,
         defaultValue: "PART",
         options: [
-          { value: "PART", label: "Peca/produto" },
-          { value: "SERVICE", label: "Servico" },
+          { value: "PART", label: "Peça/produto" },
+          { value: "SERVICE", label: "Serviço" },
         ],
       },
       {
@@ -2797,7 +3080,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "commissionPercent",
-        label: "Comissao %",
+        label: "Comissão %",
         type: "number",
         sortable: true,
         editable: true,
@@ -2818,19 +3101,19 @@ export const STUDIO_RESOURCES: StudioResource[] = [
       },
       {
         key: "serviceCalculationMode",
-        label: "Metodo servico",
+        label: "Metodo serviço",
         type: "select",
         editable: true,
         defaultValue: "FIXED_PRICE",
         options: [
-          { value: "FIXED_PRICE", label: "Preco informado" },
+          { value: "FIXED_PRICE", label: "Preço informado" },
           { value: "HOURLY_RATE", label: "Valor hora" },
           { value: "SUPPLIER_COST_MARKUP", label: "Custo + markup" },
         ],
       },
       {
         key: "isDefault",
-        label: "Padrao",
+        label: "Padrão",
         type: "boolean",
         sortable: true,
         editable: true,
@@ -2854,20 +3137,29 @@ export const STUDIO_RESOURCES: StudioResource[] = [
     ],
   },
   controlResource({
+    key: "proposalAccessoryRules",
+    label: "Lembrete de proposta",
+    pluralLabel: "Lembretes de itens complementares",
+    category: "Comercial",
+    description:
+      "Perguntas que aparecem quando uma peça pede um acessório complementar. Exemplo: mangueira e abraçadeira.",
+    type: "PROPOSAL_ACCESSORY_RULE",
+  }),
+  controlResource({
     key: "catalogUnits",
     label: "Unidade",
     pluralLabel: "Unidades de Medida",
     category: "Suprimentos",
     description:
-      "Unidades padrao para pecas, produtos, kits, litros, horas e servicos.",
+      "Unidades padrão para peças, produtos, kits, litros, horas e serviços.",
     type: "CATALOG_UNIT",
   }),
   controlResource({
     key: "catalogBrands",
-    label: "Marca de Peca",
+    label: "Marca de Peça",
     pluralLabel: "Marcas de Pecas",
     category: "Suprimentos",
-    description: "Marcas comerciais usadas no catalogo de pecas e produtos.",
+    description: "Marcas comerciais usadas no catalogo de peças e produtos.",
     type: "CATALOG_BRAND",
   }),
   controlResource({
@@ -2888,20 +3180,20 @@ export const STUDIO_RESOURCES: StudioResource[] = [
   }),
   controlResource({
     key: "serviceTypes",
-    label: "Tipo de Servico",
+    label: "Tipo de Serviço",
     pluralLabel: "Tipos de Servico",
     category: "Operacao",
     description:
-      "Servicos previstos como termografia, preventiva, corretiva e comissionamento.",
+      "Serviços previstos como termografia, preventiva, corretiva e comissionamento.",
     type: "SERVICE_TYPE",
   }),
   controlResource({
     key: "maintenanceTypes",
-    label: "Tipo de Manutencao",
+    label: "Tipo de Manutenção",
     pluralLabel: "Tipos de Manutencao",
     category: "Operacao",
     description:
-      "Classificacoes de OS e manutencao usadas no fluxo operacional.",
+      "Classificacoes de OS e manutenção usadas no fluxo operacional.",
     type: "MAINTENANCE_TYPE",
   }),
   controlResource({
@@ -2910,7 +3202,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
     pluralLabel: "Categorias de Planos",
     category: "Operacao",
     description:
-      "Categorias dos modelos de manutencao por oleo, filtro, bateria, inspecao e testes.",
+      "Categorias dos modelos de manutenção por oleo, filtro, bateria, inspecao e testes.",
     type: "MAINTENANCE_TEMPLATE_CATEGORY",
   }),
   controlResource({
@@ -2923,16 +3215,16 @@ export const STUDIO_RESOURCES: StudioResource[] = [
   }),
   controlResource({
     key: "equipmentApplications",
-    label: "Aplicacao de Equipamento",
+    label: "Aplicação de Equipamento",
     pluralLabel: "Aplicacoes de Equipamentos",
     category: "Ativos",
     description:
-      "Aplicacoes previstas para geradores: standby, prime, continuo, locacao e ponta.",
+      "Aplicações previstas para geradores: standby, prime, continuo, locacao e ponta.",
     type: "EQUIPMENT_APPLICATION",
   }),
   controlResource({
     key: "equipmentOperationModes",
-    label: "Modo de Operacao",
+    label: "Modo de Operação",
     pluralLabel: "Modos de Operacao",
     category: "Ativos",
     description: "Modos operacionais previstos para equipamentos.",
@@ -2944,16 +3236,16 @@ export const STUDIO_RESOURCES: StudioResource[] = [
     pluralLabel: "Categorias de Itens RH",
     category: "RH",
     description:
-      "Divisao de EPIs, ferramentas tecnicas, uso interno e pecas de geradores.",
+      "Divisao de EPIs, ferramentas técnicas, uso interno e peças de geradores.",
     type: "HR_ASSET_CATEGORY",
   }),
   controlResource({
     key: "paymentTerms",
-    label: "Condicao de Pagamento",
+    label: "Condição de Pagamento",
     pluralLabel: "Condicoes de Pagamento",
     category: "Financeiro",
     description:
-      "Prazos padrao de pagamento para compras, propostas e fornecedores.",
+      "Prazos padrão de pagamento para compras, propostas e fornecedores.",
     type: "PAYMENT_TERM",
   }),
   controlResource({
@@ -2962,7 +3254,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
     pluralLabel: "Estados / UF",
     category: "Comercial",
     description:
-      "Lista controlada de estados brasileiros para cadastros e enderecos.",
+      "Lista controlada de estados brasileiros para cadastros e endereços.",
     type: "BRAZIL_STATE",
   }),
   {
@@ -2971,7 +3263,7 @@ export const STUDIO_RESOURCES: StudioResource[] = [
     pluralLabel: "Colaboradores",
     category: "RH",
     description:
-      "Base operacional de pessoas internas. Edicao continua no modulo de RH.",
+      "Base operacional de pessoas internas. Edição continua no módulo de RH.",
     endpoint: "/hr-admin/collaborators",
     entityType: "User",
     editable: false,
@@ -2992,7 +3284,13 @@ export const STUDIO_RESOURCES: StudioResource[] = [
         sortable: true,
       },
       { key: "branch", label: "Filial", searchable: true, sortable: true },
-      { key: "hourCost", label: "Custo HH", type: "number", sortable: true },
+      {
+        key: "hourCost",
+        label: "Custo HH",
+        type: "number",
+        format: "currency",
+        sortable: true,
+      },
       { key: "isActive", label: "Ativo", type: "boolean", sortable: true },
     ],
   },
@@ -3007,18 +3305,50 @@ export function getFieldValue(row: StudioRecord, key: string) {
 }
 
 export function formatStudioValue(value: unknown, field?: StudioField) {
+  if (value === null || value === undefined || value === "") return "-";
+  if (field?.key === "unitLabel") {
+    const units: Record<string, string> = {
+      diaria: "diária",
+      refeicao: "refeição",
+      periodo: "período",
+    };
+    if (units[String(value)]) return units[String(value)];
+  }
+  const option = field?.options?.find(
+    (option) => option.value === String(value),
+  );
+  if (option) return option.label;
+  if (field?.format === "date") return formatCalendarDate(String(value));
+  if (field?.format === "currency") return formatCurrency(String(value));
+  if (field?.format === "percent") return formatPercent(String(value));
   if (field?.type === "boolean") {
     if (value === true) return "Sim";
-    if (value === false) return "Nao";
+    if (value === false) return "Não";
     return "-";
   }
   if (field?.type === "number") {
     if (value === null || value === undefined || value === "") return "-";
     const numberValue = Number(value);
-    return Number.isFinite(numberValue) ? String(numberValue) : String(value);
+    return Number.isFinite(numberValue)
+      ? formatQuantity(numberValue)
+      : String(value);
   }
   if (Array.isArray(value)) return value.join(", ");
   if (value === null || value === undefined || value === "") return "-";
+  return String(value);
+}
+
+/** CSV keeps source codes, numeric precision and import-compatible values. */
+export function studioCsvValue(
+  value: unknown,
+  field: StudioField,
+  preserveEmpty = false,
+) {
+  if (value === null || value === undefined || value === "")
+    return preserveEmpty ? "" : "-";
+  if (field.type === "boolean")
+    return value === true ? "Sim" : value === false ? "Nao" : "-";
+  if (Array.isArray(value)) return value.join(", ");
   return String(value);
 }
 

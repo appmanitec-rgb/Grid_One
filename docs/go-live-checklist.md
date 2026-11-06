@@ -1,5 +1,7 @@
 # Go-live checklist
 
+Plano de execução, responsáveis, métricas e critérios de parada: [Etapa 06 — preparação do piloto](etapa-06-piloto-2026-10-06.md). O preenchimento deste checklist exige evidência do ambiente e aceite das áreas; a etapa Santander está adiada.
+
 ## Ambiente
 
 - [ ] Staging separado aprovado.

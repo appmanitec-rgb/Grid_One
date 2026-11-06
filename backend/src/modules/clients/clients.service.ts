@@ -1,3 +1,5 @@
+import { proposalScope, ruleActor } from '../auth/rules/commercial-access';
+import { allowedPortfolios } from '../auth/rules/access-rules';
 import {
   BadRequestException,
   ConflictException,
@@ -9,6 +11,10 @@ import { Prisma } from '@prisma/client';
 import { CreateClientDto, ClientPersonTypeDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { DatabaseService } from 'src/database/database.service';
+import { isValidCnpj, normalizeCnpj } from '../../common/cnpj';
+
+import { ClientListPageDto } from '../../common/list-page.dto';
+import { clientListPage } from './client-list-page';
 
 @Injectable()
 export class ClientsService {
@@ -87,12 +93,16 @@ export class ClientsService {
   }
 
   private normalizeDocument(value: string) {
-    return value.replace(/\D/g, '');
+    const document = normalizeCnpj(value);
+    if (/[A-Z]/.test(document) && !isValidCnpj(document)) {
+      throw new BadRequestException('Informe um CNPJ alfanumérico válido.');
+    }
+    return document;
   }
 
   private inferPersonType(document: string): ClientPersonTypeDto {
     const digits = this.normalizeDocument(document);
-    return digits.length <= 11
+    return digits.length <= 11 && !/[A-Z]/.test(digits)
       ? ClientPersonTypeDto.INDIVIDUAL
       : ClientPersonTypeDto.LEGAL_ENTITY;
   }
@@ -258,6 +268,10 @@ export class ClientsService {
     });
   }
 
+  listPage(query: ClientListPageDto) {
+    return clientListPage(this.database, query);
+  }
+
   findAll() {
     return this.database.client.findMany({
       select: {
@@ -316,9 +330,12 @@ export class ClientsService {
     });
   }
 
-  lookup(query?: string, take?: string | number) {
+  async lookup(query?: string, take?: string | number, actorUserId?: string) {
     const search = query?.trim();
-    const digits = search?.replace(/\D/g, '') ?? '';
+    const documentCandidate = /^[A-Za-z0-9./-]+$/.test(search ?? '')
+      ? normalizeCnpj(search)
+      : (search?.replace(/\D/g, '') ?? '');
+    const document = /\d/.test(documentCandidate) ? documentCandidate : '';
     const limit = this.parseLookupLimit(take);
 
     const where: Prisma.ClientWhereInput = search
@@ -354,11 +371,11 @@ export class ClientsService {
                 mode: 'insensitive',
               },
             },
-            ...(digits
+            ...(document
               ? [
                   {
                     cnpj: {
-                      contains: digits,
+                      contains: document,
                     },
                   },
                 ]
@@ -383,7 +400,11 @@ export class ClientsService {
         proposalBlockReason: true,
         blockedPaymentTerms: true,
         _count: {
-          select: { proposals: true },
+          select: {
+            proposals: actorUserId
+              ? { where: await proposalScope(this.database, actorUserId) }
+              : true,
+          },
         },
       },
       orderBy: { companyName: 'asc' },
@@ -391,14 +412,18 @@ export class ClientsService {
     });
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, actorUserId?: string) {
     const client = await this.database.client.findUnique({
       where: { id },
       include: {
         addresses: true,
         contacts: true,
         _count: {
-          select: { proposals: true },
+          select: {
+            proposals: {
+              where: await proposalScope(this.database, actorUserId),
+            },
+          },
         },
         generators: {
           include: {
@@ -437,6 +462,13 @@ export class ClientsService {
           take: 200,
         },
         contracts: {
+          where:
+            (await ruleActor(this.database, actorUserId)) &&
+            !allowedPortfolios(
+              (await ruleActor(this.database, actorUserId))!,
+            ).includes('contracts')
+              ? { id: { in: [] } }
+              : {},
           include: {
             createdByUser: {
               select: { id: true, name: true, email: true },
@@ -454,6 +486,7 @@ export class ClientsService {
           orderBy: { createdAt: 'desc' },
         },
         proposals: {
+          where: await proposalScope(this.database, actorUserId),
           include: {
             user: {
               select: { id: true, name: true, email: true, role: true },
@@ -711,6 +744,6 @@ export class ClientsService {
   private parseLookupLimit(value?: string | number) {
     const parsed = Number(value ?? 10);
     if (!Number.isFinite(parsed)) return 10;
-    return Math.min(Math.max(Math.trunc(parsed), 1), 20);
+    return Math.min(Math.max(Math.trunc(parsed), 1), 10);
   }
 }

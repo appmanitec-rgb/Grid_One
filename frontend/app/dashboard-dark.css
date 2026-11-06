@@ -1,0 +1,1491 @@
+/* Appearance controls work in both modes and retain the existing four palettes. */
+.dashboard-appearance-popover {
+  color: var(--foreground);
+}
+.appearance-heading {
+  color: var(--foreground);
+}
+.appearance-description {
+  color: var(--text-muted);
+}
+.appearance-modes {
+  background: var(--surface-soft);
+  border-color: var(--border);
+}
+.appearance-mode {
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background-color 120ms,
+    color 120ms;
+}
+.appearance-mode[aria-pressed="true"] {
+  color: var(--foreground);
+  background: var(--surface);
+  box-shadow: 0 1px 5px #00000012;
+}
+.appearance-mode:hover {
+  color: var(--foreground);
+}
+.appearance-palette {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--foreground);
+  cursor: pointer;
+  transition:
+    border-color 120ms,
+    background-color 120ms;
+}
+.appearance-palette:hover {
+  background: var(--surface-soft);
+  border-color: var(--border-strong);
+}
+.appearance-palette[aria-pressed="true"] {
+  border-color: var(--dashboard-accent-border);
+  background: var(--surface-strong);
+}
+.appearance-swatch {
+  border-color: var(--border);
+}
+.dashboard-appearance-popover button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}
+
+/* Screen-only: documents and print output keep their original colors. */
+@media screen {
+  :root[data-manitec-theme][data-manitec-mode="dark"],
+  body[data-manitec-theme][data-manitec-mode="dark"] {
+    color-scheme: dark;
+    --background: #0d1522;
+    --foreground: #e7eef8;
+    --surface: #162234;
+    --surface-soft: #111c2c;
+    --surface-muted: #142032;
+    --surface-strong: #213149;
+    --border: #304158;
+    --border-strong: #516782;
+    --text-muted: #a4b5cc;
+    --theme-link: #91c7ff;
+    --theme-highlight: #223c5b;
+    --app-body-background: linear-gradient(155deg, #0d1522, #101b2b);
+    --app-shell-background: var(--background);
+    --dashboard-shell-overlay: none;
+    --dashboard-main-background: radial-gradient(
+      ellipse at 80% 0%,
+      #44628b0c,
+      transparent 50%
+    );
+    --dashboard-main-ornament: none;
+    --dashboard-card-background: linear-gradient(
+      155deg,
+      var(--surface),
+      var(--surface-muted)
+    );
+    --dashboard-card-border: var(--border);
+    --dashboard-glass-background: var(--surface);
+    --dashboard-glass-border: var(--border);
+    --dashboard-popover-background: var(--surface);
+    --dashboard-popover-border: var(--border);
+  }
+  :root[data-manitec-theme="linen"][data-manitec-mode="dark"],
+  body[data-manitec-theme="linen"][data-manitec-mode="dark"] {
+    --background: #191614;
+    --foreground: #f1e9e1;
+    --surface: #28231e;
+    --surface-soft: #211d19;
+    --surface-muted: #241f1b;
+    --surface-strong: #3a3026;
+    --border: #514539;
+    --border-strong: #79644e;
+    --text-muted: #c6b5a3;
+    --app-body-background: linear-gradient(155deg, #191614, #211b16);
+  }
+  :root[data-manitec-theme="sage"][data-manitec-mode="dark"],
+  body[data-manitec-theme="sage"][data-manitec-mode="dark"] {
+    --background: #101a18;
+    --foreground: #e5f1eb;
+    --surface: #1c2b27;
+    --surface-soft: #16221f;
+    --surface-muted: #192723;
+    --surface-strong: #293e36;
+    --border: #3b5148;
+    --border-strong: #5b786a;
+    --text-muted: #a8c0b4;
+    --app-body-background: linear-gradient(155deg, #101a18, #14221d);
+  }
+  :root[data-manitec-theme="slate"][data-manitec-mode="dark"],
+  body[data-manitec-theme="slate"][data-manitec-mode="dark"] {
+    --background: #13161c;
+    --foreground: #e9edf5;
+    --surface: #222731;
+    --surface-soft: #1a1f28;
+    --surface-muted: #1e242d;
+    --surface-strong: #303946;
+    --border: #424e60;
+    --border-strong: #65748a;
+    --text-muted: #b0bdd1;
+    --app-body-background: linear-gradient(155deg, #13161c, #1a202b);
+  }
+  body[data-manitec-mode="dark"] .dashboard-shell {
+    color: var(--foreground);
+    --dashboard-navigation-header-background: linear-gradient(
+      180deg,
+      #101a28,
+      #0d1622
+    );
+  }
+  body[data-manitec-mode="dark"] ::selection {
+    color: #fff;
+    background: #2b5a92;
+  }
+  body[data-manitec-mode="dark"] {
+    scrollbar-color: var(--border-strong) var(--surface-soft);
+  }
+  body[data-manitec-mode="dark"]
+    :is(input, select, textarea):not([type="checkbox"]):not([type="radio"]):not(
+      [type="range"]
+    ):not([type="color"]) {
+    background-color: var(--surface-soft);
+    border-color: var(--border-strong);
+    color: var(--foreground);
+  }
+  body[data-manitec-mode="dark"] :is(input, select, textarea):disabled {
+    background-color: var(--surface-muted);
+    color: var(--text-muted);
+  }
+  body[data-manitec-mode="dark"] :is(input, textarea)::placeholder {
+    color: var(--text-muted);
+    opacity: 1;
+  }
+  body[data-manitec-mode="dark"] :is(input, select, textarea):focus {
+    border-color: #75aef3;
+    box-shadow: 0 0 0 3px #75aef324;
+  }
+  body[data-manitec-mode="dark"]
+    :is(input[type="checkbox"], input[type="radio"]) {
+    accent-color: #5e9ef5;
+  }
+  body[data-manitec-mode="dark"] :is(button, a, summary):focus-visible {
+    outline-color: #91c7ff;
+  }
+  body[data-manitec-mode="dark"]
+    :is([role="dialog"], [role="status"]):not(.document-print-page) {
+    color: var(--foreground);
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .dashboard-page-header,
+      .dashboard-metric-card,
+      .dashboard-sticky-actions,
+      .workspace-state,
+      .workspace-state-icon,
+      .proposal-stepper,
+      .proposal-form-section,
+      .proposal-opportunity,
+      .proposal-finance-dock,
+      .proposal-finance-details dl,
+      .proposal-flow-back,
+      .dashboard-table-pagination,
+      .dashboard-page-context
+    ) {
+    background: var(--surface);
+    color: var(--foreground);
+    border-color: var(--border);
+    box-shadow: 0 8px 22px -18px #00000080;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .dashboard-page-title,
+      .dashboard-section-title,
+      .proposal-form-section > header h2,
+      .proposal-step-heading h2,
+      .proposal-opportunity-main strong,
+      .proposal-review-grid dd,
+      .proposal-finance-inline dd,
+      .proposal-finance-details summary
+    ) {
+    color: var(--foreground);
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .dashboard-page-description,
+      .dashboard-section-description,
+      .dashboard-page-context summary,
+      .proposal-form-section > header p,
+      .proposal-step-heading p,
+      .proposal-stepper button,
+      .proposal-opportunity-main p,
+      .proposal-opportunity summary,
+      .proposal-review-grid dt,
+      .proposal-finance-inline dt,
+      .proposal-finance-total > span,
+      .proposal-finance-total small,
+      .proposal-finance-details summary span,
+      .dashboard-table-pagination-summary,
+      .dashboard-table-pagination-label,
+      .dashboard-table-pagination-page
+    ) {
+    color: var(--text-muted);
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .dashboard-page-eyebrow,
+      .proposal-context-link,
+      .proposal-finance-total output
+    ) {
+    color: var(--theme-link);
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .proposal-step-heading,
+      .proposal-step-number,
+      .proposal-item-row,
+      .dashboard-table-pagination-select,
+      .dashboard-table-pagination-button
+    ) {
+    background: var(--surface-soft);
+    color: var(--foreground);
+    border-color: var(--border);
+  }
+  body[data-manitec-mode="dark"] .proposal-stepper button[aria-current="step"] {
+    background: var(--theme-highlight);
+    color: var(--theme-link);
+    border-color: #496e99;
+  }
+  body[data-manitec-mode="dark"]
+    .proposal-stepper
+    [aria-current="step"]
+    .proposal-step-number {
+    background: #2563a6;
+    color: #fff;
+    border-color: #4d83c5;
+  }
+  body[data-manitec-mode="dark"] .proposal-opportunity-icon {
+    background: var(--theme-highlight);
+    color: var(--theme-link);
+  }
+  body[data-manitec-mode="dark"] .proposal-stepper button:hover {
+    background: var(--surface-strong);
+  }
+  body[data-manitec-mode="dark"] :is(thead, tbody tr) {
+    border-color: var(--border);
+  }
+  body[data-manitec-mode="dark"] thead {
+    background: var(--surface-soft);
+    color: var(--text-muted);
+  }
+  body[data-manitec-mode="dark"] .dashboard-table-sort-button {
+    color: var(--text-muted);
+    background: var(--surface);
+    border-color: var(--border);
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .bg-white,
+      .bg-white\/70,
+      .bg-white\/72,
+      .bg-white\/80,
+      .bg-white\/82,
+      .bg-white\/85,
+      .bg-white\/88,
+      .bg-white\/90,
+      .bg-white\/92,
+      .bg-white\/95,
+      .bg-white\/96
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    background-color: var(--surface);
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .bg-slate-50,
+      .bg-slate-50\/70,
+      .bg-slate-50\/75,
+      .bg-slate-50\/80,
+      .bg-slate-50\/85,
+      .bg-slate-50\/88,
+      .bg-slate-50\/90,
+      .bg-zinc-50,
+      .bg-zinc-50\/50
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    background-color: var(--surface-soft);
+  }
+  body[data-manitec-mode="dark"]
+    :is(.bg-slate-100, .bg-slate-100\/90, .bg-zinc-100, .bg-stone-100):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    background-color: var(--surface-strong);
+  }
+  body[data-manitec-mode="dark"]
+    :is(.bg-slate-200, .bg-zinc-200):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    background-color: var(--border);
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .border-slate-100,
+      .border-slate-200,
+      .border-slate-300,
+      .border-zinc-100,
+      .border-zinc-200,
+      .border-zinc-300,
+      .border-stone-100,
+      .border-stone-200,
+      .border-stone-300,
+      .border-slate-200\/80,
+      .border-slate-200\/90
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    border-color: var(--border);
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .divide-slate-100,
+      .divide-slate-200,
+      .divide-zinc-100,
+      .divide-zinc-200
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    --tw-divide-opacity: 1;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .divide-slate-100,
+      .divide-slate-200,
+      .divide-zinc-100,
+      .divide-zinc-200
+    )
+    > :not(:last-child) {
+    border-color: var(--border);
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .text-slate-700,
+      .text-slate-800,
+      .text-slate-900,
+      .text-slate-950,
+      .text-zinc-700,
+      .text-zinc-800,
+      .text-zinc-900,
+      .text-zinc-950,
+      .text-stone-700,
+      .text-stone-800,
+      .text-stone-900,
+      .text-stone-950
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    color: var(--foreground);
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .text-slate-400,
+      .text-slate-500,
+      .text-slate-600,
+      .text-zinc-400,
+      .text-zinc-500,
+      .text-zinc-600
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    color: var(--text-muted);
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .bg-blue-50,
+      .bg-blue-50\/50,
+      .bg-blue-50\/60,
+      .bg-blue-50\/70,
+      .bg-blue-50\/75,
+      .bg-blue-50\/80,
+      .bg-blue-50\/85,
+      .bg-blue-50\/90,
+      .bg-blue-100,
+      .bg-blue-100\/50,
+      .bg-blue-100\/60,
+      .bg-blue-100\/70,
+      .bg-blue-100\/75,
+      .bg-blue-100\/80,
+      .bg-blue-100\/85,
+      .bg-blue-100\/90
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    background-color: #1c304b;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.border-blue-100, .border-blue-200, .border-blue-300):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    border-color: #3e6089;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .text-blue-500,
+      .text-blue-600,
+      .text-blue-700,
+      .text-blue-800,
+      .text-blue-900,
+      .text-blue-950
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    color: #9ccaff;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .bg-sky-50,
+      .bg-sky-50\/50,
+      .bg-sky-50\/60,
+      .bg-sky-50\/70,
+      .bg-sky-50\/75,
+      .bg-sky-50\/80,
+      .bg-sky-50\/85,
+      .bg-sky-50\/90,
+      .bg-sky-100,
+      .bg-sky-100\/50,
+      .bg-sky-100\/60,
+      .bg-sky-100\/70,
+      .bg-sky-100\/75,
+      .bg-sky-100\/80,
+      .bg-sky-100\/85,
+      .bg-sky-100\/90
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    background-color: #143146;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.border-sky-100, .border-sky-200, .border-sky-300):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    border-color: #376681;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .text-sky-500,
+      .text-sky-600,
+      .text-sky-700,
+      .text-sky-800,
+      .text-sky-900,
+      .text-sky-950
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    color: #91d3ff;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .bg-cyan-50,
+      .bg-cyan-50\/50,
+      .bg-cyan-50\/60,
+      .bg-cyan-50\/70,
+      .bg-cyan-50\/75,
+      .bg-cyan-50\/80,
+      .bg-cyan-50\/85,
+      .bg-cyan-50\/90,
+      .bg-cyan-100,
+      .bg-cyan-100\/50,
+      .bg-cyan-100\/60,
+      .bg-cyan-100\/70,
+      .bg-cyan-100\/75,
+      .bg-cyan-100\/80,
+      .bg-cyan-100\/85,
+      .bg-cyan-100\/90
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    background-color: #133439;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.border-cyan-100, .border-cyan-200, .border-cyan-300):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    border-color: #32676c;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .text-cyan-500,
+      .text-cyan-600,
+      .text-cyan-700,
+      .text-cyan-800,
+      .text-cyan-900,
+      .text-cyan-950
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    color: #80dfed;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .bg-emerald-50,
+      .bg-emerald-50\/50,
+      .bg-emerald-50\/60,
+      .bg-emerald-50\/70,
+      .bg-emerald-50\/75,
+      .bg-emerald-50\/80,
+      .bg-emerald-50\/85,
+      .bg-emerald-50\/90,
+      .bg-emerald-100,
+      .bg-emerald-100\/50,
+      .bg-emerald-100\/60,
+      .bg-emerald-100\/70,
+      .bg-emerald-100\/75,
+      .bg-emerald-100\/80,
+      .bg-emerald-100\/85,
+      .bg-emerald-100\/90
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    background-color: #17372e;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.border-emerald-100, .border-emerald-200, .border-emerald-300):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    border-color: #356b57;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .text-emerald-500,
+      .text-emerald-600,
+      .text-emerald-700,
+      .text-emerald-800,
+      .text-emerald-900,
+      .text-emerald-950
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    color: #80dfb4;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .bg-green-50,
+      .bg-green-50\/50,
+      .bg-green-50\/60,
+      .bg-green-50\/70,
+      .bg-green-50\/75,
+      .bg-green-50\/80,
+      .bg-green-50\/85,
+      .bg-green-50\/90,
+      .bg-green-100,
+      .bg-green-100\/50,
+      .bg-green-100\/60,
+      .bg-green-100\/70,
+      .bg-green-100\/75,
+      .bg-green-100\/80,
+      .bg-green-100\/85,
+      .bg-green-100\/90
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    background-color: #1c382a;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.border-green-100, .border-green-200, .border-green-300):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    border-color: #3a6d4b;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .text-green-500,
+      .text-green-600,
+      .text-green-700,
+      .text-green-800,
+      .text-green-900,
+      .text-green-950
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    color: #94e4ad;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .bg-teal-50,
+      .bg-teal-50\/50,
+      .bg-teal-50\/60,
+      .bg-teal-50\/70,
+      .bg-teal-50\/75,
+      .bg-teal-50\/80,
+      .bg-teal-50\/85,
+      .bg-teal-50\/90,
+      .bg-teal-100,
+      .bg-teal-100\/50,
+      .bg-teal-100\/60,
+      .bg-teal-100\/70,
+      .bg-teal-100\/75,
+      .bg-teal-100\/80,
+      .bg-teal-100\/85,
+      .bg-teal-100\/90
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    background-color: #163834;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.border-teal-100, .border-teal-200, .border-teal-300):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    border-color: #356b65;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .text-teal-500,
+      .text-teal-600,
+      .text-teal-700,
+      .text-teal-800,
+      .text-teal-900,
+      .text-teal-950
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    color: #82ded0;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .bg-amber-50,
+      .bg-amber-50\/50,
+      .bg-amber-50\/60,
+      .bg-amber-50\/70,
+      .bg-amber-50\/75,
+      .bg-amber-50\/80,
+      .bg-amber-50\/85,
+      .bg-amber-50\/90,
+      .bg-amber-100,
+      .bg-amber-100\/50,
+      .bg-amber-100\/60,
+      .bg-amber-100\/70,
+      .bg-amber-100\/75,
+      .bg-amber-100\/80,
+      .bg-amber-100\/85,
+      .bg-amber-100\/90
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    background-color: #3b2d18;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.border-amber-100, .border-amber-200, .border-amber-300):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    border-color: #795e2b;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .text-amber-500,
+      .text-amber-600,
+      .text-amber-700,
+      .text-amber-800,
+      .text-amber-900,
+      .text-amber-950
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    color: #f2cd80;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .bg-orange-50,
+      .bg-orange-50\/50,
+      .bg-orange-50\/60,
+      .bg-orange-50\/70,
+      .bg-orange-50\/75,
+      .bg-orange-50\/80,
+      .bg-orange-50\/85,
+      .bg-orange-50\/90,
+      .bg-orange-100,
+      .bg-orange-100\/50,
+      .bg-orange-100\/60,
+      .bg-orange-100\/70,
+      .bg-orange-100\/75,
+      .bg-orange-100\/80,
+      .bg-orange-100\/85,
+      .bg-orange-100\/90
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    background-color: #3d291c;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.border-orange-100, .border-orange-200, .border-orange-300):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    border-color: #795030;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .text-orange-500,
+      .text-orange-600,
+      .text-orange-700,
+      .text-orange-800,
+      .text-orange-900,
+      .text-orange-950
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    color: #f3bb86;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .bg-rose-50,
+      .bg-rose-50\/50,
+      .bg-rose-50\/60,
+      .bg-rose-50\/70,
+      .bg-rose-50\/75,
+      .bg-rose-50\/80,
+      .bg-rose-50\/85,
+      .bg-rose-50\/90,
+      .bg-rose-100,
+      .bg-rose-100\/50,
+      .bg-rose-100\/60,
+      .bg-rose-100\/70,
+      .bg-rose-100\/75,
+      .bg-rose-100\/80,
+      .bg-rose-100\/85,
+      .bg-rose-100\/90
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    background-color: #3e242e;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.border-rose-100, .border-rose-200, .border-rose-300):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    border-color: #794554;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .text-rose-500,
+      .text-rose-600,
+      .text-rose-700,
+      .text-rose-800,
+      .text-rose-900,
+      .text-rose-950
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    color: #ffb0c1;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .bg-red-50,
+      .bg-red-50\/50,
+      .bg-red-50\/60,
+      .bg-red-50\/70,
+      .bg-red-50\/75,
+      .bg-red-50\/80,
+      .bg-red-50\/85,
+      .bg-red-50\/90,
+      .bg-red-100,
+      .bg-red-100\/50,
+      .bg-red-100\/60,
+      .bg-red-100\/70,
+      .bg-red-100\/75,
+      .bg-red-100\/80,
+      .bg-red-100\/85,
+      .bg-red-100\/90
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    background-color: #3d2326;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.border-red-100, .border-red-200, .border-red-300):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    border-color: #79434b;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .text-red-500,
+      .text-red-600,
+      .text-red-700,
+      .text-red-800,
+      .text-red-900,
+      .text-red-950
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    color: #ffb0b5;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .bg-violet-50,
+      .bg-violet-50\/50,
+      .bg-violet-50\/60,
+      .bg-violet-50\/70,
+      .bg-violet-50\/75,
+      .bg-violet-50\/80,
+      .bg-violet-50\/85,
+      .bg-violet-50\/90,
+      .bg-violet-100,
+      .bg-violet-100\/50,
+      .bg-violet-100\/60,
+      .bg-violet-100\/70,
+      .bg-violet-100\/75,
+      .bg-violet-100\/80,
+      .bg-violet-100\/85,
+      .bg-violet-100\/90
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    background-color: #30263e;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.border-violet-100, .border-violet-200, .border-violet-300):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    border-color: #635080;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .text-violet-500,
+      .text-violet-600,
+      .text-violet-700,
+      .text-violet-800,
+      .text-violet-900,
+      .text-violet-950
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    color: #cdb5ff;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .bg-indigo-50,
+      .bg-indigo-50\/50,
+      .bg-indigo-50\/60,
+      .bg-indigo-50\/70,
+      .bg-indigo-50\/75,
+      .bg-indigo-50\/80,
+      .bg-indigo-50\/85,
+      .bg-indigo-50\/90,
+      .bg-indigo-100,
+      .bg-indigo-100\/50,
+      .bg-indigo-100\/60,
+      .bg-indigo-100\/70,
+      .bg-indigo-100\/75,
+      .bg-indigo-100\/80,
+      .bg-indigo-100\/85,
+      .bg-indigo-100\/90
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    background-color: #282b47;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.border-indigo-100, .border-indigo-200, .border-indigo-300):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    border-color: #525e8f;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .text-indigo-500,
+      .text-indigo-600,
+      .text-indigo-700,
+      .text-indigo-800,
+      .text-indigo-900,
+      .text-indigo-950
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    color: #b9c5ff;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .bg-purple-50,
+      .bg-purple-50\/50,
+      .bg-purple-50\/60,
+      .bg-purple-50\/70,
+      .bg-purple-50\/75,
+      .bg-purple-50\/80,
+      .bg-purple-50\/85,
+      .bg-purple-50\/90,
+      .bg-purple-100,
+      .bg-purple-100\/50,
+      .bg-purple-100\/60,
+      .bg-purple-100\/70,
+      .bg-purple-100\/75,
+      .bg-purple-100\/80,
+      .bg-purple-100\/85,
+      .bg-purple-100\/90
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    background-color: #35263e;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.border-purple-100, .border-purple-200, .border-purple-300):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    border-color: #715184;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .text-purple-500,
+      .text-purple-600,
+      .text-purple-700,
+      .text-purple-800,
+      .text-purple-900,
+      .text-purple-950
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    color: #deb5fa;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.from-white, .from-slate-50, .from-slate-100, .from-zinc-100):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    --tw-gradient-from: var(--surface);
+  }
+  body[data-manitec-mode="dark"]
+    :is(.to-white, .to-slate-200, .to-zinc-200):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ) {
+    --tw-gradient-to: var(--surface-soft);
+  }
+  body[data-manitec-mode="dark"]
+    :is(button, a, [role="button"]):is(
+      [class*="hover:bg-slate-"],
+      [class*="hover:bg-zinc-"],
+      [class*="hover:bg-white"]
+    ):not(
+      :where(
+        .dashboard-sidebar *,
+        .dashboard-topbar *,
+        .document-print-page,
+        .document-print-page *
+      )
+    ):hover:not(:disabled) {
+    background-color: var(--surface-strong);
+  }
+  body[data-manitec-mode="dark"] :is(.modern-card, .dashboard-metric-card) {
+    box-shadow: 0 8px 24px -20px #000000a0;
+  }
+}
+
+@media screen {
+  body[data-manitec-mode="dark"]
+    :is(
+      thead .dashboard-sticky-actions,
+      tbody tr:hover .dashboard-sticky-actions
+    ) {
+    background: var(--surface-soft);
+  }
+  body[data-manitec-mode="dark"] .workspace-state--error {
+    background: #3d2326;
+    border-color: #79434b;
+    color: #ffb0b5;
+  }
+  body[data-manitec-mode="dark"] .workspace-state--success {
+    background: #17372e;
+    border-color: #356b57;
+    color: #80dfb4;
+  }
+  body[data-manitec-mode="dark"]
+    :is(
+      .dashboard-kanban-side-button:hover,
+      .dashboard-kanban-side-button:focus-visible
+    ) {
+    background: var(--surface-strong);
+    color: var(--foreground);
+  }
+}
+
+@media screen {
+  body[data-manitec-mode="dark"] .document-print-page {
+    color-scheme: light;
+    color: #0f172a;
+    background-color: #fff;
+  }
+  body[data-manitec-mode="dark"]
+    .document-print-page
+    :is(input, select, textarea) {
+    color-scheme: light;
+    color: #0f172a;
+    background-color: #fff;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .appearance-mode,
+  .appearance-palette {
+    transition: none;
+  }
+}
+
+/* The same surfaces cover custom gradients, Kanban columns, and the ticket workspace. */
+@media screen {
+  :root[data-manitec-theme][data-manitec-mode="dark"],
+  body[data-manitec-theme][data-manitec-mode="dark"] {
+    --surface-tint: #64748b;
+    --ticket-surface: var(--surface);
+    --ticket-soft: var(--surface-soft);
+    --ticket-hover: var(--surface-strong);
+    --ticket-selection: var(--theme-highlight);
+    --ticket-badge: var(--surface-strong);
+    --ticket-text: var(--foreground);
+    --ticket-muted: var(--text-muted);
+    --ticket-link: var(--theme-link);
+    --ticket-border: var(--border);
+    --ticket-border-strong: var(--border-strong);
+    --ticket-danger: #ffb0c1;
+    --ticket-warning: #f2cd80;
+    --ticket-note: #3b2d18;
+    --ticket-customer: #1c304b;
+    --ticket-note-border: #795e2b;
+    --ticket-customer-border: #3e6089;
+    --ticket-focus-ring: #75aef324;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.border-slate-200, .border-zinc-200, .border-stone-200) {
+    --surface-tint: #64748b;
+  }
+  body[data-manitec-mode="dark"] :is(.border-sky-200, .border-blue-200) {
+    --surface-tint: #38bdf8;
+  }
+  body[data-manitec-mode="dark"] .border-emerald-200 {
+    --surface-tint: #10b981;
+  }
+  body[data-manitec-mode="dark"] .border-amber-200 {
+    --surface-tint: #f59e0b;
+  }
+  body[data-manitec-mode="dark"] .border-rose-200 {
+    --surface-tint: #f43f5e;
+  }
+  body[data-manitec-mode="dark"]
+    .dashboard-tinted-surface:not(.document-print-page) {
+    background: linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--surface) 90%, var(--surface-tint)) 0%,
+      var(--surface) 100%
+    );
+  }
+  body[data-manitec-mode="dark"] .dashboard-kanban-side-button {
+    background: var(--surface-soft);
+    color: var(--text-muted);
+    border-color: var(--border);
+  }
+  body[data-manitec-mode="dark"]
+    .dashboard-kanban-side-button:is(:hover, :focus-visible) {
+    background: var(--surface-strong);
+    color: var(--foreground);
+    border-color: var(--border-strong);
+  }
+}
+
+@media screen {
+  body[data-manitec-mode="dark"] :is(.bg-blue-50\/30, .bg-blue-50\/40) {
+    background-color: #1c304b;
+  }
+  body[data-manitec-mode="dark"] .bg-emerald-50\/40 {
+    background-color: #17372e;
+  }
+  body[data-manitec-mode="dark"] .bg-sky-50\/35 {
+    background-color: #143146;
+  }
+  body[data-manitec-mode="dark"] .bg-amber-200 {
+    background-color: #3b2d18;
+  }
+  body[data-manitec-mode="dark"] .dashboard-record-link {
+    color: var(--theme-link);
+  }
+  body[data-manitec-mode="dark"]
+    :is(.dashboard-main, [role="dialog"])
+    :is(.bg-sky-400, .bg-sky-500, .bg-sky-600):is(
+      .text-white,
+      .text-sky-700,
+      .text-sky-800,
+      .text-sky-900,
+      .text-sky-950
+    ) {
+    background-color: #145780;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.dashboard-main, [role="dialog"])
+    :is(.bg-blue-400, .bg-blue-500, .bg-blue-600):is(
+      .text-white,
+      .text-blue-700,
+      .text-blue-800,
+      .text-blue-900,
+      .text-blue-950
+    ) {
+    background-color: #24558c;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.dashboard-main, [role="dialog"])
+    :is(.bg-cyan-400, .bg-cyan-500, .bg-cyan-600):is(
+      .text-white,
+      .text-cyan-700,
+      .text-cyan-800,
+      .text-cyan-900,
+      .text-cyan-950
+    ) {
+    background-color: #15565f;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.dashboard-main, [role="dialog"])
+    :is(.bg-emerald-400, .bg-emerald-500, .bg-emerald-600):is(
+      .text-white,
+      .text-emerald-700,
+      .text-emerald-800,
+      .text-emerald-900,
+      .text-emerald-950
+    ) {
+    background-color: #145c45;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.dashboard-main, [role="dialog"])
+    :is(.bg-green-400, .bg-green-500, .bg-green-600):is(
+      .text-white,
+      .text-green-700,
+      .text-green-800,
+      .text-green-900,
+      .text-green-950
+    ) {
+    background-color: #205b38;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.dashboard-main, [role="dialog"])
+    :is(.bg-teal-400, .bg-teal-500, .bg-teal-600):is(
+      .text-white,
+      .text-teal-700,
+      .text-teal-800,
+      .text-teal-900,
+      .text-teal-950
+    ) {
+    background-color: #165b52;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.dashboard-main, [role="dialog"])
+    :is(.bg-amber-400, .bg-amber-500, .bg-amber-600):is(
+      .text-white,
+      .text-amber-700,
+      .text-amber-800,
+      .text-amber-900,
+      .text-amber-950
+    ) {
+    background-color: #694612;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.dashboard-main, [role="dialog"])
+    :is(.bg-orange-400, .bg-orange-500, .bg-orange-600):is(
+      .text-white,
+      .text-orange-700,
+      .text-orange-800,
+      .text-orange-900,
+      .text-orange-950
+    ) {
+    background-color: #763d18;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.dashboard-main, [role="dialog"])
+    :is(.bg-rose-400, .bg-rose-500, .bg-rose-600):is(
+      .text-white,
+      .text-rose-700,
+      .text-rose-800,
+      .text-rose-900,
+      .text-rose-950
+    ) {
+    background-color: #8c2947;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.dashboard-main, [role="dialog"])
+    :is(.bg-red-400, .bg-red-500, .bg-red-600):is(
+      .text-white,
+      .text-red-700,
+      .text-red-800,
+      .text-red-900,
+      .text-red-950
+    ) {
+    background-color: #842e35;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.dashboard-main, [role="dialog"])
+    :is(.bg-violet-400, .bg-violet-500, .bg-violet-600):is(
+      .text-white,
+      .text-violet-700,
+      .text-violet-800,
+      .text-violet-900,
+      .text-violet-950
+    ) {
+    background-color: #57368a;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.dashboard-main, [role="dialog"])
+    :is(.bg-indigo-400, .bg-indigo-500, .bg-indigo-600):is(
+      .text-white,
+      .text-indigo-700,
+      .text-indigo-800,
+      .text-indigo-900,
+      .text-indigo-950
+    ) {
+    background-color: #3f4a87;
+  }
+  body[data-manitec-mode="dark"]
+    :is(.dashboard-main, [role="dialog"])
+    :is(.bg-purple-400, .bg-purple-500, .bg-purple-600):is(
+      .text-white,
+      .text-purple-700,
+      .text-purple-800,
+      .text-purple-900,
+      .text-purple-950
+    ) {
+    background-color: #653b80;
+  }
+}

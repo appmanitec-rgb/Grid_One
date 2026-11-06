@@ -6,6 +6,7 @@ import { ServiceReportsModule } from '../service-reports/service-reports.module'
 import { TicketsModule } from '../tickets/tickets.module';
 import { CustomerPortalController } from './customer-portal.controller';
 import { CustomerPortalService } from './customer-portal.service';
+import { PortalPermissionGuard } from './portal-permission.guard';
 
 @Module({
   imports: [
@@ -16,7 +17,7 @@ import { CustomerPortalService } from './customer-portal.service';
     ServiceReportsModule,
   ],
   controllers: [CustomerPortalController],
-  providers: [CustomerPortalService],
+  providers: [CustomerPortalService, PortalPermissionGuard],
   exports: [CustomerPortalService],
 })
 export class CustomerPortalModule {}

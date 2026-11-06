@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import { DatabaseService } from '../../database/database.service';
 
 const authorSelect = {
@@ -14,6 +15,7 @@ const authorSelect = {
   role: true,
   profilePhotoUrl: true,
 } as const;
+const feedCategories = ['GENERAL', 'COMMERCIAL', 'WORKS', 'SERVICES'] as const;
 
 @Injectable()
 export class TeamService {
@@ -84,11 +86,24 @@ export class TeamService {
       : fallback;
   }
 
-  async feed(userId: string, cursor?: string, limit?: string) {
+  private category(value?: string) {
+    const category = value || 'GENERAL';
+    if (!feedCategories.includes(category as (typeof feedCategories)[number])) {
+      throw new BadRequestException('Feed inválido.');
+    }
+    return category;
+  }
+
+  async feed(
+    userId: string,
+    cursor?: string,
+    limit?: string,
+    category?: string,
+  ) {
     const actor = await this.actor(userId);
     const take = this.pageSize(limit, 30, 15);
     const rows = await this.prisma.teamPost.findMany({
-      where: { deletedAt: null },
+      where: { deletedAt: null, category: this.category(category) },
       orderBy: [{ pinnedAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
       take: take + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -109,6 +124,8 @@ export class TeamService {
       items: page.map((post) => ({
         id: post.id,
         body: post.body,
+        category: post.category,
+        automated: Boolean(post.eventKey),
         author: this.authorView(post.author, post.authorName),
         pinnedAt: post.pinnedAt,
         editedAt: post.editedAt,
@@ -116,7 +133,7 @@ export class TeamService {
         reactionCount: post._count.reactions,
         commentCount: post._count.comments,
         likedByMe: post.reactions.length > 0,
-        canEdit: post.authorId === userId,
+        canEdit: post.authorId === userId && post.authorId !== null,
         canDelete: post.authorId === userId || this.canModerate(actor),
         comments: post.comments.reverse().map((comment) => ({
           id: comment.id,
@@ -131,13 +148,14 @@ export class TeamService {
     };
   }
 
-  async createPost(userId: string, body: string) {
+  async createPost(userId: string, body: string, category?: string) {
     const actor = await this.actor(userId);
     return this.prisma.teamPost.create({
       data: {
         authorId: userId,
         authorName: actor.name,
         body: this.cleanBody(body, 5000),
+        category: this.category(category),
       },
       include: { author: { select: authorSelect } },
     });
@@ -276,7 +294,10 @@ export class TeamService {
   async channels(userId: string) {
     await this.actor(userId);
     const channels = await this.prisma.teamChannel.findMany({
-      where: { isArchived: false },
+      where: {
+        isArchived: false,
+        OR: [{ isPrivate: false }, { members: { some: { userId } } }],
+      },
       orderBy: { name: 'asc' },
       include: {
         reads: { where: { userId }, select: { lastReadAt: true } },
@@ -299,6 +320,14 @@ export class TeamService {
         slug: channel.slug,
         name: channel.name,
         description: channel.description,
+        isPrivate: channel.isPrivate,
+        directKey: channel.directKey,
+        members: await this.prisma.teamChannelMember
+          .findMany({
+            where: { channelId: channel.id },
+            select: { user: { select: authorSelect } },
+          })
+          .then((rows) => rows.map((row) => row.user)),
         unreadCount: await this.prisma.teamMessage.count({
           where: {
             channelId: channel.id,
@@ -322,10 +351,55 @@ export class TeamService {
     );
   }
 
-  async createChannel(userId: string, name: string, description?: string) {
+  async people(userId: string) {
+    await this.actor(userId);
+    return this.prisma.user.findMany({
+      where: {
+        isActive: true,
+        role: { not: UserRole.CLIENT },
+        id: { not: userId },
+      },
+      select: authorSelect,
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async direct(userId: string, otherId: string) {
     const actor = await this.actor(userId);
-    if (!this.canModerate(actor))
-      throw new ForbiddenException('Apenas gestores podem criar canais.');
+    if (userId === otherId)
+      throw new BadRequestException('Escolha outra pessoa.');
+    const other = await this.prisma.user.findFirst({
+      where: { id: otherId, isActive: true, role: { not: UserRole.CLIENT } },
+      select: { id: true, name: true },
+    });
+    if (!other) throw new NotFoundException('Colaborador não encontrado.');
+    const directKey = [userId, otherId].sort().join(':');
+    return this.prisma.teamChannel.upsert({
+      where: { directKey },
+      create: {
+        slug: `direct-${randomUUID()}`,
+        name: `${actor.name} e ${other.name}`,
+        isPrivate: true,
+        directKey,
+        createdByUserId: userId,
+        members: { create: [{ userId }, { userId: otherId }] },
+      },
+      update: {},
+    });
+  }
+
+  async createChannel(
+    userId: string,
+    name: string,
+    description?: string,
+    memberIds?: string[],
+  ) {
+    const actor = await this.actor(userId);
+    const requested = [...new Set(memberIds || [])];
+    if (!this.canModerate(actor) && requested.length === 0)
+      throw new ForbiddenException(
+        'Selecione participantes para criar um canal privado.',
+      );
     const cleanName = name?.trim();
     const slug = cleanName
       ?.normalize('NFD')
@@ -336,23 +410,54 @@ export class TeamService {
     if (!cleanName || cleanName.length > 40 || !slug) {
       throw new BadRequestException('Informe um nome válido para o canal.');
     }
-    const existing = await this.prisma.teamChannel.findUnique({
-      where: { slug },
-    });
-    if (existing)
-      throw new ConflictException('Já existe um canal com este nome.');
+    if (requested.length === 0) {
+      const existing = await this.prisma.teamChannel.findUnique({
+        where: { slug },
+      });
+      if (existing)
+        throw new ConflictException('Já existe um canal com este nome.');
+    }
+    if (requested.length > 100)
+      throw new BadRequestException('Limite de 100 participantes.');
+    if (requested.length) {
+      const found = await this.prisma.user.count({
+        where: {
+          id: { in: requested },
+          isActive: true,
+          role: { not: UserRole.CLIENT },
+        },
+      });
+      if (found !== requested.length)
+        throw new BadRequestException('Participantes inválidos.');
+    }
     return this.prisma.teamChannel.create({
       data: {
         name: cleanName,
-        slug,
+        slug: requested.length ? `${slug}-${randomUUID()}` : slug,
         description: description?.trim() || null,
         createdByUserId: userId,
+        isPrivate: requested.length > 0,
+        ...(requested.length
+          ? {
+              members: {
+                create: [...new Set([userId, ...requested])].map(
+                  (memberId) => ({ userId: memberId }),
+                ),
+              },
+            }
+          : {}),
       },
     });
   }
 
-  private async channel(id: string) {
+  private async channel(id: string, userId: string) {
     const channel = await this.prisma.teamChannel.findUnique({ where: { id } });
+    if (channel?.isPrivate) {
+      const member = await this.prisma.teamChannelMember.findUnique({
+        where: { channelId_userId: { channelId: id, userId } },
+      });
+      if (!member) throw new NotFoundException('Canal não encontrado.');
+    }
     if (!channel || channel.isArchived)
       throw new NotFoundException('Canal não encontrado.');
     return channel;
@@ -365,7 +470,7 @@ export class TeamService {
     limit?: string,
   ) {
     const actor = await this.actor(userId);
-    await this.channel(channelId);
+    await this.channel(channelId, userId);
     const take = this.pageSize(limit, 100, 50);
     const rows = await this.prisma.teamMessage.findMany({
       where: { channelId, deletedAt: null },
@@ -392,7 +497,7 @@ export class TeamService {
 
   async sendMessage(userId: string, channelId: string, body: string) {
     const actor = await this.actor(userId);
-    await this.channel(channelId);
+    await this.channel(channelId, userId);
     return this.prisma.teamMessage.create({
       data: {
         channelId,
@@ -407,6 +512,7 @@ export class TeamService {
   async updateMessage(userId: string, id: string, body: string) {
     await this.actor(userId);
     const message = await this.prisma.teamMessage.findUnique({ where: { id } });
+    if (message) await this.channel(message.channelId, userId);
     if (!message || message.deletedAt)
       throw new NotFoundException('Mensagem não encontrada.');
     if (message.authorId !== userId)
@@ -420,6 +526,7 @@ export class TeamService {
   async deleteMessage(userId: string, id: string) {
     const actor = await this.actor(userId);
     const message = await this.prisma.teamMessage.findUnique({ where: { id } });
+    if (message) await this.channel(message.channelId, userId);
     if (!message || message.deletedAt)
       throw new NotFoundException('Mensagem não encontrada.');
     if (message.authorId !== userId && !this.canModerate(actor)) {
@@ -434,7 +541,7 @@ export class TeamService {
 
   async markRead(userId: string, channelId: string) {
     await this.actor(userId);
-    await this.channel(channelId);
+    await this.channel(channelId, userId);
     await this.prisma.teamChannelRead.upsert({
       where: { channelId_userId: { channelId, userId } },
       create: { channelId, userId },

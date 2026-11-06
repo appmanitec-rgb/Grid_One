@@ -1,5 +1,5 @@
 "use client";
-
+import { PageHeader } from "@/app/dashboard/components/DashboardPageKit";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
@@ -47,11 +47,17 @@ export default function PortalDashboardPage() {
     );
   if (!data) return <PortalState title="Sem dados para exibir" />;
 
+  const can = (permission: string) => data.permissions.includes(permission);
   const stats = [
     {
       label: "Equipamentos",
       value: data.stats.equipmentCount,
       href: "/portal/equipamentos",
+    },
+    {
+      label: "Contratos ativos",
+      value: data.stats.activeContracts,
+      href: "/portal/contratos",
     },
     {
       label: "Propostas pendentes",
@@ -78,24 +84,18 @@ export default function PortalDashboardPage() {
       value: data.stats.waitingCustomerTickets || 0,
       href: "/portal/chamados",
     },
-  ];
+  ].filter((stat) => can(({ "/portal/equipamentos": "EQUIPMENT", "/portal/contratos": "CONTRACTS", "/portal/propostas": "PROPOSALS", "/portal/chamados": "TICKETS", "/portal/solicitacoes": "REQUESTS" } as Record<string, string>)[stat.href] || ""));
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <p className="text-sm font-bold uppercase text-blue-700">
-          Área do Cliente
-        </p>
-        <h1 className="mt-1 text-2xl font-extrabold text-slate-950">
-          {data.client.tradeName || data.client.companyName}
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Acompanhe equipamentos, propostas, ordens, documentos e cobranças
-          liberadas.
-        </p>
-      </section>
+    <div className="dashboard-page space-y-5">
+      <PageHeader eyebrow="Central do cliente" title={data.client.tradeName || data.client.companyName} description="Acompanhe os equipamentos, propostas, atendimentos e documentos da sua empresa." />
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="flex flex-wrap gap-3">
+        {can("PROPOSALS") && <Link href="/portal/propostas" className="app-button app-button-primary">Avaliar minhas propostas</Link>}
+        {can("REQUESTS") && <Link href="/portal/solicitacoes" className="app-button app-button-secondary">Solicitar peças ou serviços</Link>}
+      </div>
+
+      <section className="dashboard-metrics-grid">
         {stats.map((stat) => (
           <Link
             key={stat.label}
@@ -113,7 +113,7 @@ export default function PortalDashboardPage() {
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Propostas recentes" href="/portal/propostas">
+        {can("PROPOSALS") && <Panel title="Propostas recentes" href="/portal/propostas">
           {data.recentProposals.length ? (
             data.recentProposals.map((proposal) => (
               <Row key={proposal.id} href={`/portal/propostas/${proposal.id}`}>
@@ -129,9 +129,9 @@ export default function PortalDashboardPage() {
           ) : (
             <EmptyText text="Nenhuma proposta liberada para acompanhamento." />
           )}
-        </Panel>
+        </Panel>}
 
-        <Panel title="Ordens recentes" href="/portal/equipamentos">
+        {can("EQUIPMENT") && <Panel title="Ordens recentes" href="/portal/equipamentos">
           {data.recentOrders.length ? (
             data.recentOrders.map((order) => (
               <Row
@@ -150,11 +150,11 @@ export default function PortalDashboardPage() {
           ) : (
             <EmptyText text="Nenhuma ordem recente para exibir." />
           )}
-        </Panel>
+        </Panel>}
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Próximas preventivas" href="/portal/equipamentos">
+        {can("EQUIPMENT") && <Panel title="Próximas preventivas" href="/portal/equipamentos">
           {data.upcomingPreventives.length ? (
             data.upcomingPreventives.map((item) => (
               <Row
@@ -175,9 +175,9 @@ export default function PortalDashboardPage() {
           ) : (
             <EmptyText text="Nenhuma preventiva futura programada." />
           )}
-        </Panel>
+        </Panel>}
 
-        <Panel title="Documentos recentes" href="/portal/documentos">
+        {can("DOCUMENTS") && <Panel title="Documentos recentes" href="/portal/documentos">
           {data.recentDocuments.length ? (
             data.recentDocuments.map((document) => (
               <Row key={document.id} href="/portal/documentos">
@@ -197,7 +197,7 @@ export default function PortalDashboardPage() {
           ) : (
             <EmptyText text="Nenhum documento liberado ainda." />
           )}
-        </Panel>
+        </Panel>}
       </section>
     </div>
   );

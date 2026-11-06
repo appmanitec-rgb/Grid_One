@@ -1,5 +1,7 @@
 ﻿"use client";
 
+import { PageHeader } from "../../components/DashboardPageKit";
+
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 
@@ -20,30 +22,65 @@ function currentMonthKey() {
 export default function TimeTrackingPage() {
   const [month, setMonth] = useState(currentMonthKey());
   const [rows, setRows] = useState<PayrollRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
+    let active = true;
     async function load() {
-      const res = await apiFetch(`/hr-admin/time-entries/payroll-export?month=${month}`, {
-        cache: "no-store",
-      });
-      if (!res.ok) return;
-      const data = (await res.json()) as { collaborators: PayrollRow[] };
-      setRows(data.collaborators || []);
+      setLoading(true);
+      setError("");
+      try {
+        const res = await apiFetch(
+          `/hr-admin/time-entries/payroll-export?month=${month}`,
+          {
+            cache: "no-store",
+          },
+        );
+        if (!res.ok)
+          throw new Error("Não foi possível carregar os apontamentos.");
+        const data = (await res.json()) as { collaborators: PayrollRow[] };
+        if (active) setRows(data.collaborators || []);
+      } catch {
+        if (active) setError("Não foi possível carregar os apontamentos.");
+      } finally {
+        if (active) setLoading(false);
+      }
     }
     void load();
+    return () => {
+      active = false;
+    };
   }, [month]);
 
   return (
-    <div className="space-y-6 p-8">
-      <h1 className="text-3xl font-bold text-zinc-900">Apontamento / Banco de Horas</h1>
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Pessoas"
+        title="Apontamento e banco de horas"
+        description="Consulte as horas da equipe por competência."
+      />
 
       <section className="rounded-xl border border-zinc-200 bg-white p-4">
-        <label className="text-sm font-semibold text-zinc-700">Competencia</label>
-        <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="ml-2 rounded border border-zinc-300 px-2 py-1 text-sm" />
+        <label className="text-sm font-semibold text-zinc-700">
+          Competencia
+        </label>
+        <input
+          aria-label="Competência"
+          type="month"
+          value={month}
+          onChange={(event) => setMonth(event.target.value)}
+          className="ml-2 rounded border border-zinc-300 px-2 py-1 text-sm"
+        />
       </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-4">
-        <div className="overflow-x-auto">
+        <div
+          className="overflow-x-auto"
+          tabIndex={0}
+          role="region"
+          aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas."
+        >
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">
@@ -54,16 +91,41 @@ export default function TimeTrackingPage() {
                 <th className="px-2 py-2">Noturno (h)</th>
               </tr>
             </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.userId} className="border-b border-zinc-100">
-                  <td className="px-2 py-2 font-semibold text-zinc-800">{row.name}</td>
-                  <td className="px-2 py-2 text-zinc-700">{(row.transitMinutes / 60).toFixed(2)}</td>
-                  <td className="px-2 py-2 text-zinc-700">{(row.workMinutes / 60).toFixed(2)}</td>
-                  <td className="px-2 py-2 text-zinc-700">{(row.extraMinutes / 60).toFixed(2)}</td>
-                  <td className="px-2 py-2 text-zinc-700">{(row.nightMinutes / 60).toFixed(2)}</td>
+            <tbody aria-busy={loading}>
+              {loading || error || !rows.length ? (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="px-4 py-10 text-center text-slate-500"
+                  >
+                    {loading
+                      ? "Carregando apontamentos..."
+                      : error ||
+                        "Nenhum apontamento nesta competência. Confira o período ou registre uma entrada para iniciar o acompanhamento."}
+                  </td>
                 </tr>
-              ))}
+              ) : null}
+              {!loading &&
+                !error &&
+                rows.map((row) => (
+                  <tr key={row.userId} className="border-b border-zinc-100">
+                    <td className="px-2 py-2 font-semibold text-zinc-800">
+                      {row.name}
+                    </td>
+                    <td className="px-2 py-2 text-zinc-700">
+                      {(row.transitMinutes / 60).toFixed(2)}
+                    </td>
+                    <td className="px-2 py-2 text-zinc-700">
+                      {(row.workMinutes / 60).toFixed(2)}
+                    </td>
+                    <td className="px-2 py-2 text-zinc-700">
+                      {(row.extraMinutes / 60).toFixed(2)}
+                    </td>
+                    <td className="px-2 py-2 text-zinc-700">
+                      {(row.nightMinutes / 60).toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
             </tbody>
           </table>
         </div>

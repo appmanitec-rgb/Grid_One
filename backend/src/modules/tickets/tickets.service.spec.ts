@@ -475,6 +475,164 @@ describe('TicketsService', () => {
     ).rejects.toThrow(NotFoundException);
   });
 
+  it('conta a base completa e pagina a fila sem limitar os indicadores aos primeiros 100', async () => {
+    db.serviceTicket.count.mockResolvedValue(173);
+    db.serviceTicket.findMany.mockResolvedValue([makeTicket()]);
+    const result = await service.workspace(
+      { page: 3, pageSize: 20, search: 'gerador', bucket: 'ACTIVE' },
+      'operator',
+    );
+    expect(result.total).toBe(173);
+    expect(result.summary.ACTIVE).toBe(173);
+    expect(result.items).toHaveLength(1);
+    expect(db.serviceTicket.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skip: 40,
+        take: 20,
+        where: expect.objectContaining({
+          OR: expect.any(Array),
+          AND: expect.any(Array),
+        }),
+      }),
+    );
+    expect(
+      db.serviceTicket.count.mock.calls.every(
+        ([args]: [{ take?: number; skip?: number }]) =>
+          args.take === undefined && args.skip === undefined,
+      ),
+    ).toBe(true);
+  });
+
+  it('carrega cada etapa do quadro com seu próprio total e sua própria página', async () => {
+    db.serviceTicket.count.mockResolvedValue(47);
+    db.serviceTicket.groupBy.mockResolvedValue([
+      { status: TicketStatus.OPEN, _count: { _all: 47 } },
+    ]);
+    db.serviceTicket.findMany.mockResolvedValue(
+      Array.from({ length: 20 }, (_, index) =>
+        makeTicket({ id: 'ticket-' + index }),
+      ),
+    );
+    const result = await service.workspace({ view: 'board', pageSize: 20 });
+    expect(result.columns.find((column) => column.key === 'NEW')).toMatchObject(
+      { total: 47, page: 1, hasMore: true },
+    );
+    expect(
+      result.columns.find((column) => column.key === 'DONE'),
+    ).toMatchObject({ total: 0, hasMore: false });
+    await service.workspace({ column: 'NEW', page: 2, pageSize: 20 });
+    expect(db.serviceTicket.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        skip: 20,
+        take: 20,
+        where: expect.objectContaining({
+          AND: expect.arrayContaining([
+            { status: { in: [TicketStatus.OPEN, TicketStatus.TRIAGE] } },
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it('limita Meus chamados ao usuário autenticado e não aceita identidade ausente', async () => {
+    db.serviceTicket.count.mockResolvedValue(0);
+    await service.workspace({ bucket: 'MINE' }, 'operator-1');
+    expect(db.serviceTicket.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          AND: expect.arrayContaining([
+            expect.objectContaining({
+              OR: [
+                { assignedToUserId: 'operator-1' },
+                { technician: { userId: 'operator-1' } },
+              ],
+            }),
+          ]),
+        }),
+      }),
+    );
+    await expect(service.workspace({ bucket: 'MINE' })).rejects.toThrow(
+      'Usuário não identificado.',
+    );
+  });
+
+  it('remover o responsável não registra atendimento nem envia o chamado à triagem', async () => {
+    db.serviceTicket.findUnique.mockResolvedValue(
+      makeTicket({ assignedToUserId: 'old-user' }),
+    );
+    db.serviceTicket.update.mockResolvedValue(makeTicket());
+    await service.assign(
+      'ticket-a',
+      { assignedToUserId: null },
+      'operator',
+      {},
+    );
+    expect(db.serviceTicket.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          assignedToUserId: null,
+          firstResponseAt: undefined,
+          status: undefined,
+        }),
+      }),
+    );
+  });
+
+  it('não permite converter ou finalizar um chamado pelo campo de status', async () => {
+    db.serviceTicket.findUnique.mockResolvedValue(makeTicket());
+    for (const status of [
+      TicketStatus.CONVERTED_TO_ORDER,
+      TicketStatus.CONVERTING_TO_ORDER,
+      TicketStatus.CLOSED,
+      TicketStatus.RESOLVED,
+      TicketStatus.CANCELED,
+    ]) {
+      await expect(
+        service.update('ticket-a', { status }, 'operator', {}),
+      ).rejects.toThrow(BadRequestException);
+    }
+    expect(db.serviceTicket.update).not.toHaveBeenCalled();
+  });
+
+  it('não sinaliza como pendente um prazo já atendido ou um chamado finalizado', async () => {
+    const now = new Date();
+    const near = new Date(now.getTime() + 30 * 60 * 1000);
+    db.serviceTicket.findMany.mockResolvedValue([
+      makeTicket({
+        status: TicketStatus.RESOLVED,
+        slaResponseDueAt: near,
+        slaResolutionDueAt: near,
+      }),
+      makeTicket({
+        firstResponseAt: now,
+        slaResponseDueAt: near,
+        slaResolutionDueAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+      }),
+    ]);
+    const result = await service.findAll({});
+    expect(result.map((ticket) => ticket.slaStatus)).toEqual(['OK', 'OK']);
+  });
+
+  it('uma resposta final ao cliente preserva a resolução do chamado', async () => {
+    const resolved = makeTicket({
+      status: TicketStatus.RESOLVED,
+      resolvedAt: new Date(),
+    });
+    db.serviceTicket.findUnique.mockResolvedValue(resolved);
+    db.serviceTicket.update.mockResolvedValue(resolved);
+    await service.addInternalComment(
+      'ticket-a',
+      { message: 'Atendimento concluído, obrigado.', customerVisible: true },
+      'operator',
+      {},
+    );
+    expect(db.serviceTicket.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: undefined }),
+      }),
+    );
+  });
+
   it('identifica SLA vencido na lista interna', async () => {
     const overdue = makeTicket({
       firstResponseAt: null,
@@ -512,6 +670,7 @@ function createDbMock() {
     user: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
+      findMany: jest.fn(),
     },
     client: {
       findUnique: jest.fn(),
@@ -532,6 +691,8 @@ function createDbMock() {
       findUnique: jest.fn(),
     },
     serviceTicket: {
+      count: jest.fn(),
+      groupBy: jest.fn(),
       findMany: jest.fn(),
       findFirst: jest.fn(),
       findUnique: jest.fn(),

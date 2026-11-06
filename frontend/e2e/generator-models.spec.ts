@@ -32,11 +32,11 @@ test.describe("modelos de geradores", () => {
     });
     await expectLoaded(page, /Modelos de Geradores/i);
 
-    await page.getByLabel(/Fabricante/i).fill("STEMAC");
+    await page.getByRole("combobox", { name: /^Fabricante$/i }).fill("STEMAC");
     await page.getByLabel(/^Modelo$/i).fill(modelName);
     await page.getByLabel(/Potencia kVA/i).fill("180");
-    await page.getByLabel(/Tensao/i).fill("380/220 V");
-    await page.getByLabel(/Frequencia/i).fill("60");
+    await page.getByRole("textbox", { name: /^Tensao$/i }).fill("380/220 V");
+    await page.getByRole("textbox", { name: /^Frequencia$/i }).fill("60");
     await page.getByRole("button", { name: /^Adicionar item$/i }).click();
     await page.getByLabel("Nome do item de manutencao 1").fill("Troca de oleo");
     await page.getByLabel("Intervalo por tempo 1").fill("6");
@@ -54,15 +54,18 @@ test.describe("modelos de geradores", () => {
 
     await page
       .locator("tr", { hasText: modelName })
-      .getByRole("button", { name: /Editar/i })
+      .getByRole("button", { name: new RegExp(modelName) })
       .click();
-    await expect(page.getByRole("button", { name: /Salvar alteracoes/i })).toBeVisible();
+    const editor = page.getByRole("dialog", { name: "Editar modelo" });
+    await expect(editor).toBeVisible();
+    await expect(editor.getByRole("button", { name: /Salvar alteracoes/i })).toBeVisible();
     await expect(page.getByLabel(/^Modelo$/i)).toHaveValue(modelName);
     await page.getByLabel(/^Modelo$/i).fill(updatedName);
     await page.getByLabel(/Potencia kVA/i).fill("200");
     await page.getByRole("button", { name: /^Adicionar item$/i }).click();
     await page.getByLabel("Nome do item de manutencao 2").fill("Filtro de oleo");
     await page.getByRole("button", { name: /Salvar alteracoes/i }).click();
+    await expect(editor).toBeHidden();
     await expect(page.locator("body")).toContainText(
       /Modelo atualizado com plano de manutencao/i,
     );

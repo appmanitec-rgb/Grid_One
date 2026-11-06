@@ -1,5 +1,12 @@
 import {
+  assertProposalConference,
+  phase1Enabled,
+} from '../proposals/proposal-conference';
+import { proposalScope, ruleActor } from '../auth/rules/commercial-access';
+import { allowedPortfolios } from '../auth/rules/access-rules';
+import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -22,6 +29,8 @@ import { allAccessPolicy, effectiveAccessPolicy } from '../users/access-policy';
 import { ApproveSharedProposalDto } from './dto/approve-shared-proposal.dto';
 import { CreateDocumentDeliveryDto } from './dto/create-document-delivery.dto';
 import { CreateDocumentEmailDeliveryDto } from './dto/create-document-email-delivery.dto';
+import { createApprovedProposalOrder } from '../proposals/proposal-work-order';
+import { publishProposalWon } from '../team/team-automation';
 
 type ActorScope = {
   id: string;
@@ -225,7 +234,22 @@ export class DeliveriesService {
     private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  async createDelivery(dto: CreateDocumentDeliveryDto, actorUserId: string) {
+  async createDelivery(
+    dto: CreateDocumentDeliveryDto,
+    actorUserId: string,
+  ): Promise<{
+    delivery: ReturnType<DeliveriesService['mapDelivery']>;
+    channel: DeliveryChannel;
+    shareUrl: string;
+    shareExpiresAt: string;
+    dispatched: boolean;
+    emailDispatched: boolean;
+    manualActionRequired: boolean;
+    manualShareRequired: boolean;
+    providerConfigured: boolean;
+    launchUrl: string | null;
+    note: string;
+  }> {
     const actor = await this.getActorScope(actorUserId);
     if (actor.role === UserRole.CLIENT) {
       throw new ForbiddenException(
@@ -238,6 +262,47 @@ export class DeliveriesService {
       dto.documentId,
       actor.id,
     );
+    if (
+      phase1Enabled() &&
+      dto.documentType === DeliveryDocumentType.PROPOSAL &&
+      dto.requestKey
+    ) {
+      const entityId = actor.id + ':' + dto.requestKey;
+      const content = { ...dto };
+      delete content.requestKey;
+      const signature = createHash('sha256')
+        .update(JSON.stringify(content))
+        .digest('hex');
+      await this.prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(
+          'SELECT pg_advisory_xact_lock(hashtext($1))',
+          'proposal-delivery:' + entityId,
+        );
+        const previous = await tx.systemAuditLog.findFirst({
+          where: { entityType: 'PROPOSAL_DELIVERY_REQUEST', entityId },
+        });
+        if (previous)
+          throw new ConflictException(
+            'Esta solicitação de envio já foi registrada. Consulte o histórico antes de reenviar.',
+          );
+        await tx.systemAuditLog.create({
+          data: {
+            domain: AuditDomain.PROPOSALS,
+            entityType: 'PROPOSAL_DELIVERY_REQUEST',
+            entityId,
+            action: 'DELIVERY_REQUEST_CLAIMED',
+            actorUserId: actor.id,
+            afterPayload: { documentId: dto.documentId, signature },
+          },
+        });
+      });
+      // The claim is durable before the external side effect. Retries cannot send twice,
+      // including an interrupted/uncertain response. No share token is stored in telemetry.
+      return this.createDelivery(
+        { ...content, requestKey: undefined },
+        actor.id,
+      );
+    }
     const descriptor = this.describeSnapshot(snapshot);
     const expiresAt = this.calculateExpiration(dto.expiresInDays);
     const token = randomBytes(24).toString('hex');
@@ -413,6 +478,7 @@ export class DeliveriesService {
     return this.createDelivery(
       {
         channel: DeliveryChannel.EMAIL,
+        requestKey: dto.requestKey,
         documentType: dto.documentType,
         documentId: dto.documentId,
         recipientTarget: dto.recipientEmail,
@@ -462,13 +528,43 @@ export class DeliveriesService {
 
   async getHistory(actorUserId: string) {
     const actor = await this.getActorScope(actorUserId);
+    const rulesActor = await ruleActor(this.prisma, actorUserId);
+    const proposalIds =
+      actor.role === UserRole.CLIENT
+        ? []
+        : (
+            await this.prisma.proposal.findMany({
+              where: await proposalScope(this.prisma, actorUserId),
+              select: { id: true },
+            })
+          ).map((p) => p.id);
+    const canSeeContracts =
+      !rulesActor || allowedPortfolios(rulesActor).includes('contracts');
     const deliveries = await this.prisma.documentDelivery.findMany({
       where:
         actor.role === UserRole.CLIENT
           ? {
               clientId: this.requireLinkedClientId(actor),
             }
-          : undefined,
+          : {
+              OR: [
+                {
+                  documentType: {
+                    notIn: [
+                      DeliveryDocumentType.PROPOSAL,
+                      DeliveryDocumentType.CONTRACT,
+                    ],
+                  },
+                },
+                {
+                  documentType: DeliveryDocumentType.PROPOSAL,
+                  documentId: { in: proposalIds },
+                },
+                ...(canSeeContracts
+                  ? [{ documentType: DeliveryDocumentType.CONTRACT }]
+                  : []),
+              ],
+            },
       include: {
         shareToken: true,
         createdByUser: {
@@ -533,14 +629,16 @@ export class DeliveriesService {
       templates: preferences.templates,
       providerStatus: {
         email: Boolean(
+          process.env.EXTERNAL_DELIVERIES_DISABLED !== 'true' &&
           process.env.RESEND_API_KEY?.trim() &&
           (preferences.fromEmail || envFromEmail),
         ),
         whatsapp: Boolean(
+          process.env.EXTERNAL_DELIVERIES_DISABLED !== 'true' &&
           process.env.WHATSAPP_ACCESS_TOKEN?.trim() &&
           process.env.WHATSAPP_PHONE_NUMBER_ID?.trim(),
         ),
-        webhook: true,
+        webhook: process.env.EXTERNAL_DELIVERIES_DISABLED !== 'true',
       },
     };
   }
@@ -617,6 +715,11 @@ export class DeliveriesService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      if (phase1Enabled())
+        await tx.$executeRawUnsafe(
+          'SELECT pg_advisory_xact_lock(hashtext($1))',
+          'proposal-write:' + shareToken.documentId,
+        );
       const proposal = await tx.proposal.findFirst({
         where: {
           id: shareToken.documentId,
@@ -627,6 +730,8 @@ export class DeliveriesService {
           code: true,
           status: true,
           totalValue: true,
+          type: true,
+          generatorId: true,
           validUntil: true,
           salesOpportunityId: true,
           clientId: true,
@@ -651,6 +756,7 @@ export class DeliveriesService {
       }
 
       const now = new Date();
+      await assertProposalConference(tx, proposal.id, undefined, 'accept');
       const approvalHash = this.buildSharedApprovalHash({
         proposalId: proposal.id,
         proposalCode: proposal.code,
@@ -670,7 +776,7 @@ export class DeliveriesService {
       });
 
       const updated = await tx.proposal.update({
-        where: { id: proposal.id },
+        where: { id: proposal.id, status: ProposalStatus.CLIENT_REVIEW },
         data: {
           status: ProposalStatus.WON,
           requestedDiscountPercent: null,
@@ -711,6 +817,9 @@ export class DeliveriesService {
           },
         });
       }
+
+      await createApprovedProposalOrder(tx, proposal);
+      await publishProposalWon(tx, proposal.id);
 
       await tx.documentShareToken.update({
         where: { id: shareToken.id },
@@ -972,6 +1081,25 @@ export class DeliveriesService {
   private async dispatchDelivery(
     input: DispatchInput,
   ): Promise<DispatchResult> {
+    if (process.env.EXTERNAL_DELIVERIES_DISABLED === 'true') {
+      return {
+        mode: 'manual',
+        provider:
+          input.channel === DeliveryChannel.WHATSAPP
+            ? 'whatsapp-link'
+            : 'manual-link',
+        providerConfigured: false,
+        ...(input.channel === DeliveryChannel.WHATSAPP
+          ? {
+              launchUrl: this.buildWhatsappLaunchUrl(
+                input.recipientTarget,
+                `${input.message}\n\n${input.shareUrl}`,
+              ),
+            }
+          : {}),
+        note: 'Envio automático desativado neste ambiente. Link seguro preparado para envio manual.',
+      };
+    }
     if (input.channel === DeliveryChannel.WHATSAPP) {
       return this.dispatchWhatsappDelivery(input);
     }

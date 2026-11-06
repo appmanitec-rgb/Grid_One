@@ -1,4 +1,7 @@
 "use client";
+import { FormField } from "../../components/DashboardPageKit";
+
+import { formatCalendarDate } from "@/lib/formatters";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -66,10 +69,8 @@ type Portfolio = {
   items: PortfolioItem[];
 };
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 
 export default function ContractRenewalsPage() {
   const router = useRouter();
@@ -80,7 +81,9 @@ export default function ContractRenewalsPage() {
   const [workingId, setWorkingId] = useState("");
   const [query, setQuery] = useState("");
   const [attention, setAttention] = useState<"ALL" | AttentionState>("ALL");
-  const [parts, setParts] = useState<"ALL" | "INCLUDED" | "BILLED_SEPARATELY">("ALL");
+  const [parts, setParts] = useState<"ALL" | "INCLUDED" | "BILLED_SEPARATELY">(
+    "ALL",
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -96,7 +99,10 @@ export default function ContractRenewalsPage() {
       }
       if (!response.ok) {
         throw new Error(
-          await readApiErrorMessage(response, "Nao foi possivel carregar renovacoes."),
+          await readApiErrorMessage(
+            response,
+            "Não foi possivel carregar renovações.",
+          ),
         );
       }
       setPortfolio((await response.json()) as Portfolio);
@@ -118,7 +124,8 @@ export default function ContractRenewalsPage() {
   const items = useMemo(() => {
     const term = query.trim().toLocaleLowerCase("pt-BR");
     return (portfolio?.items || []).filter((item) => {
-      if (attention !== "ALL" && item.attentionState !== attention) return false;
+      if (attention !== "ALL" && item.attentionState !== attention)
+        return false;
       if (parts !== "ALL" && item.partsCoverage !== parts) return false;
       if (!term) return true;
       return [item.code, item.title || "", item.client.companyName]
@@ -133,14 +140,20 @@ export default function ContractRenewalsPage() {
     setError("");
     setNotice("");
     try {
-      const response = await apiFetch(apiUrl(`/contracts/${item.id}/renewals`), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
+      const response = await apiFetch(
+        apiUrl(`/contracts/${item.id}/renewals`),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        },
+      );
       if (!response.ok) {
         throw new Error(
-          await readApiErrorMessage(response, "Nao foi possivel iniciar a renovacao."),
+          await readApiErrorMessage(
+            response,
+            "Não foi possivel iniciar a renovação.",
+          ),
         );
       }
       const renewal = (await response.json()) as Renewal;
@@ -166,20 +179,45 @@ export default function ContractRenewalsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
-        eyebrow="Gestao contratual"
-        title="Renovacoes de contratos"
-        description="Controle de vigencia, reajuste, cobertura de pecas e negociacao ate a formalizacao do novo periodo."
+        loading={loading}
+        eyebrow="Comercial"
+        title="Renovações de contratos"
+        description="Acompanhe os vencimentos e negocie as condições do próximo período."
         stats={[
-          { label: "Em renovacao", value: String(summary.inRenewal), helper: "Processos em andamento.", tone: "blue" },
-          { label: "A vencer", value: String(summary.expiring), helper: "Dentro da janela de alerta.", tone: "amber" },
-          { label: "Vencidos", value: String(summary.expired), helper: "Sem renovacao aberta.", tone: "rose" },
-          { label: "Pecas inclusas", value: String(summary.withPartsIncluded), helper: "Contratos com cobertura integral.", tone: "emerald" },
+          {
+            label: "Em renovação",
+            value: String(summary.inRenewal),
+            helper: "Processos em andamento.",
+            tone: "blue",
+          },
+          {
+            label: "A vencer",
+            value: String(summary.expiring),
+            helper: "Dentro da janela de alerta.",
+            tone: "amber",
+          },
+          {
+            label: "Vencidos",
+            value: String(summary.expired),
+            helper: "Sem renovação aberta.",
+            tone: "rose",
+          },
+          {
+            label: "Peças inclusas",
+            value: String(summary.withPartsIncluded),
+            helper: "Contratos com cobertura integral.",
+            tone: "emerald",
+          },
         ]}
         actions={
           <>
-            <button type="button" onClick={() => void load()} className={SECONDARY_BUTTON}>
+            <button
+              type="button"
+              onClick={() => void load()}
+              className={SECONDARY_BUTTON}
+            >
               Atualizar
             </button>
           </>
@@ -191,40 +229,62 @@ export default function ContractRenewalsPage() {
 
       <SectionCard
         eyebrow="Localizar"
-        title="Fila de renovacao"
+        title="Fila de renovação"
         description={`${items.length} contrato(s) na leitura atual.`}
       >
         <div className="grid gap-3 lg:grid-cols-[minmax(280px,1fr)_220px_220px]">
-          <TextInput
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Pesquisar contrato, cliente ou titulo"
-          />
-          <SelectInput
-            value={attention}
-            onChange={(event) => setAttention(event.target.value as typeof attention)}
-          >
-            <option value="ALL">Todos os prazos</option>
-            <option value="EXPIRING">A vencer</option>
-            <option value="EXPIRED">Vencidos</option>
-            <option value="IN_RENEWAL">Em renovacao</option>
-            <option value="CURRENT">Vigentes</option>
-          </SelectInput>
-          <SelectInput value={parts} onChange={(event) => setParts(event.target.value as typeof parts)}>
-            <option value="ALL">Toda cobertura de pecas</option>
-            <option value="INCLUDED">Pecas inclusas</option>
-            <option value="BILLED_SEPARATELY">Pecas separadas</option>
-          </SelectInput>
+          <FormField className="min-w-0 flex-1" label="Buscar contrato">
+            <TextInput
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Pesquisar contrato, cliente ou título"
+            />
+          </FormField>
+          <FormField className="min-w-0 flex-1" label="Prazo do contrato">
+            <SelectInput
+              value={attention}
+              onChange={(event) =>
+                setAttention(event.target.value as typeof attention)
+              }
+            >
+              <option value="ALL">Todos os prazos</option>
+              <option value="EXPIRING">A vencer</option>
+              <option value="EXPIRED">Vencidos</option>
+              <option value="IN_RENEWAL">Em renovação</option>
+              <option value="CURRENT">Vigentes</option>
+            </SelectInput>
+          </FormField>
+          <FormField className="min-w-0 flex-1" label="Cobertura de peças">
+            <SelectInput
+              value={parts}
+              onChange={(event) => setParts(event.target.value as typeof parts)}
+            >
+              <option value="ALL">Toda cobertura de peças</option>
+              <option value="INCLUDED">Peças inclusas</option>
+              <option value="BILLED_SEPARATELY">Peças separadas</option>
+            </SelectInput>
+          </FormField>
         </div>
       </SectionCard>
 
-      <SectionCard eyebrow="Carteira" title="Contratos por vigencia">
+      <SectionCard eyebrow="Carteira" title="Contratos por vigência">
         {loading ? (
-          <EmptyState title="Carregando renovacoes" description="Organizando vigencias e processos em andamento." />
+          <EmptyState
+            title="Carregando renovações"
+            description="Organizando vigencias e processos em andamento."
+          />
         ) : items.length === 0 ? (
-          <EmptyState title="Nenhum contrato encontrado" description="Revise os filtros da carteira." />
+          <EmptyState
+            title="Nenhum contrato encontrado"
+            description="Revise os filtros da carteira."
+          />
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
+          <div
+            className="overflow-x-auto rounded-lg border border-slate-200"
+            tabIndex={0}
+            role="region"
+            aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas."
+          >
             <table className="w-full min-w-[1040px] text-sm">
               <thead className="bg-slate-50 text-left text-slate-500">
                 <tr>
@@ -233,42 +293,81 @@ export default function ContractRenewalsPage() {
                   <th className="px-4 py-3 font-semibold">Termino</th>
                   <th className="px-4 py-3 font-semibold">Prazo</th>
                   <th className="px-4 py-3 font-semibold">Equipamentos</th>
-                  <th className="px-4 py-3 font-semibold">Pecas</th>
+                  <th className="px-4 py-3 font-semibold">Peças</th>
                   <th className="px-4 py-3 font-semibold">Mensalidade</th>
-                  <th className="px-4 py-3 font-semibold">Renovacao</th>
-                  <th className="dashboard-sticky-actions px-4 py-3 font-semibold">Acoes</th>
+                  <th className="px-4 py-3 font-semibold">Renovação</th>
+                  <th className="dashboard-sticky-actions px-4 py-3 font-semibold">
+                    Acoes
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((item) => (
-                  <tr key={item.id} className="border-t border-slate-100 align-middle">
+                  <tr
+                    key={item.id}
+                    className="border-t border-slate-100 align-middle"
+                  >
                     <td className="px-4 py-3">
-                      <Link href={`/dashboard/contracts/${item.id}`} className="dashboard-record-link font-semibold" title="Abrir cadastro do contrato">
+                      <Link
+                        href={`/dashboard/contracts/${item.id}`}
+                        className="dashboard-record-link font-semibold"
+                        title="Abrir cadastro do contrato"
+                      >
                         {item.code}
                       </Link>
-                      <p className="mt-1 max-w-[220px] truncate text-xs text-slate-500">{item.title || "Contrato de manutencao"}</p>
+                      <p className="mt-1 max-w-[220px] truncate text-xs text-slate-500">
+                        {item.title || "Contrato de manutencao"}
+                      </p>
                     </td>
-                    <td className="px-4 py-3 text-slate-700">{item.client.companyName}</td>
-                    <td className="px-4 py-3 text-slate-700">{formatDate(item.endDate)}</td>
-                    <td className="px-4 py-3"><DataPill tone={attentionTone(item.attentionState)}>{attentionLabel(item)}</DataPill></td>
-                    <td className="px-4 py-3 text-slate-700">{item.equipments.length}</td>
-                    <td className="px-4 py-3 text-slate-700">{item.partsCoverage === "INCLUDED" ? "Inclusas" : "Separadas"}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-900">{formatCurrency(item.recurringAmount)}</td>
+                    <td className="px-4 py-3 text-slate-700">
+                      {item.client.companyName}
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">
+                      {formatCalendarDate(item.endDate)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <DataPill tone={attentionTone(item.attentionState)}>
+                        {attentionLabel(item)}
+                      </DataPill>
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">
+                      {item.equipments.length}
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">
+                      {item.partsCoverage === "INCLUDED"
+                        ? "Inclusas"
+                        : "Separadas"}
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-slate-900">
+                      {formatCurrency(item.recurringAmount)}
+                    </td>
                     <td className="px-4 py-3">
                       {item.activeRenewal ? (
-                        <DataPill tone={renewalTone(item.activeRenewal.status)}>{renewalLabel(item.activeRenewal.status)}</DataPill>
+                        <DataPill tone={renewalTone(item.activeRenewal.status)}>
+                          {renewalLabel(item.activeRenewal.status)}
+                        </DataPill>
                       ) : (
-                        <span className="text-slate-400">Nao iniciada</span>
+                        <span className="text-slate-400">Não iniciada</span>
                       )}
                     </td>
                     <td className="dashboard-sticky-actions px-4 py-3">
                       {item.activeRenewal ? (
-                        <Link href={`/dashboard/contracts/${item.id}?renewalId=${item.activeRenewal.id}`} className={SECONDARY_BUTTON}>
-                          Abrir renovacao
+                        <Link
+                          href={`/dashboard/contracts/${item.id}?renewalId=${item.activeRenewal.id}`}
+                          className={SECONDARY_BUTTON}
+                        >
+                          Abrir renovação
                         </Link>
                       ) : (
-                        <button type="button" onClick={() => void startRenewal(item)} disabled={workingId === item.id} className={PRIMARY_BUTTON}>
-                          {workingId === item.id ? "Iniciando..." : "Iniciar renovacao"}
+                        <button
+                          type="button"
+                          onClick={() => void startRenewal(item)}
+                          disabled={workingId === item.id}
+                          className={PRIMARY_BUTTON}
+                        >
+                          {workingId === item.id
+                            ? "Iniciando..."
+                            : "Iniciar renovacao"}
                         </button>
                       )}
                     </td>
@@ -292,7 +391,8 @@ function attentionTone(state: AttentionState): Tone {
 
 function attentionLabel(item: PortfolioItem) {
   if (item.attentionState === "IN_RENEWAL") return "Em renovacao";
-  if (item.daysRemaining < 0) return `${Math.abs(item.daysRemaining)} dia(s) vencido`;
+  if (item.daysRemaining < 0)
+    return `${Math.abs(item.daysRemaining)} dia(s) vencido`;
   return `${item.daysRemaining} dia(s)`;
 }
 
@@ -317,10 +417,9 @@ function renewalLabel(status: RenewalStatus) {
   return labels[status];
 }
 
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString("pt-BR");
-}
-
 function formatCurrency(value: number) {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value || 0);
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(value || 0);
 }

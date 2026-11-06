@@ -20,10 +20,15 @@ test.describe("staging remote smoke", () => {
   test("valida health remoto, login interno, portal e RBAC basico", async ({
     page,
   }) => {
+    const [adminSession, clientSession] = await Promise.all([
+      apiLogin(accounts.admin),
+      apiLogin(accounts.clientA),
+    ]);
+
     const [health, dbHealth, storageHealth] = await Promise.all([
       apiRequest<HealthPayload>(undefined, "/health"),
-      apiRequest<HealthPayload>(undefined, "/health/db"),
-      apiRequest<HealthPayload>(undefined, "/health/storage"),
+      apiRequest<HealthPayload>(adminSession.access_token, "/health/db"),
+      apiRequest<HealthPayload>(adminSession.access_token, "/health/storage"),
     ]);
 
     expect(health.status).toBe("ok");
@@ -32,11 +37,6 @@ test.describe("staging remote smoke", () => {
     expect(JSON.stringify({ health, dbHealth, storageHealth })).not.toMatch(
       /DATABASE_URL|storageKey|S3_SECRET|SECRET_ACCESS_KEY|postgres:\/\/|postgresql:\/\//i,
     );
-
-    const [adminSession, clientSession] = await Promise.all([
-      apiLogin(accounts.admin),
-      apiLogin(accounts.clientA),
-    ]);
 
     await loginByApi(page, accounts.admin);
     await page.goto("/dashboard", {

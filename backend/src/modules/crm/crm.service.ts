@@ -1,3 +1,15 @@
+import { portfolioForPipeline } from '../auth/rules/access-rules';
+import {
+  managedActivityScope,
+  managementAllowed,
+} from '../auth/rules/commercial-management';
+import {
+  opportunityScope,
+  proposalScope,
+  checkPipeline,
+  checkDiscount,
+  ruleActor,
+} from '../auth/rules/commercial-access';
 import {
   BadRequestException,
   Injectable,
@@ -5,6 +17,8 @@ import {
 } from '@nestjs/common';
 import {
   CommercialInspectionStatus,
+  CrmActivityStatus,
+  CrmActivityType,
   OpportunityLossReason,
   Prisma,
   SalesOpportunityPipeline,
@@ -16,9 +30,11 @@ import { DatabaseService } from 'src/database/database.service';
 import {
   AddInspectionMediaDto,
   CreateInspectionDto,
+  CreateCrmActivityDto,
   CreateOpportunityDto,
   SetOpportunityStageDto,
   UpdateInspectionDto,
+  UpdateCrmActivityDto,
   UpdateOpportunityDto,
 } from './dto/crm.dto';
 
@@ -26,11 +42,30 @@ import {
 export class CrmService {
   constructor(private readonly prisma: DatabaseService) {}
 
-  listSellers(query?: string, take?: string | number, pipeline?: string) {
+  async listSellers(
+    query?: string,
+    take?: string | number,
+    pipeline?: string,
+    actorUserId?: string,
+  ) {
+    if (pipeline) await checkPipeline(this.prisma, actorUserId, pipeline);
     const search = query?.trim();
     const limit = this.parseLookupLimit(take);
     const normalizedPipeline = this.normalizePipeline(pipeline);
+    const actor = await ruleActor(this.prisma, actorUserId);
+    const canChooseSeller =
+      actor &&
+      (normalizedPipeline
+        ? managementAllowed(
+            actor,
+            portfolioForPipeline(normalizedPipeline),
+            'team',
+          )
+        : ['generators', 'partsServices', 'contracts'].some((p) =>
+            managementAllowed(actor, p as 'partsServices', 'team'),
+          ));
     const andWhere: Prisma.UserWhereInput[] = [];
+    if (actor && !canChooseSeller) andWhere.push({ id: actor.sub });
     if (search) {
       andWhere.push({
         OR: [
@@ -50,7 +85,7 @@ export class CrmService {
     }
 
     const where: Prisma.UserWhereInput = {
-      role: UserRole.SALES,
+      role: { in: [UserRole.SALES, UserRole.MANAGER, UserRole.ADMIN] },
       isActive: true,
       ...(andWhere.length > 0 ? { AND: andWhere } : {}),
     };
@@ -68,10 +103,11 @@ export class CrmService {
     });
   }
 
-  listOpportunities(
+  async listOpportunities(
     stage?: string,
     pipeline?: string,
     opportunityType?: string,
+    actorUserId?: string,
   ) {
     const normalizedStage =
       stage &&
@@ -84,6 +120,7 @@ export class CrmService {
     const normalizedType = this.normalizeOpportunityType(opportunityType);
 
     const where: Prisma.SalesOpportunityWhereInput = {
+      AND: [await opportunityScope(this.prisma, actorUserId)],
       ...(normalizedStage ? { stage: normalizedStage } : {}),
       ...(normalizedPipeline ? { pipeline: normalizedPipeline } : {}),
       ...(normalizedType ? { opportunityType: normalizedType } : {}),
@@ -109,6 +146,7 @@ export class CrmService {
           orderBy: { createdAt: 'desc' },
         },
         proposals: {
+          where: await proposalScope(this.prisma, actorUserId),
           select: {
             id: true,
             code: true,
@@ -118,14 +156,20 @@ export class CrmService {
           },
           orderBy: { createdAt: 'desc' },
         },
+        crmActivities: {
+          where: { status: CrmActivityStatus.PLANNED },
+          select: { id: true, type: true, subject: true, dueAt: true },
+          orderBy: { dueAt: 'asc' },
+          take: 1,
+        },
       },
       orderBy: { updatedAt: 'desc' },
     });
   }
 
-  async getOpportunity(id: string) {
+  async getOpportunity(id: string, actorUserId?: string) {
     const opportunity = await this.prisma.salesOpportunity.findUnique({
-      where: { id },
+      where: { id, AND: [await opportunityScope(this.prisma, actorUserId)] },
       include: {
         client: { select: { id: true, companyName: true, tradeName: true } },
         assignedSeller: { select: { id: true, name: true } },
@@ -145,6 +189,7 @@ export class CrmService {
           orderBy: { createdAt: 'desc' },
         },
         proposals: {
+          where: await proposalScope(this.prisma, actorUserId),
           select: {
             id: true,
             code: true,
@@ -153,6 +198,12 @@ export class CrmService {
             createdAt: true,
           },
           orderBy: { createdAt: 'desc' },
+        },
+        crmActivities: {
+          where: { status: CrmActivityStatus.PLANNED },
+          select: { id: true, type: true, subject: true, dueAt: true },
+          orderBy: { dueAt: 'asc' },
+          take: 1,
         },
       },
     });
@@ -164,11 +215,16 @@ export class CrmService {
     return opportunity;
   }
 
-  async opportunityPipeline(pipeline?: string) {
+  async opportunityPipeline(pipeline?: string, actorUserId?: string) {
     const normalizedPipeline = this.normalizePipeline(pipeline);
     const rows = await this.prisma.salesOpportunity.groupBy({
       by: ['stage'],
-      where: normalizedPipeline ? { pipeline: normalizedPipeline } : undefined,
+      where: {
+        AND: [
+          normalizedPipeline ? { pipeline: normalizedPipeline } : {},
+          await opportunityScope(this.prisma, actorUserId),
+        ],
+      },
       _count: { _all: true },
       _sum: { estimatedValue: true },
     });
@@ -184,11 +240,235 @@ export class CrmService {
     });
   }
 
-  async createOpportunity(dto: CreateOpportunityDto) {
+  async opportunityForecast(pipeline?: string, actorUserId?: string) {
+    const normalizedPipeline = this.normalizePipeline(pipeline);
+    const opportunities = await this.prisma.salesOpportunity.findMany({
+      where: {
+        AND: [await opportunityScope(this.prisma, actorUserId)],
+        stage: {
+          notIn: [SalesOpportunityStage.WON, SalesOpportunityStage.LOST],
+        },
+        ...(normalizedPipeline ? { pipeline: normalizedPipeline } : {}),
+      },
+      select: {
+        id: true,
+        stage: true,
+        estimatedValue: true,
+        probabilityPercent: true,
+        expectedCloseDate: true,
+      },
+    });
+    const months = new Map<
+      string,
+      { month: string; count: number; amount: number; weightedAmount: number }
+    >();
+    let unscheduled = 0;
+    let overdue = 0;
+    let totalAmount = 0;
+    let totalWeightedAmount = 0;
+    const todayInBrazil = new Date().toLocaleDateString('sv-SE', {
+      timeZone: 'America/Sao_Paulo',
+    });
+    for (const item of opportunities) {
+      const probability =
+        item.probabilityPercent ?? this.stageProbability(item.stage);
+      const amount = Number(item.estimatedValue || 0);
+      const weightedAmount =
+        Math.round(((amount * probability) / 100) * 100) / 100;
+      totalAmount += amount;
+      totalWeightedAmount += weightedAmount;
+      if (!item.expectedCloseDate) {
+        unscheduled += 1;
+        continue;
+      }
+      if (item.expectedCloseDate.toISOString().slice(0, 10) < todayInBrazil)
+        overdue += 1;
+      const month = item.expectedCloseDate.toISOString().slice(0, 7);
+      const current = months.get(month) ?? {
+        month,
+        count: 0,
+        amount: 0,
+        weightedAmount: 0,
+      };
+      current.count += 1;
+      current.amount += amount;
+      current.weightedAmount += weightedAmount;
+      months.set(month, current);
+    }
+    return {
+      count: opportunities.length,
+      amount: totalAmount,
+      weightedAmount: Math.round(totalWeightedAmount * 100) / 100,
+      unscheduled,
+      overdue,
+      months: [...months.values()].sort((a, b) =>
+        a.month.localeCompare(b.month),
+      ),
+    };
+  }
+
+  async listActivities(
+    clientId?: string,
+    opportunityId?: string,
+    skip?: string,
+    actorUserId?: string,
+  ) {
+    if (!clientId && !opportunityId) {
+      throw new BadRequestException('Informe cliente ou oportunidade.');
+    }
+    const offset = Math.max(0, Math.min(10000, Number(skip) || 0));
+    const where: Prisma.CrmActivityWhereInput = {
+      ...(actorUserId
+        ? managedActivityScope((await ruleActor(this.prisma, actorUserId))!)
+        : {}),
+      ...(clientId ? { clientId } : {}),
+      ...(opportunityId ? { opportunityId } : {}),
+    };
+    const [rows, nextAction] = await Promise.all([
+      this.prisma.crmActivity.findMany({
+        where,
+        include: {
+          createdBy: { select: { id: true, name: true } },
+          owner: { select: { id: true, name: true } },
+          opportunity: { select: { id: true, title: true } },
+        },
+        orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }],
+        skip: offset,
+        take: 51,
+      }),
+      this.prisma.crmActivity.findFirst({
+        where: { ...where, status: CrmActivityStatus.PLANNED },
+        orderBy: { dueAt: 'asc' },
+        include: { owner: { select: { id: true, name: true } } },
+      }),
+    ]);
+    return { items: rows.slice(0, 50), hasMore: rows.length > 50, nextAction };
+  }
+
+  async createActivity(dto: CreateCrmActivityDto, actorId: string) {
+    const subject = dto.subject?.trim();
+    if (!subject)
+      throw new BadRequestException('Informe o assunto da atividade.');
+    const status =
+      dto.status ??
+      (dto.type === CrmActivityType.TASK
+        ? CrmActivityStatus.PLANNED
+        : CrmActivityStatus.COMPLETED);
+    if (status === CrmActivityStatus.PLANNED && !dto.dueAt) {
+      throw new BadRequestException('Informe o prazo da proxima acao.');
+    }
+    let ownerId = actorId;
+    if (dto.opportunityId) {
+      const opportunity = await this.prisma.salesOpportunity.findUnique({
+        where: {
+          id: dto.opportunityId,
+          AND: [await opportunityScope(this.prisma, actorId)],
+        },
+        select: { clientId: true, assignedSellerId: true },
+      });
+      if (!opportunity || opportunity.clientId !== dto.clientId) {
+        throw new BadRequestException(
+          'A oportunidade nao pertence ao cliente informado.',
+        );
+      }
+      ownerId = opportunity.assignedSellerId || actorId;
+    } else {
+      const client = await this.prisma.client.findUnique({
+        where: { id: dto.clientId },
+        select: { id: true },
+      });
+      if (!client) throw new NotFoundException('Cliente nao encontrado.');
+    }
+    return this.prisma.crmActivity.create({
+      data: {
+        clientId: dto.clientId,
+        opportunityId: dto.opportunityId,
+        type: dto.type,
+        status,
+        subject,
+        details: dto.details?.trim() || null,
+        occurredAt: dto.occurredAt ? new Date(dto.occurredAt) : new Date(),
+        dueAt: dto.dueAt ? new Date(dto.dueAt) : null,
+        completedAt: status === CrmActivityStatus.COMPLETED ? new Date() : null,
+        createdById: actorId,
+        ownerId,
+      },
+    });
+  }
+
+  async updateActivity(
+    id: string,
+    dto: UpdateCrmActivityDto,
+    actorUserId?: string,
+  ) {
+    const activityScope = actorUserId
+      ? managedActivityScope((await ruleActor(this.prisma, actorUserId))!)
+      : {};
+    const existing = await this.prisma.crmActivity.findUnique({
+      where: { id, AND: [activityScope] },
+    });
+    if (!existing) throw new NotFoundException('Atividade nao encontrada.');
+    const status = dto.status ?? existing.status;
+    const dueAt = dto.dueAt ? new Date(dto.dueAt) : existing.dueAt;
+    if (status === CrmActivityStatus.PLANNED && !dueAt) {
+      throw new BadRequestException('Informe o prazo da proxima acao.');
+    }
+    const subject =
+      dto.subject === undefined ? existing.subject : dto.subject.trim();
+    if (!subject)
+      throw new BadRequestException('Informe o assunto da atividade.');
+    return this.prisma.crmActivity.update({
+      where: { id },
+      data: {
+        subject,
+        details:
+          dto.details === undefined ? undefined : dto.details.trim() || null,
+        dueAt,
+        status,
+        completedAt:
+          status === CrmActivityStatus.COMPLETED
+            ? (existing.completedAt ?? new Date())
+            : null,
+      },
+    });
+  }
+
+  private stageProbability(stage: SalesOpportunityStage): number {
+    const defaults: Record<SalesOpportunityStage, number> = {
+      PROSPECTION: 10,
+      SITE_SURVEY_SCHEDULED: 25,
+      PROPOSAL_SENT: 50,
+      NEGOTIATION: 75,
+      WON: 100,
+      LOST: 0,
+    };
+    return defaults[stage];
+  }
+
+  async createOpportunity(dto: CreateOpportunityDto, actorUserId?: string) {
     const opportunityType =
       dto.opportunityType ?? SalesOpportunityType.FIELD_SERVICE;
     const pipeline = this.resolvePipeline(dto.pipeline, opportunityType);
-    await this.assertCommercialSeller(dto.assignedSellerId, pipeline);
+    const actor = await ruleActor(this.prisma, actorUserId);
+    const canAssign =
+      actor && managementAllowed(actor, portfolioForPipeline(pipeline), 'team');
+    if (
+      actor &&
+      dto.assignedSellerId &&
+      dto.assignedSellerId !== actor.sub &&
+      !canAssign
+    )
+      throw new BadRequestException(
+        'Somente o administrador responsável pode atribuir a negociação a outro vendedor.',
+      );
+    const assignedSellerId = dto.assignedSellerId || actorUserId;
+    await checkPipeline(this.prisma, actorUserId, pipeline);
+    await checkDiscount(
+      this.prisma,
+      actorUserId,
+      Number(dto.discountPercent || 0),
+    );
+    await this.assertCommercialSeller(assignedSellerId, pipeline);
 
     const stage = dto.stage ?? SalesOpportunityStage.PROSPECTION;
     const stageData = this.buildOpportunityStageData(
@@ -204,12 +484,14 @@ export class CrmService {
         siteId: dto.siteId,
         clientAddressId: dto.clientAddressId,
         primaryContactId: dto.primaryContactId,
-        assignedSellerId: dto.assignedSellerId,
+        assignedSellerId,
         pipeline,
         opportunityType,
         stage,
         temperature: dto.temperature,
         estimatedValue: Number(dto.estimatedValue || 0),
+        probabilityPercent: dto.probabilityPercent,
+        discountPercent: dto.discountPercent,
         expectedCloseDate: dto.expectedCloseDate
           ? new Date(dto.expectedCloseDate)
           : undefined,
@@ -224,11 +506,35 @@ export class CrmService {
     });
   }
 
-  async updateOpportunity(id: string, dto: UpdateOpportunityDto) {
+  async updateOpportunity(
+    id: string,
+    dto: UpdateOpportunityDto,
+    actorUserId?: string,
+  ) {
     const existing = await this.prisma.salesOpportunity.findUnique({
-      where: { id },
+      where: { id, AND: [await opportunityScope(this.prisma, actorUserId)] },
     });
     if (!existing) throw new NotFoundException('Oportunidade nao encontrada.');
+    const actor = await ruleActor(this.prisma, actorUserId);
+    if (
+      actor &&
+      dto.assignedSellerId !== undefined &&
+      dto.assignedSellerId !== existing.assignedSellerId &&
+      !managementAllowed(actor, portfolioForPipeline(existing.pipeline), 'team')
+    )
+      throw new BadRequestException(
+        'Somente o administrador responsável pode trocar o vendedor da negociação.',
+      );
+    if (dto.clientId && dto.clientId !== existing.clientId) {
+      const activityCount = await this.prisma.crmActivity.count({
+        where: { opportunityId: id },
+      });
+      if (activityCount > 0) {
+        throw new BadRequestException(
+          'Nao e permitido trocar o cliente de oportunidade com historico comercial.',
+        );
+      }
+    }
 
     const opportunityType = dto.opportunityType ?? existing.opportunityType;
     const pipeline = this.resolvePipeline(
@@ -237,9 +543,18 @@ export class CrmService {
       opportunityType,
     );
     if (dto.assignedSellerId !== undefined) {
+      await checkPipeline(this.prisma, actorUserId, pipeline);
+      await checkDiscount(
+        this.prisma,
+        actorUserId,
+        Number(dto.discountPercent || 0),
+      );
       await this.assertCommercialSeller(dto.assignedSellerId, pipeline);
     }
 
+    await checkPipeline(this.prisma, actorUserId, pipeline);
+    if (dto.discountPercent !== undefined)
+      await checkDiscount(this.prisma, actorUserId, dto.discountPercent);
     const nextStage = dto.stage ?? existing.stage;
     const stageData = this.buildOpportunityStageData(
       nextStage,
@@ -247,45 +562,72 @@ export class CrmService {
       dto.lossReasonDetail ?? existing.lossReasonDetail ?? undefined,
     );
 
-    return this.prisma.salesOpportunity.update({
-      where: { id },
-      data: {
-        title: dto.title,
-        clientId: dto.clientId,
-        siteId: dto.siteId,
-        clientAddressId: dto.clientAddressId,
-        primaryContactId: dto.primaryContactId,
-        assignedSellerId: dto.assignedSellerId,
-        pipeline,
-        opportunityType,
-        stage: nextStage,
-        temperature: dto.temperature,
-        estimatedValue:
-          dto.estimatedValue !== undefined
-            ? Number(dto.estimatedValue)
-            : undefined,
-        expectedCloseDate: dto.expectedCloseDate
-          ? new Date(dto.expectedCloseDate)
-          : dto.expectedCloseDate === null
-            ? null
-            : undefined,
-        source: dto.source,
-        notes: dto.notes,
-        ...stageData,
-      },
-      include: {
-        client: { select: { id: true, companyName: true } },
-        assignedSeller: { select: { id: true, name: true } },
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.salesOpportunity.update({
+        where: { id, AND: [await opportunityScope(this.prisma, actorUserId)] },
+        data: {
+          title: dto.title,
+          clientId: dto.clientId,
+          siteId: dto.siteId,
+          clientAddressId: dto.clientAddressId,
+          primaryContactId: dto.primaryContactId,
+          assignedSellerId: dto.assignedSellerId,
+          pipeline,
+          opportunityType,
+          stage: nextStage,
+          temperature: dto.temperature,
+          estimatedValue:
+            dto.estimatedValue !== undefined
+              ? Number(dto.estimatedValue)
+              : undefined,
+          probabilityPercent: dto.probabilityPercent,
+          expectedCloseDate: dto.expectedCloseDate
+            ? new Date(dto.expectedCloseDate)
+            : dto.expectedCloseDate === null
+              ? null
+              : undefined,
+          source: dto.source,
+          notes: dto.notes,
+          ...stageData,
+          ...(nextStage === existing.stage
+            ? { wonAt: existing.wonAt, lostAt: existing.lostAt }
+            : {}),
+        },
+        include: {
+          client: { select: { id: true, companyName: true } },
+          assignedSeller: { select: { id: true, name: true } },
+        },
+      });
+      if (existing.stage !== nextStage)
+        await tx.systemAuditLog.create({
+          data: {
+            domain: 'OPPORTUNITIES',
+            entityType: 'SALES_OPPORTUNITY',
+            entityId: id,
+            action: 'OPPORTUNITY_STAGE_CHANGED',
+            actorUserId,
+            beforePayload: { stage: existing.stage },
+            afterPayload: { stage: nextStage },
+          },
+        });
+      return updated;
     });
   }
 
-  setOpportunityStage(id: string, dto: SetOpportunityStageDto) {
-    return this.updateOpportunity(id, {
-      stage: dto.stage,
-      lossReason: dto.lossReason,
-      lossReasonDetail: dto.lossReasonDetail,
-    });
+  async setOpportunityStage(
+    id: string,
+    dto: SetOpportunityStageDto,
+    actorUserId?: string,
+  ) {
+    return this.updateOpportunity(
+      id,
+      {
+        stage: dto.stage,
+        lossReason: dto.lossReason,
+        lossReasonDetail: dto.lossReasonDetail,
+      },
+      actorUserId,
+    );
   }
 
   async removeOpportunity(id: string) {
@@ -307,7 +649,7 @@ export class CrmService {
     return { deleted: true };
   }
 
-  listInspections(status?: string) {
+  async listInspections(status?: string, actorUserId?: string) {
     const normalizedStatus =
       status &&
       Object.values(CommercialInspectionStatus).includes(
@@ -317,7 +659,10 @@ export class CrmService {
         : undefined;
 
     return this.prisma.commercialInspection.findMany({
-      where: normalizedStatus ? { status: normalizedStatus } : {},
+      where: {
+        ...(normalizedStatus ? { status: normalizedStatus } : {}),
+        opportunity: await opportunityScope(this.prisma, actorUserId),
+      },
       include: {
         opportunity: {
           select: { id: true, title: true, stage: true, estimatedValue: true },
@@ -574,7 +919,7 @@ export class CrmService {
     const seller = await this.prisma.user.findFirst({
       where: {
         id: sellerId,
-        role: UserRole.SALES,
+        role: { in: [UserRole.SALES, UserRole.MANAGER, UserRole.ADMIN] },
         isActive: true,
         ...(pipeline
           ? { AND: [this.buildSellerDepartmentWhere(pipeline)] }
@@ -647,35 +992,16 @@ export class CrmService {
   private buildSellerDepartmentWhere(
     pipeline: SalesOpportunityPipeline,
   ): Prisma.UserWhereInput {
-    const specificTerms: Record<SalesOpportunityPipeline, string[]> = {
-      [SalesOpportunityPipeline.COMMERCIAL_01_GENERATORS]: [
-        'Comercial 01',
-        'Gerador',
-        'Geradores',
-      ],
-      [SalesOpportunityPipeline.COMMERCIAL_02_CONTRACTS]: [
-        'Comercial 02',
-        'Contrato',
-        'Contratos',
-      ],
-      [SalesOpportunityPipeline.COMMERCIAL_03_PARTS_SERVICES]: [
-        'Comercial 03',
-        'Pecas',
-        'Peças',
-        'Servico',
-        'Serviço',
-        'Servicos',
-        'Serviços',
-      ],
-    };
-
     return {
       OR: [
-        { department: null },
-        { department: { equals: 'Comercial', mode: 'insensitive' } },
-        ...specificTerms[pipeline].map((term) => ({
-          department: { contains: term, mode: 'insensitive' as const },
-        })),
+        { role: UserRole.ADMIN },
+        { isSystemMaster: true },
+        {
+          accessRules: {
+            path: ['commercial', portfolioForPipeline(pipeline)],
+            equals: true,
+          },
+        },
       ],
     };
   }
@@ -683,6 +1009,6 @@ export class CrmService {
   private parseLookupLimit(value?: string | number) {
     const parsed = Number(value ?? 10);
     if (!Number.isFinite(parsed)) return 10;
-    return Math.min(Math.max(Math.trunc(parsed), 1), 20);
+    return Math.min(Math.max(Math.trunc(parsed), 1), 10);
   }
 }

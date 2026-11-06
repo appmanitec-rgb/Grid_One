@@ -1,11 +1,23 @@
 "use client";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
+
+import {
+  MetricCard as SummaryMetric,
+  PageHeader,
+} from "../components/DashboardPageKit";
+
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { getAccessFromToken } from "@/lib/access";
+import { useEffect, useState } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
+import { getAccessFromToken } from "@/lib/access";
+import QuickRecordEditor from "../components/QuickRecordEditor";
+import ListPagination from "../components/ListPagination";
+import { usePagedList } from "../components/usePagedList";
+import { ListSortHeader } from "../components/ListSortHeader";
 
 type CatalogItem = {
+  catalogGroup?: "internal" | "technicalTools" | "generatorParts" | "services";
   id: string;
   sku?: string | null;
   legacyCode?: string | null;
@@ -42,12 +54,11 @@ type CatalogGroupKey =
   | "lowStock";
 
 export default function CatalogPage() {
-  const [items, setItems] = useState<CatalogItem[]>([]);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
   const [hydrated, setHydrated] = useState(false);
   const [canCreateItem, setCanCreateItem] = useState(false);
+  const [canUpdateItem, setCanUpdateItem] = useState(false);
   const [canViewSuppliers, setCanViewSuppliers] = useState(false);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [activeGroup, setActiveGroup] = useState<CatalogGroupKey>("all");
@@ -55,89 +66,107 @@ export default function CatalogPage() {
   useEffect(() => {
     const access = getAccessFromToken();
     setCanCreateItem(access.catalog.create);
+    setCanUpdateItem(access.catalog.update);
     setCanViewSuppliers(access.purchaseOrders.view);
     setHydrated(true);
   }, []);
 
+  const {
+    items: filteredItems,
+    total,
+    loading,
+    error,
+    refresh: refreshItems,
+    paginationProps,
+    sort,
+    direction,
+    onSort,
+    hasLoaded,
+  } = usePagedList<CatalogItem>({
+    endpoint: "/catalogs/page",
+    filters: { group: activeGroup },
+    search,
+  });
+  const [summary, setSummary] = useState<CatalogSummary | null>(null);
+  const [summaryError, setSummaryError] = useState("");
+  const [summaryRevision, setSummaryRevision] = useState(0);
+  const metrics = summary ?? EMPTY_CATALOG_SUMMARY;
+  function loadItems() {
+    refreshItems();
+    setSummaryRevision((current) => current + 1);
+  }
   useEffect(() => {
-    async function load() {
+    if (!hasLoaded) return;
+    const controller = new AbortController();
+    setSummaryError("");
+    async function loadSummary() {
       try {
-        const res = await apiFetch("/catalogs");
-        if (!res.ok) {
+        const response = await apiFetch("/catalogs/list-summary", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok)
           throw new Error(
-            await readApiErrorMessage(res, "Falha ao carregar catalogo."),
+            await readApiErrorMessage(
+              response,
+              "Não foi possível atualizar os indicadores.",
+            ),
           );
-        }
-        setItems(await res.json());
-      } catch (loadError: unknown) {
-        setError(
-          loadError instanceof Error
-            ? loadError.message
-            : "Erro ao carregar catalogo.",
-        );
-      } finally {
-        setLoading(false);
+        const next = (await response.json()) as CatalogSummary;
+        if (!controller.signal.aborted) setSummary(next);
+      } catch (error) {
+        if (!controller.signal.aborted)
+          setSummaryError(
+            error instanceof Error
+              ? error.message
+              : "Não foi possível atualizar os indicadores.",
+          );
       }
     }
+    void loadSummary();
+    return () => controller.abort();
+  }, [hasLoaded, summaryRevision]);
 
-    load();
-  }, []);
-
-  const filteredItems = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return items.filter((item) => {
-      if (!matchesCatalogGroup(item, activeGroup)) return false;
-      if (!q) return true;
-      return `${item.name} ${item.sku || ""} ${item.legacyCode || ""} ${item.legacySequence || ""} ${item.radarCode || ""} ${item.manufacturerPartNumber || ""} ${(item.identifiers || []).map((identifier) => identifier.code).join(" ")} ${item.category || ""} ${item.itemClassification || ""} ${item.acquisitionOrigin || ""} ${item.storageLocation || ""} ${item.description || ""} ${item.commercialDescription || ""}`
-        .toLowerCase()
-        .includes(q);
-    });
-  }, [activeGroup, items, search]);
-
-  const metrics = useMemo(() => {
-    const parts = items.filter((item) => item.type === "PART").length;
-    const services = items.filter((item) => item.type === "SERVICE").length;
-    const lowStock = items.filter(
-      (item) => item.operationalSummary?.isLowStock,
-    ).length;
-    return { total: items.length, parts, services, lowStock };
-  }, [items]);
   const activeFilterCount = [
     Boolean(search.trim()),
     activeGroup !== "all",
   ].filter(Boolean).length;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold text-zinc-800">
-            Catalogo de Pecas e Servicos
-          </h1>
-          <p className="text-zinc-500 mt-1">
-            Controle de itens e precificacao por perfil de usuario.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {hydrated && canViewSuppliers && (
+    <div className="dashboard-page space-y-5">
+      <PageHeader
+        eyebrow="Suprimentos"
+        title="Peças e serviços"
+        description="Catálogo, preços e aplicações."
+        actions={
+          <>
             <Link
-              href="/dashboard/suppliers"
-              className="ml-2 rounded-lg border border-zinc-300 bg-white px-4 py-2.5 font-semibold text-zinc-700 transition-colors hover:bg-zinc-100"
+              href="/dashboard/catalog/technical-library"
+              className="app-button app-button-secondary"
             >
-              Fornecedores
+              Biblioteca técnica
             </Link>
-          )}
-          {hydrated && canCreateItem && (
-            <Link
-              href="/dashboard/catalog/new"
-              className="ml-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-lg font-semibold transition-colors shadow-sm"
-            >
-              Novo Item
-            </Link>
-          )}
-        </div>
-      </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {hydrated && canViewSuppliers && (
+                <Link
+                  href="/dashboard/suppliers"
+                  className="ml-2 rounded-lg border border-zinc-300 bg-white px-4 py-2.5 font-semibold text-zinc-700 transition-colors hover:bg-zinc-100"
+                >
+                  Fornecedores
+                </Link>
+              )}
+              {hydrated && canCreateItem && (
+                <Link
+                  href="/dashboard/catalog/new"
+                  className="ml-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-lg font-semibold transition-colors shadow-sm"
+                >
+                  Novo Item
+                </Link>
+              )}
+            </div>
+          </>
+        }
+      />
 
       {error && (
         <div
@@ -147,7 +176,7 @@ export default function CatalogPage() {
           <span>{error}</span>
           <button
             type="button"
-            onClick={() => window.location.reload()}
+            onClick={loadItems}
             className="text-sm font-bold underline"
           >
             Tentar novamente
@@ -155,17 +184,35 @@ export default function CatalogPage() {
         </div>
       )}
 
-      <section className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-4">
-        <Metric title="Itens ativos" value={String(metrics.total)} />
-        <Metric title="Pecas" value={String(metrics.parts)} />
-        <Metric title="Servicos" value={String(metrics.services)} />
+      <section className="dashboard-metrics-grid">
+        <Metric
+          title="Itens ativos"
+          value={summary ? String(metrics.total) : "—"}
+        />
+        <Metric title="Peças" value={summary ? String(metrics.parts) : "—"} />
+        <Metric
+          title="Serviços"
+          value={summary ? String(metrics.services) : "—"}
+        />
         <Metric
           title="Baixo estoque"
-          value={String(metrics.lowStock)}
-          tone={metrics.lowStock > 0 ? "amber" : "emerald"}
+          value={summary ? String(metrics.lowStock) : "—"}
+          tone={!summary ? "slate" : metrics.lowStock > 0 ? "amber" : "emerald"}
         />
       </section>
 
+      {summaryError ? (
+        <p role="status" className="text-sm text-amber-700">
+          {summaryError}{" "}
+          <button
+            type="button"
+            className="font-semibold underline"
+            onClick={() => setSummaryRevision((current) => current + 1)}
+          >
+            Atualizar indicadores
+          </button>
+        </p>
+      ) : null}
       <section className="mb-4 rounded-xl border border-zinc-200 bg-white p-4">
         <div className="mb-3 flex items-center gap-2">
           <label
@@ -186,7 +233,7 @@ export default function CatalogPage() {
           id="catalog-search"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Item, SKU, PN, outros codigos, descricao ou localizacao..."
+          placeholder="Item, SKU, PN, outros códigos, descrição ou localização..."
           className="w-full rounded-lg border border-zinc-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
         />
         {showFilters ? (
@@ -195,16 +242,18 @@ export default function CatalogPage() {
               label="Grupo"
               value={activeGroup}
               onChange={(value) => setActiveGroup(value as CatalogGroupKey)}
-              options={buildCatalogGroups(items).map((group) => ({
+              options={buildCatalogGroups(metrics.groups).map((group) => ({
                 value: group.key,
-                label: `${group.label} (${group.count})`,
+                label: summary
+                  ? `${group.label} (${group.count})`
+                  : group.label,
               }))}
             />
           </div>
         ) : null}
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-zinc-500">
-            {filteredItems.length} resultado(s)
+            {total} resultado(s)
             {activeFilterCount
               ? ` | ${activeFilterCount} filtro(s) ativo(s)`
               : ""}
@@ -225,16 +274,68 @@ export default function CatalogPage() {
       </section>
 
       <div className="bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+        <div
+          className="overflow-x-auto"
+          tabIndex={0}
+          role="region"
+          aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas."
+        >
+          <table
+            data-pagination-skip="true"
+            data-sort-skip="true"
+            aria-busy={loading}
+            className="w-full text-left border-collapse"
+          >
             <thead>
               <tr className="bg-zinc-50 text-zinc-500 text-sm border-b border-zinc-200">
-                <th className="p-4 font-medium">Item</th>
-                <th className="p-4 font-medium">Descricao</th>
-                <th className="p-4 font-medium">SKU / PN</th>
-                <th className="p-4 font-medium">Tipo</th>
-                <th className="p-4 font-medium">Saldo</th>
-                <th className="p-4 font-medium">Venda sugerida</th>
+                <ListSortHeader
+                  column="name"
+                  sort={sort}
+                  direction={direction}
+                  onSort={onSort}
+                >
+                  Item
+                </ListSortHeader>
+                <ListSortHeader
+                  column="description"
+                  sort={sort}
+                  direction={direction}
+                  onSort={onSort}
+                >
+                  Descrição
+                </ListSortHeader>
+                <ListSortHeader
+                  column="sku"
+                  sort={sort}
+                  direction={direction}
+                  onSort={onSort}
+                >
+                  SKU / PN
+                </ListSortHeader>
+                <ListSortHeader
+                  column="type"
+                  sort={sort}
+                  direction={direction}
+                  onSort={onSort}
+                >
+                  Tipo
+                </ListSortHeader>
+                <ListSortHeader
+                  column="stock"
+                  sort={sort}
+                  direction={direction}
+                  onSort={onSort}
+                >
+                  Saldo
+                </ListSortHeader>
+                <ListSortHeader
+                  column="price"
+                  sort={sort}
+                  direction={direction}
+                  onSort={onSort}
+                >
+                  Venda sugerida
+                </ListSortHeader>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200">
@@ -250,13 +351,18 @@ export default function CatalogPage() {
                       className="hover:bg-zinc-50 transition-colors"
                     >
                       <td className="p-4 font-bold text-zinc-800">
-                        <Link
-                          href={`/dashboard/catalog/${item.id}`}
-                          className="dashboard-record-link"
-                          title="Abrir cadastro do item"
+                        <button
+                          type="button"
+                          onClick={() => setSelectedItemId(item.id)}
+                          className="dashboard-record-link text-left"
+                          title={
+                            item.type === "SERVICE"
+                              ? "Abrir resumo do serviço"
+                              : "Abrir resumo da peça"
+                          }
                         >
                           {item.name}
-                        </Link>
+                        </button>
                       </td>
                       <td className="p-4 text-zinc-600 text-sm max-w-md truncate">
                         {item.description ||
@@ -264,10 +370,10 @@ export default function CatalogPage() {
                           "Sem descricao"}
                       </td>
                       <td className="p-4 text-sm text-zinc-600">
-                        <p className="font-mono font-semibold text-zinc-800">
+                        <p className="tabular-nums font-semibold text-zinc-800">
                           SKU: {item.sku || "-"}
                         </p>
-                        <p className="mt-1 font-mono text-xs text-zinc-600">
+                        <p className="mt-1 tabular-nums text-xs text-zinc-600">
                           PN: {item.manufacturerPartNumber || "-"}
                         </p>
                       </td>
@@ -319,6 +425,16 @@ export default function CatalogPage() {
           </table>
         </div>
       </div>
+      <ListPagination {...paginationProps} />
+      {selectedItemId ? (
+        <QuickRecordEditor
+          kind="catalog"
+          id={selectedItemId}
+          canEdit={canUpdateItem}
+          onClose={() => setSelectedItemId(null)}
+          onSaved={loadItems}
+        />
+      ) : null}
     </div>
   );
 }
@@ -332,19 +448,13 @@ function Metric({
   value: string;
   tone?: "slate" | "amber" | "emerald";
 }) {
-  const toneClass =
-    tone === "amber"
-      ? "border-amber-200 bg-amber-50 text-amber-800"
-      : tone === "emerald"
-        ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-        : "border-zinc-200 bg-white text-zinc-900";
   return (
-    <div className={`rounded-xl border p-4 ${toneClass}`}>
-      <p className="text-xs font-bold uppercase tracking-wide opacity-70">
-        {title}
-      </p>
-      <p className="mt-1 text-2xl font-bold">{value}</p>
-    </div>
+    <SummaryMetric
+      label={title}
+      value={value}
+      tone={tone}
+      loading={value === "—"}
+    />
   );
 }
 
@@ -362,7 +472,7 @@ function SelectFilter({
   return (
     <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
       {label}
-      <select
+      <SelectField
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-sm font-medium normal-case text-zinc-700"
@@ -372,122 +482,57 @@ function SelectFilter({
             {option.label}
           </option>
         ))}
-      </select>
+      </SelectField>
     </label>
   );
 }
 
-function buildCatalogGroups(items: CatalogItem[]) {
-  return [
-    { key: "all" as const, label: "Todos", count: items.length },
-    {
-      key: "internal" as const,
-      label: "Uso interno",
-      count: items.filter((item) => classifyCatalogItem(item) === "internal")
-        .length,
-    },
-    {
-      key: "technicalTools" as const,
-      label: "Ferramentas tecnicas",
-      count: items.filter(
-        (item) => classifyCatalogItem(item) === "technicalTools",
-      ).length,
-    },
-    {
-      key: "generatorParts" as const,
-      label: "Pecas de geradores",
-      count: items.filter(
-        (item) => classifyCatalogItem(item) === "generatorParts",
-      ).length,
-    },
-    {
-      key: "services" as const,
-      label: "Servicos",
-      count: items.filter((item) => item.type === "SERVICE").length,
-    },
-    {
-      key: "lowStock" as const,
-      label: "Baixo estoque",
-      count: items.filter((item) => item.operationalSummary?.isLowStock).length,
-    },
-  ];
+type CatalogSummary = {
+  total: number;
+  parts: number;
+  services: number;
+  lowStock: number;
+  groups: Record<CatalogGroupKey, number>;
+};
+const EMPTY_CATALOG_SUMMARY: CatalogSummary = {
+  total: 0,
+  parts: 0,
+  services: 0,
+  lowStock: 0,
+  groups: {
+    all: 0,
+    internal: 0,
+    technicalTools: 0,
+    generatorParts: 0,
+    services: 0,
+    lowStock: 0,
+  },
+};
+function buildCatalogGroups(groups: Record<CatalogGroupKey, number>) {
+  return (
+    [
+      ["all", "Todos"],
+      ["internal", "Uso interno"],
+      ["technicalTools", "Ferramentas tecnicas"],
+      ["generatorParts", "Pecas de geradores"],
+      ["services", "Servicos"],
+      ["lowStock", "Baixo estoque"],
+    ] as const
+  ).map(([key, label]) => ({ key, label, count: groups[key] }));
 }
-
-function matchesCatalogGroup(item: CatalogItem, group: CatalogGroupKey) {
-  if (group === "all") return true;
-  if (group === "services") return item.type === "SERVICE";
-  if (group === "lowStock") return item.operationalSummary?.isLowStock === true;
-  return classifyCatalogItem(item) === group;
+function classifyCatalogItem(item: CatalogItem) {
+  return (
+    item.catalogGroup ??
+    (item.type === "SERVICE" ? "services" : "generatorParts")
+  );
 }
-
-function classifyCatalogItem(
-  item: CatalogItem,
-): Exclude<CatalogGroupKey, "all" | "lowStock"> {
-  if (item.type === "SERVICE") return "services";
-
-  const haystack = [
-    item.name,
-    item.sku,
-    item.category,
-    item.description,
-    item.commercialDescription,
-    item.storageLocation,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-
-  if (matchesAny(haystack, INTERNAL_USE_TERMS)) return "internal";
-  if (matchesAny(haystack, TECHNICAL_TOOL_TERMS)) return "technicalTools";
-  return "generatorParts";
-}
-
 function catalogGroupLabel(
   group: Exclude<CatalogGroupKey, "all" | "lowStock">,
 ) {
-  const labels = {
+  return {
     internal: "Uso interno",
     technicalTools: "Ferramenta tecnica",
     generatorParts: "Peca de gerador",
     services: "Servico",
-  };
-  return labels[group];
+  }[group];
 }
-
-function matchesAny(value: string, terms: string[]) {
-  return terms.some((term) => value.includes(term));
-}
-
-const INTERNAL_USE_TERMS = [
-  "uso interno",
-  "consumo interno",
-  "administrativo",
-  "escritorio",
-  "papel",
-  "a4",
-  "folha",
-  "fita",
-  "pilha",
-  "bateria comum",
-  "caneta",
-  "toner",
-  "limpeza",
-  "copa",
-];
-
-const TECHNICAL_TOOL_TERMS = [
-  "ferramenta",
-  "alicate",
-  "chave",
-  "multimetro",
-  "torquimetro",
-  "furadeira",
-  "parafusadeira",
-  "maleta",
-  "escada",
-  "epi",
-  "capacete",
-  "luva",
-  "oculos",
-  "protetor",
-];

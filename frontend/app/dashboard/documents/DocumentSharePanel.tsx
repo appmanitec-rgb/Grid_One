@@ -1,9 +1,13 @@
 "use client";
+import { FormField } from "../components/DashboardPageKit";
+
+import ProposalMessageTemplate from "../proposals/ProposalMessageTemplate";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { clearAuthSession } from "@/lib/auth-session";
+import { apiFetch } from "@/lib/api";
 import {
   cloneDeliveryTemplateMap,
   createDocumentDelivery,
@@ -55,6 +59,26 @@ export default function DocumentSharePanel({
   defaultRecipientPhone?: string;
 }) {
   const router = useRouter();
+  const [phase1, setPhase1] = useState(false);
+  const sharing = useRef(false);
+  const deliveryRequest = useRef<{ signature: string; key: string } | null>(
+    null,
+  );
+  useEffect(() => {
+    const controller = new AbortController();
+    if (documentType === "PROPOSAL")
+      void apiFetch("/proposals/editor/context", { signal: controller.signal })
+        .then(async (response) => {
+          if (response.ok)
+            setPhase1(
+              Boolean(
+                ((await response.json()) as { enabled?: boolean }).enabled,
+              ),
+            );
+        })
+        .catch(() => {});
+    return () => controller.abort();
+  }, [documentType]);
   const [channel, setChannel] = useState<DeliveryChannel>("EMAIL");
   const [recipientName, setRecipientName] = useState(defaultRecipientName);
   const [recipientEmail, setRecipientEmail] = useState(defaultRecipientEmail);
@@ -100,7 +124,8 @@ export default function DocumentSharePanel({
 
   const recipientPlaceholder = useMemo(() => {
     if (channel === "WHATSAPP") return "+55 11 99999-0000";
-    if (channel === "WEBHOOK") return "https://seu-endpoint.com/webhooks/documentos";
+    if (channel === "WEBHOOK")
+      return "https://seu-endpoint.com/webhooks/documentos";
     return "email@destino.com";
   }, [channel]);
 
@@ -124,20 +149,15 @@ export default function DocumentSharePanel({
     () => ({
       documentLabel,
       documentCode: documentLabel,
-      counterpartName: defaultRecipientName || recipientName.trim() || "cliente",
+      counterpartName:
+        defaultRecipientName || recipientName.trim() || "cliente",
       companyLabel: preferences?.companyLabel || "Manitec",
       companyContacts: buildCompanyContacts(preferences),
       shareUrl: shareUrl || "[link seguro]",
       taggoUrl: MANITEC_TAGGO_URL,
       recipientName: recipientName.trim() || defaultRecipientName || "cliente",
     }),
-    [
-      defaultRecipientName,
-      documentLabel,
-      preferences,
-      recipientName,
-      shareUrl,
-    ],
+    [defaultRecipientName, documentLabel, preferences, recipientName, shareUrl],
   );
 
   const suggestedSubject = useMemo(
@@ -150,11 +170,7 @@ export default function DocumentSharePanel({
   );
 
   const suggestedMessage = useMemo(
-    () =>
-      renderDeliveryTemplate(
-        activeTemplate.message || "",
-        templateContext,
-      ),
+    () => renderDeliveryTemplate(activeTemplate.message || "", templateContext),
     [activeTemplate.message, templateContext],
   );
 
@@ -166,7 +182,9 @@ export default function DocumentSharePanel({
         const payload = await fetchDeliveryPreferences();
         if (!active) return;
         setPreferences(payload);
-        setRecipientPhone((current) => current || payload.defaultWhatsapp || "");
+        setRecipientPhone(
+          (current) => current || payload.defaultWhatsapp || "",
+        );
         setWebhookUrl((current) => current || payload.defaultWebhookUrl || "");
       } catch (loadError: unknown) {
         const apiError = loadError as DeliveriesApiError;
@@ -230,18 +248,39 @@ export default function DocumentSharePanel({
   }
 
   async function handleShare() {
+    if (sharing.current) return;
     if (!currentTarget.trim()) {
       setError(`Informe ${targetLabel.toLowerCase()}.`);
       setNotice("");
       return;
     }
 
+    sharing.current = true;
     setWorking(true);
     setError("");
     setNotice("");
 
     try {
+      const signature = JSON.stringify([
+        channel,
+        documentType,
+        documentId,
+        currentTarget.trim(),
+        recipientName.trim(),
+        subject.trim(),
+        message.trim(),
+        expiresInDays,
+      ]);
+      if (
+        !deliveryRequest.current ||
+        deliveryRequest.current.signature !== signature
+      )
+        deliveryRequest.current = { signature, key: crypto.randomUUID() };
       const payload = await createDocumentDelivery({
+        requestKey:
+          phase1 && documentType === "PROPOSAL"
+            ? deliveryRequest.current?.key
+            : undefined,
         channel,
         documentType,
         documentId,
@@ -252,6 +291,7 @@ export default function DocumentSharePanel({
         message: message.trim() || undefined,
         expiresInDays: Number(expiresInDays),
       });
+      deliveryRequest.current = null;
 
       setShareUrl(payload.shareUrl);
       setLaunchUrl(payload.launchUrl || "");
@@ -275,6 +315,7 @@ export default function DocumentSharePanel({
           : "Erro ao compartilhar documento.",
       );
     } finally {
+      sharing.current = false;
       setWorking(false);
     }
   }
@@ -282,11 +323,14 @@ export default function DocumentSharePanel({
   async function copyLink() {
     if (!shareUrl) return;
     await navigator.clipboard.writeText(shareUrl);
-    setNotice("Link seguro copiado para a area de transferencia.");
+    setNotice("Link seguro copiado para a área de transferência.");
   }
 
   return (
-    <section className="document-print-toolbar space-y-4 rounded-[28px] border border-slate-200 bg-white/92 p-5 shadow-[0_22px_48px_-38px_rgba(15,23,42,0.24)]">
+    <section
+      id="compartilhar-documento"
+      className="document-print-toolbar space-y-4 rounded-[28px] border border-slate-200 bg-white/92 p-5 shadow-[0_22px_48px_-38px_rgba(15,23,42,0.24)]"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
@@ -297,7 +341,7 @@ export default function DocumentSharePanel({
           </h3>
         </div>
         <Link href="/dashboard/deliveries" className={SECONDARY_BUTTON}>
-          Historico de envios
+          Histórico de envios
         </Link>
       </div>
 
@@ -305,56 +349,69 @@ export default function DocumentSharePanel({
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
 
       <div className="grid gap-3 md:grid-cols-2">
-        <SelectInput
-          value={channel}
-          onChange={(event) => setChannel(event.target.value as DeliveryChannel)}
-        >
-          {DELIVERY_CHANNEL_OPTIONS.map((option) => (
-            <option key={option} value={option}>
-              {labelDeliveryChannel(option)}
-            </option>
-          ))}
-        </SelectInput>
+        <FormField className="min-w-0 flex-1" label="Canal de compartilhamento">
+          <SelectInput
+            value={channel}
+            onChange={(event) =>
+              setChannel(event.target.value as DeliveryChannel)
+            }
+          >
+            {DELIVERY_CHANNEL_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {labelDeliveryChannel(option)}
+              </option>
+            ))}
+          </SelectInput>
+        </FormField>
 
-        <SelectInput
-          value={expiresInDays}
-          onChange={(event) => setExpiresInDays(event.target.value)}
-        >
-          <option value="3">Expira em 3 dias</option>
-          <option value="7">Expira em 7 dias</option>
-          <option value="15">Expira em 15 dias</option>
-          <option value="30">Expira em 30 dias</option>
-        </SelectInput>
+        <FormField className="min-w-0 flex-1" label="Validade do link">
+          <SelectInput
+            value={expiresInDays}
+            onChange={(event) => setExpiresInDays(event.target.value)}
+          >
+            <option value="3">Expira em 3 dias</option>
+            <option value="7">Expira em 7 dias</option>
+            <option value="15">Expira em 15 dias</option>
+            <option value="30">Expira em 30 dias</option>
+          </SelectInput>
+        </FormField>
 
         {channel !== "WEBHOOK" ? (
-          <TextInput
-            value={recipientName}
-            onChange={(event) => setRecipientName(event.target.value)}
-            placeholder="Nome do destinatario"
-          />
+          <FormField className="min-w-0 flex-1" label="Nome do destinatário">
+            <TextInput
+              value={recipientName}
+              onChange={(event) => setRecipientName(event.target.value)}
+              placeholder="Nome do destinatario"
+            />
+          </FormField>
         ) : (
           <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-600">
-            <DataPill tone="blue">POST assinado</DataPill>
-            O payload inclui metadados, link seguro e snapshot do documento.
+            <DataPill tone="blue">POST assinado</DataPill>O compartilhamento
+            inclui os dados do documento e um link seguro para consulta.
           </div>
         )}
 
-        <TextInput
-          type={channel === "EMAIL" ? "email" : "text"}
-          value={currentTarget}
-          onChange={(event) => {
-            if (channel === "WHATSAPP") {
-              setRecipientPhone(event.target.value);
-              return;
-            }
-            if (channel === "WEBHOOK") {
-              setWebhookUrl(event.target.value);
-              return;
-            }
-            setRecipientEmail(event.target.value);
-          }}
-          placeholder={recipientPlaceholder}
-        />
+        <FormField
+          className="min-w-0 flex-1"
+          label="Destino do compartilhamento"
+        >
+          <TextInput
+            type={channel === "EMAIL" ? "email" : "text"}
+            value={currentTarget}
+            onChange={(event) => {
+              if (channel === "WHATSAPP") {
+                setRecipientPhone(event.target.value);
+                return;
+              }
+              if (channel === "WEBHOOK") {
+                setWebhookUrl(event.target.value);
+                return;
+              }
+              setRecipientEmail(event.target.value);
+            }}
+            placeholder={recipientPlaceholder}
+          />
+        </FormField>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -385,18 +442,34 @@ export default function DocumentSharePanel({
       </div>
 
       {channel === "EMAIL" ? (
-        <TextInput
-          value={subject}
-          onChange={(event) => setSubject(event.target.value)}
-          placeholder="Assunto do e-mail"
-        />
+        <FormField className="min-w-0 flex-1" label="Assunto da mensagem">
+          <TextInput
+            value={subject}
+            onChange={(event) => setSubject(event.target.value)}
+            placeholder="Assunto do e-mail"
+          />
+        </FormField>
       ) : null}
 
-      <TextAreaInput
-        value={message}
-        onChange={(event) => setMessage(event.target.value)}
-        placeholder={messagePlaceholder}
-      />
+      {documentType === "PROPOSAL" ? (
+        <ProposalMessageTemplate
+          proposalId={documentId}
+          onApply={(value) => {
+            if (value.subject.trim()) setSubject(value.subject);
+            setMessage(value.body);
+            setNotice(
+              "Modelo aplicado. Confira o destinatário e o conteúdo antes de enviar.",
+            );
+          }}
+        />
+      ) : null}
+      <FormField label="Mensagem para o destinatário">
+        <TextAreaInput
+          value={message}
+          onChange={(event) => setMessage(event.target.value)}
+          placeholder={messagePlaceholder}
+        />
+      </FormField>
 
       <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -431,11 +504,7 @@ export default function DocumentSharePanel({
           </button>
         ) : null}
         {launchUrl ? (
-          <Link
-            href={launchUrl}
-            target="_blank"
-            className={SECONDARY_BUTTON}
-          >
+          <Link href={launchUrl} target="_blank" className={SECONDARY_BUTTON}>
             Abrir canal
           </Link>
         ) : null}
@@ -496,7 +565,9 @@ function buildCompanyContacts(preferences: DeliveryComposerPreferences | null) {
     preferences?.replyToEmail || preferences?.fromEmail
       ? `E-mail ${preferences.replyToEmail || preferences.fromEmail}`
       : null,
-    preferences?.defaultWhatsapp ? `WhatsApp ${preferences.defaultWhatsapp}` : null,
+    preferences?.defaultWhatsapp
+      ? `WhatsApp ${preferences.defaultWhatsapp}`
+      : null,
   ].filter(Boolean);
 
   return contacts.length > 0 ? contacts.join(" | ") : "responda este contato";

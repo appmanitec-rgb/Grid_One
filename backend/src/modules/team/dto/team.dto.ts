@@ -1,10 +1,20 @@
-import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsArray,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class TeamPostDto {
   @IsString()
   @MinLength(1)
   @MaxLength(5000)
   body!: string;
+
+  @IsOptional()
+  @IsString()
+  category?: string;
 }
 
 export class TeamCommentDto {
@@ -31,4 +41,14 @@ export class TeamChannelDto {
   @IsString()
   @MaxLength(160)
   description?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  memberIds?: string[];
+}
+
+export class TeamDirectDto {
+  @IsString()
+  userId!: string;
 }

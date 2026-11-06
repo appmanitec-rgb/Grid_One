@@ -19,11 +19,35 @@ import {
   IsDateString,
   IsObject,
   ArrayMinSize,
+  ArrayMaxSize,
   Max,
   Min,
   ValidateNested,
+  IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import {
+  TechnicalScopeReviewDto,
+  TechnicalServiceClassificationDto,
+} from '../../technical-scopes/technical-scope.dto';
+import { ProposalIssueAcknowledgementDto } from '../proposal-editor.dto';
+
+export class ProposalPaymentPlanDto {
+  @IsIn(['CASH', '50_50', '30_70', 'PREPAID', 'CUSTOM', 'CONFIGURED'])
+  preset!: 'CASH' | '50_50' | '30_70' | 'PREPAID' | 'CUSTOM' | 'CONFIGURED';
+
+  @IsIn(['PERCENTAGE', 'VALUE'])
+  entryType!: 'PERCENTAGE' | 'VALUE';
+
+  @IsNumber()
+  @Min(0)
+  entryValue!: number;
+
+  @IsInt()
+  @Min(0)
+  @Max(36)
+  balanceInstallments!: number;
+}
 
 class ProposalItemDto {
   @IsString()
@@ -77,6 +101,13 @@ class ProposalOperationalExpenseDto {
 }
 
 export class CreateProposalDto {
+  @IsOptional() @IsUUID() editingDraftId?: string;
+  @IsOptional() @IsDateString() expectedUpdatedAt?: string;
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProposalIssueAcknowledgementDto)
+  reviewAcknowledgements?: ProposalIssueAcknowledgementDto[];
   @IsString()
   @IsNotEmpty()
   clientId!: string;
@@ -121,6 +152,18 @@ export class CreateProposalDto {
   @IsOptional()
   scope?: string;
 
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TechnicalScopeReviewDto)
+  technicalScopeReview?: TechnicalScopeReviewDto;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => TechnicalServiceClassificationDto)
+  technicalScopeClassifications?: TechnicalServiceClassificationDto[];
+
   @IsString()
   @IsOptional()
   freight?: string;
@@ -142,9 +185,22 @@ export class CreateProposalDto {
   @IsOptional()
   paymentDetails?: string;
 
+  @IsUUID()
+  @IsOptional()
+  partsPaymentProfileId?: string;
+
+  @IsUUID()
+  @IsOptional()
+  servicesPaymentProfileId?: string;
+
   @IsBoolean()
   @IsOptional()
   hasDownPayment?: boolean;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ProposalPaymentPlanDto)
+  paymentPlan?: ProposalPaymentPlanDto;
 
   @IsNumber()
   @Min(0)

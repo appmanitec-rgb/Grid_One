@@ -18,6 +18,7 @@ describe('UsersService', () => {
       findUnique: jest.Mock;
       create: jest.Mock;
     };
+    client: { findUnique: jest.Mock };
     $transaction: jest.Mock;
   };
   let auditLogsService: { record: jest.Mock };
@@ -35,6 +36,7 @@ describe('UsersService', () => {
         findUnique: jest.fn(),
         create: jest.fn(),
       },
+      client: { findUnique: jest.fn() },
       $transaction: jest.fn(),
     };
     prisma.$transaction.mockImplementation(
@@ -55,6 +57,70 @@ describe('UsersService', () => {
     }).compile();
 
     service = module.get<UsersService>(UsersService);
+  });
+
+  it.each([UserRole.FINANCE, UserRole.HR, UserRole.SALES])(
+    'requires security permission to provision an internal %s login',
+    async (role) => {
+      prisma.user.findUnique.mockResolvedValue({
+        role: UserRole.MANAGER,
+        isSystemMaster: false,
+        accessPolicy: { users: { manage: true, manageSecurity: false } },
+      });
+      await expect(
+        service.create(
+          {
+            name: 'Conta delegada',
+            email: 'delegada@manitec.test',
+            password: 'TemporaryPassword!2026',
+            role,
+          },
+          'delegated',
+        ),
+      ).rejects.toMatchObject({ status: 403 });
+      expect(prisma.user.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([{ email: 'changed@manitec.test' }, { isActive: true }])(
+    'requires security permission for login changes: %s',
+    async (patch) => {
+      prisma.user.findUnique
+        .mockResolvedValueOnce({
+          id: 'target',
+          email: 'old@manitec.test',
+          role: UserRole.SALES,
+          isActive: false,
+          isSystemMaster: false,
+        })
+        .mockResolvedValueOnce({
+          role: UserRole.MANAGER,
+          isSystemMaster: false,
+          accessPolicy: { users: { manage: true, manageSecurity: false } },
+        });
+      await expect(
+        service.update('target', patch, 'delegated'),
+      ).rejects.toMatchObject({ status: 403 });
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    },
+  );
+
+  it('prevents a delegated account from deleting an administrator', async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: 'admin',
+        role: UserRole.ADMIN,
+        isSystemMaster: false,
+      })
+      .mockResolvedValueOnce({
+        role: UserRole.MANAGER,
+        isSystemMaster: false,
+        accessPolicy: { users: { manage: true, manageSecurity: false } },
+      });
+    await expect(service.remove('admin', 'delegated')).rejects.toMatchObject({
+      status: 403,
+    });
+    expect(auditLogsService.record).not.toHaveBeenCalled();
   });
 
   it('should be defined', () => {
@@ -114,6 +180,36 @@ describe('UsersService', () => {
       prisma,
     );
     expect(result).toEqual(expect.objectContaining(createdUser));
+  });
+
+  it('provisions a client account inactive without an administrator-defined password', async () => {
+    prisma.user.findFirst.mockResolvedValue(null);
+    prisma.client.findUnique.mockResolvedValue({ id: 'client-1' });
+    prisma.user.create.mockResolvedValue({
+      id: 'client-user',
+      role: UserRole.CLIENT,
+      linkedClientId: 'client-1',
+      isActive: false,
+    });
+
+    await service.create({
+      name: 'Cliente Externo',
+      email: 'cliente@example.com',
+      role: UserRole.CLIENT,
+      linkedClientId: 'client-1',
+      isActive: true,
+    });
+
+    expect(prisma.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          role: UserRole.CLIENT,
+          linkedClientId: 'client-1',
+          isActive: false,
+          passwordHash: expect.any(String),
+        }),
+      }),
+    );
   });
 
   it('does not create an incomplete technician user', async () => {
@@ -185,6 +281,10 @@ describe('UsersService', () => {
       approvalDiscountLimit: 90,
       role: 'FINANCE',
       accessPolicy: { finance: { view: true } },
+      portalPermissions: ['all'],
+      linkedClientId: 'another-client',
+      isSystemMaster: true,
+      passwordHash: 'attacker-hash',
     } as unknown as Parameters<UsersService['updateMyProfile']>[1];
 
     const updated = await service.updateMyProfile('user-1', payload);
@@ -200,6 +300,14 @@ describe('UsersService', () => {
     expect(updateCall.data).not.toHaveProperty('approvalDiscountLimit');
     expect(updateCall.data).not.toHaveProperty('role');
     expect(updateCall.data).not.toHaveProperty('accessPolicy');
+    for (const field of [
+      'portalPermissions',
+      'linkedClientId',
+      'isSystemMaster',
+      'passwordHash',
+    ]) {
+      expect(updateCall.data).not.toHaveProperty(field);
+    }
     expect(updated).not.toHaveProperty('hourCost');
     expect(auditLogsService.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -236,6 +344,32 @@ describe('UsersService', () => {
     ).rejects.toThrow('dados sensiveis');
 
     expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('blocks reassigning a portal login to another client without security permission', async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: 'portal-user',
+        role: UserRole.CLIENT,
+        accessPolicy: null,
+        isSystemMaster: false,
+        linkedClientId: 'client-a',
+        isActive: true,
+      })
+      .mockResolvedValueOnce({
+        role: UserRole.AUDITOR,
+        isSystemMaster: false,
+        accessPolicy: { users: { manage: true, manageSecurity: false } },
+      });
+    await expect(
+      service.update(
+        'portal-user',
+        { linkedClientId: 'client-b' },
+        'delegated-user',
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.client.findUnique).not.toHaveBeenCalled();
   });
 
   it('blocks changes to another user access policy without security permission', async () => {
@@ -344,6 +478,118 @@ describe('UsersService', () => {
         data: expect.objectContaining({
           accessPolicy: expect.objectContaining({
             finance: expect.objectContaining({ view: true }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('uses the new department profile instead of retaining the previous role permissions', async () => {
+    const target = {
+      id: 'target-user',
+      role: UserRole.FINANCE,
+      accessPolicy: {
+        pages: { finance: true },
+        finance: { view: true, pay: true },
+        users: { manageSecurity: true },
+      },
+      isSystemMaster: false,
+      linkedClientId: null,
+      managerId: null,
+    };
+    prisma.user.findUnique.mockImplementation(
+      ({ where }: { where: { id: string } }) =>
+        Promise.resolve(
+          where.id === 'admin-user'
+            ? {
+                role: UserRole.ADMIN,
+                isSystemMaster: false,
+                accessPolicy: null,
+              }
+            : target,
+        ),
+    );
+    prisma.user.update.mockResolvedValue({ ...target, role: UserRole.SALES });
+
+    await service.update('target-user', { role: UserRole.SALES }, 'admin-user');
+
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          role: UserRole.SALES,
+          accessPolicy: expect.objectContaining({
+            pages: expect.objectContaining({ finance: false, proposals: true }),
+            finance: expect.objectContaining({ view: false, pay: false }),
+            users: expect.objectContaining({ manageSecurity: false }),
+            proposals: expect.objectContaining({ create: true }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('keeps custom permissions when saving the same profile', async () => {
+    const target = {
+      id: 'target-user',
+      role: UserRole.SALES,
+      accessPolicy: { finance: { view: true, pay: false } },
+      isSystemMaster: false,
+      linkedClientId: null,
+      managerId: null,
+    };
+    prisma.user.findUnique.mockResolvedValue(target);
+    prisma.user.update.mockResolvedValue(target);
+
+    await service.update('target-user', { role: UserRole.SALES });
+
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          accessPolicy: expect.objectContaining({
+            finance: expect.objectContaining({ view: true, pay: false }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('honors the explicitly reviewed policy when an administrator changes the profile', async () => {
+    const target = {
+      id: 'target-user',
+      role: UserRole.FINANCE,
+      accessPolicy: { finance: { view: true, pay: true } },
+      isSystemMaster: false,
+      linkedClientId: null,
+      managerId: null,
+    };
+    prisma.user.findUnique.mockImplementation(
+      ({ where }: { where: { id: string } }) =>
+        Promise.resolve(
+          where.id === 'admin-user'
+            ? {
+                role: UserRole.ADMIN,
+                isSystemMaster: false,
+                accessPolicy: null,
+              }
+            : target,
+        ),
+    );
+    prisma.user.update.mockResolvedValue({ ...target, role: UserRole.SALES });
+
+    await service.update(
+      'target-user',
+      {
+        role: UserRole.SALES,
+        accessPolicy: { finance: { view: true, pay: false } },
+      } as Parameters<UsersService['update']>[1],
+      'admin-user',
+    );
+
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          accessPolicy: expect.objectContaining({
+            finance: expect.objectContaining({ view: true, pay: false }),
           }),
         }),
       }),

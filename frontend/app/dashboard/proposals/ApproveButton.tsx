@@ -24,7 +24,7 @@ export default function ApproveButton({ proposalId }: { proposalId: string }) {
 
       if (!res.ok) {
         throw new Error(
-          await readApiErrorMessage(res, "Nao foi possivel aprovar a proposta."),
+          await readApiErrorMessage(res, "Não foi possivel aprovar a proposta."),
         );
       }
 
@@ -52,7 +52,7 @@ export default function ApproveButton({ proposalId }: { proposalId: string }) {
       {isConfirming ? (
         <div className="rounded-lg border border-emerald-200 bg-white p-3 shadow-sm">
           <p className="text-xs text-zinc-600">
-            Aprovar esta proposta tambem pode gerar OS automatica.
+            Aprovar esta proposta também pode gerar OS automática.
           </p>
           <div className="mt-2 flex items-center gap-2">
             <button

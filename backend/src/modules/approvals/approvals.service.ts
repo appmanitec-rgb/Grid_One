@@ -1,7 +1,13 @@
+import { ProcurementService } from '../purchase-orders/procurement.service';
+import {
+  checkProposalType,
+  checkDiscount,
+} from '../auth/rules/commercial-access';
 import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Optional,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -17,6 +23,7 @@ import {
 import { DatabaseService } from '../../database/database.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { effectiveAccessPolicy } from '../users/access-policy';
+import { publishOrderCompleted } from '../team/team-automation';
 
 type CreateApprovalInput = {
   type: ApprovalType;
@@ -33,6 +40,7 @@ export class ApprovalsService {
   constructor(
     private readonly prisma: DatabaseService,
     private readonly auditLogsService: AuditLogsService,
+    @Optional() private readonly purchasing?: ProcurementService,
   ) {}
 
   async listPending(actorUserId: string) {
@@ -166,6 +174,28 @@ export class ApprovalsService {
       where: { id },
     });
     if (!approval) throw new NotFoundException('Solicitacao nao encontrada.');
+    if (approval.type === ApprovalType.PURCHASE_QUOTATION) {
+      if (!this.purchasing)
+        throw new BadRequestException('Serviço de compras indisponível.');
+      const current = await this.prisma.user.findUniqueOrThrow({
+        where: { id: actorUserId },
+      });
+      return this.purchasing.decide(
+        id,
+        {
+          sub: current.id,
+          role: current.role,
+          isSystemMaster: current.isSystemMaster,
+          accessPolicy: effectiveAccessPolicy(
+            current.role,
+            current.accessPolicy,
+          ),
+          accessRules: current.accessRules,
+        },
+        status,
+        decisionNote,
+      );
+    }
     if (approval.status !== ApprovalStatus.PENDING) {
       throw new BadRequestException('Solicitacao ja decidida.');
     }
@@ -197,6 +227,27 @@ export class ApprovalsService {
       }
     }
 
+    if (approval.entityType === 'PROPOSAL') {
+      const proposal = await this.prisma.proposal.findUnique({
+        where: { id: approval.entityId },
+        select: { type: true },
+      });
+      if (proposal)
+        await checkProposalType(this.prisma, actorUserId, proposal.type);
+      if (
+        status === ApprovalStatus.APPROVED &&
+        approval.type === ApprovalType.BUDGET_DISCOUNT
+      ) {
+        const payload = approval.requestPayload as {
+          discountPercent?: number;
+        } | null;
+        await checkDiscount(
+          this.prisma,
+          actorUserId,
+          Number(payload?.discountPercent || 0),
+        );
+      }
+    }
     const isCatalogPricingApproval =
       approval.type === ApprovalType.CATALOG_PRICING &&
       approval.entityType === 'CATALOG_ITEM' &&
@@ -390,13 +441,18 @@ export class ApprovalsService {
       if (!order) return;
 
       if (status === ApprovalStatus.APPROVED) {
-        await this.prisma.maintenanceOrder.update({
-          where: { id: order.id },
-          data: {
-            status: OrderStatus.COMPLETED,
-            finishedAt: order.finishedAt ?? new Date(),
-            closedAt: order.closedAt ?? new Date(),
-          },
+        await this.prisma.$transaction(async (tx) => {
+          await tx.maintenanceOrder.update({
+            where: { id: order.id },
+            data: {
+              status: OrderStatus.COMPLETED,
+              finishedAt: order.finishedAt ?? new Date(),
+              closedAt: order.closedAt ?? new Date(),
+            },
+          });
+          if (order.status !== OrderStatus.COMPLETED) {
+            await publishOrderCompleted(tx, order.id);
+          }
         });
       } else if (order.status === OrderStatus.COMPLETED) {
         await this.prisma.maintenanceOrder.update({

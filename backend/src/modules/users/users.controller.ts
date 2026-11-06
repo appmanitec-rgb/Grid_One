@@ -19,8 +19,10 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { CreateUserSpecialtyDto } from './dto/create-user-specialty.dto';
 import { UpdateUserCertificationDto } from './dto/update-user-certification.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
 import { UpdateUserSpecialtyDto } from './dto/update-user-specialty.dto';
 import { UserPresencePingDto } from './dto/user-presence-ping.dto';
+import { listAccessProfiles } from './access-profiles';
 import { UsersService } from './users.service';
 
 @Controller('users')
@@ -33,6 +35,15 @@ export class UsersController {
   create(@Req() req: Request, @Body() createUserDto: CreateUserDto) {
     const actorUserId = this.extractUserId(req);
     return this.usersService.create(createUserDto, actorUserId);
+  }
+
+  @RequireAccessPolicy('users.manage')
+  @Post(':id/client-activation')
+  issueClientPortalActivation(@Req() req: Request, @Param('id') id: string) {
+    return this.usersService.issueClientPortalActivation(
+      id,
+      this.extractUserId(req),
+    );
   }
 
   @RequireAccessPolicy('pages.dashboard')
@@ -65,7 +76,10 @@ export class UsersController {
 
   @RequireAccessPolicy('pages.dashboard')
   @Patch('me')
-  updateMyProfile(@Req() req: Request, @Body() updateUserDto: UpdateUserDto) {
+  updateMyProfile(
+    @Req() req: Request,
+    @Body() updateUserDto: UpdateMyProfileDto,
+  ) {
     const userId = this.extractUserId(req);
     return this.usersService.updateMyProfile(userId, updateUserDto);
   }
@@ -96,6 +110,12 @@ export class UsersController {
   @Get()
   findAll() {
     return this.usersService.findAll();
+  }
+
+  @RequireAccessPolicy('users.manage')
+  @Get('access-profiles')
+  getAccessProfiles() {
+    return listAccessProfiles();
   }
 
   @RequireAccessPolicy('users.manage')

@@ -1,5 +1,8 @@
 "use client";
+import { formatCalendarDate } from "@/lib/formatters";
+import { FormField } from "@/app/dashboard/components/DashboardPageKit";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -36,10 +39,8 @@ type Contract = {
   invoices: { id: string; dueDate: string; status: string; amount: number }[];
 };
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 
 export default function ContractsPage() {
   const router = useRouter();
@@ -49,7 +50,9 @@ export default function ContractsPage() {
   const [loading, setLoading] = useState(true);
   const [workingAction, setWorkingAction] = useState("");
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | ContractStatus>("ALL");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | ContractStatus>(
+    "ALL",
+  );
 
   const handleUnauthorized = useCallback(
     async (res: Response) => {
@@ -70,7 +73,10 @@ export default function ContractsPage() {
       if (await handleUnauthorized(res)) return;
       if (!res.ok) {
         throw new Error(
-          await readApiErrorMessage(res, "Nao foi possivel carregar contratos."),
+          await readApiErrorMessage(
+            res,
+            "Não foi possivel carregar contratos.",
+          ),
         );
       }
       setItems((await res.json()) as Contract[]);
@@ -84,6 +90,11 @@ export default function ContractsPage() {
       setLoading(false);
     }
   }, [handleUnauthorized]);
+
+  useEffect(() => {
+    const clientSearch = new URLSearchParams(window.location.search).get("q");
+    if (clientSearch) setQuery(clientSearch);
+  }, []);
 
   useEffect(() => {
     void load();
@@ -110,11 +121,15 @@ export default function ContractsPage() {
   );
 
   const stats = useMemo(() => {
-    const active = items.filter((contract) => contract.status === "ACTIVE").length;
+    const active = items.filter(
+      (contract) => contract.status === "ACTIVE",
+    ).length;
     const suspended = items.filter(
       (contract) => contract.status === "SUSPENDED",
     ).length;
-    const renewal = items.filter((contract) => contract.status === "RENEWAL").length;
+    const renewal = items.filter(
+      (contract) => contract.status === "RENEWAL",
+    ).length;
     const monthly = items.reduce(
       (acc, contract) => acc + Number(contract.recurringAmount || 0),
       0,
@@ -122,11 +137,16 @@ export default function ContractsPage() {
     const overdueInvoices = items.reduce(
       (acc, contract) =>
         acc +
-        contract.invoices.filter((invoice) => invoice.status === "OVERDUE").length,
+        contract.invoices.filter((invoice) => invoice.status === "OVERDUE")
+          .length,
       0,
     );
-    const proposalBased = items.filter((contract) => contract.sourceProposal).length;
-    const expiringSoon = items.filter((contract) => daysUntil(contract.endDate) <= 45).length;
+    const proposalBased = items.filter(
+      (contract) => contract.sourceProposal,
+    ).length;
+    const expiringSoon = items.filter(
+      (contract) => daysUntil(contract.endDate) <= 45,
+    ).length;
 
     return {
       active,
@@ -152,7 +172,9 @@ export default function ContractsPage() {
       const res = await request();
       if (await handleUnauthorized(res)) return;
       if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, "Falha ao executar acao."));
+        throw new Error(
+          await readApiErrorMessage(res, "Falha ao executar acao."),
+        );
       }
 
       const data = (await res.json().catch(() => null)) as T;
@@ -203,9 +225,12 @@ export default function ContractsPage() {
     await runContractAction<{ createdCount?: number }>(
       `generate-${contractId}`,
       () =>
-        apiFetch(apiUrl(`/contracts/${contractId}/generate-orders?daysAhead=30`), {
-          method: "POST",
-        }),
+        apiFetch(
+          apiUrl(`/contracts/${contractId}/generate-orders?daysAhead=30`),
+          {
+            method: "POST",
+          },
+        ),
       (data) => {
         const createdCount = data.createdCount || 0;
         if (createdCount === 0) {
@@ -217,22 +242,23 @@ export default function ContractsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
-        eyebrow="Modulo contratual"
-        title="Contratos com leitura de risco, receita e automacao."
-        description="Esta carteira agora mostra melhor a ponte entre proposta, faturamento recorrente, preventivas e saude do cliente. Alem do visual, o fluxo recebeu tratamento consistente de sessao, erros e automacoes."
+        loading={loading}
+        eyebrow="Comercial"
+        title="Contratos"
+        description="Acompanhe vigência, renovações, faturamento e manutenções preventivas."
         stats={[
           {
             label: "Contratos ativos",
             value: String(stats.active),
-            helper: "Base recorrente atualmente em operacao.",
+            helper: "Base recorrente atualmente em operação.",
             tone: "emerald",
           },
           {
-            label: "Pedem atencao",
+            label: "Pedem atenção",
             value: String(stats.attention),
-            helper: "Suspensos ou perto da janela de renovacao.",
+            helper: "Suspensos ou perto da janela de renovação.",
             tone: "amber",
           },
           {
@@ -283,23 +309,23 @@ export default function ContractsPage() {
           <FieldBox className="space-y-4 rounded-[28px] border-white/60 bg-white/80 p-5 shadow-[0_22px_60px_-40px_rgba(15,31,50,0.45)]">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                Pulso da carteira
+                Resumo dos contratos
               </p>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                A tela agora destaca os contratos originados por proposta e onde a
-                operacao pode travar por renovacao, inadimplencia ou preventivas.
+                Acompanhe os contratos vinculados a propostas e as pendências de
+                renovação, pagamento e manutenção preventiva.
               </p>
             </div>
             <MiniPulse
               label="Origem comercial"
               value={`${stats.proposalBased} vinculados a propostas`}
-              helper="Ajuda a conferir se o fluxo ganhou-proposta-virou-contrato esta batendo."
+              helper="Contratos gerados a partir de propostas aprovadas."
               tone="blue"
             />
             <MiniPulse
-              label="Renovacao"
+              label="Renovação"
               value={`${stats.renewal} contrato(s)`}
-              helper="Itens que ja entraram na faixa de renovacao."
+              helper="Itens que já entraram na faixa de renovação."
               tone="amber"
             />
             <MiniPulse
@@ -316,30 +342,35 @@ export default function ContractsPage() {
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
 
       <SectionCard
-        eyebrow="Carteira operacional"
+        actionsLayout="below"
+        eyebrow="Contratos"
         title="Contratos em acompanhamento"
-        description="Pesquisa, filtra e aciona a automacao diretamente na carteira sem perder o contexto de origem e risco."
+        description="Pesquise contratos, confira pendências e acompanhe a vigência."
         actions={
           <div className="flex w-full flex-col gap-3 xl:w-auto xl:min-w-[640px] xl:flex-row xl:items-center xl:justify-end">
-            <TextInput
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar por contrato, cliente, titulo ou proposta..."
-              className="xl:min-w-[320px]"
-            />
-            <select
-              value={statusFilter}
-              onChange={(event) =>
-                setStatusFilter(event.target.value as "ALL" | ContractStatus)
-              }
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-3 text-sm text-slate-900 transition focus:border-sky-400 focus:bg-white focus:ring-4 focus:ring-sky-100 xl:w-[220px]"
-            >
-              <option value="ALL">Todos os status</option>
-              <option value="ACTIVE">Ativos</option>
-              <option value="SUSPENDED">Suspensos</option>
-              <option value="RENEWAL">Em renovacao</option>
-              <option value="CANCELED">Cancelados</option>
-            </select>
+            <FormField label="Buscar contrato">
+              <TextInput
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Buscar por contrato, cliente, título ou proposta..."
+                className="xl:min-w-[320px]"
+              />
+            </FormField>
+            <FormField label="Situação">
+              <SelectField
+                value={statusFilter}
+                onChange={(event) =>
+                  setStatusFilter(event.target.value as "ALL" | ContractStatus)
+                }
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-3 text-sm text-slate-900 transition focus:border-sky-400 focus:bg-white focus:ring-4 focus:ring-sky-100 xl:w-[220px]"
+              >
+                <option value="ALL">Todos os status</option>
+                <option value="ACTIVE">Ativos</option>
+                <option value="SUSPENDED">Suspensos</option>
+                <option value="RENEWAL">Em renovação</option>
+                <option value="CANCELED">Cancelados</option>
+              </SelectField>
+            </FormField>
           </div>
         }
       >
@@ -364,7 +395,9 @@ export default function ContractsPage() {
                 key={item.id}
                 contract={item}
                 busy={workingAction === `generate-${item.id}`}
-                onGenerateOrders={() => void runGenerateOrders(item.id, item.code)}
+                onGenerateOrders={() =>
+                  void runGenerateOrders(item.id, item.code)
+                }
               />
             ))}
           </div>
@@ -386,8 +419,9 @@ function ContractCard({
   const overdueInvoices = contract.invoices.filter(
     (invoice) => invoice.status === "OVERDUE",
   ).length;
-  const nextDue = [...contract.invoices]
-    .sort((a, b) => +new Date(a.dueDate) - +new Date(b.dueDate))[0];
+  const nextDue = [...contract.invoices].sort(
+    (a, b) => +new Date(a.dueDate) - +new Date(b.dueDate),
+  )[0];
   const expiringSoon = daysUntil(contract.endDate) <= 45;
 
   return (
@@ -395,19 +429,27 @@ function ContractCard({
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Link href={`/dashboard/contracts/${contract.id}`} className="dashboard-record-link text-lg font-bold" title="Abrir cadastro do contrato">
+            <Link
+              href={`/dashboard/contracts/${contract.id}`}
+              className="dashboard-record-link text-lg font-bold"
+              title="Abrir cadastro do contrato"
+            >
               {contract.code}
             </Link>
             <DataPill tone={contractStatusTone(contract.status)}>
               {contractStatusLabel(contract.status)}
             </DataPill>
             {contract.sourceProposal ? (
-              <DataPill tone="blue">Origem: {contract.sourceProposal.code}</DataPill>
+              <DataPill tone="blue">
+                Origem: {contract.sourceProposal.code}
+              </DataPill>
             ) : null}
             {contract.client.isDelinquent ? (
               <DataPill tone="amber">Cliente inadimplente</DataPill>
             ) : null}
-            {expiringSoon ? <DataPill tone="rose">Vence em breve</DataPill> : null}
+            {expiringSoon ? (
+              <DataPill tone="rose">Vence em breve</DataPill>
+            ) : null}
           </div>
 
           <div>
@@ -432,8 +474,8 @@ function ContractCard({
 
       <div className="mt-5 grid gap-3 lg:grid-cols-4">
         <CardInfo
-          label="Vigencia"
-          value={`${formatDate(contract.startDate)} ate ${formatDate(contract.endDate)}`}
+          label="Vigência"
+          value={`${formatCalendarDate(contract.startDate)} ate ${formatCalendarDate(contract.endDate)}`}
           helper={`Faltam ${Math.max(0, daysUntil(contract.endDate))} dia(s) para o termino.`}
           tone={expiringSoon ? "amber" : "slate"}
         />
@@ -448,7 +490,7 @@ function ContractCard({
           value={`${contract.invoices.length} parcela(s)`}
           helper={
             nextDue
-              ? `Proximo vencimento em ${formatDate(nextDue.dueDate)}.`
+              ? `Proximo vencimento em ${formatCalendarDate(nextDue.dueDate)}.`
               : "Sem faturas previstas."
           }
           tone="slate"
@@ -462,7 +504,10 @@ function ContractCard({
       </div>
 
       <div className="mt-5 flex flex-wrap items-center gap-3">
-        <Link href={`/dashboard/contracts/${contract.id}`} className={PRIMARY_BUTTON}>
+        <Link
+          href={`/dashboard/contracts/${contract.id}`}
+          className={PRIMARY_BUTTON}
+        >
           Abrir contrato
         </Link>
         <button
@@ -486,7 +531,7 @@ function ContractCard({
             href={`/dashboard/proposals/new?clientId=${contract.client.id}&renewalContractId=${contract.id}`}
             className="inline-flex text-sm font-semibold text-amber-700 transition hover:text-amber-800 hover:underline"
           >
-            Criar proposta de renovacao
+            Criar proposta de renovação
           </Link>
         ) : null}
       </div>
@@ -569,12 +614,6 @@ function recurrenceLabel(value: string) {
     ANNUAL: "Anual",
   };
   return labels[value] || value;
-}
-
-function formatDate(date: string) {
-  const parsed = new Date(date);
-  if (Number.isNaN(parsed.getTime())) return "Sem data";
-  return parsed.toLocaleDateString("pt-BR");
 }
 
 function formatCurrency(value: number) {

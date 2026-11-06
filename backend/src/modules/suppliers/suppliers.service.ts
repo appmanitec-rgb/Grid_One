@@ -7,6 +7,11 @@
 import { DatabaseService } from 'src/database/database.service';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
+import { Prisma } from '@prisma/client';
+import {
+  currentListPage,
+  SupplierListPageDto,
+} from '../../common/list-page.dto';
 
 @Injectable()
 export class SuppliersService {
@@ -68,6 +73,72 @@ export class SuppliersService {
       where: { isActive: true },
       orderBy: { companyName: 'asc' },
     });
+  }
+
+  async listPage(query: SupplierListPageDto) {
+    const terms = query.q.trim().split(/\s+/).filter(Boolean);
+    const normalizedDocument = query.q.replace(/[.\s/-]/g, '');
+    if (/^\d{4,}$/.test(normalizedDocument))
+      terms.splice(0, terms.length, normalizedDocument);
+    const where: Prisma.SupplierWhereInput = {
+      isActive: true,
+      ...(query.state
+        ? { state: { equals: query.state, mode: 'insensitive' } }
+        : {}),
+      ...(query.city
+        ? { city: { contains: query.city, mode: 'insensitive' } }
+        : {}),
+      AND: terms.map((term) => ({
+        OR: ['companyName', 'tradeName', 'cnpj', 'email', 'phone', 'city'].map(
+          (field) => ({ [field]: { contains: term, mode: 'insensitive' } }),
+        ),
+      })),
+    };
+    const contact = {
+      OR: [
+        { AND: [{ email: { not: null } }, { email: { not: '' } }] },
+        { AND: [{ phone: { not: null } }, { phone: { not: '' } }] },
+      ],
+    };
+    if (query.contact === 'YES')
+      where.AND = [...(where.AND as Prisma.SupplierWhereInput[]), contact];
+    if (query.contact === 'NO')
+      where.AND = [
+        ...(where.AND as Prisma.SupplierWhereInput[]),
+        {
+          AND: [
+            { OR: [{ email: null }, { email: '' }] },
+            { OR: [{ phone: null }, { phone: '' }] },
+          ],
+        },
+      ];
+    const sorts: Record<string, 'companyName' | 'cnpj' | 'city'> = {
+      name: 'companyName',
+      document: 'cnpj',
+      city: 'city',
+    };
+    const sort = sorts[query.sort] || 'companyName';
+    const total = await this.prisma.supplier.count({ where });
+    const page = currentListPage(total, query);
+    const items = await this.prisma.supplier.findMany({
+      where,
+      orderBy: [{ [sort]: query.direction }, { id: 'asc' }],
+      skip: (page - 1) * query.pageSize,
+      take: query.pageSize,
+      select: {
+        id: true,
+        companyName: true,
+        tradeName: true,
+        cnpj: true,
+        email: true,
+        phone: true,
+        city: true,
+        state: true,
+        representedBrands: true,
+        categories: true,
+      },
+    });
+    return { items, total, page, pageSize: query.pageSize };
   }
 
   async findOne(id: string) {

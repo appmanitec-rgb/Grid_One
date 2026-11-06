@@ -1,4 +1,7 @@
 "use client";
+import { formatCalendarDate } from "@/lib/formatters";
+
+import { commercialLabel } from "@/lib/commercial-labels";
 
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -72,10 +75,8 @@ type Contract = {
   renewals: ContractRenewal[];
 };
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 
 export default function ContractDetailPage() {
   const router = useRouter();
@@ -105,7 +106,7 @@ export default function ContractDetailPage() {
       if (await handleUnauthorized(res)) return;
       if (!res.ok) {
         throw new Error(
-          await readApiErrorMessage(res, "Nao foi possivel carregar contrato."),
+          await readApiErrorMessage(res, "Não foi possivel carregar contrato."),
         );
       }
       setContract((await res.json()) as Contract);
@@ -165,7 +166,7 @@ export default function ContractDetailPage() {
       const res = await request();
       if (await handleUnauthorized(res)) return;
       if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, "Falha na operacao."));
+        throw new Error(await readApiErrorMessage(res, "Falha na operação."));
       }
 
       const data = (await res.json().catch(() => null)) as T;
@@ -227,14 +228,14 @@ export default function ContractDetailPage() {
         {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
         <EmptyState
           title="Carregando contrato"
-          description="Estamos reunindo o contexto operacional, financeiro e preventivo deste contrato."
+          description="Carregando os dados, recebimentos e manutenções do contrato."
         />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <OperationalBreadcrumb
         items={[
           { label: "Dashboard", href: "/dashboard" },
@@ -244,9 +245,9 @@ export default function ContractDetailPage() {
       />
 
       <PageHero
-        eyebrow="Contrato de servico"
+        eyebrow="Contrato de serviço"
         title={`Contrato ${contract.code}`}
-        description={`Cliente ${contract.client.companyName}. Esta leitura une origem comercial, faturamento recorrente, cobertura tecnica e cronograma preventivo em uma visao unica.`}
+        description={`Cliente: ${contract.client.companyName}. Consulte vigência, cobertura e atendimentos vinculados.`}
         stats={[
           {
             label: "Status",
@@ -257,7 +258,7 @@ export default function ContractDetailPage() {
           {
             label: "Receita recorrente",
             value: formatCurrency(Number(contract.recurringAmount || 0)),
-            helper: "Valor mensal previsto na operacao.",
+            helper: "Valor mensal previsto na operação.",
             tone: "emerald",
           },
           {
@@ -269,7 +270,7 @@ export default function ContractDetailPage() {
           {
             label: "O.S. geradas",
             value: String(generatedOrdersCount),
-            helper: "Preventivas que ja viraram ordem de servico.",
+            helper: "Preventivas que já viraram ordem de serviço.",
             tone: "blue",
           },
         ]}
@@ -320,7 +321,7 @@ export default function ContractDetailPage() {
           <FieldBox className="space-y-4 rounded-[28px] border-white/60 bg-white/80 p-5 shadow-[0_22px_60px_-40px_rgba(15,31,50,0.45)]">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                Pulso do contrato
+                Resumo do contrato
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <DataPill tone={contractStatusTone(contract.status)}>
@@ -330,17 +331,17 @@ export default function ContractDetailPage() {
                   <DataPill tone="amber">Cliente inadimplente</DataPill>
                 ) : null}
                 {expiresSoon ? (
-                  <DataPill tone="rose">Renovacao em atencao</DataPill>
+                  <DataPill tone="rose">Renovação em atenção</DataPill>
                 ) : null}
               </div>
             </div>
             <MiniInfo
-              label="Vigencia"
-              value={`${formatDate(contract.startDate)} ate ${formatDate(contract.endDate)}`}
+              label="Vigência"
+              value={`${formatCalendarDate(contract.startDate)} ate ${formatCalendarDate(contract.endDate)}`}
               helper={`Janela restante: ${Math.max(0, daysUntil(contract.endDate))} dia(s).`}
             />
             <MiniInfo
-              label="Escopo tecnico"
+              label="Escopo técnico"
               value={`${contract.equipments.length} equipamento(s)`}
               helper={recurrenceLabel(contract.preventiveRecurrence)}
             />
@@ -353,18 +354,70 @@ export default function ContractDetailPage() {
         }
       />
 
+      <SectionCard
+        eyebrow="Resumo executivo"
+        title="Leitura do contrato"
+        description="Dados do contrato, renovação e atendimento."
+      >
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Info label="Cliente" value={contract.client.companyName} />
+          <Info
+            label="Vigência"
+            value={`${formatCalendarDate(contract.startDate)} ate ${formatCalendarDate(contract.endDate)}`}
+            tone={expiresSoon ? "amber" : "slate"}
+          />
+          <Info
+            label="Recorrência"
+            value={recurrenceLabel(contract.preventiveRecurrence)}
+            tone="blue"
+          />
+          <Info
+            label="Cobertura total"
+            value={formatCurrency(coveredAmount)}
+            tone="emerald"
+          />
+          <Info label="Dia de vencimento" value={`Dia ${contract.dueDay}`} />
+          <Info label="Índice de reajuste" value={contract.adjustmentIndex} />
+          <Info
+            label="Cobertura de peças"
+            value={partsCoverageLabel(contract.partsCoverage)}
+          />
+          <Info
+            label="SLA resposta"
+            value={
+              contract.responseTimeHours != null
+                ? `${contract.responseTimeHours}h`
+                : "Nao definido"
+            }
+          />
+          <Info
+            label="Franquia corretiva"
+            value={
+              contract.correctiveVisitAllowance != null
+                ? String(contract.correctiveVisitAllowance)
+                : "Nao definida"
+            }
+          />
+          <Info
+            label="Alerta de vencimento"
+            value={`${contract.alertDays} dias`}
+            tone="amber"
+          />
+        </div>
+      </SectionCard>
+
       {notice ? <StatusBanner tone="emerald">{notice}</StatusBanner> : null}
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
       {expiresSoon ? (
         <StatusBanner tone="amber">
-          Contrato proximo do vencimento. O ideal e iniciar a renovacao antes do
+          Contrato próximo do vencimento. O ideal e iniciar a renovação antes do
           prazo de alerta.
         </StatusBanner>
       ) : null}
       {contract.client.isDelinquent ? (
         <StatusBanner tone="amber">
           O cliente esta marcado como inadimplente. Isso pode impactar status,
-          cobertura e automacoes preventivas.
+          cobertura e automações preventivas.
         </StatusBanner>
       ) : null}
 
@@ -391,18 +444,21 @@ export default function ContractDetailPage() {
               permission: "clients.view",
             },
             ...(contract.sourceProposal
-              ? [{
-                  label: contract.sourceProposal.code,
-                  description: `Proposta ${contract.sourceProposal.status}.`,
-                  href: `/dashboard/proposals/${contract.sourceProposal.id}`,
-                  badge: "Proposta",
-                  tone: "amber" as const,
-                  permission: "proposals.view",
-                }]
+              ? [
+                  {
+                    label: contract.sourceProposal.code,
+                    description: `Proposta ${commercialLabel(contract.sourceProposal.status)}.`,
+                    href: `/dashboard/proposals/${contract.sourceProposal.id}`,
+                    badge: "Proposta",
+                    tone: "amber" as const,
+                    permission: "proposals.view",
+                  },
+                ]
               : []),
             {
               label: `Documento ${contract.code}`,
-              description: "Versao documental pronta para impressao e compartilhamento.",
+              description:
+                "Versao documental pronta para impressao e compartilhamento.",
               href: `/dashboard/documents/contracts/${contract.id}`,
               badge: "Documento",
               tone: "slate" as const,
@@ -429,7 +485,8 @@ export default function ContractDetailPage() {
               })),
             {
               label: "Contas a receber",
-              description: "Referencia financeira do contrato, sem refatorar o modulo financeiro.",
+              description:
+                "Referencia financeira do contrato, sem refatorar o módulo financeiro.",
               href: "/dashboard/finance/accounts-receivable",
               badge: "Financeiro",
               tone: "rose" as const,
@@ -459,7 +516,7 @@ export default function ContractDetailPage() {
                           {item.generator.name}
                         </p>
                         <p className="mt-1 text-xs text-slate-500">
-                          Serie: {item.generator.serialNumber || "-"}
+                          Série: {item.generator.serialNumber || "-"}
                         </p>
                       </div>
                       <DataPill
@@ -494,7 +551,7 @@ export default function ContractDetailPage() {
             ) : (
               <EmptyState
                 title="Sem equipamentos vinculados"
-                description="Este contrato ainda nao possui ativos cobertos."
+                description="Este contrato ainda não possui ativos cobertos."
               />
             )}
           </SectionCard>
@@ -502,9 +559,14 @@ export default function ContractDetailPage() {
           <SectionCard
             eyebrow="Financeiro recorrente"
             title="Faturas e adimplencia"
-            description="Agora o detalhe permite tratar o fluxo financeiro direto desta tela, incluindo baixa manual de faturas pendentes."
+            description="Consulte faturas, vencimentos e pagamentos deste contrato."
           >
-            <div className="overflow-x-auto">
+            <div
+              className="overflow-x-auto"
+              tabIndex={0}
+              role="region"
+              aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas."
+            >
               <table className="w-full min-w-[680px] text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-slate-500">
@@ -512,7 +574,9 @@ export default function ContractDetailPage() {
                     <th className="px-3 py-3 font-semibold">Vencimento</th>
                     <th className="px-3 py-3 font-semibold">Valor</th>
                     <th className="px-3 py-3 font-semibold">Status</th>
-                    <th className="dashboard-sticky-actions px-3 py-3 font-semibold">Acao</th>
+                    <th className="dashboard-sticky-actions px-3 py-3 font-semibold">
+                      Acao
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -530,7 +594,7 @@ export default function ContractDetailPage() {
                           {formatMonth(invoice.competenceDate)}
                         </td>
                         <td className="px-3 py-3 text-slate-700">
-                          {formatDate(invoice.dueDate)}
+                          {formatCalendarDate(invoice.dueDate)}
                         </td>
                         <td className="px-3 py-3 font-semibold text-slate-900">
                           {formatCurrency(Number(invoice.amount || 0))}
@@ -552,7 +616,7 @@ export default function ContractDetailPage() {
                           ) : (
                             <span className="text-xs text-slate-500">
                               {invoice.paidAt
-                                ? `Pago em ${formatDate(invoice.paidAt)}`
+                                ? `Pago em ${new Date(invoice.paidAt).toLocaleDateString("pt-BR")}`
                                 : "Sem acao"}
                             </span>
                           )}
@@ -567,7 +631,7 @@ export default function ContractDetailPage() {
                 <div className="mt-4">
                   <EmptyState
                     title="Sem faturamento projetado"
-                    description="As parcelas recorrentes aparecerao aqui apos a sincronizacao do contrato."
+                    description="As parcelas recorrentes aparecerao aqui após a sincronização do contrato."
                   />
                 </div>
               ) : null}
@@ -577,7 +641,7 @@ export default function ContractDetailPage() {
           <SectionCard
             eyebrow="Preventivas"
             title="Cronograma e ordens geradas"
-            description="A trilha preventiva agora mostra melhor o que ainda esta pendente e o que ja virou ordem de servico."
+            description="Acompanhe as preventivas previstas e as ordens de serviço associadas."
             actions={
               <button
                 type="button"
@@ -585,7 +649,7 @@ export default function ContractDetailPage() {
                 disabled={Boolean(workingKey)}
                 className={SECONDARY_BUTTON}
               >
-                Gerar proximas O.S.
+                Gerar próximas O.S.
               </button>
             }
           >
@@ -602,7 +666,7 @@ export default function ContractDetailPage() {
                           {schedule.generator.name}
                         </p>
                         <p className="mt-1 text-xs text-slate-500">
-                          {formatDate(schedule.scheduledDate)} · Serie{" "}
+                          {formatDate(schedule.scheduledDate)} · Série{" "}
                           {schedule.generator.serialNumber || "-"}
                         </p>
                       </div>
@@ -632,16 +696,16 @@ export default function ContractDetailPage() {
             ) : (
               <EmptyState
                 title="Sem cronograma preventivo"
-                description="As proximas visitas preventivas aparecerao aqui apos a sincronizacao automatica."
+                description="As próximas visitas preventivas aparecerao aqui após a sincronização automática."
               />
             )}
           </SectionCard>
 
           {contract.notes ? (
             <SectionCard
-              eyebrow="Observacoes"
+              eyebrow="Observações"
               title="Notas internas do contrato"
-              description="Contexto adicional relevante para atendimento, financeiro ou renovacao."
+              description="Contexto adicional relevante para atendimento, financeiro ou renovação."
             >
               <div className="rounded-[24px] border border-slate-200 bg-slate-50/85 px-4 py-4">
                 <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">
@@ -654,67 +718,9 @@ export default function ContractDetailPage() {
 
         <div className="space-y-6">
           <SectionCard
-            eyebrow="Resumo executivo"
-            title="Leitura do contrato"
-            description="Pontos centrais para governanca, renovacao e operacao."
-          >
-            <div className="grid gap-3">
-              <Info label="Cliente" value={contract.client.companyName} />
-              <Info
-                label="Vigencia"
-                value={`${formatDate(contract.startDate)} ate ${formatDate(contract.endDate)}`}
-                tone={expiresSoon ? "amber" : "slate"}
-              />
-              <Info
-                label="Recorrencia"
-                value={recurrenceLabel(contract.preventiveRecurrence)}
-                tone="blue"
-              />
-              <Info
-                label="Cobertura total"
-                value={formatCurrency(coveredAmount)}
-                tone="emerald"
-              />
-              <Info
-                label="Dia de vencimento"
-                value={`Dia ${contract.dueDay}`}
-              />
-              <Info
-                label="Indice de reajuste"
-                value={contract.adjustmentIndex}
-              />
-              <Info
-                label="Cobertura de pecas"
-                value={partsCoverageLabel(contract.partsCoverage)}
-              />
-              <Info
-                label="SLA resposta"
-                value={
-                  contract.responseTimeHours != null
-                    ? `${contract.responseTimeHours}h`
-                    : "Nao definido"
-                }
-              />
-              <Info
-                label="Franquia corretiva"
-                value={
-                  contract.correctiveVisitAllowance != null
-                    ? String(contract.correctiveVisitAllowance)
-                    : "Nao definida"
-                }
-              />
-              <Info
-                label="Alerta de vencimento"
-                value={`${contract.alertDays} dias`}
-                tone="amber"
-              />
-            </div>
-          </SectionCard>
-
-          <SectionCard
             eyebrow="Relacionamentos"
-            title="Pontes do fluxo"
-            description="Aqui fica visivel se o contrato fecha corretamente o ciclo que veio da proposta."
+            title="Registros vinculados"
+            description="Consulte a proposta de origem, os atendimentos e o faturamento."
           >
             <div className="space-y-3">
               <Info
@@ -854,10 +860,7 @@ function partsCoverageLabel(value: string) {
 }
 
 function formatDate(date?: string | null) {
-  if (!date) return "Sem data";
-  const parsed = new Date(date);
-  if (Number.isNaN(parsed.getTime())) return "Sem data";
-  return parsed.toLocaleDateString("pt-BR");
+  return formatCalendarDate(date);
 }
 
 function formatMonth(date: string) {

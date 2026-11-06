@@ -1,5 +1,12 @@
 "use client";
 
+import { formatCalendarDate } from "@/lib/formatters";
+import { SelectField as SearchableField } from "@/app/dashboard/components/SelectField";
+import {
+  MetricCard as SummaryMetric,
+  PageHeader,
+} from "../../components/DashboardPageKit";
+
 import { useParams } from "next/navigation";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -17,6 +24,7 @@ type Equipment = {
   code: string;
   name: string;
   brand: string;
+  photoUrl?: string | null;
   serialNumber?: string | null;
   power: number;
   hourMeter?: number | null;
@@ -70,7 +78,12 @@ type Equipment = {
   client?: { id: string; companyName: string } | null;
   currentSite?: { id: string; name: string; code?: string | null } | null;
   model?: { id: string; name: string; brand?: string | null } | null;
-  proposals?: Array<{ id: string; code: string; status: string; totalValue: number }>;
+  proposals?: Array<{
+    id: string;
+    code: string;
+    status: string;
+    totalValue: number;
+  }>;
   orders?: Array<{
     id: string;
     title: string;
@@ -215,6 +228,7 @@ const DATE_FIELDS = [
 export default function EquipmentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [equipment, setEquipment] = useState<Equipment | null>(null);
+  const [failedPhoto, setFailedPhoto] = useState("");
   const [form, setForm] = useState<EditForm>({});
   const [tab, setTab] = useState<TabKey>("resumo");
   const [error, setError] = useState("");
@@ -249,7 +263,10 @@ export default function EquipmentDetailPage() {
       const res = await apiFetch(`/generators/${id}`, { cache: "no-store" });
       if (!res.ok) {
         throw new Error(
-          await readApiErrorMessage(res, "Nao foi possivel carregar o equipamento."),
+          await readApiErrorMessage(
+            res,
+            "Não foi possivel carregar o equipamento.",
+          ),
         );
       }
       const payload = (await res.json()) as Equipment;
@@ -268,7 +285,9 @@ export default function EquipmentDetailPage() {
   }
 
   function addMachineBaseItem() {
-    const selected = catalog.find((item) => item.id === newBaseItem.catalogItemId);
+    const selected = catalog.find(
+      (item) => item.id === newBaseItem.catalogItemId,
+    );
     if (!selected) {
       setError("Selecione um item do catalogo.");
       return;
@@ -280,7 +299,7 @@ export default function EquipmentDetailPage() {
           item.serviceGroup === newBaseItem.serviceGroup,
       )
     ) {
-      setError("Este item ja esta cadastrado neste tipo de manutencao.");
+      setError("Este item já esta cadastrado neste tipo de manutenção.");
       return;
     }
     setError("");
@@ -295,7 +314,11 @@ export default function EquipmentDetailPage() {
         isCustomized: false,
       },
     ]);
-    setNewBaseItem((current) => ({ ...current, catalogItemId: "", quantity: "1" }));
+    setNewBaseItem((current) => ({
+      ...current,
+      catalogItemId: "",
+      quantity: "1",
+    }));
   }
 
   async function saveMachineBaseItems() {
@@ -316,13 +339,22 @@ export default function EquipmentDetailPage() {
         }),
       });
       if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, "Nao foi possivel salvar os itens da maquina."));
+        throw new Error(
+          await readApiErrorMessage(
+            res,
+            "Não foi possivel salvar os itens da máquina.",
+          ),
+        );
       }
-      setNotice("Itens exclusivos da maquina salvos com sucesso.");
+      setNotice("Itens exclusivos da máquina salvos com sucesso.");
       await loadEquipment();
       setTab("itens");
     } catch (saveError: unknown) {
-      setError(saveError instanceof Error ? saveError.message : "Erro ao salvar itens da maquina.");
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Erro ao salvar itens da maquina.",
+      );
     } finally {
       setSavingBaseItems(false);
     }
@@ -334,16 +366,29 @@ export default function EquipmentDetailPage() {
     setError("");
     setNotice("");
     try {
-      const res = await apiFetch(`/generators/${equipment.id}/apply-model-base-items`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ detailed: true }),
-      });
+      const res = await apiFetch(
+        `/generators/${equipment.id}/apply-model-base-items`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ detailed: true }),
+        },
+      );
       if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, "Nao foi possivel atualizar pelo modelo."));
+        throw new Error(
+          await readApiErrorMessage(
+            res,
+            "Não foi possivel atualizar pelo modelo.",
+          ),
+        );
       }
       const payload = (await res.json()) as {
-        summary?: { added?: number; updated?: number; preserved?: number; conflicts?: number };
+        summary?: {
+          added?: number;
+          updated?: number;
+          preserved?: number;
+          conflicts?: number;
+        };
       };
       const summary = payload.summary;
       setNotice(
@@ -354,7 +399,11 @@ export default function EquipmentDetailPage() {
       await loadEquipment();
       setTab("itens");
     } catch (syncError: unknown) {
-      setError(syncError instanceof Error ? syncError.message : "Erro ao sincronizar itens do modelo.");
+      setError(
+        syncError instanceof Error
+          ? syncError.message
+          : "Erro ao sincronizar itens do modelo.",
+      );
     } finally {
       setSyncingBaseItems(false);
     }
@@ -364,7 +413,7 @@ export default function EquipmentDetailPage() {
     event.preventDefault();
     if (!equipment) return;
     if (!access.equipments.update) {
-      setError("Seu perfil nao pode editar a ficha tecnica do equipamento.");
+      setError("Seu perfil não pode editar a ficha técnica do equipamento.");
       return;
     }
 
@@ -379,10 +428,13 @@ export default function EquipmentDetailPage() {
       });
       if (!res.ok) {
         throw new Error(
-          await readApiErrorMessage(res, "Nao foi possivel salvar a ficha tecnica."),
+          await readApiErrorMessage(
+            res,
+            "Não foi possivel salvar a ficha técnica.",
+          ),
         );
       }
-      setNotice("Ficha tecnica atualizada com sucesso.");
+      setNotice("Ficha técnica atualizada com sucesso.");
       await loadEquipment();
       setTab("resumo");
     } catch (saveError: unknown) {
@@ -401,7 +453,11 @@ export default function EquipmentDetailPage() {
   const activeContract = equipment?.contractLinks?.[0]?.contract ?? null;
   const nextPreventive = useMemo(() => {
     const schedules = equipment?.contractSchedules || [];
-    return schedules.find((item) => item.status === "PLANNED") || schedules[0] || null;
+    return (
+      schedules.find((item) => item.status === "PLANNED") ||
+      schedules[0] ||
+      null
+    );
   }, [equipment?.contractSchedules]);
   const appliedParts = useMemo(
     () =>
@@ -422,7 +478,7 @@ export default function EquipmentDetailPage() {
   const canEdit = access.equipments.update;
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="dashboard-page space-y-5">
       <OperationalBreadcrumb
         items={[
           { label: "Dashboard", href: "/dashboard" },
@@ -431,59 +487,93 @@ export default function EquipmentDetailPage() {
         ]}
       />
 
-      <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
-              Prontuario tecnico operacional
-            </p>
-            <h1 className="mt-2 break-words text-3xl font-black text-slate-950">
-              {equipment.name}
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              <span className="font-mono font-semibold text-slate-700">{equipment.code}</span>
-              {" | "}{equipment.assetTag || "Sem tag"} | Serie{" "}
-              {equipment.serialNumber || "nao informada"} |{" "}
+      <div
+        className={
+          equipment.photoUrl
+            ? "grid gap-4 sm:grid-cols-[minmax(0,1fr)_220px]"
+            : undefined
+        }
+      >
+        <PageHeader
+          eyebrow="Equipamento"
+          title={equipment.name}
+          description={
+            <>
+              <span className="tabular-nums font-semibold text-slate-700">
+                {equipment.code}
+              </span>
+              {" · "}
+              {equipment.assetTag || "Sem tag"}
+              {" · Série "}
+              {equipment.serialNumber || "não informada"}
+              {" · "}
               {equipment.power} kVA
-            </p>
-          </div>
-          {equipment.client?.id ? (
-            <PermissionAwareLink
-              href={`/dashboard/clients/${equipment.client.id}`}
-              permission="clients.view"
-              className={SECONDARY_BUTTON}
-            >
-              Abrir cliente
-            </PermissionAwareLink>
-          ) : null}
-        </div>
-
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric label="Status" value={statusLabel(equipment.operationalStatus)} />
-          <Metric label="Criticidade" value={equipment.criticality || "-"} />
-          <Metric
-            label="Horimetro"
-            value={equipment.hourMeter != null ? `${equipment.hourMeter} h` : "-"}
-          />
-          <Metric
-            label="Proxima preventiva"
-            value={formatDate(nextPreventive?.scheduledDate)}
-          />
-        </div>
-      </header>
+            </>
+          }
+          actions={
+            equipment.client?.id ? (
+              <PermissionAwareLink
+                href={`/dashboard/clients/${equipment.client.id}`}
+                permission="clients.view"
+                className={SECONDARY_BUTTON}
+              >
+                Abrir cliente
+              </PermissionAwareLink>
+            ) : null
+          }
+        />
+        {equipment.photoUrl ? (
+          <figure
+            aria-label="Foto do equipamento"
+            className="flex h-44 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-sm"
+          >
+            {failedPhoto === equipment.photoUrl ? (
+              <p className="px-4 text-center text-sm text-slate-500">
+                Foto indisponível
+              </p>
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={equipment.photoUrl}
+                alt="Foto do equipamento do cliente"
+                className="h-full w-full rounded-xl object-contain"
+                onError={() => setFailedPhoto(equipment.photoUrl || "")}
+              />
+            )}
+          </figure>
+        ) : null}
+      </div>
+      <div className="dashboard-metrics-grid">
+        <Metric
+          label="Status"
+          value={statusLabel(equipment.operationalStatus)}
+        />
+        <Metric label="Criticidade" value={equipment.criticality || "-"} />
+        <Metric
+          label="Horimetro"
+          value={equipment.hourMeter != null ? `${equipment.hourMeter} h` : "-"}
+        />
+        <Metric
+          label="Próxima preventiva"
+          value={formatDate(nextPreventive?.scheduledDate)}
+        />
+      </div>
 
       {notice ? <State text={notice} tone="success" /> : null}
       {error ? <State text={error} tone="error" /> : null}
 
       <nav className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
         <TabButton active={tab === "resumo"} onClick={() => setTab("resumo")}>
-          Resumo tecnico
+          Resumo técnico
         </TabButton>
-        <TabButton active={tab === "historico"} onClick={() => setTab("historico")}>
-          Historico e links
+        <TabButton
+          active={tab === "historico"}
+          onClick={() => setTab("historico")}
+        >
+          Histórico e links
         </TabButton>
         <TabButton active={tab === "itens"} onClick={() => setTab("itens")}>
-          Itens de manutencao
+          Itens de manutenção
         </TabButton>
         {canEdit ? (
           <TabButton active={tab === "editar"} onClick={() => setTab("editar")}>
@@ -495,41 +585,91 @@ export default function EquipmentDetailPage() {
       {tab === "resumo" ? (
         <div className="space-y-6">
           <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <Panel title="Identificacao e localizacao">
+            <Panel title="Identificação e localização">
               <InfoGrid>
-                <Info label="Codigo do equipamento" value={equipment.code} />
-                <Info label="Cliente" value={equipment.client?.companyName || "-"} href={equipment.client?.id ? `/dashboard/clients/${equipment.client.id}` : undefined} permission="clients.view" />
-                <Info label="Local/site" value={equipment.currentSite?.name || equipment.installationSite || "-"} href={equipment.currentSite?.id ? "/dashboard/sites" : undefined} permission="clients.view" />
+                <Info label="Código do equipamento" value={equipment.code} />
+                <Info
+                  label="Cliente"
+                  value={equipment.client?.companyName || "-"}
+                  href={
+                    equipment.client?.id
+                      ? `/dashboard/clients/${equipment.client.id}`
+                      : undefined
+                  }
+                  permission="clients.view"
+                />
+                <Info
+                  label="Local/site"
+                  value={
+                    equipment.currentSite?.name ||
+                    equipment.installationSite ||
+                    "-"
+                  }
+                  href={
+                    equipment.currentSite?.id ? "/dashboard/sites" : undefined
+                  }
+                  permission="clients.view"
+                />
                 <Info label="Modelo" value={equipment.model?.name || "-"} />
                 <Info label="Fabricante" value={equipment.brand} />
-                <Info label="Aplicacao" value={equipment.application || "-"} />
-                <Info label="Condicao" value={equipment.condition || "-"} />
-                <Info label="Ciclo de vida" value={statusLabel(equipment.lifecycleStatus)} />
-                <Info label="Garantia ate" value={formatDate(equipment.warrantyEndDate)} />
+                <Info label="Aplicação" value={equipment.application || "-"} />
+                <Info label="Condição" value={equipment.condition || "-"} />
+                <Info
+                  label="Ciclo de vida"
+                  value={statusLabel(equipment.lifecycleStatus)}
+                />
+                <Info
+                  label="Garantia até"
+                  value={formatDate(equipment.warrantyEndDate)}
+                />
               </InfoGrid>
             </Panel>
 
-            <Panel title="Leitura operacional">
+            <Panel title="Situação do equipamento">
               <div className="space-y-3">
                 <LinkCard
                   title="Ultima OS"
                   value={latestOrder?.title || "-"}
-                  helper={latestOrder ? `${statusLabel(latestOrder.status)} | ${formatDate(latestOrder.finishedAt || latestOrder.openedAt)}` : "Sem OS recente"}
-                  href={latestOrder?.id ? `/dashboard/orders/${latestOrder.id}` : undefined}
+                  helper={
+                    latestOrder
+                      ? `${statusLabel(latestOrder.status)} | ${formatDate(latestOrder.finishedAt || latestOrder.openedAt)}`
+                      : "Sem OS recente"
+                  }
+                  href={
+                    latestOrder?.id
+                      ? `/dashboard/orders/${latestOrder.id}`
+                      : undefined
+                  }
                   permission="orders.view"
                 />
                 <LinkCard
                   title="Ultimo laudo"
                   value={latestReport?.code || "-"}
-                  helper={latestReport ? statusLabel(latestReport.status) : "Sem laudo relacionado"}
-                  href={latestReport?.id ? `/dashboard/relatorios-tecnicos/${latestReport.id}` : undefined}
+                  helper={
+                    latestReport
+                      ? statusLabel(latestReport.status)
+                      : "Sem laudo relacionado"
+                  }
+                  href={
+                    latestReport?.id
+                      ? `/dashboard/relatorios-tecnicos/${latestReport.id}`
+                      : undefined
+                  }
                   permission="serviceReports.view"
                 />
                 <LinkCard
                   title="Contrato"
                   value={activeContract?.code || "-"}
-                  helper={activeContract ? statusLabel(activeContract.status) : "Nao vinculado"}
-                  href={activeContract?.id ? `/dashboard/contracts/${activeContract.id}` : undefined}
+                  helper={
+                    activeContract
+                      ? statusLabel(activeContract.status)
+                      : "Nao vinculado"
+                  }
+                  href={
+                    activeContract?.id
+                      ? `/dashboard/contracts/${activeContract.id}`
+                      : undefined
+                  }
                   permission="contracts.view"
                 />
               </div>
@@ -542,11 +682,30 @@ export default function EquipmentDetailPage() {
                 <Info label="Potencia" value={`${equipment.power} kVA`} />
                 <Info label="Tensao" value={equipment.voltage || "-"} />
                 <Info label="Corrente" value={equipment.ratedCurrent || "-"} />
-                <Info label="Fator de potencia" value={formatNumber(equipment.powerFactor)} />
-                <Info label="Frequencia" value={formatHz(equipment.frequencyHz)} />
-                <Info label="Regime de operacao" value={equipment.operationMode || "-"} />
-                <Info label="Ano fabricacao" value={equipment.manufactureYear ? String(equipment.manufactureYear) : "-"} />
-                <Info label="Instalacao" value={formatDate(equipment.installationDate)} />
+                <Info
+                  label="Fator de potencia"
+                  value={formatNumber(equipment.powerFactor)}
+                />
+                <Info
+                  label="Frequencia"
+                  value={formatHz(equipment.frequencyHz)}
+                />
+                <Info
+                  label="Regime de operação"
+                  value={equipment.operationMode || "-"}
+                />
+                <Info
+                  label="Ano fabricacao"
+                  value={
+                    equipment.manufactureYear
+                      ? String(equipment.manufactureYear)
+                      : "-"
+                  }
+                />
+                <Info
+                  label="Instalacao"
+                  value={formatDate(equipment.installationDate)}
+                />
               </InfoGrid>
             </Panel>
 
@@ -554,47 +713,131 @@ export default function EquipmentDetailPage() {
               <InfoGrid>
                 <Info label="Fabricante" value={equipment.engineBrand || "-"} />
                 <Info label="Modelo" value={equipment.engineModelName || "-"} />
-                <Info label="Serie" value={equipment.engineSerialNumber || "-"} />
+                <Info
+                  label="Série"
+                  value={equipment.engineSerialNumber || "-"}
+                />
                 <Info label="Potencia" value={equipment.enginePower || "-"} />
                 <Info label="Combustivel" value={equipment.fuelType || "-"} />
-                <Info label="Cilindros" value={formatNumber(equipment.engineCylinders)} />
-                <Info label="Oleo recomendado" value={equipment.oilRecommendation || "-"} />
-                <Info label="Capacidade oleo" value={equipment.oilCapacityLiters != null ? `${equipment.oilCapacityLiters} L` : "-"} />
-                <Info label="Ultima troca" value={formatDate(equipment.lastOilChangeAt)} />
+                <Info
+                  label="Cilindros"
+                  value={formatNumber(equipment.engineCylinders)}
+                />
+                <Info
+                  label="Oleo recomendado"
+                  value={equipment.oilRecommendation || "-"}
+                />
+                <Info
+                  label="Capacidade oleo"
+                  value={
+                    equipment.oilCapacityLiters != null
+                      ? `${equipment.oilCapacityLiters} L`
+                      : "-"
+                  }
+                />
+                <Info
+                  label="Ultima troca"
+                  value={formatDate(equipment.lastOilChangeAt)}
+                />
               </InfoGrid>
             </Panel>
 
             <Panel title="Alternador">
               <InfoGrid>
-                <Info label="Fabricante" value={equipment.alternatorBrand || "-"} />
-                <Info label="Modelo" value={equipment.alternatorModelName || "-"} />
-                <Info label="Serie" value={equipment.alternatorSerialNumber || "-"} />
-                <Info label="Tensao" value={equipment.alternatorVoltage || "-"} />
-                <Info label="Frequencia" value={formatHz(equipment.alternatorFrequencyHz)} />
-                <Info label="Classe isolacao" value={equipment.alternatorInsulationClass || "-"} />
-                <Info label="Grau protecao" value={equipment.alternatorProtectionDegree || "-"} />
+                <Info
+                  label="Fabricante"
+                  value={equipment.alternatorBrand || "-"}
+                />
+                <Info
+                  label="Modelo"
+                  value={equipment.alternatorModelName || "-"}
+                />
+                <Info
+                  label="Série"
+                  value={equipment.alternatorSerialNumber || "-"}
+                />
+                <Info
+                  label="Tensao"
+                  value={equipment.alternatorVoltage || "-"}
+                />
+                <Info
+                  label="Frequencia"
+                  value={formatHz(equipment.alternatorFrequencyHz)}
+                />
+                <Info
+                  label="Classe isolacao"
+                  value={equipment.alternatorInsulationClass || "-"}
+                />
+                <Info
+                  label="Grau protecao"
+                  value={equipment.alternatorProtectionDegree || "-"}
+                />
               </InfoGrid>
             </Panel>
 
             <Panel title="QTA, bateria e carregador">
               <InfoGrid>
-                <Info label="Possui QTA" value={equipment.hasTransferSwitch ? "Sim" : "Nao"} />
-                <Info label="QTA fabricante" value={equipment.transferSwitchBrand || "-"} />
-                <Info label="QTA modelo" value={equipment.transferSwitchModel || "-"} />
-                <Info label="Corrente nominal" value={equipment.transferSwitchRatedCurrent || "-"} />
-                <Info label="Tensao comando" value={equipment.transferSwitchCommandVoltage || "-"} />
-                <Info label="Tipo transferencia" value={equipment.transferSwitchType || "-"} />
-                <Info label="Baterias" value={equipment.batteryQuantity != null ? String(equipment.batteryQuantity) : "-"} />
-                <Info label="Tensao bateria" value={equipment.batteryVoltage || "-"} />
-                <Info label="Capacidade" value={equipment.batteryCapacityAh != null ? `${equipment.batteryCapacityAh} Ah` : "-"} />
-                <Info label="Carregador" value={equipment.batteryChargerModel || "-"} />
-                <Info label="Instalacao bateria" value={formatDate(equipment.batteryInstallationDate)} />
-                <Info label="Ultima substituicao" value={formatDate(equipment.batteryLastReplacementDate)} />
+                <Info
+                  label="Possui QTA"
+                  value={equipment.hasTransferSwitch ? "Sim" : "Nao"}
+                />
+                <Info
+                  label="QTA fabricante"
+                  value={equipment.transferSwitchBrand || "-"}
+                />
+                <Info
+                  label="QTA modelo"
+                  value={equipment.transferSwitchModel || "-"}
+                />
+                <Info
+                  label="Corrente nominal"
+                  value={equipment.transferSwitchRatedCurrent || "-"}
+                />
+                <Info
+                  label="Tensao comando"
+                  value={equipment.transferSwitchCommandVoltage || "-"}
+                />
+                <Info
+                  label="Tipo transferência"
+                  value={equipment.transferSwitchType || "-"}
+                />
+                <Info
+                  label="Baterias"
+                  value={
+                    equipment.batteryQuantity != null
+                      ? String(equipment.batteryQuantity)
+                      : "-"
+                  }
+                />
+                <Info
+                  label="Tensao bateria"
+                  value={equipment.batteryVoltage || "-"}
+                />
+                <Info
+                  label="Capacidade"
+                  value={
+                    equipment.batteryCapacityAh != null
+                      ? `${equipment.batteryCapacityAh} Ah`
+                      : "-"
+                  }
+                />
+                <Info
+                  label="Carregador"
+                  value={equipment.batteryChargerModel || "-"}
+                />
+                <Info
+                  label="Instalacao bateria"
+                  value={formatDate(equipment.batteryInstallationDate)}
+                />
+                <Info
+                  label="Ultima substituicao"
+                  value={formatDate(equipment.batteryLastReplacementDate)}
+                />
               </InfoGrid>
             </Panel>
           </section>
 
-          <Panel title="Observacoes tecnicas">
+          <Panel title="Observações técnicas">
             <p className="whitespace-pre-wrap rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
               {equipment.notes || "Sem observacoes registradas."}
             </p>
@@ -605,7 +848,7 @@ export default function EquipmentDetailPage() {
       {tab === "historico" ? (
         <div className="space-y-6">
           <section className="grid gap-4 lg:grid-cols-2">
-            <Panel title="Ordens de servico recentes">
+            <Panel title="Ordens de serviço recentes">
               <RelatedList empty="Nenhuma OS vinculada.">
                 {(equipment.orders || []).map((order) => (
                   <LinkCard
@@ -620,14 +863,18 @@ export default function EquipmentDetailPage() {
               </RelatedList>
             </Panel>
 
-            <Panel title="Laudos tecnicos">
+            <Panel title="Laudos técnicos">
               <RelatedList empty="Nenhum laudo vinculado.">
                 {(equipment.serviceReports || []).map((report) => (
                   <LinkCard
                     key={report.id}
                     title={report.code}
                     value={report.title || statusLabel(report.status)}
-                    helper={report.documentHash ? "Documento validavel" : statusLabel(report.status)}
+                    helper={
+                      report.documentHash
+                        ? "Documento validavel"
+                        : statusLabel(report.status)
+                    }
                     href={`/dashboard/relatorios-tecnicos/${report.id}`}
                     permission="serviceReports.view"
                   />
@@ -661,8 +908,10 @@ export default function EquipmentDetailPage() {
                     <LinkCard
                       key={link.id}
                       title={link.contract.code}
-                      value={link.contract.title || statusLabel(link.contract.status)}
-                      helper={`${formatDate(link.contract.startDate)} ate ${formatDate(link.contract.endDate)}`}
+                      value={
+                        link.contract.title || statusLabel(link.contract.status)
+                      }
+                      helper={`${formatCalendarDate(link.contract.startDate)} ate ${formatCalendarDate(link.contract.endDate)}`}
                       href={`/dashboard/contracts/${link.contract.id}`}
                       permission="contracts.view"
                     />
@@ -685,7 +934,11 @@ export default function EquipmentDetailPage() {
                           ? `/dashboard/contracts/${schedule.contract.id}`
                           : undefined
                     }
-                    permission={schedule.generatedOrder?.id ? "orders.view" : "contracts.view"}
+                    permission={
+                      schedule.generatedOrder?.id
+                        ? "orders.view"
+                        : "contracts.view"
+                    }
                   />
                 ))}
               </RelatedList>
@@ -693,7 +946,7 @@ export default function EquipmentDetailPage() {
           </section>
 
           <section className="grid gap-4 lg:grid-cols-2">
-            <Panel title="Pecas aplicadas em OS">
+            <Panel title="Peças aplicadas em OS">
               <RelatedList empty="Nenhuma peca aplicada encontrada nas OS recentes.">
                 {appliedParts.map((part) => (
                   <LinkCard
@@ -706,13 +959,15 @@ export default function EquipmentDetailPage() {
                         ? `/dashboard/catalog/${part.catalogItem.id}`
                         : `/dashboard/orders/${part.orderId}`
                     }
-                    permission={part.catalogItem?.id ? "catalog.view" : "orders.view"}
+                    permission={
+                      part.catalogItem?.id ? "catalog.view" : "orders.view"
+                    }
                   />
                 ))}
               </RelatedList>
             </Panel>
 
-            <Panel title="Pecas base de manutencao">
+            <Panel title="Peças base de manutenção">
               <RelatedList empty="Nenhum item base cadastrado.">
                 {(equipment.baseItems || []).map((item) => (
                   <LinkCard
@@ -739,10 +994,13 @@ export default function EquipmentDetailPage() {
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <h2 className="text-lg font-bold text-slate-950">Itens desta maquina</h2>
+                <h2 className="text-lg font-bold text-slate-950">
+                  Itens desta máquina
+                </h2>
                 <p className="mt-1 max-w-3xl text-sm text-slate-500">
-                  A lista pertence ao gerador instalado. Itens vindos do modelo mantem a origem;
-                  quantidades personalizadas e itens manuais nao sao apagados pela sincronizacao.
+                  A lista pertence ao gerador instalado. Itens vindos do modelo
+                  mantem a origem; quantidades personalizadas e itens manuais
+                  não sao apagados pela sincronização.
                 </p>
               </div>
               {canEdit ? (
@@ -752,46 +1010,79 @@ export default function EquipmentDetailPage() {
                   disabled={syncingBaseItems || !equipment.model?.id}
                   className={SECONDARY_BUTTON}
                 >
-                  {syncingBaseItems ? "Atualizando..." : "Atualizar itens do modelo"}
+                  {syncingBaseItems
+                    ? "Atualizando..."
+                    : "Atualizar itens do modelo"}
                 </button>
               ) : null}
             </div>
             {!equipment.model?.id ? (
               <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                Vincule um modelo ao equipamento para importar recomendacoes. Os itens manuais continuam disponiveis.
+                Vincule um modelo ao equipamento para importar recomendacoes. Os
+                itens manuais continuam disponíveis.
               </p>
             ) : null}
           </section>
 
           {canEdit ? (
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-bold text-slate-950">Adicionar item exclusivo</h2>
+              <h2 className="text-lg font-bold text-slate-950">
+                Adicionar item exclusivo
+              </h2>
               <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_280px_110px_auto]">
                 <CatalogSearchField
                   value={newBaseItem.catalogItemId}
-                  selectedItem={catalog.find((item) => item.id === newBaseItem.catalogItemId)}
+                  selectedItem={catalog.find(
+                    (item) => item.id === newBaseItem.catalogItemId,
+                  )}
                   onChange={(catalogItemId, selected) => {
-                    setNewBaseItem((current) => ({ ...current, catalogItemId }));
-                    if (selected) setCatalog((current) => current.some((item) => item.id === selected.id) ? current : [...current, selected]);
+                    setNewBaseItem((current) => ({
+                      ...current,
+                      catalogItemId,
+                    }));
+                    if (selected)
+                      setCatalog((current) =>
+                        current.some((item) => item.id === selected.id)
+                          ? current
+                          : [...current, selected],
+                      );
                   }}
                   placeholder="Buscar no catalogo geral"
                 />
-                <select
+                <SearchableField
                   value={newBaseItem.serviceGroup}
-                  onChange={(event) => setNewBaseItem((current) => ({ ...current, serviceGroup: event.target.value }))}
+                  onChange={(event) =>
+                    setNewBaseItem((current) => ({
+                      ...current,
+                      serviceGroup: event.target.value,
+                    }))
+                  }
                   className={INPUT_CLASS}
                 >
-                  {SERVICE_GROUP_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select>
+                  {SERVICE_GROUP_OPTIONS.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </SearchableField>
                 <input
                   type="number"
                   min="1"
                   value={newBaseItem.quantity}
-                  onChange={(event) => setNewBaseItem((current) => ({ ...current, quantity: event.target.value }))}
+                  onChange={(event) =>
+                    setNewBaseItem((current) => ({
+                      ...current,
+                      quantity: event.target.value,
+                    }))
+                  }
                   aria-label="Quantidade do novo item"
                   className={INPUT_CLASS}
                 />
-                <button type="button" onClick={addMachineBaseItem} className={PRIMARY_BUTTON}>
+                <button
+                  type="button"
+                  onClick={addMachineBaseItem}
+                  className={PRIMARY_BUTTON}
+                >
                   Adicionar
                 </button>
               </div>
@@ -801,44 +1092,100 @@ export default function EquipmentDetailPage() {
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             {baseItems.length === 0 ? (
               <p className="rounded-xl border border-dashed border-slate-300 p-5 text-sm text-slate-500">
-                Nenhum item cadastrado para esta maquina.
+                Nenhum item cadastrado para esta máquina.
               </p>
             ) : (
               <div className="space-y-3">
                 {baseItems.map((item, index) => (
-                  <div key={item.id} className="grid gap-3 rounded-xl border border-slate-200 p-4 md:grid-cols-[minmax(0,1fr)_270px_100px_auto] md:items-center">
+                  <div
+                    key={item.id}
+                    className="grid gap-3 rounded-xl border border-slate-200 p-4 md:grid-cols-[minmax(0,1fr)_270px_100px_auto] md:items-center"
+                  >
                     <div>
-                      <p className="font-bold text-slate-900">{item.catalogItem?.name || "Item do catalogo"}</p>
+                      <p className="font-bold text-slate-900">
+                        {item.catalogItem?.name || "Item do catalogo"}
+                      </p>
                       <div className="mt-1 flex flex-wrap gap-2 text-xs">
-                        <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">{item.catalogItem?.sku || "Sem SKU"}</span>
-                        <span className={item.sourceModelBaseItemId ? "rounded-full bg-sky-50 px-2 py-1 font-semibold text-sky-700" : "rounded-full bg-violet-50 px-2 py-1 font-semibold text-violet-700"}>
-                          {item.sourceModelBaseItemId ? "Origem: modelo" : "Exclusivo da maquina"}
+                        <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">
+                          {item.catalogItem?.sku || "Sem SKU"}
                         </span>
-                        {item.isCustomized ? <span className="rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700">Quantidade personalizada</span> : null}
+                        <span
+                          className={
+                            item.sourceModelBaseItemId
+                              ? "rounded-full bg-sky-50 px-2 py-1 font-semibold text-sky-700"
+                              : "rounded-full bg-violet-50 px-2 py-1 font-semibold text-violet-700"
+                          }
+                        >
+                          {item.sourceModelBaseItemId
+                            ? "Origem: modelo"
+                            : "Exclusivo da maquina"}
+                        </span>
+                        {item.isCustomized ? (
+                          <span className="rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700">
+                            Quantidade personalizada
+                          </span>
+                        ) : null}
                       </div>
                     </div>
-                    <select
+                    <SearchableField
                       value={item.serviceGroup}
                       disabled={!canEdit}
-                      onChange={(event) => setBaseItems((current) => current.map((candidate, itemIndex) => itemIndex === index ? { ...candidate, serviceGroup: event.target.value } : candidate))}
+                      onChange={(event) =>
+                        setBaseItems((current) =>
+                          current.map((candidate, itemIndex) =>
+                            itemIndex === index
+                              ? {
+                                  ...candidate,
+                                  serviceGroup: event.target.value,
+                                }
+                              : candidate,
+                          ),
+                        )
+                      }
                       className={INPUT_CLASS}
                     >
-                      {SERVICE_GROUP_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                    </select>
+                      {SERVICE_GROUP_OPTIONS.map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </SearchableField>
                     <input
                       type="number"
                       min="1"
                       value={item.quantity}
                       disabled={!canEdit}
                       aria-label={`Quantidade de ${item.catalogItem?.name || "item"}`}
-                      onChange={(event) => setBaseItems((current) => current.map((candidate, itemIndex) => itemIndex === index ? { ...candidate, quantity: Math.max(1, Number(event.target.value || 1)) } : candidate))}
+                      onChange={(event) =>
+                        setBaseItems((current) =>
+                          current.map((candidate, itemIndex) =>
+                            itemIndex === index
+                              ? {
+                                  ...candidate,
+                                  quantity: Math.max(
+                                    1,
+                                    Number(event.target.value || 1),
+                                  ),
+                                }
+                              : candidate,
+                          ),
+                        )
+                      }
                       className={INPUT_CLASS}
                     />
                     {canEdit ? (
-                      <button type="button" onClick={() => {
-                        if (!confirmDeletion("este item da maquina")) return;
-                        setBaseItems((current) => current.filter((_, itemIndex) => itemIndex !== index));
-                      }} className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!confirmDeletion("este item da maquina")) return;
+                          setBaseItems((current) =>
+                            current.filter(
+                              (_, itemIndex) => itemIndex !== index,
+                            ),
+                          );
+                        }}
+                        className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100"
+                      >
                         Remover
                       </button>
                     ) : null}
@@ -848,7 +1195,12 @@ export default function EquipmentDetailPage() {
             )}
             {canEdit ? (
               <div className="mt-5 flex justify-end">
-                <button type="button" onClick={() => void saveMachineBaseItems()} disabled={savingBaseItems} className={PRIMARY_BUTTON}>
+                <button
+                  type="button"
+                  onClick={() => void saveMachineBaseItems()}
+                  disabled={savingBaseItems}
+                  className={PRIMARY_BUTTON}
+                >
                   {savingBaseItems ? "Salvando..." : "Salvar itens da maquina"}
                 </button>
               </div>
@@ -859,77 +1211,346 @@ export default function EquipmentDetailPage() {
 
       {tab === "editar" && canEdit ? (
         <form onSubmit={saveTechnicalData} className="space-y-6">
-          <EditSection title="Identificacao">
-            <TextField label="Nome/apelido" field="name" form={form} setForm={setForm} required />
-            <TextField label="Fabricante" field="brand" form={form} setForm={setForm} required />
-            <TextField label="Numero de serie" field="serialNumber" form={form} setForm={setForm} />
-            <TextField label="Tag patrimonial" field="assetTag" form={form} setForm={setForm} />
-            <NumberField label="Potencia kVA" field="power" form={form} setForm={setForm} required />
-            <NumberField label="Horimetro atual" field="hourMeter" form={form} setForm={setForm} />
-            <TextField label="Local de instalacao" field="installationSite" form={form} setForm={setForm} />
-            <TextField label="Aplicacao" field="application" form={form} setForm={setForm} />
-            <SelectField label="Status operacional" field="operationalStatus" form={form} setForm={setForm} options={OPERATIONAL_STATUS_OPTIONS} />
-            <SelectField label="Ciclo de vida" field="lifecycleStatus" form={form} setForm={setForm} options={LIFECYCLE_STATUS_OPTIONS} />
-            <SelectField label="Criticidade" field="criticality" form={form} setForm={setForm} options={CRITICALITY_OPTIONS} />
-            <TextField label="Condicao" field="condition" form={form} setForm={setForm} />
-            <DateField label="Data de instalacao" field="installationDate" form={form} setForm={setForm} />
-            <DateField label="Garantia ate" field="warrantyEndDate" form={form} setForm={setForm} />
+          <EditSection title="Identificação">
+            <TextField
+              label="Nome/apelido"
+              field="name"
+              form={form}
+              setForm={setForm}
+              required
+            />
+            <TextField
+              label="Fabricante"
+              field="brand"
+              form={form}
+              setForm={setForm}
+              required
+            />
+            <TextField
+              label="Número de série"
+              field="serialNumber"
+              form={form}
+              setForm={setForm}
+            />
+            <TextField
+              label="Tag patrimonial"
+              field="assetTag"
+              form={form}
+              setForm={setForm}
+            />
+            <NumberField
+              label="Potencia kVA"
+              field="power"
+              form={form}
+              setForm={setForm}
+              required
+            />
+            <NumberField
+              label="Horimetro atual"
+              field="hourMeter"
+              form={form}
+              setForm={setForm}
+            />
+            <TextField
+              label="Local de instalacao"
+              field="installationSite"
+              form={form}
+              setForm={setForm}
+            />
+            <TextField
+              label="Aplicação"
+              field="application"
+              form={form}
+              setForm={setForm}
+            />
+            <SelectField
+              label="Status operacional"
+              field="operationalStatus"
+              form={form}
+              setForm={setForm}
+              options={OPERATIONAL_STATUS_OPTIONS}
+            />
+            <SelectField
+              label="Ciclo de vida"
+              field="lifecycleStatus"
+              form={form}
+              setForm={setForm}
+              options={LIFECYCLE_STATUS_OPTIONS}
+            />
+            <SelectField
+              label="Criticidade"
+              field="criticality"
+              form={form}
+              setForm={setForm}
+              options={CRITICALITY_OPTIONS}
+            />
+            <TextField
+              label="Condição"
+              field="condition"
+              form={form}
+              setForm={setForm}
+            />
+            <DateField
+              label="Data de instalacao"
+              field="installationDate"
+              form={form}
+              setForm={setForm}
+            />
+            <DateField
+              label="Garantia até"
+              field="warrantyEndDate"
+              form={form}
+              setForm={setForm}
+            />
           </EditSection>
 
           <EditSection title="Gerador">
-            <TextField label="Tensao" field="voltage" form={form} setForm={setForm} />
-            <TextField label="Corrente" field="ratedCurrent" form={form} setForm={setForm} />
-            <NumberField label="Fator de potencia" field="powerFactor" form={form} setForm={setForm} step="0.01" />
-            <NumberField label="Frequencia Hz" field="frequencyHz" form={form} setForm={setForm} />
-            <NumberField label="Ano de fabricacao" field="manufactureYear" form={form} setForm={setForm} />
-            <TextField label="Regime de operacao" field="operationMode" form={form} setForm={setForm} />
+            <TextField
+              label="Tensao"
+              field="voltage"
+              form={form}
+              setForm={setForm}
+            />
+            <TextField
+              label="Corrente"
+              field="ratedCurrent"
+              form={form}
+              setForm={setForm}
+            />
+            <NumberField
+              label="Fator de potencia"
+              field="powerFactor"
+              form={form}
+              setForm={setForm}
+              step="0.01"
+            />
+            <NumberField
+              label="Frequencia Hz"
+              field="frequencyHz"
+              form={form}
+              setForm={setForm}
+            />
+            <NumberField
+              label="Ano de fabricacao"
+              field="manufactureYear"
+              form={form}
+              setForm={setForm}
+            />
+            <TextField
+              label="Regime de operação"
+              field="operationMode"
+              form={form}
+              setForm={setForm}
+            />
           </EditSection>
 
           <EditSection title="Motor">
-            <TextField label="Fabricante" field="engineBrand" form={form} setForm={setForm} />
-            <TextField label="Modelo" field="engineModelName" form={form} setForm={setForm} />
-            <TextField label="Numero de serie" field="engineSerialNumber" form={form} setForm={setForm} />
-            <TextField label="Potencia" field="enginePower" form={form} setForm={setForm} />
-            <TextField label="Combustivel" field="fuelType" form={form} setForm={setForm} />
-            <NumberField label="Cilindros" field="engineCylinders" form={form} setForm={setForm} />
-            <TextField label="Oleo recomendado" field="oilRecommendation" form={form} setForm={setForm} />
-            <NumberField label="Capacidade de oleo (L)" field="oilCapacityLiters" form={form} setForm={setForm} step="0.1" />
-            <DateField label="Ultima troca de oleo" field="lastOilChangeAt" form={form} setForm={setForm} />
+            <TextField
+              label="Fabricante"
+              field="engineBrand"
+              form={form}
+              setForm={setForm}
+            />
+            <TextField
+              label="Modelo"
+              field="engineModelName"
+              form={form}
+              setForm={setForm}
+            />
+            <TextField
+              label="Número de série"
+              field="engineSerialNumber"
+              form={form}
+              setForm={setForm}
+            />
+            <TextField
+              label="Potencia"
+              field="enginePower"
+              form={form}
+              setForm={setForm}
+            />
+            <TextField
+              label="Combustivel"
+              field="fuelType"
+              form={form}
+              setForm={setForm}
+            />
+            <NumberField
+              label="Cilindros"
+              field="engineCylinders"
+              form={form}
+              setForm={setForm}
+            />
+            <TextField
+              label="Oleo recomendado"
+              field="oilRecommendation"
+              form={form}
+              setForm={setForm}
+            />
+            <NumberField
+              label="Capacidade de oleo (L)"
+              field="oilCapacityLiters"
+              form={form}
+              setForm={setForm}
+              step="0.1"
+            />
+            <DateField
+              label="Ultima troca de oleo"
+              field="lastOilChangeAt"
+              form={form}
+              setForm={setForm}
+            />
           </EditSection>
 
           <EditSection title="Alternador">
-            <TextField label="Fabricante" field="alternatorBrand" form={form} setForm={setForm} />
-            <TextField label="Modelo" field="alternatorModelName" form={form} setForm={setForm} />
-            <TextField label="Numero de serie" field="alternatorSerialNumber" form={form} setForm={setForm} />
-            <TextField label="Tensao" field="alternatorVoltage" form={form} setForm={setForm} />
-            <NumberField label="Frequencia Hz" field="alternatorFrequencyHz" form={form} setForm={setForm} />
-            <TextField label="Classe de isolacao" field="alternatorInsulationClass" form={form} setForm={setForm} />
-            <TextField label="Grau de protecao" field="alternatorProtectionDegree" form={form} setForm={setForm} />
+            <TextField
+              label="Fabricante"
+              field="alternatorBrand"
+              form={form}
+              setForm={setForm}
+            />
+            <TextField
+              label="Modelo"
+              field="alternatorModelName"
+              form={form}
+              setForm={setForm}
+            />
+            <TextField
+              label="Número de série"
+              field="alternatorSerialNumber"
+              form={form}
+              setForm={setForm}
+            />
+            <TextField
+              label="Tensao"
+              field="alternatorVoltage"
+              form={form}
+              setForm={setForm}
+            />
+            <NumberField
+              label="Frequencia Hz"
+              field="alternatorFrequencyHz"
+              form={form}
+              setForm={setForm}
+            />
+            <TextField
+              label="Classe de isolacao"
+              field="alternatorInsulationClass"
+              form={form}
+              setForm={setForm}
+            />
+            <TextField
+              label="Grau de protecao"
+              field="alternatorProtectionDegree"
+              form={form}
+              setForm={setForm}
+            />
           </EditSection>
 
-          <EditSection title="QTA / transferencia">
-            <SelectField label="Possui QTA" field="hasTransferSwitch" form={form} setForm={setForm} options={BOOLEAN_OPTIONS} />
-            <TextField label="Fabricante" field="transferSwitchBrand" form={form} setForm={setForm} />
-            <TextField label="Modelo" field="transferSwitchModel" form={form} setForm={setForm} />
-            <TextField label="Numero de serie" field="transferSwitchSerialNumber" form={form} setForm={setForm} />
-            <TextField label="Corrente nominal" field="transferSwitchRatedCurrent" form={form} setForm={setForm} />
-            <TextField label="Tensao de comando" field="transferSwitchCommandVoltage" form={form} setForm={setForm} />
-            <TextField label="Tipo de transferencia" field="transferSwitchType" form={form} setForm={setForm} />
-            <TextAreaField label="Observacoes do QTA" field="transferSwitchNotes" form={form} setForm={setForm} />
+          <EditSection title="QTA / transferência">
+            <SelectField
+              label="Possui QTA"
+              field="hasTransferSwitch"
+              form={form}
+              setForm={setForm}
+              options={BOOLEAN_OPTIONS}
+            />
+            <TextField
+              label="Fabricante"
+              field="transferSwitchBrand"
+              form={form}
+              setForm={setForm}
+            />
+            <TextField
+              label="Modelo"
+              field="transferSwitchModel"
+              form={form}
+              setForm={setForm}
+            />
+            <TextField
+              label="Número de série"
+              field="transferSwitchSerialNumber"
+              form={form}
+              setForm={setForm}
+            />
+            <TextField
+              label="Corrente nominal"
+              field="transferSwitchRatedCurrent"
+              form={form}
+              setForm={setForm}
+            />
+            <TextField
+              label="Tensao de comando"
+              field="transferSwitchCommandVoltage"
+              form={form}
+              setForm={setForm}
+            />
+            <TextField
+              label="Tipo de transferência"
+              field="transferSwitchType"
+              form={form}
+              setForm={setForm}
+            />
+            <TextAreaField
+              label="Observações do QTA"
+              field="transferSwitchNotes"
+              form={form}
+              setForm={setForm}
+            />
           </EditSection>
 
           <EditSection title="Bateria / carregador">
-            <NumberField label="Quantidade de baterias" field="batteryQuantity" form={form} setForm={setForm} />
-            <TextField label="Tensao" field="batteryVoltage" form={form} setForm={setForm} />
-            <NumberField label="Capacidade Ah" field="batteryCapacityAh" form={form} setForm={setForm} step="0.1" />
-            <DateField label="Data de instalacao" field="batteryInstallationDate" form={form} setForm={setForm} />
-            <TextField label="Carregador" field="batteryChargerModel" form={form} setForm={setForm} />
-            <DateField label="Ultima substituicao" field="batteryLastReplacementDate" form={form} setForm={setForm} />
-            <TextAreaField label="Observacoes gerais" field="notes" form={form} setForm={setForm} />
+            <NumberField
+              label="Quantidade de baterias"
+              field="batteryQuantity"
+              form={form}
+              setForm={setForm}
+            />
+            <TextField
+              label="Tensao"
+              field="batteryVoltage"
+              form={form}
+              setForm={setForm}
+            />
+            <NumberField
+              label="Capacidade Ah"
+              field="batteryCapacityAh"
+              form={form}
+              setForm={setForm}
+              step="0.1"
+            />
+            <DateField
+              label="Data de instalacao"
+              field="batteryInstallationDate"
+              form={form}
+              setForm={setForm}
+            />
+            <TextField
+              label="Carregador"
+              field="batteryChargerModel"
+              form={form}
+              setForm={setForm}
+            />
+            <DateField
+              label="Ultima substituicao"
+              field="batteryLastReplacementDate"
+              form={form}
+              setForm={setForm}
+            />
+            <TextAreaField
+              label="Observações gerais"
+              field="notes"
+              form={form}
+              setForm={setForm}
+            />
           </EditSection>
 
           <div className="sticky bottom-3 flex flex-wrap justify-end gap-2 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur">
-            <button type="button" onClick={() => setTab("resumo")} className={SECONDARY_BUTTON}>
+            <button
+              type="button"
+              onClick={() => setTab("resumo")}
+              className={SECONDARY_BUTTON}
+            >
               Cancelar
             </button>
             <button type="submit" disabled={saving} className={PRIMARY_BUTTON}>
@@ -942,10 +1563,8 @@ export default function EquipmentDetailPage() {
   );
 }
 
-const PRIMARY_BUTTON =
-  "inline-flex min-h-10 items-center justify-center rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 
 const OPERATIONAL_STATUS_OPTIONS = [
   ["OPERATING", "Operando"],
@@ -980,7 +1599,9 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
 }
 
 function InfoGrid({ children }: { children: ReactNode }) {
-  return <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{children}</dl>;
+  return (
+    <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{children}</dl>
+  );
 }
 
 function Info({
@@ -996,7 +1617,9 @@ function Info({
 }) {
   const content = (
     <>
-      <dt className="text-[11px] font-bold uppercase text-slate-400">{label}</dt>
+      <dt className="text-[11px] font-bold uppercase text-slate-400">
+        {label}
+      </dt>
       <dd className="mt-1 break-words text-sm font-semibold text-slate-800">
         {value}
       </dd>
@@ -1016,16 +1639,15 @@ function Info({
     );
   }
 
-  return <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">{content}</div>;
+  return (
+    <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+      {content}
+    </div>
+  );
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-      <p className="text-[11px] font-bold uppercase text-slate-400">{label}</p>
-      <p className="mt-1 break-words text-sm font-black text-slate-900">{value}</p>
-    </div>
-  );
+  return <SummaryMetric label={label} value={String(value)} tone={"slate"} />;
 }
 
 function LinkCard({
@@ -1063,10 +1685,20 @@ function LinkCard({
   );
 }
 
-function RelatedList({ empty, children }: { empty: string; children: ReactNode }) {
+function RelatedList({
+  empty,
+  children,
+}: {
+  empty: string;
+  children: ReactNode;
+}) {
   const items = Array.isArray(children) ? children.filter(Boolean) : children;
   const hasItems = Array.isArray(items) ? items.length > 0 : Boolean(items);
-  return hasItems ? <div className="space-y-2">{items}</div> : <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">{empty}</p>;
+  return hasItems ? (
+    <div className="space-y-2">{items}</div>
+  ) : (
+    <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">{empty}</p>
+  );
 }
 
 function TabButton({
@@ -1093,7 +1725,13 @@ function TabButton({
   );
 }
 
-function EditSection({ title, children }: { title: string; children: ReactNode }) {
+function EditSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 className="mb-4 text-lg font-bold text-slate-950">{title}</h2>
@@ -1114,7 +1752,9 @@ function TextField({
       <input
         data-testid={`equipment-field-${field}`}
         value={form[field] || ""}
-        onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
+        onChange={(event) =>
+          setForm((prev) => ({ ...prev, [field]: event.target.value }))
+        }
         required={required}
         className={INPUT_CLASS}
       />
@@ -1138,7 +1778,9 @@ function NumberField({
         min="0"
         step={step}
         value={form[field] || ""}
-        onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
+        onChange={(event) =>
+          setForm((prev) => ({ ...prev, [field]: event.target.value }))
+        }
         required={required}
         className={INPUT_CLASS}
       />
@@ -1153,7 +1795,9 @@ function DateField({ label, field, form, setForm }: FieldProps) {
         data-testid={`equipment-field-${field}`}
         type="date"
         value={form[field] || ""}
-        onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
+        onChange={(event) =>
+          setForm((prev) => ({ ...prev, [field]: event.target.value }))
+        }
         className={INPUT_CLASS}
       />
     </Field>
@@ -1169,10 +1813,12 @@ function SelectField({
 }: FieldProps & { options: ReadonlyArray<readonly [string, string]> }) {
   return (
     <Field label={label}>
-      <select
+      <SearchableField
         data-testid={`equipment-field-${field}`}
         value={form[field] || ""}
-        onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
+        onChange={(event) =>
+          setForm((prev) => ({ ...prev, [field]: event.target.value }))
+        }
         className={INPUT_CLASS}
       >
         {options.map(([value, optionLabel]) => (
@@ -1180,7 +1826,7 @@ function SelectField({
             {optionLabel}
           </option>
         ))}
-      </select>
+      </SearchableField>
     </Field>
   );
 }
@@ -1191,7 +1837,9 @@ function TextAreaField({ label, field, form, setForm }: FieldProps) {
       <textarea
         data-testid={`equipment-field-${field}`}
         value={form[field] || ""}
-        onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
+        onChange={(event) =>
+          setForm((prev) => ({ ...prev, [field]: event.target.value }))
+        }
         className={`${INPUT_CLASS} min-h-28 resize-y`}
       />
     </Field>
@@ -1241,7 +1889,8 @@ function formFromEquipment(equipment: Equipment): EditForm {
     lifecycleStatus: equipment.lifecycleStatus || "AVAILABLE",
     criticality: equipment.criticality || "B",
     hasTransferSwitch:
-      equipment.hasTransferSwitch === null || equipment.hasTransferSwitch === undefined
+      equipment.hasTransferSwitch === null ||
+      equipment.hasTransferSwitch === undefined
         ? ""
         : String(equipment.hasTransferSwitch),
   };

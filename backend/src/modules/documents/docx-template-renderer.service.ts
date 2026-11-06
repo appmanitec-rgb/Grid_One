@@ -6,6 +6,7 @@ import {
   InstitutionalTemplateDefinition,
   LoadedInstitutionalDocumentTemplate,
 } from './document-template.service';
+import type { RenderedVisualBlock } from './visual-document.service';
 
 type RenderContext = Record<string, unknown>;
 
@@ -23,13 +24,71 @@ type DocxFile = {
   content: Buffer;
 };
 
+export type EditableWordBlock = {
+  id: string;
+  section: string;
+  text: string;
+  editable: boolean;
+};
+
 const DOCX_MIME =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document' as const;
 const WORD_TEXT_XML_PATTERN = /^word\/(?:document|header\d+|footer\d+)\.xml$/;
 
 @Injectable()
 export class DocxTemplateRendererService {
+  renderVisual(input: {
+    title: string;
+    blocks: RenderedVisualBlock[];
+    templateKey: string;
+    templateVersion: string;
+    fileName: string;
+  }): GeneratedDocxDocument {
+    const paragraphs = input.blocks.map((block) => {
+      const spacing = Math.round(block.spaceAfter * 20);
+      if (block.type === 'spacer') {
+        return `<w:p><w:pPr><w:spacing w:after="${spacing}"/></w:pPr></w:p>`;
+      }
+      const alignment =
+        block.align === 'center'
+          ? 'center'
+          : block.align === 'right'
+            ? 'right'
+            : 'left';
+      const runs = block.runs
+        .flatMap((run) =>
+          run.text
+            .split(/\r?\n/)
+            .map(
+              (line, index) =>
+                `<w:r><w:rPr>${block.bold || block.type === 'heading' ? '<w:b/>' : ''}<w:sz w:val="${block.fontSize * 2}"/></w:rPr>${index > 0 ? '<w:br/>' : ''}<w:t xml:space="preserve">${this.escapeXml(line)}</w:t></w:r>`,
+            ),
+        )
+        .join('');
+      return `<w:p><w:pPr><w:jc w:val="${alignment}"/><w:spacing w:after="${spacing}"/></w:pPr>${runs || this.run(' ')}</w:p>`;
+    });
+    const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>
+${this.documentBrand()}${paragraphs.join('')}
+<w:sectPr><w:footerReference w:type="default" r:id="rId1"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1020" w:bottom="1276" w:left="1020" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr>
+</w:body></w:document>`;
+    const buffer = this.buildDocxArchive({ documentXml, title: input.title });
+    return {
+      buffer,
+      mimeType: DOCX_MIME,
+      checksumSha256: createHash('sha256').update(buffer).digest('hex'),
+      templateKey: input.templateKey,
+      templateVersion: input.templateVersion,
+      fileName: input.fileName,
+    };
+  }
+
   private readonly legacyVariables: Array<[string, string]> = [
+    ['!propostapecasmanitec.dataset', ''],
+    ['!propostaservicosmanitec.dataset', ''],
+    ['!propostapecasresumo.dataset', ''],
+    ['!propostaservicosresumo.dataset', ''],
+    ['!propostaitens.dataset', ''],
     ['!pecasrelatorio.dataset', ''],
     ['!servicosrel.dataset', ''],
     ['!dadosequipamentosjoin.dataset', ''],
@@ -193,6 +252,413 @@ export class DocxTemplateRendererService {
     };
   }
 
+  wordTemplatePaths(buffer: Buffer): string[] {
+    const paths = new Set<string>();
+    for (const file of this.unzip(buffer)) {
+      if (!WORD_TEXT_XML_PATTERN.test(file.path)) continue;
+      const xml = file.content.toString('utf8');
+      for (const paragraph of xml.match(/<w:p\b[\s\S]*?<\/w:p>/g) || []) {
+        const content = this.extractWordParagraphText(paragraph);
+        for (const match of content.matchAll(/{{\s*([\w.[\]]+)\s*}}/g))
+          paths.add(match[1]);
+        for (const [marker, replacement] of this.legacyVariables) {
+          if (
+            !content
+              .toLocaleLowerCase('pt-BR')
+              .includes(marker.toLocaleLowerCase('pt-BR'))
+          )
+            continue;
+          const path = replacement.match(/^{{([\w.[\]]+)}}$/)?.[1];
+          if (path) paths.add(path);
+          else if (
+            marker.toLowerCase().includes('propostapecasmanitec.dataset')
+          )
+            paths.add('__proposal_parts_branded__');
+          else if (
+            marker.toLowerCase().includes('propostaservicosmanitec.dataset')
+          )
+            paths.add('__proposal_services_branded__');
+          else if (marker.toLowerCase().includes('propostapecasresumo.dataset'))
+            paths.add('__proposal_parts_summary__');
+          else if (
+            marker.toLowerCase().includes('propostaservicosresumo.dataset')
+          )
+            paths.add('__proposal_services_summary__');
+          else if (marker.toLowerCase().includes('propostaitens.dataset'))
+            paths.add('__proposal_items__');
+          else if (marker.toLowerCase().includes('pecasrelatorio.dataset'))
+            paths.add('__proposal_parts__');
+          else if (marker.toLowerCase().includes('servicosrel.dataset'))
+            paths.add('__proposal_services__');
+          else if (
+            marker.toLowerCase().includes('dadosequipamentosjoin.dataset')
+          )
+            paths.add('__contract_items__');
+          else if (marker.toLowerCase().includes('prodcontratopxjoin.dataset'))
+            paths.add('__contract_services__');
+        }
+      }
+    }
+    return [...paths];
+  }
+
+  prepareEditableWord(buffer: Buffer, labelsByPath: Record<string, string>) {
+    const files = this.unzip(buffer).map((file) => {
+      if (!WORD_TEXT_XML_PATTERN.test(file.path)) return file;
+      const xml = file.content
+        .toString('utf8')
+        .replace(/<w:p\b[\s\S]*?<\/w:p>/g, (paragraph) => {
+          const legacy = this.legacyVariables.map(
+            ([marker, replacement]): [string, string] => {
+              const path = replacement.match(/^{{([\w.[\]]+)}}$/)?.[1];
+              const summaryPath = marker
+                .toLowerCase()
+                .includes('propostapecasresumo.dataset')
+                ? '__proposal_parts_summary__'
+                : marker
+                      .toLowerCase()
+                      .includes('propostaservicosresumo.dataset')
+                  ? '__proposal_services_summary__'
+                  : null;
+              const special =
+                (marker.toLowerCase().includes('propostapecasmanitec.dataset')
+                  ? '__proposal_parts_branded__'
+                  : marker
+                        .toLowerCase()
+                        .includes('propostaservicosmanitec.dataset')
+                    ? '__proposal_services_branded__'
+                    : null) ||
+                summaryPath ||
+                (marker.toLowerCase().includes('propostaitens.dataset')
+                  ? '__proposal_items__'
+                  : marker.toLowerCase().includes('pecasrelatorio.dataset')
+                    ? '__proposal_parts__'
+                    : marker.toLowerCase().includes('servicosrel.dataset')
+                      ? '__proposal_services__'
+                      : marker
+                            .toLowerCase()
+                            .includes('dadosequipamentosjoin.dataset')
+                        ? '__contract_items__'
+                        : marker
+                              .toLowerCase()
+                              .includes('prodcontratopxjoin.dataset')
+                          ? '__contract_services__'
+                          : null);
+              const label = labelsByPath[path || special || ''];
+              return [marker, label ? `«${label}»` : replacement];
+            },
+          );
+          const converted = this.replaceWordsInRuns(paragraph, legacy);
+          const paths = [
+            ...this.extractWordParagraphText(converted).matchAll(
+              /{{\s*([\w.[\]]+)\s*}}/g,
+            ),
+          ].map((match): [string, string] => [
+            match[0],
+            labelsByPath[match[1]] ? `«${labelsByPath[match[1]]}»` : match[0],
+          ]);
+          return this.replaceWordsInRuns(converted, paths);
+        });
+      return { ...file, content: Buffer.from(xml, 'utf8') };
+    });
+    return this.zip(files);
+  }
+
+  inspectFriendlyWord(buffer: Buffer) {
+    const files = this.unzip(buffer);
+    if (!files.some((file) => file.path === 'word/document.xml'))
+      throw new BadRequestException(
+        'O arquivo enviado não é um documento Word válido.',
+      );
+    const labels = new Set<string>();
+    let technicalMarkers = false;
+    for (const file of files) {
+      if (!WORD_TEXT_XML_PATTERN.test(file.path)) continue;
+      for (const paragraph of file.content
+        .toString('utf8')
+        .match(/<w:p\b[\s\S]*?<\/w:p>/g) || []) {
+        const content = this.extractWordParagraphText(paragraph);
+        for (const match of content.matchAll(/«([^»]{1,120})»/g))
+          labels.add(match[1]);
+        if (
+          content.includes('{{') ||
+          content.includes('}}') ||
+          this.hasLegacyMarker(content) ||
+          /[!^][A-Za-z][\w.]{2,}/.test(content)
+        )
+          technicalMarkers = true;
+      }
+    }
+    return { labels: [...labels], technicalMarkers };
+  }
+
+  wordBlocks(buffer: Buffer): EditableWordBlock[] {
+    const blocks: EditableWordBlock[] = [];
+    for (const file of this.unzip(buffer)) {
+      if (!WORD_TEXT_XML_PATTERN.test(file.path)) continue;
+      let index = 0;
+      for (const paragraph of file.content
+        .toString('utf8')
+        .match(/<w:p\b[\s\S]*?<\/w:p>/g) || []) {
+        const id = `${file.path}:${index++}`;
+        const text = this.extractWordParagraphText(paragraph).trim();
+        if (!text) continue;
+        const section =
+          file.path === 'word/document.xml'
+            ? 'Documento'
+            : file.path.includes('/header')
+              ? 'Cabeçalho'
+              : 'Rodapé';
+        blocks.push({
+          id,
+          section,
+          text,
+          editable: this.canEditWordParagraph(paragraph),
+        });
+      }
+    }
+    return blocks;
+  }
+
+  editWordBlocks(
+    buffer: Buffer,
+    edits: Array<{ id: string; text: string }>,
+  ): Buffer {
+    if (!Array.isArray(edits) || edits.length > 500)
+      throw new BadRequestException('Envie até 500 blocos por vez.');
+    const changes = new Map<string, string>();
+    for (const edit of edits) {
+      if (
+        !edit ||
+        typeof edit.id !== 'string' ||
+        typeof edit.text !== 'string' ||
+        edit.text.length > 6000 ||
+        /[\r\n\t]/.test(edit.text) ||
+        changes.has(edit.id)
+      )
+        throw new BadRequestException('Há um bloco inválido ou repetido.');
+      if (/[«»]/.test(edit.text.replace(/«[^»]{1,120}»/g, '')))
+        throw new BadRequestException(
+          'Um campo automático foi alterado parcialmente. Insira o campo novamente pela lista.',
+        );
+      changes.set(edit.id, edit.text);
+    }
+    const files = this.unzip(buffer).map((file) => {
+      if (!WORD_TEXT_XML_PATTERN.test(file.path)) return file;
+      let index = 0;
+      const xml = file.content
+        .toString('utf8')
+        .replace(/<w:p\b[\s\S]*?<\/w:p>/g, (paragraph) => {
+          const id = `${file.path}:${index++}`;
+          if (!changes.has(id)) return paragraph;
+          if (!this.canEditWordParagraph(paragraph))
+            throw new BadRequestException(
+              `O bloco ${id} contém elementos que precisam ser editados no Word.`,
+            );
+          const nextText = changes.get(id)!;
+          changes.delete(id);
+          const nodes = [
+            ...paragraph.matchAll(/(<w:t\b[^>]*>)([\s\S]*?)(<\/w:t>)/g),
+          ];
+          const values = nodes.map((node) => this.decodeXmlText(node[2]));
+          const original = values.join('');
+          if (original === nextText) return paragraph;
+          let start = 0;
+          while (
+            start < original.length &&
+            start < nextText.length &&
+            original[start] === nextText[start]
+          )
+            start++;
+          let end = 0;
+          while (
+            end < original.length - start &&
+            end < nextText.length - start &&
+            original[original.length - 1 - end] ===
+              nextText[nextText.length - 1 - end]
+          )
+            end++;
+          const oldEnd = original.length - end;
+          const replacement = nextText.slice(start, nextText.length - end);
+          let offset = 0;
+          let first = -1;
+          let last = -1;
+          let firstOffset = 0;
+          let lastOffset = 0;
+          for (let i = 0; i < values.length; i++) {
+            const nodeEnd = offset + values[i].length;
+            if (first < 0 && start <= nodeEnd) {
+              first = i;
+              firstOffset = start - offset;
+            }
+            if (last < 0 && oldEnd <= nodeEnd) {
+              last = i;
+              lastOffset = oldEnd - offset;
+            }
+            offset = nodeEnd;
+          }
+          if (first < 0 || last < 0)
+            throw new BadRequestException(
+              `Não foi possível alterar o bloco ${id}.`,
+            );
+          if (first === last) {
+            values[first] =
+              values[first].slice(0, firstOffset) +
+              replacement +
+              values[first].slice(lastOffset);
+          } else {
+            values[first] = values[first].slice(0, firstOffset) + replacement;
+            for (let i = first + 1; i < last; i++) values[i] = '';
+            values[last] = values[last].slice(lastOffset);
+          }
+          let nodeIndex = 0;
+          return paragraph.replace(
+            /(<w:t\b[^>]*>)([\s\S]*?)(<\/w:t>)/g,
+            (_match, open: string, _value: string, close: string) =>
+              `${open}${this.escapeXml(values[nodeIndex++] || '')}${close}`,
+          );
+        });
+      return { ...file, content: Buffer.from(xml, 'utf8') };
+    });
+    if (changes.size)
+      throw new BadRequestException(
+        'Um dos blocos não pertence a esta versão do Word. Recarregue o editor.',
+      );
+    return this.zip(files);
+  }
+
+  private canEditWordParagraph(paragraph: string) {
+    return (
+      /<w:t\b/.test(paragraph) &&
+      !/^«[^»]+»$/.test(this.extractWordParagraphText(paragraph).trim()) &&
+      !/<w:(?:br|tab|drawing|pict|object|fldChar|instrText|sym|footnoteReference|endnoteReference|commentReference|hyperlink|sdt)\b|<mc:AlternateContent\b/i.test(
+        paragraph,
+      )
+    );
+  }
+
+  renderFriendlyWord(
+    buffer: Buffer,
+    context: RenderContext,
+    fields: Array<{
+      label: string;
+      sourcePath?: string | null;
+      fixedValue?: string | null;
+    }>,
+    validationUrl?: string | null,
+  ) {
+    const files = this.unzip(buffer).map((file) => {
+      if (!WORD_TEXT_XML_PATTERN.test(file.path)) return file;
+      let xml = file.content
+        .toString('utf8')
+        .replace(/<w:p\b[\s\S]*?<\/w:p>/g, (paragraph) => {
+          const text = this.extractWordParagraphText(paragraph).trim();
+          const onlyField = fields.find((field) => text === `«${field.label}»`);
+          if (onlyField?.sourcePath === '__proposal_parts_branded__')
+            return this.proposalBrandedItemsTable('parts');
+          if (onlyField?.sourcePath === '__proposal_services_branded__')
+            return this.proposalBrandedItemsTable('services');
+          if (onlyField?.sourcePath === 'brandedProposal.contractorText')
+            return this.proposalObligationParagraphs('contractor');
+          if (onlyField?.sourcePath === 'brandedProposal.clientText')
+            return this.proposalObligationParagraphs('client');
+          if (
+            onlyField?.sourcePath?.startsWith('proposalPayment.') &&
+            !this.wordValue(onlyField.sourcePath, context)
+          )
+            return '';
+          if (
+            onlyField?.sourcePath?.startsWith('brandedProposal.') &&
+            [
+              'installationNote',
+              'customerNotes',
+              'paymentPending',
+              'demonstrationNote',
+              'arithmeticWarning',
+            ].includes(onlyField.sourcePath.split('.')[1]) &&
+            !this.wordValue(onlyField.sourcePath, context)
+          )
+            return '';
+          if (onlyField?.sourcePath === 'clientProposal.activities')
+            return this.proposalScopeParagraphs();
+          if (
+            onlyField?.sourcePath &&
+            [
+              'clientProposal.installationNote',
+              'clientProposal.paymentPending',
+              'clientProposal.arithmeticNote',
+              'brandedProposal.billingNote',
+            ].includes(onlyField.sourcePath) &&
+            !this.wordValue(onlyField.sourcePath, context)
+          )
+            return '';
+          if (onlyField?.sourcePath === '__proposal_parts_summary__')
+            return this.proposalClientItemsTable('parts');
+          if (onlyField?.sourcePath === '__proposal_services_summary__')
+            return this.proposalClientItemsTable('services');
+          if (onlyField?.sourcePath === '__proposal_items__')
+            return this.proposalItemsTable();
+          if (onlyField?.sourcePath === '__proposal_parts__')
+            return this.legacyProposalItemsTable('parts');
+          if (onlyField?.sourcePath === '__proposal_services__')
+            return this.legacyProposalItemsTable('services');
+          if (onlyField?.sourcePath === '__contract_items__')
+            return this.legacyContractEquipmentsTable();
+          if (onlyField?.sourcePath === '__contract_services__')
+            return this.legacyContractProductsTable();
+          const replacements: Array<[string, string]> = fields.map((field) => [
+            `«${field.label}»`,
+            field.fixedValue ?? this.wordValue(field.sourcePath, context),
+          ]);
+          return this.replaceWordsInRuns(paragraph, replacements);
+        });
+      if (file.path === 'word/document.xml' && validationUrl) {
+        const validationPage = `<w:p><w:r><w:br w:type="page"/></w:r></w:p><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Validação do relatório</w:t></w:r></w:p><w:p><w:r><w:t xml:space="preserve">${this.escapeXml(validationUrl)}</w:t></w:r></w:p>`;
+        xml = xml.replace(
+          /(<w:sectPr\b[\s\S]*?<\/w:sectPr>\s*<\/w:body>)/,
+          `${validationPage}$1`,
+        );
+      }
+      return {
+        ...file,
+        content: Buffer.from(this.renderXmlTemplate(xml, context), 'utf8'),
+      };
+    });
+    const unresolved = this.inspectFriendlyWord(this.zip(files));
+    if (unresolved.labels.length || unresolved.technicalMarkers)
+      throw new BadRequestException(
+        'O Word contém campos que não puderam ser preenchidos. Revise o modelo no Studio.',
+      );
+    return this.zip(files);
+  }
+
+  private wordValue(path: string | null | undefined, context: RenderContext) {
+    if (!path) return '';
+    if (path === '__today__')
+      return new Intl.DateTimeFormat('pt-BR', {
+        timeZone: 'America/Sao_Paulo',
+      }).format(new Date());
+    if (path.startsWith('__')) {
+      const rows =
+        path === '__proposal_parts__'
+          ? context.parts
+          : path === '__proposal_services__' || path === '__contract_services__'
+            ? context.services
+            : path === '__report_checklist__'
+              ? context.checklistItems
+              : context.items;
+      return Array.isArray(rows)
+        ? rows
+            .map((row, index) => {
+              const record = row as Record<string, unknown>;
+              return `${index + 1}. ${this.stringify(record.description || record.title || record.label || record.name)}`;
+            })
+            .join(' • ')
+        : '';
+    }
+    return this.stringify(this.resolvePath(path, context));
+  }
+
   renderDocumentXml(
     definition: InstitutionalTemplateDefinition,
     context: RenderContext,
@@ -282,8 +748,27 @@ export class DocxTemplateRendererService {
 
   private renderLegacyParagraph(paragraph: string) {
     const text = this.extractWordParagraphText(paragraph);
+    if (text.trim() === '{{brandedProposal.contractorText}}')
+      return this.proposalObligationParagraphs('contractor');
+    if (text.trim() === '{{brandedProposal.clientText}}')
+      return this.proposalObligationParagraphs('client');
+    if (text.trim() === '{{clientProposal.activities}}')
+      return this.proposalScopeParagraphs();
     if (!this.hasLegacyMarker(text)) return paragraph;
     const normalized = text.toLocaleLowerCase('pt-BR');
+    if (normalized.includes('!propostapecasmanitec.dataset'))
+      return this.proposalBrandedItemsTable('parts');
+    if (normalized.includes('!propostaservicosmanitec.dataset'))
+      return this.proposalBrandedItemsTable('services');
+
+    if (normalized.includes('!propostapecasresumo.dataset'))
+      return this.proposalClientItemsTable('parts');
+    if (normalized.includes('!propostaservicosresumo.dataset'))
+      return this.proposalClientItemsTable('services');
+
+    if (normalized.includes('!propostaitens.dataset')) {
+      return this.proposalItemsTable();
+    }
 
     if (normalized.includes('!pecasrelatorio.dataset')) {
       return this.legacyProposalItemsTable('parts');
@@ -312,14 +797,25 @@ export class DocxTemplateRendererService {
   }
 
   private replaceLegacyVariablesInRuns(paragraph: string) {
+    return this.replaceWordsInRuns(paragraph, this.legacyVariables);
+  }
+
+  private replaceWordsInRuns(
+    paragraph: string,
+    replacements: Array<[string, string]>,
+  ) {
     const textNodePattern = /(<w:t\b[^>]*>)([\s\S]*?)(<\/w:t>)/g;
     const matches = [...paragraph.matchAll(textNodePattern)];
     if (!matches.length) return paragraph;
 
     const values = matches.map((match) => this.decodeXmlText(match[2]));
-    const mappings = [...this.legacyVariables].sort(
-      ([left], [right]) => right.length - left.length,
-    );
+    const mappings = replacements
+      .filter(
+        ([marker, replacement]) =>
+          marker.toLocaleLowerCase('pt-BR') !==
+          replacement.toLocaleLowerCase('pt-BR'),
+      )
+      .sort(([left], [right]) => right.length - left.length);
 
     for (const [marker, replacement] of mappings) {
       const normalizedMarker = marker.toLocaleLowerCase('pt-BR');
@@ -401,6 +897,65 @@ export class DocxTemplateRendererService {
         '{{total}}',
       ])}{{/${rowsPath}}}`,
     ]);
+  }
+
+  private proposalObligationParagraphs(kind: 'contractor' | 'client') {
+    const paragraph = (keepNext: boolean) =>
+      `<w:p><w:pPr><w:keepLines/>${keepNext ? '<w:keepNext/>' : ''}<w:ind w:left="220" w:hanging="220"/><w:spacing w:after="45" w:line="255" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="21"/></w:rPr><w:t xml:space="preserve">- {{description}}</w:t></w:r></w:p>`;
+    return `{{#brandedProposal.${kind}Chain}}${paragraph(true)}{{/brandedProposal.${kind}Chain}}{{#brandedProposal.${kind}Last}}${paragraph(false)}{{/brandedProposal.${kind}Last}}`;
+  }
+
+  private proposalBrandedItemsTable(rowsPath: 'parts' | 'services') {
+    const widths = [3600, 1100, 650, 550, 1300, 850, 1588];
+    const row = (
+      values: string[],
+      mode: 'head' | 'body' | 'total' = 'body',
+      keepWithSubtotal = false,
+    ) =>
+      `<w:tr><w:trPr><w:cantSplit/>${mode === 'head' ? '<w:tblHeader/>' : ''}</w:trPr>${values.map((value, index) => `<w:tc><w:tcPr><w:tcW w:w="${widths[index]}" w:type="dxa"/><w:vAlign w:val="center"/>${mode !== 'body' ? `<w:shd w:fill="${mode === 'head' ? 'E8F2FA' : 'F1F5F9'}"/>` : ''}</w:tcPr><w:p><w:pPr>${keepWithSubtotal ? '<w:keepNext/>' : ''}<w:spacing w:before="40" w:after="40" w:line="240" w:lineRule="auto"/><w:jc w:val="${index > 3 ? 'right' : index > 1 ? 'center' : 'left'}"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="19"/>${mode !== 'body' ? '<w:b/><w:color w:val="005AA8"/>' : ''}</w:rPr><w:t xml:space="preserve">${this.escapeXml(value)}</w:t></w:r></w:p></w:tc>`).join('')}</w:tr>`;
+    const category =
+      rowsPath === 'parts' ? 'Peças / descrição' : 'Serviços / descrição';
+    const total =
+      rowsPath === 'parts'
+        ? '{{proposal.summaryMaterialsTotal}}'
+        : '{{proposal.summaryLaborTotal}}';
+    const values = [
+      '{{description}}',
+      '{{sku}}',
+      '{{quantity}}',
+      '{{unit}}',
+      '{{unitPrice}}',
+      '{{discountPercent}}',
+      '{{total}}',
+    ];
+    return `<w:tbl><w:tblPr><w:tblW w:w="9638" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="70" w:type="dxa"/><w:bottom w:w="70" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar><w:tblBorders><w:bottom w:val="single" w:sz="4" w:color="D9E2EB"/><w:insideH w:val="single" w:sz="4" w:color="D9E2EB"/></w:tblBorders></w:tblPr><w:tblGrid>${widths.map((width) => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>${row([category, 'Código', 'Qtd.', 'Un.', 'Unitário', 'Desc.', 'Total'], 'head')}{{#brandedProposal.${rowsPath}BeforeLast}}${row(values)}{{/brandedProposal.${rowsPath}BeforeLast}}{{#brandedProposal.${rowsPath}Last}}${row(values, 'body', true)}{{/brandedProposal.${rowsPath}Last}}${row(['Subtotal', '', '', '', '', '', total], 'total')}</w:tbl>`;
+  }
+
+  private proposalScopeParagraphs() {
+    return '{{#clientProposal.activityParagraphs}}<w:p><w:pPr><w:keepLines/><w:widowControl/><w:spacing w:after="0" w:line="255" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="21"/></w:rPr><w:t xml:space="preserve">{{description}}</w:t></w:r></w:p>{{/clientProposal.activityParagraphs}}';
+  }
+
+  private proposalClientItemsTable(rowsPath: 'parts' | 'services') {
+    const widths = [4288, 650, 600, 1450, 900, 1750];
+    const row = (
+      values: string[],
+      type: 'header' | 'body' | 'subtotal' = 'body',
+    ) =>
+      `<w:tr><w:trPr><w:cantSplit/>${type === 'header' ? '<w:tblHeader/>' : ''}</w:trPr>${values.map((value, index) => `<w:tc><w:tcPr><w:tcW w:w="${widths[index]}" w:type="dxa"/>${type !== 'body' ? `<w:shd w:fill="${type === 'header' ? '173652' : 'F1F4F7'}"/>` : ''}<w:vAlign w:val="center"/></w:tcPr><w:p><w:pPr><w:spacing w:before="35" w:after="35" w:line="230" w:lineRule="auto"/><w:jc w:val="${index > 2 ? 'right' : index > 0 ? 'center' : 'left'}"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="19"/>${type !== 'body' ? '<w:b/>' : ''}${type === 'header' ? '<w:color w:val="FFFFFF"/>' : ''}</w:rPr><w:t xml:space="preserve">${this.escapeXml(value)}</w:t></w:r></w:p></w:tc>`).join('')}</w:tr>`;
+    const category =
+      rowsPath === 'parts' ? 'Peças e materiais' : 'Serviços e mão de obra';
+    const subtotal =
+      rowsPath === 'parts'
+        ? '{{proposal.summaryMaterialsTotal}}'
+        : '{{proposal.summaryLaborTotal}}';
+    return `<w:tbl><w:tblPr><w:tblW w:w="9638" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="65" w:type="dxa"/><w:bottom w:w="65" w:type="dxa"/><w:left w:w="90" w:type="dxa"/><w:right w:w="90" w:type="dxa"/></w:tblCellMar><w:tblBorders><w:top w:val="single" w:sz="3" w:color="D9D9D9"/><w:bottom w:val="single" w:sz="3" w:color="D9D9D9"/><w:insideH w:val="single" w:sz="3" w:color="D9D9D9"/></w:tblBorders></w:tblPr><w:tblGrid>${widths.map((width) => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>${row([category, 'Qtd.', 'Un.', 'Preço unit.', 'Desc.', 'Total'], 'header')}{{#${rowsPath}}}${row(['{{description}}\nCódigo {{sku}}', '{{quantity}}', '{{unit}}', '{{unitPrice}}', '{{discountPercent}}', '{{total}}'])}{{/${rowsPath}}}${row(['Subtotal', '', '', '', '', subtotal], 'subtotal')}</w:tbl>`;
+  }
+
+  private proposalItemsTable() {
+    const widths = [3500, 1050, 600, 500, 1200, 700, 1250];
+    const row = (values: string[], header = false) =>
+      `<w:tr><w:trPr><w:cantSplit/>${header ? '<w:tblHeader/>' : ''}</w:trPr>${values.map((value, index) => `<w:tc><w:tcPr><w:tcW w:w="${widths[index]}" w:type="dxa"/>${header ? '<w:shd w:fill="16324F"/>' : ''}<w:vAlign w:val="top"/></w:tcPr><w:p><w:pPr><w:spacing w:before="50" w:after="50" w:line="240" w:lineRule="auto"/>${index > 1 ? '<w:jc w:val="right"/>' : ''}</w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="18"/>${header ? '<w:b/><w:color w:val="FFFFFF"/>' : ''}</w:rPr><w:t xml:space="preserve">${this.escapeXml(value)}</w:t></w:r></w:p></w:tc>`).join('')}</w:tr>`;
+    return `<w:tbl><w:tblPr><w:tblW w:w="8800" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="70" w:type="dxa"/><w:left w:w="75" w:type="dxa"/><w:bottom w:w="70" w:type="dxa"/><w:right w:w="75" w:type="dxa"/></w:tblCellMar><w:tblBorders><w:bottom w:val="single" w:sz="4" w:color="CBD5E1"/><w:insideH w:val="single" w:sz="4" w:color="E2E8F0"/></w:tblBorders></w:tblPr><w:tblGrid>${widths.map((width) => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>${row(['Descrição', 'Código', 'Qtd.', 'Un.', 'Unitário', 'Desc.', 'Total'], true)}{{#items}}${row(['{{description}}', '{{sku}}', '{{quantity}}', '{{unit}}', '{{unitPrice}}', '{{discountPercent}}', '{{total}}'])}{{/items}}</w:tbl>`;
   }
 
   private legacyContractEquipmentsTable() {
@@ -847,6 +1402,7 @@ export class DocxTemplateRendererService {
     rows: string,
     _spacing: { before?: number; after?: number } = {},
   ) {
+    void _spacing;
     return `<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="90" w:type="dxa"/><w:left w:w="100" w:type="dxa"/><w:bottom w:w="90" w:type="dxa"/><w:right w:w="100" w:type="dxa"/></w:tblCellMar></w:tblPr>${rows}</w:tbl>`;
   }
 
@@ -1048,11 +1604,85 @@ export class DocxTemplateRendererService {
   }
 
   private renderXmlTemplate(template: string, context: RenderContext) {
-    return this.renderVariables(
-      this.renderLoops(template, context, true),
+    const rendered = this.renderVariables(
+      this.renderLoops(
+        this.proposalLayoutRegions(template, context),
+        context,
+        true,
+      ),
       context,
       true,
     );
+    return rendered.replace(
+      /(<w:t\b[^>]*>)([\s\S]*?)(<\/w:t>)/g,
+      (_match, open: string, content: string, close: string) =>
+        `${open}${content.replace(/\r\n|\n|\r/g, `${close}<w:br/>${open}`)}${close}`,
+    );
+  }
+
+  private proposalLayoutRegions(xml: string, context: RenderContext) {
+    const layout = context.clientProposal as
+      | Record<string, unknown>
+      | undefined;
+    const branded = context.brandedProposal as
+      | Record<string, unknown>
+      | undefined;
+    if (!layout && !branded) return xml;
+    xml = xml.replace(/<w:p\b[\s\S]*?<\/w:p>/g, (paragraph) => {
+      const field = this.extractWordParagraphText(paragraph)
+        .trim()
+        .match(
+          /^{{clientProposal\.(installationNote|paymentPending|arithmeticNote)}}$/,
+        )?.[1];
+      const brandedField = this.extractWordParagraphText(paragraph)
+        .trim()
+        .match(
+          /^{{brandedProposal\.(installationNote|paymentPending|arithmeticWarning|customerNotes|demonstrationNote|billingNote)}}$/,
+        )?.[1];
+      const paymentField = this.extractWordParagraphText(paragraph)
+        .trim()
+        .match(/^{{(proposalPayment\.[\w.]+)}}$/)?.[1];
+      return (field && !layout?.[field]) ||
+        (brandedField && !branded?.[brandedField]) ||
+        (paymentField && !this.resolvePath(paymentField, context))
+        ? ''
+        : paragraph;
+    });
+    const extended = layout?.extendedLayout === true;
+    for (const [name, visible] of [
+      ['manitec_compact_items', !extended],
+      ['manitec_extended_summary', extended],
+      ['manitec_extended_items', extended],
+      ['manitec_v4_warranty', branded?.warrantyConfirmed === true],
+    ] as const) {
+      const paragraphs = [...xml.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)];
+      const start = paragraphs.find((match) =>
+        match[0].includes(`w:name="${name}"`),
+      );
+      if (!start || start.index == null) continue;
+      const id = start[0].match(/<w:bookmarkStart\b[^>]*\bw:id="(\d+)"/)?.[1];
+      const end = id
+        ? paragraphs.find(
+            (match) =>
+              match.index > start.index &&
+              new RegExp(`<w:bookmarkEnd\\b[^>]*\\bw:id="${id}"`).test(
+                match[0],
+              ),
+          )
+        : undefined;
+      if (!end || end.index == null)
+        throw new BadRequestException(
+          'Uma seção do modelo de proposta está incompleta. Restaure a base ou revise o arquivo no Studio.',
+        );
+      const contents = visible
+        ? xml.slice(start.index + start[0].length, end.index)
+        : '';
+      xml =
+        xml.slice(0, start.index) +
+        contents +
+        xml.slice(end.index + end[0].length);
+    }
+    return xml;
   }
 
   private renderLoops(
@@ -1179,10 +1809,19 @@ export class DocxTemplateRendererService {
   }
 
   private unzip(buffer: Buffer): DocxFile[] {
+    if (
+      buffer.length < 22 ||
+      buffer.length > 16 * 1024 * 1024 ||
+      buffer.readUInt32LE(0) !== 0x04034b50
+    )
+      throw new BadRequestException('Arquivo Word inválido ou acima de 16 MB.');
     const endOffset = this.findEndOfCentralDirectory(buffer);
     const totalEntries = buffer.readUInt16LE(endOffset + 10);
+    if (totalEntries > 500)
+      throw new BadRequestException('O Word possui arquivos internos demais.');
     let offset = buffer.readUInt32LE(endOffset + 16);
     const files: DocxFile[] = [];
+    let totalSize = 0;
 
     for (let index = 0; index < totalEntries; index += 1) {
       if (buffer.readUInt32LE(offset) !== 0x02014b50) {
@@ -1193,6 +1832,10 @@ export class DocxTemplateRendererService {
 
       const method = buffer.readUInt16LE(offset + 10);
       const compressedSize = buffer.readUInt32LE(offset + 20);
+      const uncompressedSize = buffer.readUInt32LE(offset + 24);
+      totalSize += uncompressedSize;
+      if (totalSize > 50 * 1024 * 1024 || uncompressedSize > 20 * 1024 * 1024)
+        throw new BadRequestException('O Word descompactado é grande demais.');
       const localHeaderOffset = buffer.readUInt32LE(offset + 42);
       const fileNameLength = buffer.readUInt16LE(offset + 28);
       const extraLength = buffer.readUInt16LE(offset + 30);
@@ -1214,10 +1857,12 @@ export class DocxTemplateRendererService {
         localHeaderOffset + 30 + localFileNameLength + localExtraLength;
       const compressed = buffer.subarray(dataStart, dataStart + compressedSize);
 
-      files.push({
-        path: fileName,
-        content: this.inflateZipEntry(method, compressed),
-      });
+      const content = this.inflateZipEntry(method, compressed);
+      if (content.length !== uncompressedSize)
+        throw new BadRequestException(
+          'DOCX inválido: tamanho interno incorreto.',
+        );
+      files.push({ path: fileName, content });
     }
 
     return files;
@@ -1239,7 +1884,8 @@ export class DocxTemplateRendererService {
 
   private inflateZipEntry(method: number, compressed: Buffer) {
     if (method === 0) return compressed;
-    if (method === 8) return inflateRawSync(compressed);
+    if (method === 8)
+      return inflateRawSync(compressed, { maxOutputLength: 20 * 1024 * 1024 });
 
     throw new BadRequestException(
       `DOCX usa metodo ZIP nao suportado: ${method}.`,

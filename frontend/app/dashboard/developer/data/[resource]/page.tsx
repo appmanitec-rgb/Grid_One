@@ -13,7 +13,7 @@ export default function StudioResourcePage() {
     return (
       <div className="space-y-4 p-4 sm:p-6 lg:p-8">
         <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-700">
-          Recurso nao encontrado no Manitec Studio.
+          Recurso não encontrado no Manitec Studio.
         </div>
         <Link
           href="/dashboard/developer/data"

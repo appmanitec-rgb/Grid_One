@@ -15,7 +15,13 @@ import {
   GeneratorOperationalStatus,
 } from '@prisma/client';
 
+import { IsProfilePhoto } from '../../users/profile-photo.validator';
+
 export class CreateGeneratorDto {
+  @IsOptional()
+  @IsProfilePhoto()
+  photoUrl?: string | null;
+
   @IsString()
   @IsOptional()
   legacyCode?: string;

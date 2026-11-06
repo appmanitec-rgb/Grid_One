@@ -49,9 +49,9 @@ test.describe.serial("piloto operacional hardening", () => {
 
     const [health, dbHealth, storageHealth] = await Promise.all([
       apiRequest<{ status: string }>(undefined, "/health"),
-      apiRequest<{ status: string }>(undefined, "/health/db"),
+      apiRequest<{ status: string }>(financeSession.access_token, "/health/db"),
       apiRequest<{ status: string; driver: string }>(
-        undefined,
+        financeSession.access_token,
         "/health/storage",
       ),
     ]);

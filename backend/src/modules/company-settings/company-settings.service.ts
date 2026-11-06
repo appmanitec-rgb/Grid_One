@@ -7,6 +7,7 @@ import {
 import { randomUUID } from 'crypto';
 import { DatabaseService } from 'src/database/database.service';
 import { UpdateCompanySettingsDto } from './dto/update-company-settings.dto';
+import { isValidCnpj, normalizeCnpj } from '../../common/cnpj';
 
 @Injectable()
 export class CompanySettingsService {
@@ -29,8 +30,13 @@ export class CompanySettingsService {
   private normalizeCnpj(value?: string) {
     if (value === undefined) return undefined;
 
-    const digits = value.replace(/\D/g, '');
-    return digits.length > 0 ? digits : null;
+    const normalized = normalizeCnpj(value);
+    if (normalized && !isValidCnpj(normalized)) {
+      throw new BadRequestException(
+        'Informe um CNPJ valido, incluindo os digitos verificadores.',
+      );
+    }
+    return normalized || null;
   }
 
   private normalizeState(value?: string) {
@@ -271,6 +277,25 @@ export class CompanySettingsService {
     if (totalCompanies <= 1) {
       throw new BadRequestException(
         'Mantenha ao menos um cadastro de empresa ativo.',
+      );
+    }
+
+    const linkedFiscalDocuments = await this.prisma.fiscalDocument.count({
+      where: { issuerCompanyId: id },
+    });
+    if (linkedFiscalDocuments > 0) {
+      throw new ConflictException(
+        'Esta empresa já está vinculada a documentos fiscais e não pode ser excluída.',
+      );
+    }
+
+    const linkedBankAgreements =
+      await this.prisma.bankCollectionAgreement.count({
+        where: { issuerCompanyId: id },
+      });
+    if (linkedBankAgreements > 0) {
+      throw new ConflictException(
+        'Esta empresa está vinculada a um convênio bancário e não pode ser excluída.',
       );
     }
 

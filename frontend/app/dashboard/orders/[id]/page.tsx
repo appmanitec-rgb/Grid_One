@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
+import OrderTechnicalScope from "../OrderTechnicalScope";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
 import { getAccessFromToken } from "@/lib/access";
@@ -88,10 +89,8 @@ type Order = {
   }>;
 };
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 
 export default function OrderDetailPage() {
   const router = useRouter();
@@ -128,7 +127,7 @@ export default function OrderDetailPage() {
       if (await handleUnauthorized(res)) return;
       if (!res.ok) {
         throw new Error(
-          await readApiErrorMessage(res, "Nao foi possivel carregar a O.S."),
+          await readApiErrorMessage(res, "Não foi possivel carregar a O.S."),
         );
       }
       const data = (await res.json()) as Order;
@@ -204,7 +203,7 @@ export default function OrderDetailPage() {
   async function submitVisitReport() {
     if (!id) return;
     if (!reportDraft.trim()) {
-      setError("Escreva o relatorio antes de enviar para aprovacao.");
+      setError("Escreva o relatorio antes de enviar para aprovação.");
       return;
     }
 
@@ -233,7 +232,7 @@ export default function OrderDetailPage() {
         );
       }
 
-      setNotice("Relatorio de visita enviado para aprovacao com sucesso.");
+      setNotice("Relatorio de visita enviado para aprovação com sucesso.");
       setReportNote("");
       await loadOrder();
     } catch (submitError: unknown) {
@@ -252,8 +251,8 @@ export default function OrderDetailPage() {
       <div className="space-y-4">
         {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
         <EmptyState
-          title="Carregando ordem de servico"
-          description="Estamos reunindo contexto de execucao, materiais, contrato e relatorio tecnico."
+          title="Carregando ordem de serviço"
+          description="Estamos reunindo contexto de execucao, materiais, contrato e relatorio técnico."
         />
       </div>
     );
@@ -266,7 +265,7 @@ export default function OrderDetailPage() {
   const canViewCosts = access.catalog.viewCosts;
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <OperationalBreadcrumb
         items={[
           { label: "Dashboard", href: "/dashboard" },
@@ -276,9 +275,10 @@ export default function OrderDetailPage() {
       />
 
       <PageHero
-        eyebrow="Ordem de servico"
+        asideLayout="side"
+        eyebrow="Ordem de serviço"
         title={order.title}
-        description={`Status ${orderStatusLabel(order.status)}. Esta tela agora concentra contexto de execucao, origem contratual, materiais e envio do relatorio tecnico.`}
+        description={`Status ${orderStatusLabel(order.status)}. Acompanhe o atendimento, os materiais e o relatório técnico.`}
         stats={[
           {
             label: "Status",
@@ -375,10 +375,10 @@ export default function OrderDetailPage() {
           </>
         }
         aside={
-          <FieldBox className="space-y-4 rounded-[28px] border-white/60 bg-white/80 p-5 shadow-[0_22px_60px_-40px_rgba(15,31,50,0.45)]">
+          <FieldBox className="space-y-3 rounded-2xl border border-white/80 bg-white/95 p-4 shadow-sm">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                Pulso da execucao
+                Andamento da O.S.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <DataPill tone={orderStatusTone(order.status)}>
@@ -393,7 +393,7 @@ export default function OrderDetailPage() {
               </div>
             </div>
             <MiniInfo
-              label="Tecnico"
+              label="Técnico"
               value={order.technician?.user?.name || "Aguardando alocacao"}
               helper={
                 order.technician?.user?.skillLevel
@@ -419,24 +419,23 @@ export default function OrderDetailPage() {
         }
       />
 
+      <OrderTechnicalScope id={order.id} checklist={order.checklistData} canEdit={access.orders.update && order.status !== "COMPLETED" && order.status !== "CANCELED"} onSaved={loadOrder} />
+
       {notice ? <StatusBanner tone="emerald">{notice}</StatusBanner> : null}
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
       {needsDispatch ? (
         <StatusBanner tone="amber">
-          Esta O.S. ainda nao possui tecnico atribuido. O fluxo operacional pede
-          despacho antes da execucao em campo.
+          Atribua um técnico e programe o atendimento antes de iniciar a execução.
         </StatusBanner>
       ) : null}
       {reportPending && order.status === "IN_PROGRESS" ? (
         <StatusBanner tone="amber">
-          Atendimento em andamento sem relatorio de visita submetido. Vale
-          fechar essa trilha para aprovacao.
+          Envie o relatório de visita para encaminhar o atendimento para aprovação.
         </StatusBanner>
       ) : null}
       {order.status === "COMPLETED" ? (
         <StatusBanner tone="blue">
-          O.S. concluida. Proximo passo do processo: conferir valores e gerar o
-          recebivel em Faturamento.
+          O.S. concluída. Confira os valores e gere o título a receber em Faturamento.
         </StatusBanner>
       ) : null}
 
@@ -486,7 +485,7 @@ export default function OrderDetailPage() {
               : []),
             ...(order.sourceTickets || []).map((ticket) => ({
               label: ticket.code || "Chamado de origem",
-              description: "Solicitacao que originou esta ordem.",
+              description: "Solicitação que originou esta ordem.",
               href: `/dashboard/atendimento/${ticket.id}`,
               badge: "Chamado",
               tone: "amber" as const,
@@ -496,7 +495,7 @@ export default function OrderDetailPage() {
               ? [
                   {
                     label: order.serviceReport.code || "Laudo tecnico",
-                    description: "Laudo tecnico vinculado a execucao.",
+                    description: "Laudo técnico vinculado a execucao.",
                     href: `/dashboard/relatorios-tecnicos/${order.serviceReport.id}`,
                     badge: "Laudo",
                     tone: "amber" as const,
@@ -505,8 +504,9 @@ export default function OrderDetailPage() {
                 ]
               : []),
             {
-              label: `Documento da O.S.`,
-              description: "Versao documental pronta para impressao.",
+              label: "Arquivos e envio da O.S.",
+              description:
+                "Consultar resumo, baixar DOCX e compartilhar com o cliente.",
               href: `/dashboard/documents/orders/${order.id}`,
               badge: "Documento",
               tone: "slate" as const,
@@ -519,13 +519,13 @@ export default function OrderDetailPage() {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_360px]">
         <div className="space-y-6">
           <SectionCard
-            eyebrow="Escopo operacional"
-            title="Descricao e contexto"
+            eyebrow="Atendimento"
+            title="Descrição e contexto"
             description="Resumo do trabalho, origem e vinculacoes da ordem."
           >
             <div className="rounded-[24px] border border-slate-200 bg-slate-50/85 px-4 py-4">
               <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">
-                {order.description || "Sem descricao operacional registrada."}
+                {order.description || "Nenhuma descrição registrada."}
               </p>
             </div>
 
@@ -581,7 +581,7 @@ export default function OrderDetailPage() {
                   className="inline-flex text-sm font-semibold text-sky-700 transition hover:text-sky-800 hover:underline"
                   fallbackClassName="inline-flex text-sm font-semibold text-slate-500"
                 >
-                  Abrir laudo tecnico
+                  Abrir laudo técnico
                 </PermissionAwareLink>
               ) : null}
               {order.sourceTickets?.map((ticket) => (
@@ -609,9 +609,9 @@ export default function OrderDetailPage() {
           </SectionCard>
 
           <SectionCard
-            eyebrow="Relatorio tecnico"
-            title="Relatorio de visita e aprovacao"
-            description="O backend ja possui esse fluxo; agora ele esta acessivel na tela para fechar a trilha da visita tecnica."
+            eyebrow="Relatorio técnico"
+            title="Relatorio de visita e aprovação"
+            description="Registre o relatório do atendimento, confira o documento e envie ao cliente."
             actions={
               access.maintenanceOrders.submitVisitReport ? (
                 <button
@@ -632,21 +632,20 @@ export default function OrderDetailPage() {
                 <TextAreaInput
                   value={reportDraft}
                   onChange={(event) => setReportDraft(event.target.value)}
-                  placeholder="Descreva o atendimento, diagnostico, servicos executados e recomendacoes."
+                  placeholder="Descreva o atendimento, diagnostico, serviços executados e recomendacoes."
                 />
               </FormField>
-              <FormField label="Observacao para aprovacao">
+              <FormField label="Observação para aprovação">
                 <TextAreaInput
                   value={reportNote}
                   onChange={(event) => setReportNote(event.target.value)}
-                  placeholder="Opcional: observacoes para o gestor/aprovador."
+                  placeholder="Opcional: observações para o gestor/aprovador."
                   className="min-h-24"
                 />
               </FormField>
               {order.customerReport ? (
                 <InlineMessage>
-                  Ja existe um relatorio salvo nesta O.S. Reenviar atualiza a
-                  trilha para aprovacao.
+                  Já existe um relatório salvo nesta O.S. Reenviar atualiza os registros para aprovação.
                 </InlineMessage>
               ) : null}
             </div>
@@ -701,14 +700,14 @@ export default function OrderDetailPage() {
             ) : (
               <EmptyState
                 title="Sem materiais vinculados"
-                description="Esta O.S. nao possui reserva de insumos registrada."
+                description="Esta O.S. não possui reserva de insumos registrada."
               />
             )}
           </SectionCard>
 
           <SectionCard
             eyebrow="Checklist e evidencias"
-            title="Requisitos tecnicos"
+            title="Requisitos técnicos"
             description="Resumo do checklist associado, quando houver."
           >
             {checklistEntries.length > 0 ? (
@@ -728,7 +727,7 @@ export default function OrderDetailPage() {
             ) : (
               <EmptyState
                 title="Sem checklist estruturado"
-                description="Nenhum requisito tecnico detalhado foi anexado a esta ordem."
+                description="Nenhum requisito técnico detalhado foi anexado a esta ordem."
               />
             )}
 
@@ -765,7 +764,7 @@ export default function OrderDetailPage() {
                 tone={priorityTone(order.priority)}
               />
               <Info
-                label="Tecnico"
+                label="Técnico"
                 value={order.technician?.user?.name || "Nao atribuido"}
                 tone={order.technician?.id ? "emerald" : "amber"}
               />
@@ -901,6 +900,7 @@ function summarizeChecklist(checklistData?: Record<string, unknown> | null) {
   if (!checklistData) return [];
 
   return Object.entries(checklistData)
+    .filter(([key]) => !["technicalScope", "technicalScopeAuthorizations"].includes(key))
     .filter(
       ([, value]) => value !== null && value !== undefined && value !== "",
     )
@@ -964,6 +964,7 @@ function orderTypeLabel(type?: string | null) {
   const labels: Record<string, string> = {
     PREVENTIVE: "Preventiva",
     CORRECTIVE: "Corretiva",
+    EMERGENCY: "Atendimento emergencial",
     INSTALLATION: "Instalacao",
     DEMOBILIZATION: "Desmobilizacao",
     REFUELING: "Abastecimento",

@@ -1,6 +1,11 @@
 "use client";
+import { InterfaceIcon } from "@/app/dashboard/components/InterfaceIcon";
+import { canUsePortfolio, canScreenAction } from "@/lib/access-rules";
+import { getAccessFromToken } from "@/lib/access";
 
+import { SelectField } from "@/app/dashboard/components/SelectField";
 import Link from "next/link";
+import ProposalEditingDraftList from "./ProposalEditingDraftList";
 import { useRouter } from "next/navigation";
 import {
   DragEvent,
@@ -19,7 +24,6 @@ import {
 import {
   DataPill,
   EmptyState,
-  FieldBox,
   PageHero,
   SectionCard,
   StatusBanner,
@@ -38,16 +42,21 @@ type ProposalListItem = {
   code: string;
   status: string;
   totalValue?: number | null;
+  hasDownPayment?: boolean;
+  downPaymentAmount?: number | null;
+  downPaymentConfirmedAt?: string | null;
   type: string;
   origin?: "MANITEC" | "EXTERNAL";
   externalReference?: string | null;
   externalCurrency?: string | null;
+  createdAt?: string | null;
   postSaleGeneratorId?: string | null;
   generatedContract?: { id: string; code: string; status: string } | null;
   client?: { companyName?: string | null } | null;
   generator?: { name?: string | null } | null;
   commercialGenerator?: {
     model?: string | null;
+    manufacturer?: string | null;
     internalCode?: string | null;
   } | null;
 };
@@ -68,12 +77,15 @@ type FlowColumnSummary = {
   tone: string;
   items: ProposalListItem[];
   totalValue: number;
+  foreignCount: number;
 };
 
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 
 export default function ProposalsPage() {
+  const [accessReady, setAccessReady] = useState(false);
+  useEffect(() => setAccessReady(true), []);
+
   const router = useRouter();
   const [proposals, setProposals] = useState<ProposalListItem[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
@@ -84,7 +96,9 @@ export default function ProposalsPage() {
   const [movingId, setMovingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<ProposalCategory>("ALL");
-  const [kanbanStatusFilter, setKanbanStatusFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [sortBy, setSortBy] = useState("RECENT");
+  const [page, setPage] = useState(1);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
 
   const viewerRole = useMemo(() => {
@@ -95,6 +109,15 @@ export default function ProposalsPage() {
   }, []);
   const isAdmin = viewerRole === "ADMIN";
   const isClient = viewerRole === "CLIENT";
+  const canCreate =
+    !isClient &&
+    getAccessFromToken().proposals.create &&
+    canScreenAction("proposals", "create");
+  const newProposalHref = canUsePortfolio("partsServices")
+    ? "/dashboard/proposals/new"
+    : canUsePortfolio("generators")
+      ? "/dashboard/proposals/new/generator"
+      : "/dashboard/proposals/new?proposalType=CONTRACT";
 
   const handleUnauthorized = useCallback(
     async (res: Response) => {
@@ -106,31 +129,35 @@ export default function ProposalsPage() {
     [router],
   );
 
-  const loadProposals = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    setNotice("");
+  const loadProposals = useCallback(
+    async (clearNotice = true) => {
+      setLoading(true);
+      setError("");
+      if (clearNotice) setNotice("");
 
-    try {
-      const res = await apiFetch(apiUrl("/proposals"), { cache: "no-store" });
-      if (await handleUnauthorized(res)) return;
-      if (!res.ok) {
-        throw new Error(
-          await readApiErrorMessage(res, "Falha ao carregar propostas."),
+      try {
+        const res = await apiFetch(apiUrl("/proposals"), { cache: "no-store" });
+        if (await handleUnauthorized(res)) return false;
+        if (!res.ok) {
+          throw new Error(
+            await readApiErrorMessage(res, "Falha ao carregar propostas."),
+          );
+        }
+        setProposals((await res.json()) as ProposalListItem[]);
+        return true;
+      } catch (loadError: unknown) {
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Nao foi possivel carregar propostas.",
         );
+        return false;
+      } finally {
+        setLoading(false);
       }
-      setProposals((await res.json()) as ProposalListItem[]);
-    } catch (loadError: unknown) {
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Nao foi possivel carregar propostas.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [handleUnauthorized]);
-
+    },
+    [handleUnauthorized],
+  );
   useEffect(() => {
     const saved = localStorage.getItem(
       "manitec_view_proposals",
@@ -175,15 +202,17 @@ export default function ProposalsPage() {
       setNotice("");
       return;
     }
-
     if (movingId) return;
 
     const current = proposals.find((proposal) => proposal.id === proposalId);
     if (!current || current.status === nextStatus) return;
-
     if (!isAdmin && !canMoveForward(current.status, nextStatus)) {
       setError(
-        `Fluxo invalido: ${statusLabel(current.status)} -> ${statusLabel(nextStatus)}.`,
+        "Fluxo inválido: " +
+          statusLabel(current.status) +
+          " → " +
+          statusLabel(nextStatus) +
+          ".",
       );
       setNotice("");
       setDropTarget(null);
@@ -204,24 +233,26 @@ export default function ProposalsPage() {
     );
 
     try {
-      const res = await apiFetch(apiUrl(`/proposals/${proposalId}`), {
+      const res = await apiFetch(apiUrl("/proposals/" + proposalId), {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: nextStatus }),
       });
-
       if (await handleUnauthorized(res)) return;
       if (!res.ok) {
         throw new Error(
           await readApiErrorMessage(res, "Falha ao mover proposta."),
         );
       }
-
-      setNotice(
-        `Proposta ${current.code} movida para ${statusLabel(nextStatus)}.`,
-      );
+      if (await loadProposals(false)) {
+        setNotice(
+          "Proposta " +
+            current.code +
+            " movida para " +
+            statusLabel(nextStatus) +
+            ".",
+        );
+      }
     } catch (moveError: unknown) {
       setProposals(snapshot);
       setError(
@@ -235,7 +266,6 @@ export default function ProposalsPage() {
       setDraggingId(null);
     }
   }
-
   const filteredProposals = useMemo(() => {
     const term = query.trim().toLowerCase();
 
@@ -244,26 +274,52 @@ export default function ProposalsPage() {
         return false;
       }
       const proposalStep = statusToFlowStep(proposal.status);
-      if (
-        viewMode === "kanban" &&
-        kanbanStatusFilter !== "ALL" &&
-        proposalStep !== kanbanStatusFilter
-      ) {
+      if (statusFilter !== "ALL" && proposalStep !== statusFilter) {
         return false;
       }
       if (!term) return true;
 
       return (
         proposal.code.toLowerCase().includes(term) ||
+        (proposal.externalReference || "").toLowerCase().includes(term) ||
         (proposal.client?.companyName || "").toLowerCase().includes(term) ||
-        (proposal.generator?.name || "").toLowerCase().includes(term) ||
-        (proposal.commercialGenerator?.model || "")
-          .toLowerCase()
-          .includes(term) ||
+        proposalEquipmentLabel(proposal).toLowerCase().includes(term) ||
         statusLabel(proposal.status).toLowerCase().includes(term)
       );
     });
-  }, [category, kanbanStatusFilter, proposals, query, viewMode]);
+  }, [category, statusFilter, proposals, query]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [category, query, sortBy, statusFilter, viewMode]);
+
+  const sortedProposals = useMemo(() => {
+    return [...filteredProposals].sort((a, b) => {
+      if (sortBy === "VALUE_DESC")
+        return Number(b.totalValue || 0) - Number(a.totalValue || 0);
+      if (sortBy === "VALUE_ASC")
+        return Number(a.totalValue || 0) - Number(b.totalValue || 0);
+      if (sortBy === "CLIENT")
+        return (a.client?.companyName || "").localeCompare(
+          b.client?.companyName || "",
+          "pt-BR",
+        );
+      const difference =
+        new Date(b.createdAt || 0).getTime() -
+        new Date(a.createdAt || 0).getTime();
+      return sortBy === "OLDEST" ? -difference : difference;
+    });
+  }, [filteredProposals, sortBy]);
+
+  const pageSize = 20;
+  const pageCount = Math.max(1, Math.ceil(sortedProposals.length / pageSize));
+  useEffect(() => {
+    setPage((current) => Math.min(current, pageCount));
+  }, [pageCount]);
+  const visibleProposals = sortedProposals.slice(
+    (page - 1) * pageSize,
+    page * pageSize,
+  );
 
   const categoryCounts = useMemo(
     () => ({
@@ -282,14 +338,9 @@ export default function ProposalsPage() {
   );
 
   const flowColumns = useMemo(
-    () => buildFlowColumns(filteredProposals),
-    [filteredProposals],
+    () => buildFlowColumns(sortedProposals),
+    [sortedProposals],
   );
-  const portfolioColumns = useMemo(
-    () => buildFlowColumns(proposals),
-    [proposals],
-  );
-
   const draggingProposal = useMemo(
     () => proposals.find((proposal) => proposal.id === draggingId) || null,
     [proposals, draggingId],
@@ -300,32 +351,43 @@ export default function ProposalsPage() {
       const step = statusToFlowStep(proposal.status);
       return !["WON", "LOST", "REJECTED", "REVISED"].includes(step);
     });
-    const boardReview = proposals.filter(
-      (proposal) => statusToFlowStep(proposal.status) === "BOARD_REVIEW",
-    ).length;
-    const clientReview = proposals.filter(
-      (proposal) => statusToFlowStep(proposal.status) === "CLIENT_REVIEW",
-    ).length;
-    const wonValue = proposals
-      .filter((proposal) => statusToFlowStep(proposal.status) === "WON")
-      .reduce((sum, proposal) => sum + Number(proposal.totalValue || 0), 0);
-
     return {
       total: proposals.length,
       active: active.length,
-      activeValue: active.reduce(
-        (sum, proposal) => sum + Number(proposal.totalValue || 0),
-        0,
-      ),
-      boardReview,
-      clientReview,
-      wonValue,
+      activeValue: active
+        .filter(isBrlProposal)
+        .reduce((sum, proposal) => sum + Number(proposal.totalValue || 0), 0),
+      boardReview: proposals.filter(
+        (proposal) => statusToFlowStep(proposal.status) === "BOARD_REVIEW",
+      ).length,
+      clientReview: proposals.filter(
+        (proposal) => statusToFlowStep(proposal.status) === "CLIENT_REVIEW",
+      ).length,
+      wonValue: proposals
+        .filter(
+          (proposal) => proposal.status === "WON" && isBrlProposal(proposal),
+        )
+        .reduce((sum, proposal) => sum + Number(proposal.totalValue || 0), 0),
+      foreignCount: proposals.filter((proposal) => !isBrlProposal(proposal))
+        .length,
     };
   }, [proposals]);
-
   const commercialHandoffs = useMemo(
     () =>
       proposals.flatMap((proposal) => {
+        if (
+          proposal.status === "WON" &&
+          proposal.hasDownPayment &&
+          Number(proposal.downPaymentAmount || 0) > 0 &&
+          !proposal.downPaymentConfirmedAt
+        ) {
+          return [
+            {
+              proposal,
+              action: "Aguardando confirmação da entrada pelo financeiro",
+            },
+          ];
+        }
         if (
           proposal.status === "WON" &&
           proposal.type === "CONTRACT" &&
@@ -345,21 +407,28 @@ export default function ProposalsPage() {
     [proposals],
   );
 
+  if (!accessReady)
+    return (
+      <div className="dashboard-page p-6 text-sm text-slate-500">
+        Carregando permissões...
+      </div>
+    );
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page space-y-5">
       <PageHero
-        eyebrow="Modulo comercial"
+        loading={loading}
+        eyebrow="Módulo comercial"
         title={isClient ? "Minhas propostas" : "Central de propostas"}
         description={
           isClient
             ? "Acompanhe suas propostas, revisoes e itens prontos para decisao."
-            : "Carteira comercial organizada por etapa, valor e prioridade de aprovacao."
+            : "Carteira comercial e aprovações."
         }
         stats={[
           {
             label: "Carteira total",
             value: String(stats.total),
-            helper: "Todas as propostas registradas no modulo.",
+            helper: "Todas as propostas registradas no módulo.",
             tone: "slate",
           },
           {
@@ -371,226 +440,91 @@ export default function ProposalsPage() {
           {
             label: "Volume no funil",
             value: formatCurrency(stats.activeValue),
-            helper: "Soma financeira das oportunidades abertas.",
+            helper: stats.foreignCount
+              ? "Soma em BRL; propostas em outra moeda ficam fora do total."
+              : "Soma das propostas abertas em BRL.",
             tone: "emerald",
           },
           {
             label: "Fechado ganho",
             value: formatCurrency(stats.wonValue),
-            helper: "Receita potencial ja convertida em propostas ganhas.",
+            helper: stats.foreignCount
+              ? "Soma em BRL; propostas em outra moeda ficam fora do total."
+              : "Valor das propostas ganhas em BRL.",
             tone: "amber",
           },
         ]}
         actions={
           <>
-            <ViewModeButton
-              active={viewMode === "list"}
-              onClick={() => setViewMode("list")}
-            >
-              Lista executiva
-            </ViewModeButton>
-            {!isClient ? (
-              <ViewModeButton
-                active={viewMode === "kanban"}
-                onClick={() => setViewMode("kanban")}
+            {canCreate &&
+            (canUsePortfolio("partsServices") ||
+              canUsePortfolio("generators") ||
+              canUsePortfolio("contracts")) ? (
+              <Link
+                href={newProposalHref}
+                className="app-button app-button-primary"
               >
-                Kanban comercial
-              </ViewModeButton>
+                <InterfaceIcon name="plus" /> Nova proposta
+              </Link>
             ) : null}
             <button
               type="button"
               onClick={() => void loadProposals()}
+              disabled={loading}
               className={SECONDARY_BUTTON}
             >
-              Atualizar carteira
+              {loading ? "Atualizando..." : "Atualizar carteira"}
             </button>
+            {!isClient ? (
+              <button
+                type="button"
+                className="app-icon-button"
+                aria-label="Abrir acompanhamento e rascunhos"
+                title="Acompanhamento e rascunhos"
+                aria-controls="proposal-followup"
+                onClick={() => {
+                  const panel = document.getElementById(
+                    "proposal-followup",
+                  ) as HTMLDetailsElement | null;
+                  if (panel) {
+                    panel.open = true;
+                    panel.scrollIntoView({ block: "start" });
+                    panel.querySelector("summary")?.focus();
+                  }
+                }}
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  className="h-5 w-5"
+                  fill="currentColor"
+                >
+                  <circle cx="5" cy="12" r="2" />
+                  <circle cx="12" cy="12" r="2" />
+                  <circle cx="19" cy="12" r="2" />
+                </svg>
+              </button>
+            ) : null}
           </>
         }
-        asideLayout="stacked"
-        aside={
-          <FieldBox className="rounded-[24px] border-white/60 bg-white/82 p-4 shadow-[0_18px_48px_-38px_rgba(15,31,50,0.4)]">
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)_minmax(260px,0.7fr)] lg:items-center">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                  Pulso do modulo
-                </p>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Diretoria e cliente concentram as etapas mais sensiveis. A
-                  leitura abaixo ajuda a antecipar gargalos sem entulhar a tela.
-                </p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <PulseStat
-                  label="Diretoria"
-                  value={String(stats.boardReview)}
-                  helper="Itens aguardando decisao interna."
-                  tone="blue"
-                />
-                <PulseStat
-                  label="Cliente"
-                  value={String(stats.clientReview)}
-                  helper="Itens em analise ou fechamento externo."
-                  tone="amber"
-                />
-              </div>
-              {isAdmin ? (
-                <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-900">
-                  Modo admin ativo: a movimentacao no kanban aceita override
-                  manual de etapa.
-                </div>
-              ) : isClient ? (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
-                  O portal concentra leitura e decisao final. Para aprovar ou
-                  recusar, abra a proposta.
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">
-                  Usuarios comuns seguem apenas as transicoes permitidas do
-                  fluxo comercial.
-                </div>
-              )}
-            </div>
-          </FieldBox>
-        }
+        compact
       />
 
-      {!isClient ? (
-        <SectionCard
-          eyebrow="Nova proposta"
-          title="Escolha o tipo de proposta"
-          description="Abra o fluxo comercial adequado para esta nova oportunidade."
-          className="p-4 sm:p-5"
-        >
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Link
-              href="/dashboard/proposals/new/generator"
-              className={SECONDARY_BUTTON}
-            >
-              Proposta de gerador
-            </Link>
-            <Link
-              href="/dashboard/proposals/new?proposalType=CONTRACT"
-              className={SECONDARY_BUTTON}
-            >
-              Proposta de contrato
-            </Link>
-            <Link href="/dashboard/proposals/new" className={SECONDARY_BUTTON}>
-              Proposta de peças e serviços
-            </Link>
-            <Link
-              href="/dashboard/proposals/new/external"
-              className={SECONDARY_BUTTON}
-            >
-              Proposta externa
-            </Link>
-          </div>
-        </SectionCard>
+      {!isClient &&
+      !canUsePortfolio("generators") &&
+      !canUsePortfolio("partsServices") &&
+      !canUsePortfolio("contracts") ? (
+        <StatusBanner tone="amber">
+          Nenhuma carteira comercial foi atribuída ao seu perfil. Solicite a
+          configuração em RH, Colaboradores e acessos.
+        </StatusBanner>
       ) : null}
-
       {notice ? <StatusBanner tone="emerald">{notice}</StatusBanner> : null}
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
 
-      {!isClient && commercialHandoffs.length > 0 ? (
-        <SectionCard
-          eyebrow="Passagem comercial"
-          title="Vendas ganhas aguardando o próximo passo"
-          description="O aceite do cliente atualiza a proposta. A continuidade aparece aqui até o contrato ou o pré-cadastro de pós-venda estar vinculado."
-          actions={<DataPill tone="amber">{commercialHandoffs.length} pendente(s)</DataPill>}
-        >
-          <div className="grid gap-3 lg:grid-cols-2">
-            {commercialHandoffs.slice(0, 6).map(({ proposal, action }) => (
-              <Link
-                key={proposal.id}
-                href={`/dashboard/proposals/${proposal.id}`}
-                className="group flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 transition hover:border-amber-400 hover:bg-amber-50"
-              >
-                <span>
-                  <span className="block text-sm font-bold text-slate-900">
-                    {proposal.code} · {proposal.client?.companyName || "Cliente sem nome"}
-                  </span>
-                  <span className="mt-1 block text-xs text-slate-600">{action}</span>
-                </span>
-                <span className="text-xs font-bold text-amber-800 group-hover:underline">
-                  Abrir proposta →
-                </span>
-              </Link>
-            ))}
-          </div>
-          {commercialHandoffs.length > 6 ? (
-            <p className="mt-3 text-xs text-slate-500">
-              Mostrando as 6 mais recentes. As demais seguem identificadas na carteira abaixo.
-            </p>
-          ) : null}
-        </SectionCard>
-      ) : null}
-
       <SectionCard
-        eyebrow="Carteiras comerciais"
-        title="Tipos de proposta"
-        description="Cada carteira usa seu fluxo de criacao, preservando a proposta atual de pecas e servicos."
-      >
-        <div className="grid gap-3 md:grid-cols-4">
-          <CategoryButton
-            label="Todas"
-            count={categoryCounts.ALL}
-            active={category === "ALL"}
-            onClick={() => setCategory("ALL")}
-          />
-          <CategoryButton
-            label="Geradores"
-            count={categoryCounts.GENERATORS}
-            active={category === "GENERATORS"}
-            onClick={() => setCategory("GENERATORS")}
-          />
-          <CategoryButton
-            label="Pecas e servicos"
-            count={categoryCounts.PARTS_SERVICES}
-            active={category === "PARTS_SERVICES"}
-            onClick={() => setCategory("PARTS_SERVICES")}
-          />
-          <CategoryButton
-            label="Contratos"
-            count={categoryCounts.CONTRACTS}
-            active={category === "CONTRACTS"}
-            onClick={() => setCategory("CONTRACTS")}
-          />
-        </div>
-      </SectionCard>
-
-      <SectionCard
-        eyebrow="Radar do funil"
-        title="Leitura rapida das etapas do fluxo"
-        description="Cada bloco resume quantidade e valor por etapa. Quando a busca estiver ativa, os indicadores abaixo refletem somente o recorte filtrado."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <DataPill tone="slate">
-              {filteredProposals.length} resultado(s)
-            </DataPill>
-            {query.trim() ? (
-              <DataPill tone="blue">Filtro: {query.trim()}</DataPill>
-            ) : (
-              <DataPill tone="emerald">Sem filtro ativo</DataPill>
-            )}
-          </div>
-        }
-      >
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          {flowColumns.map((column) => (
-            <FlowSummaryCard
-              key={column.key}
-              label={column.label}
-              count={column.items.length}
-              value={column.totalValue}
-              tone={statusTone(column.key)}
-            />
-          ))}
-        </div>
-      </SectionCard>
-
-      <SectionCard
-        eyebrow={
-          viewMode === "list" ? "Vista de carteira" : "Vista de operacao"
-        }
+        className="proposal-portfolio"
+        actionsLayout="below"
         title={
           viewMode === "list"
             ? isClient
@@ -598,26 +532,46 @@ export default function ProposalsPage() {
               : "Carteira de propostas"
             : "Kanban de aprovacao"
         }
-        description={
-          viewMode === "list"
-            ? isClient
-              ? "Acompanhe revisoes, liberacoes e propostas prontas para sua decisao sem entrar no fluxo interno."
-              : "Uma leitura mais limpa para navegar pelo portfolio comercial sem a poluicao de uma tabela pesada."
-            : "Arraste as propostas entre as colunas permitidas para manter o funil vivo e visivel."
-        }
         actions={
-          <div className="flex w-full flex-col gap-3 xl:w-auto xl:min-w-[640px] xl:flex-row xl:items-center xl:justify-end">
-            <TextInput
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar por codigo, cliente ou equipamento..."
-              className="xl:min-w-[320px]"
-            />
-            {viewMode === "kanban" && !isClient ? (
-              <select
-                value={kanbanStatusFilter}
-                onChange={(event) => setKanbanStatusFilter(event.target.value)}
-                className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+          <div className="flex w-full flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <ViewModeButton
+                active={viewMode === "list"}
+                onClick={() => setViewMode("list")}
+              >
+                Lista
+              </ViewModeButton>
+              {!isClient ? (
+                <ViewModeButton
+                  active={viewMode === "kanban"}
+                  onClick={() => setViewMode("kanban")}
+                >
+                  Kanban
+                </ViewModeButton>
+              ) : null}
+              <span className="ml-auto rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700">
+                {filteredProposals.length} de {proposals.length} propostas
+              </span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_200px_180px_auto]">
+              <label className="sr-only" htmlFor="proposal-search">
+                Pesquisar propostas
+              </label>
+              <TextInput
+                id="proposal-search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Código, cliente, referência ou equipamento"
+                className="min-w-0"
+              />
+              <label className="sr-only" htmlFor="proposal-status-filter">
+                Filtrar por etapa
+              </label>
+              <SelectField
+                id="proposal-status-filter"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                className="h-11 min-w-0 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
               >
                 <option value="ALL">Todas as etapas</option>
                 {KANBAN_COLUMNS.map((column) => (
@@ -625,13 +579,84 @@ export default function ProposalsPage() {
                     {column.label}
                   </option>
                 ))}
-              </select>
-            ) : null}
+              </SelectField>
+              <label className="sr-only" htmlFor="proposal-sort">
+                Ordenar propostas
+              </label>
+              <SelectField
+                id="proposal-sort"
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value)}
+                className="h-11 min-w-0 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+              >
+                <option value="RECENT">Mais recentes</option>
+                <option value="OLDEST">Mais antigas</option>
+                <option value="VALUE_DESC">Maior valor</option>
+                <option value="VALUE_ASC">Menor valor</option>
+                <option value="CLIENT">Cliente A–Z</option>
+              </SelectField>
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  setStatusFilter("ALL");
+                  setSortBy("RECENT");
+                  setCategory("ALL");
+                }}
+                disabled={
+                  !query &&
+                  statusFilter === "ALL" &&
+                  sortBy === "RECENT" &&
+                  category === "ALL"
+                }
+                className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Limpar filtros
+              </button>
+            </div>
           </div>
         }
       >
+        <div className="mb-5 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-4">
+          <span className="mr-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
+            Tipo
+          </span>
+          <CategoryButton
+            label="Todas"
+            count={categoryCounts.ALL}
+            active={category === "ALL"}
+            onClick={() => setCategory("ALL")}
+          />
+          {isClient || canUsePortfolio("generators") ? (
+            <CategoryButton
+              label="Geradores"
+              count={categoryCounts.GENERATORS}
+              active={category === "GENERATORS"}
+              onClick={() => setCategory("GENERATORS")}
+            />
+          ) : null}
+          {isClient || canUsePortfolio("partsServices") ? (
+            <CategoryButton
+              label="Peças e serviços"
+              count={categoryCounts.PARTS_SERVICES}
+              active={category === "PARTS_SERVICES"}
+              onClick={() => setCategory("PARTS_SERVICES")}
+            />
+          ) : null}
+          {isClient || canUsePortfolio("contracts") ? (
+            <CategoryButton
+              label="Contratos"
+              count={categoryCounts.CONTRACTS}
+              active={category === "CONTRACTS"}
+              onClick={() => setCategory("CONTRACTS")}
+            />
+          ) : null}
+        </div>
         {loading ? (
-          <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 px-5 py-10 text-sm text-slate-500">
+          <div
+            role="status"
+            className="rounded-[24px] border border-slate-200 bg-slate-50/80 px-5 py-10 text-sm text-slate-500"
+          >
             Carregando propostas...
           </div>
         ) : null}
@@ -639,9 +664,35 @@ export default function ProposalsPage() {
         {!loading && viewMode === "list" ? (
           filteredProposals.length > 0 ? (
             <div className="space-y-3">
-              {filteredProposals.map((proposal) => (
+              {visibleProposals.map((proposal) => (
                 <ProposalPortfolioCard key={proposal.id} proposal={proposal} />
               ))}
+              {pageCount > 1 ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                  <p className="text-sm text-slate-600">
+                    Página {page} de {pageCount} · {sortedProposals.length}{" "}
+                    propostas
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={page === 1}
+                      onClick={() => setPage((current) => current - 1)}
+                      className={SECONDARY_BUTTON}
+                    >
+                      Anterior
+                    </button>
+                    <button
+                      type="button"
+                      disabled={page === pageCount}
+                      onClick={() => setPage((current) => current + 1)}
+                      className={SECONDARY_BUTTON}
+                    >
+                      Próxima
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : (
             <EmptyState
@@ -654,73 +705,37 @@ export default function ProposalsPage() {
         {!loading && viewMode === "kanban" ? (
           filteredProposals.length > 0 ? (
             <div className="space-y-4">
-              <div className="grid gap-3">
-                <div className="rounded-[28px] border border-slate-200 bg-[linear-gradient(145deg,#f8fbff_0%,#eef5ff_100%)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
-                  <div className="grid gap-3 md:grid-cols-5">
-                    {flowColumns.map((column, index) => (
-                      <KanbanStepCard
-                        key={column.key}
-                        index={index + 1}
-                        label={column.label}
-                        count={column.items.length}
-                        tone={column.tone}
-                      />
-                    ))}
+              <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500">
+                      Etapas do funil
+                    </p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Arraste um cartão para uma etapa permitida.
+                    </p>
                   </div>
+                  <DataPill tone="blue">
+                    {filteredProposals.length} propostas no quadro
+                  </DataPill>
                 </div>
-
-                <div className="rounded-[28px] border border-slate-200 bg-slate-50/85 p-5 shadow-[0_24px_60px_-48px_rgba(15,31,50,0.38)]">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    <div>
-                      <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                        Leitura da operacao
-                      </p>
-                      <p className="mt-2 text-sm leading-6 text-slate-600">
-                        Encoste nas laterais do quadro para andar
-                        horizontalmente. Cada coluna tem rolagem propria para
-                        evitar listas longas.
-                      </p>
-                    </div>
-                    <DataPill
-                      tone={
-                        query.trim() || kanbanStatusFilter !== "ALL"
-                          ? "blue"
-                          : "emerald"
-                      }
-                    >
-                      {filteredProposals.length} resultado(s)
-                    </DataPill>
-                  </div>
-                  <div className="mt-4 grid gap-3 lg:grid-cols-3">
-                    {portfolioColumns
-                      .filter((column) => column.items.length > 0)
-                      .slice(0, 3)
-                      .map((column) => (
-                        <div
-                          key={column.key}
-                          className="rounded-2xl border border-white/70 bg-white/80 px-4 py-3"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <p className="text-sm font-semibold text-slate-900">
-                              {column.label}
-                            </p>
-                            <DataPill tone={statusTone(column.key)}>
-                              {column.items.length} itens
-                            </DataPill>
-                          </div>
-                          <p className="mt-2 text-sm text-slate-600">
-                            Volume atual: {formatCurrency(column.totalValue)}
-                          </p>
-                        </div>
-                      ))}
-                  </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
+                  {flowColumns.map((column, index) => (
+                    <KanbanStepCard
+                      key={column.key}
+                      index={index + 1}
+                      label={column.label}
+                      count={column.items.length}
+                      tone={column.tone}
+                    />
+                  ))}
                 </div>
               </div>
-
               <DashboardKanban ariaLabel="Kanban comercial de propostas">
                 {flowColumns.map((column) => {
                   const canReceiveDrop = draggingProposal
-                    ? !GOVERNED_REVISION_STATUSES.has(
+                    ? column.key !== "OTHER" &&
+                      !GOVERNED_REVISION_STATUSES.has(
                         draggingProposal.status,
                       ) &&
                       !GOVERNED_REVISION_STATUSES.has(column.key) &&
@@ -772,9 +787,16 @@ export default function ProposalsPage() {
                               {column.items.length}
                             </p>
                           </div>
-                          <DataPill tone={statusTone(column.key)}>
-                            {formatCurrency(column.totalValue)}
-                          </DataPill>
+                          <div className="text-right">
+                            <DataPill tone={statusTone(column.key)}>
+                              {formatCurrency(column.totalValue)} em BRL
+                            </DataPill>
+                            {column.foreignCount > 0 ? (
+                              <p className="mt-1 text-[11px] font-medium text-slate-600">
+                                {column.foreignCount} em outra moeda
+                              </p>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
 
@@ -846,10 +868,208 @@ export default function ProposalsPage() {
           )
         ) : null}
       </SectionCard>
+      <details id="proposal-followup" className="dashboard-create-panel">
+        <summary>Acompanhamento e rascunhos</summary>
+        <div className="space-y-3 p-3">
+          {" "}
+          {!isClient ? <ProposalEditingDraftList /> : null}
+          {!isClient ? (
+            <section
+              aria-label="Prioridades comerciais"
+              className="grid gap-3 sm:grid-cols-2"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setCategory("ALL");
+                  setQuery("");
+                  setStatusFilter("BOARD_REVIEW");
+                  setViewMode("list");
+                }}
+                className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition hover:border-sky-300 hover:shadow-md"
+              >
+                <span>
+                  <span className="block text-xs font-bold uppercase tracking-[0.14em] text-sky-700">
+                    Aguardando diretoria
+                  </span>
+                  <span className="mt-1 block text-sm text-slate-700">
+                    Inclui revisão de desconto
+                  </span>
+                </span>
+                <span className="text-2xl font-black text-sky-950">
+                  {stats.boardReview}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCategory("ALL");
+                  setQuery("");
+                  setStatusFilter("CLIENT_REVIEW");
+                  setViewMode("list");
+                }}
+                className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition hover:border-amber-300 hover:shadow-md"
+              >
+                <span>
+                  <span className="block text-xs font-bold uppercase tracking-[0.14em] text-amber-700">
+                    Aguardando cliente
+                  </span>
+                  <span className="mt-1 block text-sm text-slate-700">
+                    Propostas em análise externa
+                  </span>
+                </span>
+                <span className="text-2xl font-black text-amber-950">
+                  {stats.clientReview}
+                </span>
+              </button>
+            </section>
+          ) : null}
+          {canCreate ? (
+            <details className="dashboard-page-context">
+              <summary>
+                <span>Nova proposta: escolher o tipo</span>
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  className="h-4 w-4"
+                >
+                  <path
+                    d="m5 7.5 5 5 5-5"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </summary>
+              <div className="dashboard-page-context-body">
+                <p className="mb-3 text-sm text-slate-600">
+                  Escolha o formato para iniciar uma proposta.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  {canUsePortfolio("partsServices") ? (
+                    <CreateProposalCard
+                      index="01"
+                      title="Peças e serviços"
+                      description="Manutenção, materiais e atendimento."
+                      href="/dashboard/proposals/new"
+                    />
+                  ) : null}
+                  {canUsePortfolio("generators") ? (
+                    <CreateProposalCard
+                      index="02"
+                      title="Gerador"
+                      description="Venda de equipamento e acessórios."
+                      href="/dashboard/proposals/new/generator"
+                    />
+                  ) : null}
+                  {canUsePortfolio("contracts") ? (
+                    <CreateProposalCard
+                      index="03"
+                      title="Contrato"
+                      description="Cobertura e serviços recorrentes."
+                      href="/dashboard/proposals/new?proposalType=CONTRACT"
+                    />
+                  ) : null}
+                  {canUsePortfolio("generators") ||
+                  canUsePortfolio("partsServices") ||
+                  canUsePortfolio("contracts") ? (
+                    <CreateProposalCard
+                      index="04"
+                      title="Proposta externa"
+                      description="Registre uma venda de origem externa."
+                      href="/dashboard/proposals/new/external"
+                    />
+                  ) : null}
+                </div>
+              </div>
+            </details>
+          ) : null}
+          {!isClient && commercialHandoffs.length > 0 ? (
+            <SectionCard
+              eyebrow="Passagem comercial"
+              title="Vendas ganhas aguardando o próximo passo"
+              description="Após o aceite, acompanhe a confirmação da entrada e a continuidade para o contrato ou o pós-venda."
+              actions={
+                <DataPill tone="amber">
+                  {commercialHandoffs.length} pendente(s)
+                </DataPill>
+              }
+            >
+              <div className="grid gap-3 lg:grid-cols-2">
+                {commercialHandoffs.slice(0, 6).map(({ proposal, action }) => (
+                  <Link
+                    key={proposal.id}
+                    href={`/dashboard/proposals/${proposal.id}`}
+                    className="group flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 transition hover:border-amber-400 hover:bg-amber-50"
+                  >
+                    <span>
+                      <span className="block text-sm font-bold text-slate-900">
+                        {proposal.code} ·{" "}
+                        {proposal.client?.companyName || "Cliente sem nome"}
+                      </span>
+                      <span className="mt-1 block text-xs text-slate-600">
+                        {action}
+                      </span>
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-800 group-hover:underline">
+                      Abrir proposta{" "}
+                      <InterfaceIcon
+                        name="arrow-right"
+                        className="ml-1 h-4 w-4"
+                      />
+                    </span>
+                  </Link>
+                ))}
+              </div>
+              {commercialHandoffs.length > 6 ? (
+                <p className="mt-3 text-xs text-slate-500">
+                  Mostrando as 6 mais recentes. As demais seguem identificadas
+                  na carteira abaixo.
+                </p>
+              ) : null}
+            </SectionCard>
+          ) : null}
+        </div>
+      </details>
     </div>
   );
 }
 
+function CreateProposalCard({
+  index,
+  title,
+  description,
+  href,
+}: {
+  index: string;
+  title: string;
+  description: string;
+  href: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group flex min-h-32 flex-col justify-between rounded-2xl border border-slate-200 dashboard-tinted-surface bg-[linear-gradient(145deg,#f8fbff,#ffffff)] p-4 transition hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-[0_18px_36px_-28px_rgba(2,132,199,0.42)]"
+    >
+      <div className="flex items-start justify-between">
+        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-xs font-black text-sky-700 shadow-sm">
+          {index}
+        </span>
+        <span
+          aria-hidden="true"
+          className="text-lg font-bold text-sky-600 transition group-hover:translate-x-1"
+        >
+          ↗
+        </span>
+      </div>
+      <div>
+        <h3 className="text-sm font-bold text-slate-950">{title}</h3>
+        <p className="mt-1 text-xs leading-5 text-slate-600">{description}</p>
+      </div>
+    </Link>
+  );
+}
 function ViewModeButton({
   active,
   onClick,
@@ -889,120 +1109,77 @@ function CategoryButton({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-2xl border px-4 py-4 text-left transition ${
+      aria-pressed={active}
+      className={
         active
-          ? "border-sky-400 bg-sky-50 text-sky-950 ring-2 ring-sky-100"
-          : "border-slate-200 bg-white text-slate-700 hover:border-sky-200"
-      }`}
+          ? "inline-flex items-center gap-2 rounded-full border border-sky-500 bg-sky-50 px-3 py-2 text-xs font-bold text-sky-900"
+          : "inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-sky-300 hover:bg-sky-50"
+      }
     >
-      <span className="block text-xs font-bold uppercase tracking-[0.14em]">
-        {label}
+      <span>{label}</span>
+      <span
+        className={
+          active
+            ? "rounded-full bg-sky-600 px-2 py-0.5 text-[11px] text-white"
+            : "rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600"
+        }
+      >
+        {count}
       </span>
-      <span className="mt-2 block text-2xl font-black">{count}</span>
     </button>
   );
 }
-
-function PulseStat({
-  label,
-  value,
-  helper,
-  tone,
-}: {
-  label: string;
-  value: string;
-  helper: string;
-  tone: Tone;
-}) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-          {label}
-        </p>
-        <DataPill tone={tone}>{value}</DataPill>
-      </div>
-      <p className="mt-3 text-xs leading-5 text-slate-600">{helper}</p>
-    </div>
-  );
-}
-
-function FlowSummaryCard({
-  label,
-  count,
-  value,
-  tone,
-}: {
-  label: string;
-  count: number;
-  value: number;
-  tone: Tone;
-}) {
-  return (
-    <article className="rounded-[24px] border border-slate-200 bg-slate-50/85 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-          {label}
-        </p>
-        <DataPill tone={tone}>{count} itens</DataPill>
-      </div>
-      <p className="mt-3 text-2xl font-bold text-slate-950">
-        {formatCurrency(value)}
-      </p>
-      <p className="mt-2 text-xs leading-5 text-slate-600">
-        Valor acumulado para esta etapa do fluxo.
-      </p>
-    </article>
-  );
-}
-
 function ProposalPortfolioCard({ proposal }: { proposal: ProposalListItem }) {
   const step = statusToFlowStep(proposal.status);
-  const statusToneValue = statusTone(proposal.status);
 
   return (
-    <article className="rounded-[28px] border border-slate-200 bg-white/92 px-5 py-5 shadow-[0_24px_60px_-48px_rgba(15,31,50,0.35)]">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <Link href={`/dashboard/proposals/${proposal.id}`} className="dashboard-record-link text-lg font-bold" title="Abrir proposta">
-              {proposal.code}
-            </Link>
-            <DataPill tone={statusToneValue}>
-              {statusLabel(proposal.status)}
-            </DataPill>
-            <DataPill tone="blue">{proposalTypeLabel(proposal.type)}</DataPill>
-            <DataPill tone={proposal.origin === "EXTERNAL" ? "amber" : "slate"}>
-              {proposal.origin === "EXTERNAL" ? "Externa" : "Manitec"}
-            </DataPill>
-            {proposal.type === "GENERATOR_SALE" &&
-            proposal.status === "WON" &&
-            !proposal.postSaleGeneratorId ? (
-              <DataPill tone="amber">Pós-venda pendente</DataPill>
-            ) : null}
-            {proposal.type === "CONTRACT" &&
-            proposal.status === "WON" &&
-            !proposal.generatedContract ? (
-              <DataPill tone="amber">Contrato pendente</DataPill>
-            ) : null}
-            {proposal.status !== step ? (
-              <DataPill tone="amber">Retorno para diretoria</DataPill>
-            ) : null}
-          </div>
-          <p className="text-sm font-medium text-slate-700">
-            {proposal.client?.companyName || "Sem cliente vinculado"}
-          </p>
-          <p className="text-sm text-slate-500">
-            Equipamento: {proposalEquipmentLabel(proposal)}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="text-right">
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-              Valor total
+    <article className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-sky-300 hover:shadow-[0_18px_42px_-30px_rgba(15,31,50,0.35)] sm:p-5">
+      <span
+        aria-hidden="true"
+        className="absolute inset-y-0 left-0 w-1 bg-sky-500"
+      />
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <span
+            aria-hidden="true"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-lg font-black text-sky-700"
+          >
+            {proposalTypeLabel(proposal.type).slice(0, 1)}
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href={"/dashboard/proposals/" + proposal.id}
+                className="dashboard-record-link text-base font-bold"
+                title="Abrir proposta"
+              >
+                {proposal.code}
+              </Link>
+              <DataPill tone={statusTone(proposal.status)}>
+                {statusLabel(proposal.status)}
+              </DataPill>
+              {proposal.origin === "EXTERNAL" ? (
+                <DataPill tone="amber">Externa</DataPill>
+              ) : null}
+            </div>
+            <p
+              className="mt-1 truncate text-sm font-semibold text-slate-800"
+              title={proposal.client?.companyName || ""}
+            >
+              {proposal.client?.companyName || "Cliente não vinculado"}
             </p>
-            <p className="mt-1 text-2xl font-bold text-slate-950">
+            <p className="mt-1 text-xs text-slate-500">
+              {proposalTypeLabel(proposal.type)} ·{" "}
+              {proposalEquipmentLabel(proposal)}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-end justify-between gap-4 border-t border-slate-100 pt-3 lg:flex-col lg:items-end lg:border-0 lg:pt-0">
+          <div className="lg:text-right">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+              Valor da proposta
+            </p>
+            <p className="mt-1 text-xl font-bold text-slate-950">
               {formatCurrency(
                 Number(proposal.totalValue || 0),
                 proposal.externalCurrency || "BRL",
@@ -1010,59 +1187,53 @@ function ProposalPortfolioCard({ proposal }: { proposal: ProposalListItem }) {
             </p>
           </div>
           <Link
-            href={`/dashboard/proposals/${proposal.id}`}
-            className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+            href={"/dashboard/proposals/" + proposal.id}
+            className="app-button app-button-primary shrink-0"
           >
-            Abrir detalhes
+            Abrir proposta{" "}
+            <span aria-hidden="true" className="ml-2">
+              <InterfaceIcon name="arrow-right" className="h-4 w-4" />
+            </span>
           </Link>
         </div>
       </div>
-
-      <div className="mt-5 grid gap-3 md:grid-cols-3">
-        <MiniPortfolioInfo
-          label="Etapa do fluxo"
-          value={stepLabel(step)}
-          helper="Posicao macro no kanban comercial."
-        />
-        <MiniPortfolioInfo
-          label="Status operacional"
-          value={statusLabel(proposal.status)}
-          helper="Leitura detalhada do momento atual."
-        />
-        <MiniPortfolioInfo
-          label="Acompanhamento"
-          value={
-            proposal.client?.companyName
-              ? "Cliente vinculado"
-              : "Revisar cadastro"
-          }
-          helper="Base usada para comunicacao e proposta."
-        />
+      <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-slate-100 pt-3 text-xs text-slate-600">
+        <span>
+          <strong className="font-semibold text-slate-800">Etapa:</strong>{" "}
+          {stepLabel(step)}
+        </span>
+        {proposal.createdAt ? (
+          <span>
+            <strong className="font-semibold text-slate-800">Criada:</strong>{" "}
+            {formatDate(proposal.createdAt)}
+          </span>
+        ) : null}
+        {proposal.externalReference ? (
+          <span>
+            <strong className="font-semibold text-slate-800">
+              Referência:
+            </strong>{" "}
+            {proposal.externalReference}
+          </span>
+        ) : null}
+        {proposal.type === "CONTRACT" &&
+        proposal.status === "WON" &&
+        !proposal.generatedContract ? (
+          <span className="font-semibold text-amber-700">
+            Contrato pendente
+          </span>
+        ) : null}
+        {proposal.type === "GENERATOR_SALE" &&
+        proposal.status === "WON" &&
+        !proposal.postSaleGeneratorId ? (
+          <span className="font-semibold text-amber-700">
+            Pós-venda pendente
+          </span>
+        ) : null}
       </div>
     </article>
   );
 }
-
-function MiniPortfolioInfo({
-  label,
-  value,
-  helper,
-}: {
-  label: string;
-  value: string;
-  helper: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/85 px-4 py-4">
-      <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-        {label}
-      </p>
-      <p className="mt-2 text-sm font-semibold text-slate-900">{value}</p>
-      <p className="mt-2 text-xs leading-5 text-slate-600">{helper}</p>
-    </div>
-  );
-}
-
 function KanbanStepCard({
   index,
   label,
@@ -1113,7 +1284,12 @@ function KanbanProposalCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <Link href={`/dashboard/proposals/${proposal.id}`} draggable={false} className="dashboard-record-link text-sm font-bold" title="Abrir proposta">
+          <Link
+            href={`/dashboard/proposals/${proposal.id}`}
+            draggable={false}
+            className="dashboard-record-link text-sm font-bold"
+            title="Abrir proposta"
+          >
             {proposal.code}
           </Link>
           <p className="mt-1 text-sm text-slate-700">
@@ -1180,18 +1356,23 @@ function buildFlowColumns(proposals: ProposalListItem[]): FlowColumnSummary[] {
     const items = proposals.filter(
       (proposal) => statusToFlowStep(proposal.status) === column.key,
     );
-
     return {
       ...column,
       items,
-      totalValue: items.reduce(
-        (sum, proposal) => sum + Number(proposal.totalValue || 0),
-        0,
-      ),
+      totalValue: items
+        .filter(isBrlProposal)
+        .reduce((sum, proposal) => sum + Number(proposal.totalValue || 0), 0),
+      foreignCount: items.filter((proposal) => !isBrlProposal(proposal)).length,
     };
   });
 }
 
+function isBrlProposal(proposal: ProposalListItem) {
+  return (
+    !proposal.externalCurrency ||
+    proposal.externalCurrency.trim().toUpperCase() === "BRL"
+  );
+}
 function proposalCategory(type: string): ProposalCategory {
   if (type === "GENERATOR_SALE") return "GENERATORS";
   if (type === "CONTRACT") return "CONTRACTS";
@@ -1208,11 +1389,15 @@ function proposalTypeLabel(type: string) {
 
 function proposalEquipmentLabel(proposal: ProposalListItem) {
   if (proposal.commercialGenerator?.model) {
-    return `Generac ${proposal.commercialGenerator.model}`;
+    const model = proposal.commercialGenerator.model.trim();
+    const manufacturer = proposal.commercialGenerator.manufacturer?.trim();
+    return manufacturer &&
+      !model.toLowerCase().startsWith(manufacturer.toLowerCase())
+      ? manufacturer + " " + model
+      : model;
   }
   return proposal.generator?.name || "Sem equipamento vinculado";
 }
-
 function stepLabel(step: string) {
   return KANBAN_COLUMNS.find((column) => column.key === step)?.label || step;
 }
@@ -1229,10 +1414,29 @@ function statusTone(status: string): Tone {
   return "slate";
 }
 
+function formatDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "Data indisponível"
+    : date.toLocaleDateString("pt-BR");
+}
+
 function formatCurrency(value: number, currency = "BRL") {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-  }).format(value);
+  const amount = Number.isFinite(value) ? value : 0;
+  try {
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return (
+      amount.toLocaleString("pt-BR", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }) +
+      " " +
+      currency
+    );
+  }
 }

@@ -12,11 +12,12 @@ import type { Request, Response } from 'express';
 import { RequireAccessPolicy } from '../auth/access-policy.decorator';
 import { AccessPolicyGuard } from '../auth/access-policy.guard';
 import { AuthGuard } from '../auth/auth.guard';
+import { CommercialScopeGuard } from '../auth/rules/commercial-scope.guard';
 import { DocumentsService } from './documents.service';
 import { ContractDocumentOptionsDto } from './dto/contract-document-options.dto';
 
 @Controller('documents')
-@UseGuards(AuthGuard, AccessPolicyGuard)
+@UseGuards(AuthGuard, AccessPolicyGuard, CommercialScopeGuard)
 @RequireAccessPolicy('pages.dashboard')
 export class DocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
@@ -54,6 +55,27 @@ export class DocumentsController {
     return res.send(file.buffer);
   }
 
+  @Get('proposals/:id/draft-preview')
+  @RequireAccessPolicy('proposals.view')
+  async previewDraft(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const file = await this.documentsService.previewDraft(
+      id,
+      (req['user'] as { sub?: string })?.sub || '',
+    );
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader(
+      'Content-Disposition',
+      'inline; filename="previa-proposta.pdf"',
+    );
+    return res.send(file.buffer);
+  }
+
   @Post('proposals/:id/generate-document')
   generateProposalDocument(@Req() req: Request, @Param('id') id: string) {
     const userId = (req['user'] as any)?.sub as string | undefined;
@@ -85,6 +107,21 @@ export class DocumentsController {
       id,
       userId || '',
     );
+    return this.sendFile(res, file);
+  }
+
+  @Get('proposals/:id/download-approved-word-pdf')
+  async downloadApprovedWordPdfCopy(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const file =
+      await this.documentsService.downloadProposalApprovedWordPdfCopy(
+        id,
+        (req['user'] as { sub?: string })?.sub || '',
+      );
+    res.setHeader('Cache-Control', 'private, no-store');
     return this.sendFile(res, file);
   }
 

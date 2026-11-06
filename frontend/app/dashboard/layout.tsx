@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import TopBar from "./components/TopBar";
+import MobileNavigation from "./components/MobileNavigation";
 import SessionHeartbeat from "../SessionHeartbeat";
 import DashboardTableSorting from "./components/DashboardTableSorting";
 import DashboardTablePagination from "./components/DashboardTablePagination";
@@ -17,6 +18,9 @@ import {
 } from "@/lib/access";
 import {
   applyDashboardTheme,
+  readStoredDashboardMode,
+  saveStoredDashboardMode,
+  type DashboardColorMode,
   clearAppliedDashboardTheme,
   readStoredDashboardTheme,
   saveStoredDashboardTheme,
@@ -27,7 +31,6 @@ import {
   decodeJwtPayload,
   ensureValidSession,
   getStoredAccessToken,
-  refreshAccessSession,
 } from "@/lib/auth-session";
 
 type VisiblePages = SidebarAccess;
@@ -39,8 +42,9 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [accessReady, setAccessReady] = useState(false);
+  const [colorMode, setColorMode] = useState<DashboardColorMode>("light");
+  const [appearanceReady, setAppearanceReady] = useState(false);
   const [appearanceTheme, setAppearanceTheme] =
     useState<DashboardThemeId>("mist");
   const [currentRole, setCurrentRole] = useState("NORMAL");
@@ -79,12 +83,16 @@ export default function DashboardLayout({
 
       try {
         const payload = decodeJwtPayload<{ role?: string }>(token);
+        if (payload?.role === "CLIENT") {
+          window.location.replace("/portal");
+          return;
+        }
         setCurrentRole(payload?.role || "NORMAL");
         const access = getAccessFromToken();
         setVisiblePages({
           ...(access.pages as VisiblePages),
-          usersControl: access.pages.usersControl || access.users.manage,
-          studio: access.pages.studio || access.studio.access,
+          usersControl: access.pages.usersControl,
+          studio: access.pages.studio,
         });
         setAccessReady(true);
       } catch {
@@ -113,9 +121,9 @@ export default function DashboardLayout({
   useEffect(() => {
     if (!accessReady || currentRole !== "CLIENT") return;
     if (pathname.startsWith("/dashboard")) {
-      router.replace("/portal");
+      window.location.replace("/portal");
     }
-  }, [accessReady, currentRole, pathname, router]);
+  }, [accessReady, currentRole, pathname]);
 
   useEffect(() => {
     if (!accessReady || currentRole === "CLIENT") return;
@@ -129,10 +137,8 @@ export default function DashboardLayout({
 
     let cancelled = false;
 
-    async function syncSession(forceRefresh = false) {
-      const hasSession =
-        (forceRefresh && (await refreshAccessSession())) ||
-        (await ensureValidSession());
+    async function syncSession() {
+      const hasSession = await ensureValidSession();
       const token = getStoredAccessToken();
       if (cancelled) return;
 
@@ -144,12 +150,16 @@ export default function DashboardLayout({
 
       try {
         const payload = decodeJwtPayload<{ role?: string }>(token);
+        if (payload?.role === "CLIENT") {
+          window.location.replace("/portal");
+          return;
+        }
         setCurrentRole(payload?.role || "NORMAL");
         const access = getAccessFromToken();
         setVisiblePages({
           ...(access.pages as VisiblePages),
-          usersControl: access.pages.usersControl || access.users.manage,
-          studio: access.pages.studio || access.studio.access,
+          usersControl: access.pages.usersControl,
+          studio: access.pages.studio,
         });
       } catch {
         clearAuthSession();
@@ -158,14 +168,14 @@ export default function DashboardLayout({
     }
 
     const intervalId = window.setInterval(() => {
-      void syncSession(true);
+      void syncSession();
     }, 300_000);
     const handleFocus = () => {
-      void syncSession(true);
+      void syncSession();
     };
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        void syncSession(true);
+        void syncSession();
       }
     };
 
@@ -180,31 +190,21 @@ export default function DashboardLayout({
     };
   }, [accessReady, router]);
 
-  useEffect(() => {
-    const saved = localStorage.getItem("manitec_sidebar_collapsed");
-    setIsSidebarCollapsed(saved === "1");
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem(
-      "manitec_sidebar_collapsed",
-      isSidebarCollapsed ? "1" : "0",
-    );
-  }, [isSidebarCollapsed]);
-
-  useEffect(() => {
+  useLayoutEffect(() => {
     const savedTheme = readStoredDashboardTheme();
+    const savedMode = readStoredDashboardMode();
     setAppearanceTheme(savedTheme);
-    applyDashboardTheme(savedTheme);
-
+    setColorMode(savedMode);
+    applyDashboardTheme(savedTheme, savedMode);
+    setAppearanceReady(true);
     return () => {
       clearAppliedDashboardTheme();
     };
   }, []);
 
   useEffect(() => {
-    applyDashboardTheme(appearanceTheme);
-  }, [appearanceTheme]);
+    if (appearanceReady) applyDashboardTheme(appearanceTheme, colorMode);
+  }, [appearanceTheme, colorMode, appearanceReady]);
 
   const navItems = useMemo(
     () => [
@@ -242,6 +242,16 @@ export default function DashboardLayout({
         mobileLabel: "Propostas",
         icon: "PP",
         enabled: visiblePages.proposals,
+      },
+      {
+        href: "/dashboard/sales-orders",
+        label: "Pedidos de venda",
+        mobileLabel: "Pedidos",
+        icon: "PV",
+        enabled:
+          visiblePages.proposals ||
+          visiblePages.inventory ||
+          visiblePages.finance,
       },
       {
         href: "/dashboard/orders",
@@ -308,8 +318,8 @@ export default function DashboardLayout({
       },
       {
         href: "/dashboard/hr/collaborators",
-        label: "Agentes",
-        mobileLabel: "Agentes",
+        label: "Colaboradores",
+        mobileLabel: "Equipe",
         icon: "RH",
         enabled: visiblePages.people,
       },
@@ -346,6 +356,22 @@ export default function DashboardLayout({
   );
 
   const allowedItems = navItems.filter((item) => item.enabled);
+  const mobileItems = allowedItems.filter((item) =>
+    ["/dashboard", "/dashboard/notifications"].includes(item.href),
+  );
+  const currentItem = allowedItems
+    .filter(
+      (item) =>
+        item.href !== "/dashboard" &&
+        (pathname === item.href || pathname.startsWith(item.href + "/")),
+    )
+    .sort((a, b) => b.href.length - a.href.length)[0];
+  const contextualItem =
+    currentItem ||
+    allowedItems.find((item) => item.href === "/dashboard/proposals") ||
+    allowedItems.find((item) => !mobileItems.includes(item));
+  if (contextualItem && !mobileItems.includes(contextualItem))
+    mobileItems.push(contextualItem);
 
   function logout() {
     clearAuthSession();
@@ -357,7 +383,11 @@ export default function DashboardLayout({
     saveStoredDashboardTheme(nextTheme);
   }
 
-  if (!accessReady) {
+  if (
+    !accessReady ||
+    currentRole === "CLIENT" ||
+    !canAccessDashboardPath(pathname, visiblePages)
+  ) {
     return (
       <div
         className="flex min-h-screen items-center justify-center px-6 text-sm font-semibold text-zinc-500"
@@ -373,21 +403,29 @@ export default function DashboardLayout({
       <SessionHeartbeat source="DASHBOARD" />
       <DashboardTableSorting />
       <DashboardTablePagination />
+      <a href="#main-content" className="dashboard-skip-link fixed">
+        Ir para o conteúdo
+      </a>
       <SidebarNavigation
         pathname={pathname}
-        collapsed={isSidebarCollapsed}
         access={visiblePages}
-        onToggleCollapsed={() => setIsSidebarCollapsed((prev) => !prev)}
         onLogout={logout}
       />
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <TopBar
           appearanceTheme={appearanceTheme}
+          colorMode={colorMode}
+          onChangeColorMode={(mode) => {
+            setColorMode(mode);
+            saveStoredDashboardMode(mode);
+          }}
           onChangeAppearanceTheme={handleThemeChange}
         />
         <main
           className={`dashboard-main flex-1 overflow-y-auto px-4 pb-24 pt-5 md:px-6 md:pb-10 md:pt-6 ${pathname === "/dashboard/management/users/permissions" ? "dashboard-main--wide" : ""}`}
+          id="main-content"
+          tabIndex={-1}
         >
           <div className="dashboard-container w-full">
             <div className="slide-fade-in">{children}</div>
@@ -395,24 +433,38 @@ export default function DashboardLayout({
         </main>
       </div>
 
-      <nav className="glass-surface fixed inset-x-4 bottom-3 z-30 flex gap-2 overflow-x-auto rounded-[24px] p-2 md:hidden">
-        {allowedItems.map((item) => {
-          const active = pathname === item.href;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`min-w-[92px] rounded-2xl px-2 py-2 text-center text-[11px] font-semibold ${
-                active
-                  ? "bg-slate-950 text-white shadow-[0_16px_28px_-22px_rgba(15,31,50,0.65)]"
-                  : "bg-slate-100/90 text-slate-600"
-              }`}
-              aria-label={item.label}
-            >
-              {item.mobileLabel}
-            </Link>
-          );
-        })}
+      <nav
+        aria-label="Atalhos rápidos"
+        className="dashboard-mobile-shortcuts glass-surface fixed inset-x-3 bottom-3 z-30 flex min-w-0 gap-2 rounded-xl p-2 md:hidden"
+      >
+        <MobileNavigation
+          pathname={pathname}
+          access={visiblePages}
+          onLogout={logout}
+        />
+        <div className="grid min-w-0 flex-1 grid-cols-3 gap-1">
+          {mobileItems.slice(0, 3).map((item) => {
+            const active =
+              pathname === item.href ||
+              (item.href !== "/dashboard" &&
+                pathname.startsWith(item.href + "/"));
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                className={`flex min-w-0 items-center justify-center break-words rounded-lg px-1 py-2 text-center text-xs font-medium ${
+                  active
+                    ? "bg-slate-950 text-white shadow-[0_16px_28px_-22px_rgba(15,31,50,0.65)]"
+                    : "bg-slate-100/90 text-slate-600"
+                }`}
+                aria-label={item.label}
+              >
+                {item.mobileLabel}
+              </Link>
+            );
+          })}
+        </div>
       </nav>
     </div>
   );
