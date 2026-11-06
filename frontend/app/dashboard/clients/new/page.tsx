@@ -1,7 +1,11 @@
 ﻿"use client";
+import { InterfaceIcon } from "@/app/dashboard/components/InterfaceIcon";
 
-import { SelectField, SuggestionInput } from "@/app/dashboard/components/SelectField";
-import { PageHeader } from "../../components/DashboardPageKit";
+import {
+  SelectField,
+  SuggestionInput,
+} from "@/app/dashboard/components/SelectField";
+import { FormField, PageHeader } from "../../components/DashboardPageKit";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -140,7 +144,9 @@ const FABRICANTES = {
 
 function inferPersonType(documentValue: string): PersonType {
   const document = documentValue.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  return document.length <= 11 && !/[A-Z]/.test(document) ? "INDIVIDUAL" : "LEGAL_ENTITY";
+  return document.length <= 11 && !/[A-Z]/.test(document)
+    ? "INDIVIDUAL"
+    : "LEGAL_ENTITY";
 }
 
 export default function NewClientPage() {
@@ -190,6 +196,7 @@ export default function NewClientPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingClient, setIsLoadingClient] = useState(false);
   const [error, setError] = useState("");
+  const [errorSection, setErrorSection] = useState("");
   const [editClientId, setEditClientId] = useState("");
   const isEditing = Boolean(editClientId);
 
@@ -300,7 +307,7 @@ export default function NewClientPage() {
         const res = await apiFetch(`/clients/${id}`, { cache: "no-store" });
         if (!res.ok) {
           setError(
-            "Nao foi possivel carregar os dados do cliente para edicao.",
+            "Não foi possivel carregar os dados do cliente para edição.",
           );
           return;
         }
@@ -374,16 +381,26 @@ export default function NewClientPage() {
           (client.generators ?? []).map((generator) => generator.id),
         );
       } catch {
-        setError("Erro ao carregar o cliente para edicao.");
+        setError("Erro ao carregar o cliente para edição.");
       } finally {
         setIsLoadingClient(false);
       }
     })();
   }, []);
 
+  function focusSection(id: string) {
+    setErrorSection(id);
+    window.requestAnimationFrame(() => {
+      const section = document.getElementById(id);
+      section?.scrollIntoView({ block: "start" });
+      section?.focus({ preventScroll: true });
+    });
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setErrorSection("");
 
     const validContacts = contacts.filter(
       (c) =>
@@ -395,7 +412,8 @@ export default function NewClientPage() {
       !billingAddress.city ||
       !billingAddress.state
     ) {
-      setError("Preencha o endereco de cobranca com rua, cidade e UF.");
+      setError("Preencha o endereço de faturamento com rua, cidade e UF.");
+      focusSection("client-section-2");
       return;
     }
 
@@ -404,11 +422,13 @@ export default function NewClientPage() {
       !installationAddress.city ||
       !installationAddress.state
     ) {
-      setError("Preencha o endereco de instalacao com rua, cidade e UF.");
+      setError("Preencha o endereço de instalação com rua, cidade e UF.");
+      focusSection("client-section-3");
       return;
     }
 
     if (validContacts.length === 0) {
+      focusSection("client-section-4");
       setError(
         "Cadastre pelo menos um contato valido (nome + telefone/celular/email).",
       );
@@ -423,6 +443,7 @@ export default function NewClientPage() {
         Number(machine.power) <= 0,
     );
     if (incompleteMachineIndex >= 0) {
+      focusSection("client-section-6");
       setError(
         `Complete nome, marca e potencia da maquina ${incompleteMachineIndex + 1}.`,
       );
@@ -435,7 +456,9 @@ export default function NewClientPage() {
 
     const primaryContact =
       validContacts.find((c) => c.status === "ACTIVE") ?? validContacts[0];
-    const normalizedDocument = formData.document.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const normalizedDocument = formData.document
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "");
 
     const normalizedContacts = validContacts.map((contact) => ({
       name: contact.name.trim(),
@@ -545,16 +568,19 @@ export default function NewClientPage() {
     <div className="dashboard-page mb-20 space-y-5">
       <PageHeader
         eyebrow="Comercial"
-        title={isEditing ? "Editar Cliente" : "Novo Cliente Completo"}
-        description="Pessoa fisica/juridica, dois enderecos, contatos e multiplas maquinas."
-        actions={<>
-<Link
-          href="/dashboard/clients"
-          className="w-10 h-10 flex items-center justify-center bg-white border border-zinc-200 rounded-lg hover:bg-zinc-50 transition-colors text-zinc-500 shadow-sm"
-        >
-          ←
-        </Link>
-</>}
+        title={isEditing ? "Editar cliente" : "Novo cliente"}
+        description="Cadastre os dados do cliente, endereços, contatos e equipamentos."
+        actions={
+          <>
+            <Link
+              href="/dashboard/clients"
+              className="app-icon-button"
+              aria-label="Voltar para clientes"
+            >
+              <InterfaceIcon name="arrow-left" className="h-4 w-4" />
+            </Link>
+          </>
+        }
       />
 
       {error && (
@@ -568,21 +594,34 @@ export default function NewClientPage() {
         </div>
       )}
 
+      <nav className="dashboard-section-nav" aria-label="Seções do cadastro">
+        <a href="#client-section-1">Dados cadastrais</a>
+        <a href="#client-section-2">Faturamento</a>
+        <a href="#client-section-3">Instalação</a>
+        <a href="#client-section-4">Contatos</a>
+        <a href="#client-section-5">Equipamentos</a>
+      </nav>
       <form
         onSubmit={handleSubmit}
         className="bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden"
       >
         <div className="p-6 md:p-8 space-y-8">
-          <section>
+          <section id="client-section-1" tabIndex={-1}>
             <h2 className="text-lg font-bold text-zinc-800 border-b border-zinc-100 pb-2 mb-4">
               1. Dados da Empresa/Pessoa
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="md:col-span-2">
-                <label className="block text-sm font-bold text-zinc-700 mb-1">
-                  Razao Social / Nome *
+                <label
+                  id="client-field-1-label"
+                  htmlFor="client-field-1"
+                  className="block text-sm font-bold text-zinc-700 mb-1"
+                >
+                  Razão social / Nome *
                 </label>
                 <input
+                  id="client-field-1"
+                  aria-labelledby="client-field-1-label"
                   type="text"
                   required
                   value={formData.companyName}
@@ -593,10 +632,16 @@ export default function NewClientPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-bold text-zinc-700 mb-1">
-                  Nome Fantasia
+                <label
+                  id="client-field-2-label"
+                  htmlFor="client-field-2"
+                  className="block text-sm font-bold text-zinc-700 mb-1"
+                >
+                  Nome fantasia
                 </label>
                 <input
+                  id="client-field-2"
+                  aria-labelledby="client-field-2-label"
                   type="text"
                   value={formData.tradeName}
                   onChange={(e) =>
@@ -607,26 +652,38 @@ export default function NewClientPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-zinc-700 mb-1">
+                <label
+                  id="client-field-3-label"
+                  htmlFor="client-field-3"
+                  className="block text-sm font-bold text-zinc-700 mb-1"
+                >
                   CPF/CNPJ *
                 </label>
                 <input
+                  id="client-field-3"
+                  aria-labelledby="client-field-3-label"
                   type="text"
                   required
                   value={formData.document}
                   onChange={(e) =>
                     setFormData({ ...formData, document: e.target.value })
                   }
-                  placeholder="CPF numerico ou CNPJ com letras e numeros"
+                  placeholder="CPF numerico ou CNPJ com letras e números"
                   className="w-full border border-zinc-300 rounded-lg p-3 tabular-nums bg-zinc-50 focus:bg-white outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-zinc-700 mb-1">
-                  Tipo de Pessoa (automatico)
+                <label
+                  id="client-field-4-label"
+                  htmlFor="client-field-4"
+                  className="block text-sm font-bold text-zinc-700 mb-1"
+                >
+                  Tipo de Pessoa (automático)
                 </label>
                 <input
+                  id="client-field-4"
+                  aria-labelledby="client-field-4-label"
                   type="text"
                   readOnly
                   value={personTypeLabel}
@@ -635,10 +692,17 @@ export default function NewClientPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-zinc-700 mb-1">
+                <label
+                  id="client-field-5-label"
+                  htmlFor="client-field-5"
+                  className="block text-sm font-bold text-zinc-700 mb-1"
+                >
                   Tipo do Cliente *
                 </label>
-                <SelectField searchable
+                <SelectField
+                  id="client-field-5"
+                  aria-labelledby="client-field-5-label"
+                  searchable
                   value={formData.clientType}
                   onChange={(e) =>
                     setFormData({ ...formData, clientType: e.target.value })
@@ -651,10 +715,16 @@ export default function NewClientPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-zinc-700 mb-1">
+                <label
+                  id="client-field-6-label"
+                  htmlFor="client-field-6"
+                  className="block text-sm font-bold text-zinc-700 mb-1"
+                >
                   Inscricao Estadual
                 </label>
                 <input
+                  id="client-field-6"
+                  aria-labelledby="client-field-6-label"
                   type="text"
                   value={formData.stateRegistration}
                   onChange={(e) =>
@@ -668,10 +738,16 @@ export default function NewClientPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-zinc-700 mb-1">
+                <label
+                  id="client-field-7-label"
+                  htmlFor="client-field-7"
+                  className="block text-sm font-bold text-zinc-700 mb-1"
+                >
                   Inscricao Municipal
                 </label>
                 <input
+                  id="client-field-7"
+                  aria-labelledby="client-field-7-label"
                   type="text"
                   value={formData.municipalRegistration}
                   onChange={(e) =>
@@ -685,10 +761,16 @@ export default function NewClientPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-zinc-700 mb-1">
+                <label
+                  id="client-field-8-label"
+                  htmlFor="client-field-8"
+                  className="block text-sm font-bold text-zinc-700 mb-1"
+                >
                   Ramo
                 </label>
                 <input
+                  id="client-field-8"
+                  aria-labelledby="client-field-8-label"
                   type="text"
                   value={formData.segment}
                   onChange={(e) =>
@@ -700,10 +782,16 @@ export default function NewClientPage() {
               </div>
 
               <div className="md:col-span-3">
-                <label className="block text-sm font-bold text-zinc-700 mb-1">
+                <label
+                  id="client-field-9-label"
+                  htmlFor="client-field-9"
+                  className="block text-sm font-bold text-zinc-700 mb-1"
+                >
                   Preferencias do Cliente
                 </label>
                 <textarea
+                  id="client-field-9"
+                  aria-labelledby="client-field-9-label"
                   value={formData.preferences}
                   onChange={(e) =>
                     setFormData({ ...formData, preferences: e.target.value })
@@ -713,243 +801,316 @@ export default function NewClientPage() {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-bold text-zinc-700 mb-1">
-                  Condicao de Pagamento
-                </label>
-                <SuggestionInput aria-label="UF"
-                  type="text"
-                  value={formData.paymentTermDefault}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      paymentTermDefault: e.target.value,
-                    })
-                  }
-
-                  placeholder="Ex: 28 dias, 30/60"
-                  className="w-full border border-zinc-300 rounded-lg p-3 bg-zinc-50 focus:bg-white outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  {controlOptions.paymentTerms.map((option) => (
-                    <option
-                      key={option.id}
-                      value={option.name}
-                      label={optionLabel(option)}
-                    />
-                  ))}
-                </SuggestionInput>
-
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-zinc-700 mb-1">
-                  Tabela de Preco
-                </label>
-                <input
-                  type="text"
-                  value={formData.priceTableCode}
-                  onChange={(e) =>
-                    setFormData({ ...formData, priceTableCode: e.target.value })
-                  }
-                  placeholder="Ex: PADRAO, VIP"
-                  className="w-full border border-zinc-300 rounded-lg p-3 bg-zinc-50 focus:bg-white outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-zinc-700 mb-1">
-                  Limite de Credito
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={formData.creditLimit}
-                  onChange={(e) =>
-                    setFormData({ ...formData, creditLimit: e.target.value })
-                  }
-                  className="w-full border border-zinc-300 rounded-lg p-3 bg-zinc-50 focus:bg-white outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-zinc-700 mb-1">
-                  Retem INSS?
-                </label>
-                <SelectField
-                  value={formData.withholdsInss ? "YES" : "NO"}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      withholdsInss: e.target.value === "YES",
-                    })
-                  }
-                  className="w-full border border-zinc-300 rounded-lg p-3 bg-zinc-50 focus:bg-white outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option value="NO">Nao</option>
-                  <option value="YES">Sim</option>
-                </SelectField>
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-zinc-700 mb-1">
-                  Retem ISS?
-                </label>
-                <SelectField
-                  value={formData.withholdsIss ? "YES" : "NO"}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      withholdsIss: e.target.value === "YES",
-                    })
-                  }
-                  className="w-full border border-zinc-300 rounded-lg p-3 bg-zinc-50 focus:bg-white outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option value="NO">Nao</option>
-                  <option value="YES">Sim</option>
-                </SelectField>
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-sm font-bold text-zinc-700 mb-1">
-                  Observacoes Financeiras
-                </label>
-                <textarea
-                  value={formData.accountingNotes}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      accountingNotes: e.target.value,
-                    })
-                  }
-                  rows={2}
-                  placeholder="Retem INSS? ISS? condicoes especiais de pagamento, etc."
-                  className="w-full border border-zinc-300 rounded-lg p-3 bg-zinc-50 focus:bg-white outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-
-              <div className="md:col-span-1 flex items-end">
-                <label className="flex items-center gap-2 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-3 text-sm font-medium text-zinc-700">
-                  <input
-                    type="checkbox"
-                    checked={formData.isDelinquent}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        isDelinquent: e.target.checked,
-                      })
-                    }
-                  />
-                  Cliente inadimplente
-                </label>
-              </div>
-
-              <div className="md:col-span-2 rounded-xl border border-rose-200 bg-rose-50/70 p-4">
-                <label className="flex items-center gap-3 text-sm font-bold text-rose-900">
-                  <input
-                    type="checkbox"
-                    checked={formData.proposalCreationBlocked}
-                    onChange={(event) =>
-                      setFormData({
-                        ...formData,
-                        proposalCreationBlocked: event.target.checked,
-                        proposalBlockReason: event.target.checked
-                          ? formData.proposalBlockReason
-                          : "",
-                      })
-                    }
-                  />
-                  Bloquear novas propostas para este cliente
-                </label>
-                <textarea
-                  value={formData.proposalBlockReason}
-                  onChange={(event) =>
-                    setFormData({
-                      ...formData,
-                      proposalBlockReason: event.target.value,
-                    })
-                  }
-                  disabled={!formData.proposalCreationBlocked}
-                  rows={2}
-                  placeholder="Motivo que sera exibido ao comercial"
-                  className="mt-3 w-full rounded-lg border border-rose-200 bg-white p-3 text-sm outline-none focus:ring-2 focus:ring-rose-300 disabled:bg-zinc-100"
-                />
-              </div>
-
-              <div className="md:col-span-2 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                <p className="text-sm font-bold text-zinc-800">
-                  Condicoes de pagamento bloqueadas para este cliente
-                </p>
-                <p className="mt-1 text-xs text-zinc-500">
-                  Estas condicoes permanecem indisponiveis mesmo depois que o
-                  cliente tiver historico comercial.
-                </p>
-                <input
-                  type="search"
-                  value={blockedPaymentTermSearch}
-                  onChange={(event) =>
-                    setBlockedPaymentTermSearch(event.target.value)
-                  }
-                  placeholder="Pesquisar condicao de pagamento"
-                  className="mt-3 w-full rounded-lg border border-zinc-300 bg-white p-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-                <div className="mt-3 grid max-h-52 gap-2 overflow-y-auto sm:grid-cols-2">
-                  {controlOptions.paymentTerms
-                    .filter((option) => {
-                      const term = blockedPaymentTermSearch
-                        .trim()
-                        .toLowerCase();
-                      return (
-                        !term ||
-                        option.name.toLowerCase().includes(term) ||
-                        option.code.toLowerCase().includes(term)
-                      );
-                    })
-                    .map((option) => {
-                      const checked = formData.blockedPaymentTerms.includes(
-                        option.name,
-                      );
-                      return (
-                        <label
+              <details
+                id="client-commercial"
+                className="dashboard-create-panel md:col-span-3"
+                open={
+                  Boolean(
+                    formData.isDelinquent || formData.proposalCreationBlocked,
+                  ) || undefined
+                }
+              >
+                <summary>
+                  Condições comerciais e financeiras
+                  {formData.proposalCreationBlocked
+                    ? " · Propostas bloqueadas"
+                    : formData.isDelinquent
+                      ? " · Cliente inadimplente"
+                      : ""}
+                </summary>
+                <div className="grid grid-cols-1 gap-4 p-4 md:grid-cols-3">
+                  <div>
+                    <label
+                      id="client-field-10-label"
+                      htmlFor="client-field-10"
+                      className="block text-sm font-bold text-zinc-700 mb-1"
+                    >
+                      Condição de pagamento
+                    </label>
+                    <SuggestionInput
+                      id="client-field-10"
+                      aria-labelledby="client-field-10-label"
+                      aria-label="Condição de pagamento"
+                      type="text"
+                      value={formData.paymentTermDefault}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          paymentTermDefault: e.target.value,
+                        })
+                      }
+                      placeholder="Ex: 28 dias, 30/60"
+                      className="w-full border border-zinc-300 rounded-lg p-3 bg-zinc-50 focus:bg-white outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      {controlOptions.paymentTerms.map((option) => (
+                        <option
                           key={option.id}
-                          className="flex items-start gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(event) =>
-                              setFormData({
-                                ...formData,
-                                blockedPaymentTerms: event.target.checked
-                                  ? [
-                                      ...formData.blockedPaymentTerms,
-                                      option.name,
-                                    ]
-                                  : formData.blockedPaymentTerms.filter(
-                                      (term) => term !== option.name,
-                                    ),
-                              })
-                            }
-                          />
-                          <span>
-                            <span className="block font-semibold">
-                              {option.name}
-                            </span>
-                            <span className="text-xs text-zinc-500">
-                              {option.code}
-                            </span>
-                          </span>
-                        </label>
-                      );
-                    })}
+                          value={option.name}
+                          label={optionLabel(option)}
+                        />
+                      ))}
+                    </SuggestionInput>
+                  </div>
+
+                  <div>
+                    <label
+                      id="client-field-11-label"
+                      htmlFor="client-field-11"
+                      className="block text-sm font-bold text-zinc-700 mb-1"
+                    >
+                      Tabela de Preço
+                    </label>
+                    <input
+                      id="client-field-11"
+                      aria-labelledby="client-field-11-label"
+                      type="text"
+                      value={formData.priceTableCode}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          priceTableCode: e.target.value,
+                        })
+                      }
+                      placeholder="Ex: PADRÃO, VIP"
+                      className="w-full border border-zinc-300 rounded-lg p-3 bg-zinc-50 focus:bg-white outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      id="client-field-12-label"
+                      htmlFor="client-field-12"
+                      className="block text-sm font-bold text-zinc-700 mb-1"
+                    >
+                      Limite de Credito
+                    </label>
+                    <input
+                      id="client-field-12"
+                      aria-labelledby="client-field-12-label"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formData.creditLimit}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          creditLimit: e.target.value,
+                        })
+                      }
+                      className="w-full border border-zinc-300 rounded-lg p-3 bg-zinc-50 focus:bg-white outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      id="client-field-13-label"
+                      htmlFor="client-field-13"
+                      className="block text-sm font-bold text-zinc-700 mb-1"
+                    >
+                      Retem INSS?
+                    </label>
+                    <SelectField
+                      id="client-field-13"
+                      aria-labelledby="client-field-13-label"
+                      value={formData.withholdsInss ? "YES" : "NO"}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          withholdsInss: e.target.value === "YES",
+                        })
+                      }
+                      className="w-full border border-zinc-300 rounded-lg p-3 bg-zinc-50 focus:bg-white outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="NO">Não</option>
+                      <option value="YES">Sim</option>
+                    </SelectField>
+                  </div>
+
+                  <div>
+                    <label
+                      id="client-field-14-label"
+                      htmlFor="client-field-14"
+                      className="block text-sm font-bold text-zinc-700 mb-1"
+                    >
+                      Retem ISS?
+                    </label>
+                    <SelectField
+                      id="client-field-14"
+                      aria-labelledby="client-field-14-label"
+                      value={formData.withholdsIss ? "YES" : "NO"}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          withholdsIss: e.target.value === "YES",
+                        })
+                      }
+                      className="w-full border border-zinc-300 rounded-lg p-3 bg-zinc-50 focus:bg-white outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="NO">Não</option>
+                      <option value="YES">Sim</option>
+                    </SelectField>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label
+                      id="client-field-15-label"
+                      htmlFor="client-field-15"
+                      className="block text-sm font-bold text-zinc-700 mb-1"
+                    >
+                      Observações Financeiras
+                    </label>
+                    <textarea
+                      id="client-field-15"
+                      aria-labelledby="client-field-15-label"
+                      value={formData.accountingNotes}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          accountingNotes: e.target.value,
+                        })
+                      }
+                      rows={2}
+                      placeholder="Retem INSS? ISS? condições especiais de pagamento, etc."
+                      className="w-full border border-zinc-300 rounded-lg p-3 bg-zinc-50 focus:bg-white outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div className="md:col-span-1 flex items-end">
+                    <label className="flex items-center gap-2 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-3 text-sm font-medium text-zinc-700">
+                      <input
+                        type="checkbox"
+                        checked={formData.isDelinquent}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            isDelinquent: e.target.checked,
+                          })
+                        }
+                      />
+                      Cliente inadimplente
+                    </label>
+                  </div>
+
+                  <div className="md:col-span-2 rounded-xl border border-rose-200 bg-rose-50/70 p-4">
+                    <label className="flex items-center gap-3 text-sm font-bold text-rose-900">
+                      <input
+                        type="checkbox"
+                        checked={formData.proposalCreationBlocked}
+                        onChange={(event) =>
+                          setFormData({
+                            ...formData,
+                            proposalCreationBlocked: event.target.checked,
+                            proposalBlockReason: event.target.checked
+                              ? formData.proposalBlockReason
+                              : "",
+                          })
+                        }
+                      />
+                      Bloquear novas propostas para este cliente
+                    </label>
+                    <FormField label="Motivo do bloqueio de propostas">
+                      <textarea
+                        value={formData.proposalBlockReason}
+                        onChange={(event) =>
+                          setFormData({
+                            ...formData,
+                            proposalBlockReason: event.target.value,
+                          })
+                        }
+                        disabled={!formData.proposalCreationBlocked}
+                        rows={2}
+                        placeholder="Motivo que sera exibido ao comercial"
+                        className="mt-3 w-full rounded-lg border border-rose-200 bg-white p-3 text-sm outline-none focus:ring-2 focus:ring-rose-300 disabled:bg-zinc-100"
+                      />
+                    </FormField>
+                  </div>
+
+                  <div className="md:col-span-2 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+                    <p className="text-sm font-bold text-zinc-800">
+                      Condições de pagamento bloqueadas para este cliente
+                    </p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      Estas condições permanecem indisponiveis mesmo depois que
+                      o cliente tiver histórico comercial.
+                    </p>
+                    <FormField label="Buscar condições de pagamento">
+                      <input
+                        type="search"
+                        value={blockedPaymentTermSearch}
+                        onChange={(event) =>
+                          setBlockedPaymentTermSearch(event.target.value)
+                        }
+                        placeholder="Pesquisar condição de pagamento"
+                        className="mt-3 w-full rounded-lg border border-zinc-300 bg-white p-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </FormField>
+                    <div className="mt-3 grid max-h-52 gap-2 overflow-y-auto sm:grid-cols-2">
+                      {controlOptions.paymentTerms
+                        .filter((option) => {
+                          const term = blockedPaymentTermSearch
+                            .trim()
+                            .toLowerCase();
+                          return (
+                            !term ||
+                            option.name.toLowerCase().includes(term) ||
+                            option.code.toLowerCase().includes(term)
+                          );
+                        })
+                        .map((option) => {
+                          const checked = formData.blockedPaymentTerms.includes(
+                            option.name,
+                          );
+                          return (
+                            <label
+                              key={option.id}
+                              className="flex items-start gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(event) =>
+                                  setFormData({
+                                    ...formData,
+                                    blockedPaymentTerms: event.target.checked
+                                      ? [
+                                          ...formData.blockedPaymentTerms,
+                                          option.name,
+                                        ]
+                                      : formData.blockedPaymentTerms.filter(
+                                          (term) => term !== option.name,
+                                        ),
+                                  })
+                                }
+                              />
+                              <span>
+                                <span className="block font-semibold">
+                                  {option.name}
+                                </span>
+                                <span className="text-xs text-zinc-500">
+                                  {option.code}
+                                </span>
+                              </span>
+                            </label>
+                          );
+                        })}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              </details>
             </div>
           </section>
 
-          <section>
+          <section id="client-section-2" tabIndex={-1}>
+            {errorSection === "client-section-2" && error ? (
+              <p
+                role="alert"
+                className="mb-3 text-sm font-medium text-rose-700"
+              >
+                {error}
+              </p>
+            ) : null}
             <h2 className="text-lg font-bold text-zinc-800 border-b border-zinc-100 pb-2 mb-4">
-              2. Endereco de Faturamento
+              2. Endereço de faturamento
             </h2>
             <AddressFields
               value={billingAddress}
@@ -959,17 +1120,25 @@ export default function NewClientPage() {
             />
           </section>
 
-          <section>
+          <section id="client-section-3" tabIndex={-1}>
+            {errorSection === "client-section-3" && error ? (
+              <p
+                role="alert"
+                className="mb-3 text-sm font-medium text-rose-700"
+              >
+                {error}
+              </p>
+            ) : null}
             <div className="flex items-center justify-between border-b border-zinc-100 pb-2 mb-4">
               <h2 className="text-lg font-bold text-zinc-800">
-                3. Endereco de Instalacao
+                3. Endereço de instalação
               </h2>
               <button
                 type="button"
                 onClick={copyBillingToInstallation}
                 className="text-sm font-semibold bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-2 rounded-lg"
               >
-                Copiar endereco de faturamento
+                Copiar endereço de faturamento
               </button>
             </div>
             <AddressFields
@@ -980,17 +1149,23 @@ export default function NewClientPage() {
             />
           </section>
 
-          <section>
+          <section id="client-section-4" tabIndex={-1}>
+            {errorSection === "client-section-4" && error ? (
+              <p
+                role="alert"
+                className="mb-3 text-sm font-medium text-rose-700"
+              >
+                {error}
+              </p>
+            ) : null}
             <div className="flex items-center justify-between border-b border-zinc-100 pb-2 mb-4">
-              <h2 className="text-lg font-bold text-zinc-800">
-                4. Contatos do Cliente
-              </h2>
+              <h2 className="text-lg font-bold text-zinc-800">4. Contatos</h2>
               <button
                 type="button"
                 onClick={addContact}
                 className="bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-sm font-semibold px-3 py-2 rounded-lg"
               >
-                + Novo Contato
+                <InterfaceIcon name="plus" /> Novo contato
               </button>
             </div>
 
@@ -1016,85 +1191,99 @@ export default function NewClientPage() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <input
-                      type="text"
-                      placeholder="Nome *"
-                      value={contact.name}
-                      onChange={(e) =>
-                        updateContact(index, "name", e.target.value)
-                      }
-                      className="border border-zinc-300 rounded-lg p-2.5 bg-white"
-                    />
-                    <SelectField
-                      value={contact.status}
-                      onChange={(e) =>
-                        updateContact(
-                          index,
-                          "status",
-                          e.target.value as ContactStatus,
-                        )
-                      }
-                      className="border border-zinc-300 rounded-lg p-2.5 bg-white"
-                    >
-                      <option value="ACTIVE">Ativo</option>
-                      <option value="INACTIVE">Inativo</option>
-                      <option value="LEFT_COMPANY">Saiu da empresa</option>
-                    </SelectField>
-                    <input
-                      type="text"
-                      placeholder="Cargo"
-                      value={contact.role}
-                      onChange={(e) =>
-                        updateContact(index, "role", e.target.value)
-                      }
-                      className="border border-zinc-300 rounded-lg p-2.5 bg-white"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Telefone"
-                      value={contact.phone}
-                      onChange={(e) =>
-                        updateContact(index, "phone", e.target.value)
-                      }
-                      className="border border-zinc-300 rounded-lg p-2.5 bg-white"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Celular"
-                      value={contact.mobile}
-                      onChange={(e) =>
-                        updateContact(index, "mobile", e.target.value)
-                      }
-                      className="border border-zinc-300 rounded-lg p-2.5 bg-white"
-                    />
-                    <input
-                      type="email"
-                      placeholder="Email"
-                      value={contact.email}
-                      onChange={(e) =>
-                        updateContact(index, "email", e.target.value)
-                      }
-                      className="border border-zinc-300 rounded-lg p-2.5 bg-white"
-                    />
+                    <FormField label="Nome do contato *">
+                      <input
+                        type="text"
+                        placeholder="Nome *"
+                        value={contact.name}
+                        onChange={(e) =>
+                          updateContact(index, "name", e.target.value)
+                        }
+                        className="border border-zinc-300 rounded-lg p-2.5 bg-white"
+                      />
+                    </FormField>
+                    <FormField label="Situação do contato">
+                      <SelectField
+                        value={contact.status}
+                        onChange={(e) =>
+                          updateContact(
+                            index,
+                            "status",
+                            e.target.value as ContactStatus,
+                          )
+                        }
+                        className="border border-zinc-300 rounded-lg p-2.5 bg-white"
+                      >
+                        <option value="ACTIVE">Ativo</option>
+                        <option value="INACTIVE">Inativo</option>
+                        <option value="LEFT_COMPANY">Saiu da empresa</option>
+                      </SelectField>
+                    </FormField>
+                    <FormField label="Cargo">
+                      <input
+                        type="text"
+                        placeholder="Cargo"
+                        value={contact.role}
+                        onChange={(e) =>
+                          updateContact(index, "role", e.target.value)
+                        }
+                        className="border border-zinc-300 rounded-lg p-2.5 bg-white"
+                      />
+                    </FormField>
+                    <FormField label="Telefone">
+                      <input
+                        type="text"
+                        placeholder="Telefone"
+                        value={contact.phone}
+                        onChange={(e) =>
+                          updateContact(index, "phone", e.target.value)
+                        }
+                        className="border border-zinc-300 rounded-lg p-2.5 bg-white"
+                      />
+                    </FormField>
+                    <FormField label="Celular">
+                      <input
+                        type="text"
+                        placeholder="Celular"
+                        value={contact.mobile}
+                        onChange={(e) =>
+                          updateContact(index, "mobile", e.target.value)
+                        }
+                        className="border border-zinc-300 rounded-lg p-2.5 bg-white"
+                      />
+                    </FormField>
+                    <FormField label="E-mail">
+                      <input
+                        type="email"
+                        placeholder="Email"
+                        value={contact.email}
+                        onChange={(e) =>
+                          updateContact(index, "email", e.target.value)
+                        }
+                        className="border border-zinc-300 rounded-lg p-2.5 bg-white"
+                      />
+                    </FormField>
                   </div>
                 </div>
               ))}
             </div>
           </section>
 
-          <section>
+          <section id="client-section-5" tabIndex={-1}>
             <div className="flex items-center justify-between border-b border-zinc-100 pb-2 mb-4">
               <h2 className="text-lg font-bold text-zinc-800">
-                5. Vincular Maquinas Existentes
+                5. Vincular equipamentos existentes
               </h2>
             </div>
 
-            <input
-              value={generatorSearch}
-              onChange={(event) => setGeneratorSearch(event.target.value)}
-              placeholder="Buscar por nome, serie, tag, marca..."
-              className="mb-3 w-full rounded-lg border border-zinc-300 p-2.5 bg-zinc-50 focus:bg-white"
-            />
+            <FormField label="Buscar equipamentos existentes">
+              <input
+                value={generatorSearch}
+                onChange={(event) => setGeneratorSearch(event.target.value)}
+                placeholder="Buscar por nome, série, tag, marca..."
+                className="mb-3 w-full rounded-lg border border-zinc-300 p-2.5 bg-zinc-50 focus:bg-white"
+              />
+            </FormField>
 
             <div className="max-h-64 space-y-2 overflow-y-auto rounded-lg border border-zinc-200 p-3">
               {visibleGenerators.map((generator) => {
@@ -1117,7 +1306,7 @@ export default function NewClientPage() {
                         {generator.name || "Equipamento"}
                       </p>
                       <p className="text-xs text-zinc-500">
-                        Serie: {generator.serialNumber || "-"} | Tag:{" "}
+                        Série: {generator.serialNumber || "-"} | Tag:{" "}
                         {generator.assetTag || "-"} | Marca:{" "}
                         {generator.brand || "-"}
                       </p>
@@ -1127,7 +1316,7 @@ export default function NewClientPage() {
                       </p>
                       {isFromAnotherClient ? (
                         <p className="mt-1 text-xs font-semibold text-red-700">
-                          Ja vinculada a outro cliente. Nao pode ser
+                          Já vinculada a outro cliente. Não pode ser
                           selecionada.
                         </p>
                       ) : null}
@@ -1159,24 +1348,32 @@ export default function NewClientPage() {
           </section>
 
           {!isEditing && (
-            <section>
+            <section id="client-section-6" tabIndex={-1}>
+              {errorSection === "client-section-6" && error ? (
+                <p
+                  role="alert"
+                  className="mb-3 text-sm font-medium text-rose-700"
+                >
+                  {error}
+                </p>
+              ) : null}
               <div className="flex items-center justify-between border-b border-zinc-100 pb-2 mb-4">
                 <h2 className="text-lg font-bold text-zinc-800">
-                  6. Cadastrar Novas Maquinas (opcional)
+                  6. Cadastrar novos equipamentos (opcional)
                 </h2>
                 <button
                   type="button"
                   onClick={addMachine}
                   className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-sm font-semibold px-3 py-2 rounded-lg"
                 >
-                  + Cadastrar Maquina
+                  + Cadastrar Máquina
                 </button>
               </div>
 
               {machines.length === 0 && (
                 <p className="text-sm text-zinc-500">
-                  Sem maquinas adicionadas. Se quiser, pode cadastrar depois no
-                  modulo Equipamentos.
+                  Sem máquinas adicionadas. Se quiser, pode cadastrar depois no
+                  módulo Equipamentos.
                 </p>
               )}
 
@@ -1188,7 +1385,7 @@ export default function NewClientPage() {
                   >
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="text-sm font-bold text-zinc-700">
-                        Maquina {index + 1}
+                        Máquina {index + 1}
                       </h3>
                       <button
                         type="button"
@@ -1200,70 +1397,80 @@ export default function NewClientPage() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                      <input
-                        type="text"
-                        placeholder="Nome da maquina *"
-                        value={machine.name}
-                        onChange={(e) =>
-                          updateMachine(index, "name", e.target.value)
-                        }
-                        className="border border-zinc-300 rounded-lg p-2.5 bg-white"
-                      />
-                      <SelectField
-                        value={machine.brand}
-                        onChange={(e) => {
-                          updateMachine(index, "brand", e.target.value);
-                          updateMachine(index, "model", "");
-                        }}
-                        className="border border-zinc-300 rounded-lg p-2.5 bg-white"
-                      >
-                        <option value="">Marca *</option>
-                        {Object.keys(FABRICANTES).map((brand) => (
-                          <option key={brand} value={brand}>
-                            {brand}
-                          </option>
-                        ))}
-                      </SelectField>
-                      <SelectField
-                        value={machine.model}
-                        onChange={(e) =>
-                          updateMachine(index, "model", e.target.value)
-                        }
-                        disabled={!machine.brand}
-                        className="border border-zinc-300 rounded-lg p-2.5 bg-white disabled:bg-zinc-100"
-                      >
-                        <option value="">Modelo (opcional)</option>
-                        {(machine.brand
-                          ? (FABRICANTES[
-                              machine.brand as keyof typeof FABRICANTES
-                            ] ?? [])
-                          : []
-                        ).map((model) => (
-                          <option key={model} value={model}>
-                            {model}
-                          </option>
-                        ))}
-                      </SelectField>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="Potencia (kVA) *"
-                        value={machine.power}
-                        onChange={(e) =>
-                          updateMachine(index, "power", e.target.value)
-                        }
-                        className="border border-zinc-300 rounded-lg p-2.5 bg-white"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Numero de serie"
-                        value={machine.serialNumber}
-                        onChange={(e) =>
-                          updateMachine(index, "serialNumber", e.target.value)
-                        }
-                        className="border border-zinc-300 rounded-lg p-2.5 bg-white"
-                      />
+                      <FormField label="Nome do equipamento *">
+                        <input
+                          type="text"
+                          placeholder="Nome da máquina *"
+                          value={machine.name}
+                          onChange={(e) =>
+                            updateMachine(index, "name", e.target.value)
+                          }
+                          className="border border-zinc-300 rounded-lg p-2.5 bg-white"
+                        />
+                      </FormField>
+                      <FormField label="Fabricante *">
+                        <SelectField
+                          value={machine.brand}
+                          onChange={(e) => {
+                            updateMachine(index, "brand", e.target.value);
+                            updateMachine(index, "model", "");
+                          }}
+                          className="border border-zinc-300 rounded-lg p-2.5 bg-white"
+                        >
+                          <option value="">Marca *</option>
+                          {Object.keys(FABRICANTES).map((brand) => (
+                            <option key={brand} value={brand}>
+                              {brand}
+                            </option>
+                          ))}
+                        </SelectField>
+                      </FormField>
+                      <FormField label="Modelo">
+                        <SelectField
+                          value={machine.model}
+                          onChange={(e) =>
+                            updateMachine(index, "model", e.target.value)
+                          }
+                          disabled={!machine.brand}
+                          className="border border-zinc-300 rounded-lg p-2.5 bg-white disabled:bg-zinc-100"
+                        >
+                          <option value="">Modelo (opcional)</option>
+                          {(machine.brand
+                            ? (FABRICANTES[
+                                machine.brand as keyof typeof FABRICANTES
+                              ] ?? [])
+                            : []
+                          ).map((model) => (
+                            <option key={model} value={model}>
+                              {model}
+                            </option>
+                          ))}
+                        </SelectField>
+                      </FormField>
+                      <FormField label="Potência (kVA) *">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="Potencia (kVA) *"
+                          value={machine.power}
+                          onChange={(e) =>
+                            updateMachine(index, "power", e.target.value)
+                          }
+                          className="border border-zinc-300 rounded-lg p-2.5 bg-white"
+                        />
+                      </FormField>
+                      <FormField label="Número de série">
+                        <input
+                          type="text"
+                          placeholder="Número de série"
+                          value={machine.serialNumber}
+                          onChange={(e) =>
+                            updateMachine(index, "serialNumber", e.target.value)
+                          }
+                          className="border border-zinc-300 rounded-lg p-2.5 bg-white"
+                        />
+                      </FormField>
                     </div>
                   </div>
                 ))}
@@ -1308,74 +1515,91 @@ function AddressFields({
 }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-      <input
-        type="text"
-        placeholder="Rua *"
-        value={value.street}
-        onChange={(e) => onChange({ ...value, street: e.target.value })}
-        className="md:col-span-3 border border-zinc-300 rounded-lg p-2.5 bg-zinc-50"
-      />
-      <input
-        type="text"
-        placeholder="Numero"
-        value={value.number}
-        onChange={(e) => onChange({ ...value, number: e.target.value })}
-        className="border border-zinc-300 rounded-lg p-2.5 bg-zinc-50"
-      />
-      <input
-        type="text"
-        placeholder="Complemento"
-        value={value.complement}
-        onChange={(e) => onChange({ ...value, complement: e.target.value })}
-        className="md:col-span-2 border border-zinc-300 rounded-lg p-2.5 bg-zinc-50"
-      />
-      <input
-        type="text"
-        placeholder="Bairro"
-        value={value.district}
-        onChange={(e) => onChange({ ...value, district: e.target.value })}
-        className="md:col-span-2 border border-zinc-300 rounded-lg p-2.5 bg-zinc-50"
-      />
-      <input
-        type="text"
-        placeholder="CEP"
-        value={value.zipCode}
-        onChange={(e) => onChange({ ...value, zipCode: e.target.value })}
-        className="border border-zinc-300 rounded-lg p-2.5 bg-zinc-50"
-      />
-      <input
-        type="text"
-        placeholder="Cidade *"
-        value={value.city}
-        onChange={(e) => onChange({ ...value, city: e.target.value })}
-        className="md:col-span-2 border border-zinc-300 rounded-lg p-2.5 bg-zinc-50"
-      />
-      <SuggestionInput aria-label="UF" id={listId}
-        type="text"
-        placeholder="UF *"
-        maxLength={2}
-        value={value.state}
+      <FormField label="Rua *" className="md:col-span-3">
+        <input
+          type="text"
+          placeholder="Rua *"
+          value={value.street}
+          onChange={(e) => onChange({ ...value, street: e.target.value })}
+          className="border border-zinc-300 rounded-lg p-2.5 bg-zinc-50"
+        />
+      </FormField>
+      <FormField label="Número">
+        <input
+          type="text"
+          placeholder="Número"
+          value={value.number}
+          onChange={(e) => onChange({ ...value, number: e.target.value })}
+          className="border border-zinc-300 rounded-lg p-2.5 bg-zinc-50"
+        />
+      </FormField>
+      <FormField label="Complemento" className="md:col-span-2">
+        <input
+          type="text"
+          placeholder="Complemento"
+          value={value.complement}
+          onChange={(e) => onChange({ ...value, complement: e.target.value })}
+          className="border border-zinc-300 rounded-lg p-2.5 bg-zinc-50"
+        />
+      </FormField>
+      <FormField label="Bairro" className="md:col-span-2">
+        <input
+          type="text"
+          placeholder="Bairro"
+          value={value.district}
+          onChange={(e) => onChange({ ...value, district: e.target.value })}
+          className="border border-zinc-300 rounded-lg p-2.5 bg-zinc-50"
+        />
+      </FormField>
+      <FormField label="CEP">
+        <input
+          type="text"
+          placeholder="CEP"
+          value={value.zipCode}
+          onChange={(e) => onChange({ ...value, zipCode: e.target.value })}
+          className="border border-zinc-300 rounded-lg p-2.5 bg-zinc-50"
+        />
+      </FormField>
+      <FormField label="Cidade *" className="md:col-span-2">
+        <input
+          type="text"
+          placeholder="Cidade *"
+          value={value.city}
+          onChange={(e) => onChange({ ...value, city: e.target.value })}
+          className="border border-zinc-300 rounded-lg p-2.5 bg-zinc-50"
+        />
+      </FormField>
+      <FormField label="UF *">
+        <SuggestionInput
+          aria-label="UF"
+          id={listId}
+          type="text"
+          placeholder="UF *"
+          maxLength={2}
+          value={value.state}
+          onChange={(e) =>
+            onChange({
+              ...value,
+              state: e.target.value.toUpperCase().slice(0, 2),
+            })
+          }
+          className="border border-zinc-300 rounded-lg p-2.5 bg-zinc-50 uppercase"
+        >
+          {stateOptions.map((option) => (
+            <option key={option.id} value={option.code} label={option.name} />
+          ))}
+        </SuggestionInput>
+      </FormField>
 
-        onChange={(e) =>
-          onChange({
-            ...value,
-            state: e.target.value.toUpperCase().slice(0, 2),
-          })
-        }
-        className="border border-zinc-300 rounded-lg p-2.5 bg-zinc-50 uppercase"
-      >
-        {stateOptions.map((option) => (
-          <option key={option.id} value={option.code} label={option.name} />
-        ))}
-      </SuggestionInput>
-
-      <input
-        type="text"
-        placeholder="Pais"
-        value={value.country}
-        onChange={(e) => onChange({ ...value, country: e.target.value })}
-        className="border border-zinc-300 rounded-lg p-2.5 bg-zinc-50"
-      />
+      <FormField label="País">
+        <input
+          type="text"
+          placeholder="Pais"
+          value={value.country}
+          onChange={(e) => onChange({ ...value, country: e.target.value })}
+          className="border border-zinc-300 rounded-lg p-2.5 bg-zinc-50"
+        />
+      </FormField>
     </div>
   );
 }

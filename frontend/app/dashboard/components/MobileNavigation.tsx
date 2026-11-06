@@ -225,7 +225,8 @@ export default function MobileNavigation({
                   >
                     {section.items.map((item, index) => (
                       <div key={item.key}>
-                        {new Set(section.items.map((i) => i.group)).size > 1 &&
+                        {section.items.length > 6 &&
+                        new Set(section.items.map((i) => i.group)).size > 1 &&
                         item.group &&
                         (index === 0 ||
                           section.items[index - 1].group !== item.group) ? (

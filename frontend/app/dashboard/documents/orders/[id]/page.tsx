@@ -156,7 +156,7 @@ export default function OrderDocumentPage() {
 
         <PrintSection title="Execucao" columns={3}>
           <ValueCard
-            label="Tecnico"
+            label="Técnico"
             value={data.technician?.user?.name || "Nao alocado"}
           />
           <ValueCard
@@ -182,7 +182,7 @@ export default function OrderDocumentPage() {
             }
           />
           <ValueCard
-            label="Concluida em"
+            label="Concluída em"
             value={
               data.document.finishedAt
                 ? formatDateTime(data.document.finishedAt)
@@ -191,7 +191,7 @@ export default function OrderDocumentPage() {
           />
         </PrintSection>
 
-        <PrintSection title="Descricao" columns={1}>
+        <PrintSection title="Descrição" columns={1}>
           <ValueCard label="Escopo" value={data.document.description || "-"} />
         </PrintSection>
 

@@ -1,10 +1,12 @@
 import { CommercialScopeGuard } from '../auth/rules/commercial-scope.guard';
+import { CommercialPrivacyInterceptor } from '../auth/rules/commercial-privacy.interceptor';
 import {
   BadRequestException,
   Body,
   Controller,
   Delete,
   Get,
+  HttpException,
   Param,
   Patch,
   Post,
@@ -28,12 +30,18 @@ import {
 import { UpdateProposalDto } from './dto/update-proposal.dto';
 import { ConvertGeneratorPostSaleDto } from './dto/convert-generator-post-sale.dto';
 import { ProposalsService } from './proposals.service';
+import { TechnicalScopesService } from '../technical-scopes/technical-scopes.service';
+import { PreviewTechnicalScopeDto } from '../technical-scopes/technical-scope.dto';
 
 @Controller('proposals')
+@UseInterceptors(CommercialPrivacyInterceptor)
 @UseGuards(AuthGuard, AccessPolicyGuard, CommercialScopeGuard)
 @RequireAccessPolicy('proposals.view')
 export class ProposalsController {
-  constructor(private readonly proposalsService: ProposalsService) {}
+  constructor(
+    private readonly proposalsService: ProposalsService,
+    private readonly technicalScopesService: TechnicalScopesService,
+  ) {}
 
   @UseGuards(AuthGuard)
   @RequireAccessPolicy('proposals.create')
@@ -51,6 +59,7 @@ export class ProposalsController {
       const userId = (req['user'] as any)?.sub as string | undefined;
       return await this.proposalsService.submitForBoardReview(id, userId);
     } catch (error: any) {
+      if (error instanceof HttpException) throw error;
       throw new BadRequestException(error.message);
     }
   }
@@ -63,6 +72,7 @@ export class ProposalsController {
       const userId = (req['user'] as any)?.sub as string | undefined;
       return await this.proposalsService.boardApprove(id, userId);
     } catch (error: any) {
+      if (error instanceof HttpException) throw error;
       throw new BadRequestException(error.message);
     }
   }
@@ -83,6 +93,7 @@ export class ProposalsController {
         body?.reason,
       );
     } catch (error: any) {
+      if (error instanceof HttpException) throw error;
       throw new BadRequestException(error.message);
     }
   }
@@ -99,6 +110,7 @@ export class ProposalsController {
       const userId = (req['user'] as any)?.sub as string | undefined;
       return await this.proposalsService.boardReject(id, userId, body?.reason);
     } catch (error: any) {
+      if (error instanceof HttpException) throw error;
       throw new BadRequestException(error.message);
     }
   }
@@ -111,6 +123,7 @@ export class ProposalsController {
       const userId = (req['user'] as any)?.sub as string | undefined;
       return await this.proposalsService.clientApprove(id, userId);
     } catch (error: any) {
+      if (error instanceof HttpException) throw error;
       throw new BadRequestException(error.message);
     }
   }
@@ -127,6 +140,7 @@ export class ProposalsController {
       const userId = (req['user'] as any)?.sub as string | undefined;
       return await this.proposalsService.clientReject(id, userId, body?.note);
     } catch (error: any) {
+      if (error instanceof HttpException) throw error;
       throw new BadRequestException(error.message);
     }
   }
@@ -148,6 +162,7 @@ export class ProposalsController {
         body?.reason,
       );
     } catch (error: any) {
+      if (error instanceof HttpException) throw error;
       throw new BadRequestException(error.message);
     }
   }
@@ -160,6 +175,7 @@ export class ProposalsController {
       const userId = (req['user'] as any)?.sub as string | undefined;
       return await this.proposalsService.approve(id, userId);
     } catch (error: any) {
+      if (error instanceof HttpException) throw error;
       throw new BadRequestException(error.message);
     }
   }
@@ -176,6 +192,7 @@ export class ProposalsController {
       const userId = (req['user'] as any)?.sub as string | undefined;
       return await this.proposalsService.revise(id, userId, body?.reason);
     } catch (error: any) {
+      if (error instanceof HttpException) throw error;
       throw new BadRequestException(error.message);
     }
   }
@@ -191,6 +208,7 @@ export class ProposalsController {
         userId,
       );
     } catch (error: any) {
+      if (error instanceof HttpException) throw error;
       throw new BadRequestException(error.message);
     }
   }
@@ -263,6 +281,23 @@ export class ProposalsController {
   async myUpdates(@Req() req: Request) {
     const userId = (req['user'] as any)?.sub as string;
     return this.proposalsService.getMyUpdates(userId);
+  }
+
+  @RequireAccessPolicy('proposals.view')
+  @Post('technical-scope/preview')
+  async previewTechnicalScope(
+    @Req() req: Request,
+    @Body() dto: PreviewTechnicalScopeDto,
+  ) {
+    const userId = (req['user'] as { sub: string }).sub;
+    return this.technicalScopesService.preview(dto, userId);
+  }
+
+  @RequireAccessPolicy('proposals.view')
+  @Get(':id/technical-scope/history')
+  async technicalScopeHistory(@Req() req: Request, @Param('id') id: string) {
+    const userId = (req['user'] as { sub: string }).sub;
+    return this.technicalScopesService.history(id, userId);
   }
 
   @RequireAccessPolicy('proposals.view')

@@ -61,7 +61,7 @@ export default function CommissionsPage() {
               </tr>
             </thead>
             <tbody>
-              {!items.length ? <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-500">{loading ? "Carregando..." : error ? "Dados indisponíveis." : "Nenhuma comissão registrada."}</td></tr> : null}
+              {!items.length ? <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-500">{loading ? "Carregando..." : error ? "Dados indisponíveis." : "Nenhuma comissão registrada. Os lançamentos desta área acompanham as vendas e os colaboradores vinculados."}</td></tr> : null}
               {items.map((row) => (
                 <tr key={row.id} className="border-b border-zinc-100">
                   <td className="px-2 py-2 font-semibold text-zinc-800">{row.user?.name || "-"}</td>

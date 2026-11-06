@@ -30,6 +30,26 @@ type TopBarProps = {
 };
 
 const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
+  "/dashboard/finance/bank-movements": {
+    title: "Extrato bancário",
+    subtitle: "Movimentos, saldos e lançamentos da conta.",
+  },
+  "/dashboard/finance/reconciliation": {
+    title: "Conciliação bancária",
+    subtitle: "Extratos, movimentos e divergências.",
+  },
+  "/dashboard/hr/documentation": {
+    title: "Documentação e certificações",
+    subtitle: "Documentos e vencimentos dos colaboradores.",
+  },
+  "/dashboard/relatorios-tecnicos": {
+    title: "Laudos técnicos",
+    subtitle: "Diagnósticos, evidências e documentos técnicos.",
+  },
+  "/dashboard/tecnico": {
+    title: "Minha rota",
+    subtitle: "Execução atribuída ao técnico responsável.",
+  },
   "/dashboard/inventory/operations": {
     title: "Central do almoxarifado",
     subtitle: "Recebimento, separa\u00e7\u00e3o, estoque e vencimentos.",
@@ -164,7 +184,7 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
     subtitle: "Margem por contrato, ativo e cliente.",
   },
   "/dashboard/hr/collaborators": {
-    title: "Colaboradores e acessos",
+    title: "Colaboradores",
     subtitle: "Equipe, departamentos e contas de acesso no RH.",
   },
   "/dashboard/hr/epis-tools": {
@@ -200,32 +220,31 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
     subtitle: "Dados pessoais e preferências do usuário.",
   },
   "/dashboard/clients": {
-    title: "CRM de Clientes",
+    title: "Clientes",
     subtitle: "Contatos, máquinas e histórico consolidado.",
   },
   "/dashboard/equipments": {
-    title: "Parque de Equipamentos",
+    title: "Equipamentos",
     subtitle: "Rastreio de ativos e manutenção.",
   },
   "/dashboard/catalog": {
-    title: "Inteligência de Catálogo",
+    title: "Peças e serviços",
     subtitle: "Peças, custos, margens e precificação.",
   },
   "/dashboard/suppliers": {
-    title: "Rede de Fornecedores",
+    title: "Fornecedores",
     subtitle: "Compras, SLA e condições comerciais.",
   },
   "/dashboard/developer/data": {
     title: "Manitec Studio",
-    subtitle:
-      "Visualizacao, edicao controlada, importacao preparada e exportacao de dados.",
+    subtitle: "Consulta, edição, importação e exportação de dados.",
   },
   "/dashboard/developer/document-editor": {
-    title: "Editor Inteligente de Documentos",
+    title: "Editor de documentos",
     subtitle: "Monte propostas, contratos e relatórios com campos visuais.",
   },
   "/dashboard/developer/history": {
-    title: "Historico do Studio",
+    title: "Histórico do Studio",
     subtitle: "Auditoria e rastreabilidade dos eventos administrativos.",
   },
   "/dashboard/developer": {
@@ -233,16 +252,16 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
     subtitle: "Gerenciamento seguro dos dados do ERP.",
   },
   "/dashboard/management/users": {
-    title: "Área de Gestão (Admin)",
-    subtitle: "Cadastros de usuários, permissões e governança.",
+    title: "Usuários e permissões",
+    subtitle: "Cadastro de usuários e controle de acesso.",
   },
   "/dashboard/management": {
-    title: "Área de Gestão (Admin)",
-    subtitle: "Cadastros de usuários, permissões e governança.",
+    title: "Usuários e permissões",
+    subtitle: "Cadastro de usuários e controle de acesso.",
   },
   "/dashboard/control": {
-    title: "Área de Gestão (Admin)",
-    subtitle: "Cadastros de usuários, permissões e governança.",
+    title: "Usuários e permissões",
+    subtitle: "Cadastro de usuários e controle de acesso.",
   },
   "/dashboard/automation": {
     title: "Central de Automações",
@@ -257,7 +276,7 @@ function getRouteFamily(pathname: string) {
     pathname.startsWith("/dashboard/management") ||
     pathname.startsWith("/dashboard/control")
   )
-    return "Recursos Humanos";
+    return "Administração";
   return navigationContext(pathname)?.section.title || "Meu espa\u00e7o";
 }
 
@@ -286,15 +305,9 @@ function getQuickAction(pathname: string, roleCode: string) {
   if (pathname === "/dashboard") {
     return null;
   }
-  if (pathname.startsWith("/dashboard/proposals")) {
-    return { href: "/dashboard/proposals/new", label: "Nova proposta" };
-  }
-  if (pathname.startsWith("/dashboard/clients")) {
-    return { href: "/dashboard/clients/new", label: "Novo cliente" };
-  }
-  if (pathname.startsWith("/dashboard/contracts")) {
-    return { href: "/dashboard/contracts/new", label: "Novo contrato" };
-  }
+  if (pathname.startsWith("/dashboard/proposals")) return null;
+  if (pathname.startsWith("/dashboard/clients")) return null;
+  if (pathname.startsWith("/dashboard/contracts")) return null;
   if (pathname.startsWith("/dashboard/billing")) {
     return {
       href: "/dashboard/finance/accounts-receivable",
@@ -338,17 +351,13 @@ function getQuickAction(pathname: string, roleCode: string) {
   if (pathname.startsWith("/dashboard/monitoring")) {
     return { href: "/dashboard/dispatch", label: "Abrir despacho" };
   }
-  if (pathname.startsWith("/dashboard/suppliers")) {
-    return { href: "/dashboard/suppliers/new", label: "Novo fornecedor" };
-  }
-  if (pathname.startsWith("/dashboard/catalog")) {
-    return { href: "/dashboard/catalog/new", label: "Novo item" };
-  }
+  if (pathname.startsWith("/dashboard/suppliers")) return null;
+  if (pathname.startsWith("/dashboard/catalog")) return null;
   if (pathname.startsWith("/dashboard/developer/history")) {
     return { href: "/dashboard/developer/data", label: "Tabelas" };
   }
   if (pathname.startsWith("/dashboard/developer")) {
-    return { href: "/dashboard/developer/history", label: "Historico" };
+    return { href: "/dashboard/developer/history", label: "Histórico" };
   }
   return null;
 }
@@ -446,7 +455,26 @@ export default function TopBar({
       .sort((a, b) => b.length - a.length)
       .find((key) => pathname.startsWith(key));
 
-    return matched ? PAGE_TITLES[matched] : PAGE_TITLES["/dashboard"];
+    const context = navigationContext(pathname);
+    const explicit =
+      matched && matched !== "/dashboard" ? PAGE_TITLES[matched] : undefined;
+    const navigationIsMoreSpecific =
+      context &&
+      (!matched || (context.item.href?.length || 0) > matched.length);
+    if (navigationIsMoreSpecific)
+      return {
+        title: context.item.label,
+        subtitle: context.section.description || "",
+      };
+    return (
+      explicit ||
+      (context
+        ? {
+            title: context.item.label,
+            subtitle: context.section.description || "",
+          }
+        : PAGE_TITLES["/dashboard"])
+    );
   }, [pathname]);
 
   const routeFamily = useMemo(() => getRouteFamily(pathname), [pathname]);

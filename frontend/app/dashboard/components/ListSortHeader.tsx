@@ -1,5 +1,7 @@
 "use client";
 
+import { InterfaceIcon } from "./InterfaceIcon";
+
 export function ListSortHeader({
   column,
   sort,
@@ -30,7 +32,13 @@ export function ListSortHeader({
         data-direction={active ? direction : "none"}
         onClick={() => onSort(column)}
       >
-        {active ? (direction === "asc" ? "↑" : "↓") : "↕"}
+        {active ? (
+          <InterfaceIcon name={direction === "asc" ? "arrow-up" : "arrow-down"} className="h-3.5 w-3.5" />
+        ) : (
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="h-3.5 w-3.5">
+            <path d="M5 12V3m-2 2 2-2 2 2M11 4v9m-2-2 2 2 2-2" />
+          </svg>
+        )}
       </button>
     </th>
   );

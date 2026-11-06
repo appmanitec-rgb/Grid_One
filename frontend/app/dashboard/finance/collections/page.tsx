@@ -27,7 +27,7 @@ type Event = { id: string; importId: string; titleId: string | null; movementCod
 type ReturnPreview = { checksumSha256: string; alreadyImported: boolean; eventCount: number; matchedCount: number; reviewCount: number; events: { lineNumber: number; movementCode: string; documentNumber: string; ourNumber: string; paidAmount: number; netCreditAmount: number; titleId: string | null; requiresReview: boolean }[] };
 type Overview = { accounts: Account[]; issuers: Issuer[]; agreements: Agreement[]; unprepared: Receivable[]; titles: Title[]; batches: Batch[]; returns: ReturnFile[]; events: Event[] };
 
-const button = "rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-45";
+const button = "app-button app-button-primary";
 const secondary = "rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-45";
 const input = "w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
 const emptyAgreement = { issuerCompanyId: "", transmissionCode: "", beneficiaryName: "", beneficiaryDocument: "", agency: "", agencyDigit: "", accountNumber: "", accountDigit: "", walletCode: "1", documentType: "2" };

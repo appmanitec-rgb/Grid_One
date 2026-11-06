@@ -330,7 +330,7 @@ export class ClientsService {
     });
   }
 
-  lookup(query?: string, take?: string | number) {
+  async lookup(query?: string, take?: string | number, actorUserId?: string) {
     const search = query?.trim();
     const documentCandidate = /^[A-Za-z0-9./-]+$/.test(search ?? '')
       ? normalizeCnpj(search)
@@ -400,7 +400,11 @@ export class ClientsService {
         proposalBlockReason: true,
         blockedPaymentTerms: true,
         _count: {
-          select: { proposals: true },
+          select: {
+            proposals: actorUserId
+              ? { where: await proposalScope(this.database, actorUserId) }
+              : true,
+          },
         },
       },
       orderBy: { companyName: 'asc' },
@@ -740,6 +744,6 @@ export class ClientsService {
   private parseLookupLimit(value?: string | number) {
     const parsed = Number(value ?? 10);
     if (!Number.isFinite(parsed)) return 10;
-    return Math.min(Math.max(Math.trunc(parsed), 1), 20);
+    return Math.min(Math.max(Math.trunc(parsed), 1), 10);
   }
 }

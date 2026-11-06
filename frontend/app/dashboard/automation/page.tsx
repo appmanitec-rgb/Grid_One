@@ -159,7 +159,7 @@ export default function AutomationPage() {
         throw new Error(
           await readApiErrorMessage(
             statusRes,
-            "Nao foi possivel carregar o status das automacoes.",
+            "Não foi possivel carregar o status das automações.",
           ),
         );
       }
@@ -168,7 +168,7 @@ export default function AutomationPage() {
         throw new Error(
           await readApiErrorMessage(
             runsRes,
-            "Nao foi possivel carregar o historico das automacoes.",
+            "Não foi possivel carregar o histórico das automações.",
           ),
         );
       }
@@ -219,12 +219,12 @@ export default function AutomationPage() {
 
       if (!res.ok) {
         throw new Error(
-          await readApiErrorMessage(res, "Nao foi possivel disparar a automacao."),
+          await readApiErrorMessage(res, "Não foi possivel disparar a automação."),
         );
       }
 
       if (body?.status === "SKIPPED") {
-        setNotice("Execucao ignorada porque ja existe uma automacao em andamento.");
+        setNotice("Execucao ignorada porque já existe uma automação em andamento.");
       } else if (body?.status === "FAILED") {
         setError(body.errorMessage || "A automacao terminou com falha.");
       } else {
@@ -306,15 +306,15 @@ export default function AutomationPage() {
 
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <ActionCard
-              title="Automacao completa"
+              title="Automação completa"
               description="Sincroniza inadimplencia, preventiva, recebiveis e vencimentos do financeiro."
               disabled={loading || status?.isRunning || triggeringMode !== null}
               busy={triggeringMode === "full"}
               onClick={() => void triggerRun("full")}
             />
             <ActionCard
-              title="Automacao leve"
-              description="Roda a versao horaria, focada em inadimplencia e sincronizacao de recebiveis."
+              title="Automação leve"
+              description="Roda a versao horaria, focada em inadimplencia e sincronização de recebiveis."
               disabled={loading || status?.isRunning || triggeringMode !== null}
               busy={triggeringMode === "light"}
               onClick={() => void triggerRun("light")}
@@ -354,9 +354,9 @@ export default function AutomationPage() {
       <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-black text-slate-950">Historico recente</h2>
+            <h2 className="text-lg font-black text-slate-950">Histórico recente</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Ultimas 25 execucoes com modo, gatilho, responsavel e resumo do que aconteceu.
+              Ultimas 25 execucoes com modo, gatilho, responsável e resumo do que aconteceu.
             </p>
           </div>
           <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -366,7 +366,7 @@ export default function AutomationPage() {
 
         {loading ? (
           <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-            Carregando central de automacoes...
+            Carregando central de automações...
           </div>
         ) : runs.length === 0 ? (
           <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
@@ -382,7 +382,7 @@ export default function AutomationPage() {
                   <th className="px-3 py-3">Status</th>
                   <th className="px-3 py-3">Inicio</th>
                   <th className="px-3 py-3">Duracao</th>
-                  <th className="px-3 py-3">Responsavel</th>
+                  <th className="px-3 py-3">Responsável</th>
                   <th className="px-3 py-3">Resumo</th>
                 </tr>
               </thead>

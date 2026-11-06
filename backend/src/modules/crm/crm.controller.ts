@@ -105,8 +105,16 @@ export class CrmController {
 
   @Patch('activities/:id')
   @RequireAccessPolicy('proposals.update')
-  updateActivity(@Param('id') id: string, @Body() dto: UpdateCrmActivityDto) {
-    return this.crmService.updateActivity(id, dto);
+  updateActivity(
+    @Param('id') id: string,
+    @Body() dto: UpdateCrmActivityDto,
+    @Req() req: Request,
+  ) {
+    return this.crmService.updateActivity(
+      id,
+      dto,
+      (req['user'] as { sub: string }).sub,
+    );
   }
 
   @Get('opportunities/:id')

@@ -1,5 +1,10 @@
 // Labels are for presentation only. Persist the original value in API requests.
 const LABELS: Record<string, string> = {
+  TECHNICAL_SCOPE: "Escopo técnico",
+  PROJECT_CANCELED: "Projeto cancelado",
+  COMPETITOR: "Concorrência",
+  DEADLINE: "Prazo",
+  PRICE: "Preço",
   OPERATING: "Em operação",
   STOPPED_BY_FAILURE: "Parado por falha",
   IN_MAINTENANCE: "Em manutenção",

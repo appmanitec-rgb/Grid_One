@@ -1,4 +1,5 @@
 "use client";
+import { formatCalendarDate } from "@/lib/formatters";
 import { getAccessFromToken, canAccessDashboardPath } from "@/lib/access";
 import { commercialLabel } from "@/lib/commercial-labels";
 
@@ -98,12 +99,9 @@ type PaymentDraft = {
   cancelReason: string;
 };
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
-const DANGER_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:border-rose-300 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
+const DANGER_BUTTON = "app-button app-button-danger";
 
 const STATUS_META: Record<
   ReceivableStatus,
@@ -112,17 +110,17 @@ const STATUS_META: Record<
   OPEN: {
     label: "Em aberto",
     tone: "blue",
-    helper: "Titulo sem recebimento registrado.",
+    helper: "Título sem recebimento registrado.",
   },
   PARTIAL: {
     label: "Parcial",
     tone: "amber",
-    helper: "Ja existe baixa parcial e saldo remanescente.",
+    helper: "Já existe baixa parcial e saldo remanescente.",
   },
   OVERDUE: {
     label: "Vencido",
     tone: "rose",
-    helper: "Juros e multa ja podem impactar o saldo total.",
+    helper: "Juros e multa já podem impactar o saldo total.",
   },
   PAID: {
     label: "Quitado",
@@ -132,7 +130,7 @@ const STATUS_META: Record<
   CANCELED: {
     label: "Cancelado",
     tone: "slate",
-    helper: "Titulo baixado sem gerar mais cobranca.",
+    helper: "Título baixado sem gerar mais cobranca.",
   },
 };
 
@@ -547,7 +545,7 @@ export default function AccountsReceivablePage() {
         throw new Error(
           await readApiErrorMessage(
             response,
-            "Falha ao atualizar os titulos vencidos.",
+            "Falha ao atualizar os títulos vencidos.",
           ),
         );
       }
@@ -582,7 +580,7 @@ export default function AccountsReceivablePage() {
 
     if (amount - outstanding > 0.009) {
       setError(
-        "O valor informado nao pode ultrapassar o saldo em aberto do titulo.",
+        "O valor informado não pode ultrapassar o saldo em aberto do título.",
       );
       return;
     }
@@ -646,7 +644,7 @@ export default function AccountsReceivablePage() {
 
   async function reversePayment(item: Receivable, payment: ReceivablePayment) {
     if (Number(payment.amount || 0) <= 0) {
-      setError("Lancamentos de estorno nao podem ser estornados novamente.");
+      setError("Lancamentos de estorno não podem ser estornados novamente.");
       return;
     }
 
@@ -680,7 +678,7 @@ export default function AccountsReceivablePage() {
         );
       }
 
-      setSuccessMessage("Baixa estornada e saldo do titulo recalculado.");
+      setSuccessMessage("Baixa estornada e saldo do título recalculado.");
       await loadData();
     } catch (reverseError: unknown) {
       setError(
@@ -699,22 +697,20 @@ export default function AccountsReceivablePage() {
 
     if (item.contract?.id) {
       setError(
-        "Titulos de contrato devem ser ajustados na origem contratual antes do cancelamento.",
+        "Títulos de contrato devem ser ajustados na origem contratual antes do cancelamento.",
       );
       return;
     }
 
     if (Number(item.paidAmount || 0) > 0) {
       setError(
-        "Titulos com recebimento parcial devem ser tratados no financeiro antes de cancelar.",
+        "Títulos com recebimento parcial devem ser tratados no financeiro antes de cancelar.",
       );
       return;
     }
 
     if (reason.length < 4) {
-      setError(
-        "Descreva o motivo do cancelamento para manter a trilha financeira consistente.",
-      );
+      setError("Informe o motivo do cancelamento.");
       return;
     }
 
@@ -735,11 +731,11 @@ export default function AccountsReceivablePage() {
       if (await handleUnauthorized(response)) return;
       if (!response.ok) {
         throw new Error(
-          await readApiErrorMessage(response, "Falha ao cancelar titulo."),
+          await readApiErrorMessage(response, "Falha ao cancelar título."),
         );
       }
 
-      setSuccessMessage("Titulo cancelado e retirado da esteira de cobranca.");
+      setSuccessMessage("Título cancelado.");
       setExpandedId(null);
       await loadData();
     } catch (cancelError: unknown) {
@@ -761,7 +757,7 @@ export default function AccountsReceivablePage() {
         description="Acompanhe saldos em aberto, cobranças e recebimentos por cliente."
         stats={[
           {
-            label: "Titulos ativos",
+            label: "Títulos ativos",
             value: String(stats.activeCount),
             helper:
               "Itens em aberto, parcial ou vencidos aguardando tratativa.",
@@ -776,13 +772,13 @@ export default function AccountsReceivablePage() {
           {
             label: "Carteira vencida",
             value: formatCurrency(stats.overdueAmount),
-            helper: "Montante que ja exige resposta mais rapida da cobranca.",
+            helper: "Montante que já exige resposta mais rapida da cobranca.",
             tone: "rose",
           },
           {
             label: "Recebimento parcial",
             value: String(stats.partialCount),
-            helper: "Titulos que ja tiveram baixa, mas ainda possuem saldo.",
+            helper: "Títulos que já tiveram baixa, mas ainda possuem saldo.",
             tone: "emerald",
           },
         ]}
@@ -826,19 +822,19 @@ export default function AccountsReceivablePage() {
                 <div>
                   <p className="text-xs text-slate-500">Origem contratual</p>
                   <p className="mt-1 text-lg font-bold text-slate-950">
-                    {stats.contractCount} titulo(s)
+                    {stats.contractCount} título(s)
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-500">O.S. avulsas</p>
                   <p className="mt-1 text-lg font-bold text-slate-950">
-                    {sourceMix.order} titulo(s)
+                    {sourceMix.order} título(s)
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-500">Contas manuais</p>
                   <p className="mt-1 text-lg font-bold text-slate-950">
-                    {sourceMix.manual} titulo(s)
+                    {sourceMix.manual} título(s)
                   </p>
                 </div>
               </div>
@@ -865,9 +861,9 @@ export default function AccountsReceivablePage() {
       />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.75fr)_360px]">
         <SectionCard
-          eyebrow="Carteira viva"
-          title="Recebimentos com leitura operacional"
-          description="Filtre por origem, status e cliente para atuar na cobranca certa sem perder o contexto de contrato, ordem de servico e historico financeiro."
+          eyebrow="Recebimentos"
+          title="Títulos a receber"
+          description="Filtre por cliente, origem e situação para consultar cobranças e registrar recebimentos."
         >
           <div className="grid gap-3 md:grid-cols-3">
             <FormField label="Busca">
@@ -875,7 +871,7 @@ export default function AccountsReceivablePage() {
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 aria-label="Pesquisar títulos"
-                placeholder="Cliente, contrato, O.S. ou descricao"
+                placeholder="Cliente, contrato, O.S. ou descrição"
               />
             </FormField>
 
@@ -919,7 +915,7 @@ export default function AccountsReceivablePage() {
 
           <div className="mt-4 flex flex-wrap gap-2">
             <DataPill tone="blue">
-              {filteredReceivables.length} titulo(s) na visao atual
+              {filteredReceivables.length} título(s) na visão atual
             </DataPill>
             <DataPill tone="amber">
               {formatCurrency(stats.outstandingAmount)} em aberto
@@ -947,8 +943,8 @@ export default function AccountsReceivablePage() {
               ))
             ) : filteredReceivables.length === 0 ? (
               <EmptyState
-                title="Nenhum titulo encontrado nessa visao"
-                description="Ajuste os filtros ou sincronize a carteira contratual para repovoar a central."
+                title="Nenhum título encontrado"
+                description="Ajuste os filtros ou sincronize os recebimentos dos contratos."
               />
             ) : (
               filteredReceivables.map((item) => {
@@ -1106,7 +1102,7 @@ export default function AccountsReceivablePage() {
                           Vencimento
                         </p>
                         <p className="mt-2 text-sm font-semibold text-slate-900">
-                          {formatDate(item.dueDate)}
+                          {formatCalendarDate(item.dueDate)}
                         </p>
                       </FieldBox>
                       <FieldBox>
@@ -1183,11 +1179,11 @@ export default function AccountsReceivablePage() {
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <div>
                             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                              Historico recente
+                              Histórico recente
                             </p>
                             <p className="mt-1 text-sm text-slate-600">
-                              Ate 3 ultimos recebimentos registrados para este
-                              titulo.
+                              Até 3 ultimos recebimentos registrados para este
+                              título.
                             </p>
                           </div>
                           <DataPill tone="slate">
@@ -1330,7 +1326,7 @@ export default function AccountsReceivablePage() {
                         </div>
 
                         <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_220px]">
-                          <FormField label="Observacoes">
+                          <FormField label="Observações">
                             <TextAreaInput
                               value={draft.notes}
                               onChange={(event) =>
@@ -1402,7 +1398,7 @@ export default function AccountsReceivablePage() {
                                     cancelReason: event.target.value,
                                   })
                                 }
-                                placeholder="Descreva a justificativa para trilha de auditoria."
+                                placeholder="Informe a justificativa."
                               />
                             </FormField>
 
@@ -1435,7 +1431,7 @@ export default function AccountsReceivablePage() {
           <SectionCard
             eyebrow="Prioridades"
             title="Vencimento e cobranca"
-            description="Titulos que merecem atuacao imediata para evitar envelhecimento da carteira."
+            description="Títulos vencidos ou com vencimento nos próximos 7 dias."
           >
             <div className="space-y-3">
               {loading ? (
@@ -1446,7 +1442,7 @@ export default function AccountsReceivablePage() {
               ) : dueSoon.length === 0 ? (
                 <EmptyState
                   title="Nenhum vencimento urgente"
-                  description="A carteira atual nao possui titulos ativos vencendo nos proximos 7 dias."
+                  description="A carteira atual não possui títulos ativos vencendo nos próximos 7 dias."
                 />
               ) : (
                 dueSoon.map((item) => {
@@ -1492,8 +1488,8 @@ export default function AccountsReceivablePage() {
           </SectionCard>
 
           <SectionCard
-            eyebrow="Conexao de fluxo"
-            title="Esteira validada"
+            eyebrow="Consultas relacionadas"
+            title="Contratos e documentos"
             description="Consulte os contratos, ordens e documentos associados aos recebimentos."
           >
             <div className="space-y-3">
@@ -1502,9 +1498,8 @@ export default function AccountsReceivablePage() {
                   Contrato -&gt; faturamento -&gt; recebimento
                 </p>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  A sincronizacao de contratos alimenta a carteira financeira e
-                  a quitacao de um titulo contratual continua refletindo a
-                  fatura correspondente no backend.
+                  As faturas de contrato aparecem nesta carteira. Ao registrar o
+                  recebimento, a fatura vinculada também é atualizada.
                 </p>
               </FieldBox>
 
@@ -1513,7 +1508,7 @@ export default function AccountsReceivablePage() {
                   O.S. avulsa -&gt; faturamento -&gt; baixa
                 </p>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Os titulos de ordem continuam rastreaveis por link direto para
+                  Os títulos de ordem continuam rastreaveis por link direto para
                   a O.S., o que facilita cobrar sem perder o contexto da
                   execucao.
                 </p>
@@ -1521,10 +1516,10 @@ export default function AccountsReceivablePage() {
 
               <FieldBox>
                 <p className="text-sm font-semibold text-slate-900">
-                  Seguranca de operacao
+                  Segurança de operação
                 </p>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Cancelamento de titulo contratual ou parcialmente recebido foi
+                  Cancelamento de título contratual ou parcialmente recebido foi
                   bloqueado na interface para evitar desalinhamento entre
                   cobranca, conciliacao e origem comercial.
                 </p>

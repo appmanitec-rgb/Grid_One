@@ -6,11 +6,24 @@ import { PAGE_SIZE_OPTIONS } from "./ListPagination";
 
 const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
 
-function createButton(label: string, title: string) {
+function createButton(direction: "previous" | "next", title: string) {
   const button = document.createElement("button");
   button.type = "button";
-  button.className = "dashboard-table-pagination-button";
-  button.textContent = label;
+  button.className = "dashboard-table-pagination-button app-icon-button";
+  const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  icon.setAttribute("viewBox", "0 0 24 24");
+  icon.setAttribute("fill", "none");
+  icon.setAttribute("stroke", "currentColor");
+  icon.setAttribute("stroke-width", "1.75");
+  icon.setAttribute("stroke-linecap", "round");
+  icon.setAttribute("stroke-linejoin", "round");
+  icon.setAttribute("aria-hidden", "true");
+  icon.setAttribute("width", "16");
+  icon.setAttribute("height", "16");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", direction === "previous" ? "m14 6-6 6 6 6" : "m10 6 6 6-6 6");
+  icon.appendChild(path);
+  button.appendChild(icon);
   button.title = title;
   button.setAttribute("aria-label", title);
   return button;
@@ -93,11 +106,11 @@ function refreshPagination(table: HTMLTableElement) {
 
     const label = document.createElement("label");
     label.className = "dashboard-table-pagination-label";
-    label.append("Itens por pagina ");
+    label.append("Itens por página ");
 
     const select = document.createElement("select");
     select.className = "dashboard-table-pagination-select";
-    select.setAttribute("aria-label", "Itens por pagina");
+    select.setAttribute("aria-label", "Itens por página");
     PAGE_SIZE_OPTIONS.forEach((option) => {
       const element = document.createElement("option");
       element.value = String(option);
@@ -115,14 +128,14 @@ function refreshPagination(table: HTMLTableElement) {
     pageLabel.className = "dashboard-table-pagination-page";
     pageLabel.dataset.paginationPageLabel = "true";
 
-    const previous = createButton("‹", "Pagina anterior");
+    const previous = createButton("previous", "Página anterior");
     previous.dataset.paginationPrevious = "true";
     previous.addEventListener("click", () => {
       table.dataset.paginationPage = String(Math.max(1, Number(table.dataset.paginationPage || 1) - 1));
       refreshPagination(table);
     });
 
-    const next = createButton("›", "Proxima pagina");
+    const next = createButton("next", "Próxima página");
     next.dataset.paginationNext = "true";
     next.addEventListener("click", () => {
       table.dataset.paginationPage = String(Number(table.dataset.paginationPage || 1) + 1);

@@ -1,0 +1,95 @@
+{
+  "title": "Proposta Comercial {{proposal.number}}",
+  "subtitle": "{{proposal.title}} | Emissão: {{proposal.date}} | Validade: {{proposal.validUntil}}",
+  "sections": [
+    {
+      "heading": "Resumo executivo",
+      "paragraphs": [
+        "Cliente: {{client.name}} | CNPJ/CPF: {{client.document}}",
+        "Responsável: {{contact.name}} | {{contact.email}} | {{contact.phone}}",
+        "Valor total: {{proposal.total}} | Pagamento: {{proposal.paymentTerms}} | Prazo: {{proposal.deliveryTerms}}",
+        "Código do cliente: {{client.code}}"
+      ]
+    },
+    {
+      "heading": "1. Apresentação",
+      "paragraphs": [
+        "A {{company.name}} apresenta esta proposta para {{client.name}}, conforme escopo e condições comerciais descritos a seguir.",
+        "Responsável comercial: {{consultant.name}} | {{consultant.email}} | {{consultant.phone}}."
+      ]
+    },
+    {
+      "heading": "2. Equipamento e escopo",
+      "paragraphs": [
+        "Equipamento: {{equipment.name}} | Série: {{equipment.serialNumber}} | Local: {{equipment.site}}",
+        "Escopo: {{proposal.scope}}"
+      ]
+    },
+    {
+      "heading": "3. Itens e serviços",
+      "table": {
+        "rowsPath": "items",
+        "emptyText": "Nenhum item comercial informado.",
+        "columns": [
+          {
+            "header": "Descrição",
+            "path": "description"
+          },
+          {
+            "header": "SKU",
+            "path": "sku"
+          },
+          {
+            "header": "Qtd.",
+            "path": "quantity",
+            "align": "right"
+          },
+          {
+            "header": "Un.",
+            "path": "unit"
+          },
+          {
+            "header": "Unitário",
+            "path": "unitPrice",
+            "align": "right"
+          },
+          {
+            "header": "Desc.",
+            "path": "discountPercent",
+            "align": "right"
+          },
+          {
+            "header": "Total",
+            "path": "total",
+            "align": "right"
+          }
+        ]
+      }
+    },
+    {
+      "heading": "4. Condições comerciais",
+      "paragraphs": [
+        "Faturamento: {{proposal.billingSummary}}",
+        "Valor total da proposta: {{proposal.total}}.",
+        "Pagamento: {{proposal.paymentTerms}} | Forma: {{proposal.paymentMethod}}.",
+        "Frete: {{proposal.freight}} | Prazo: {{proposal.deliveryTerms}}.",
+        "Garantia: {{technicalScope.warranty}}",
+        "Impostos: {{proposal.taxes}}",
+        "Exclusões: {{technicalScope.exclusions}}",
+        "Observações: {{proposal.notes}}"
+      ]
+    },
+    {
+      "heading": "5. Aceite",
+      "paragraphs": [
+        "A aprovação desta proposta confirma a ciência e o aceite do escopo, dos valores, dos prazos e das condições comerciais aqui apresentados.",
+        "Cliente: {{client.name}} | Responsável pelo aceite: {{approval.clientSignerName}}",
+        "Data do aceite: ____/____/________ | Assinatura: __________________________________"
+      ]
+    }
+  ],
+  "footer": [
+    "{{company.name}} | {{company.document}} | {{company.email}} | {{company.phone}}",
+    "Proposta {{proposal.number}}"
+  ]
+}

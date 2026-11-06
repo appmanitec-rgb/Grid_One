@@ -301,7 +301,7 @@ export default function CompanySettingsPage() {
 <div className="dashboard-metrics-grid">
             <Metric label="Cadastros" value={String(companies.length || 0)} hint="Empresas ativas" />
             <Metric label="Principal" value={companies.find((item) => item.isPrimary)?.tradeName || companies.find((item) => item.isPrimary)?.companyName || "-"} hint="Empresa padrao" />
-            <Metric label="Atualizacao" value={formatDate(selectedCompany?.updatedAt)} hint="Cadastro selecionado" />
+            <Metric label="Atualização" value={formatDate(selectedCompany?.updatedAt)} hint="Cadastro selecionado" />
           </div>
 
       {feedback ? <div className={`rounded-2xl border px-4 py-3 text-sm font-medium ${feedback.kind === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}>{feedback.text}</div> : null}
@@ -312,7 +312,7 @@ export default function CompanySettingsPage() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-base font-black text-slate-950">Cadastros de empresa</h2>
-                <p className="mt-1 text-xs text-slate-500">Use um cadastro por CNPJ, filial ou unidade juridica.</p>
+                <p className="mt-1 text-xs text-slate-500">Use um cadastro por CNPJ, filial ou unidade jurídica.</p>
               </div>
               <button type="button" onClick={() => void createCompany()} disabled={isCreating} className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-60">{isCreating ? "Criando..." : "Nova"}</button>
             </div>
@@ -342,9 +342,9 @@ export default function CompanySettingsPage() {
             <p className="text-sm font-bold">Boas praticas</p>
             <ul className="mt-3 space-y-2 text-sm text-slate-300">
               <li>Cadastre matriz e filial separadamente.</li>
-              <li>Marque a empresa principal para padroes do sistema.</li>
+              <li>Marque a empresa principal para padrões do sistema.</li>
               <li>Preencha e-mail financeiro e inscricoes para faturamento.</li>
-              <li>Defina remetente, WhatsApp e webhook padrao para a central de envios.</li>
+              <li>Defina remetente, WhatsApp e webhook padrão para a central de envios.</li>
             </ul>
           </div>
         </aside>
@@ -391,7 +391,7 @@ export default function CompanySettingsPage() {
             <div className="space-y-5 p-6">
               <Section title="Fiscal e cadastro" description="Dados juridicos e tributarios da empresa.">
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  <Field label="Razao social" value={form.companyName} onChange={(value) => updateField("companyName", value)} placeholder="Manitec Energia e Servicos Ltda" />
+                  <Field label="Razão social" value={form.companyName} onChange={(value) => updateField("companyName", value)} placeholder="Manitec Energia e Serviços Ltda" />
                   <Field label="Nome fantasia" value={form.tradeName} onChange={(value) => updateField("tradeName", value)} placeholder="Manitec" />
                   <Field label="CNPJ" value={form.cnpj} onChange={(value) => updateField("cnpj", formatCnpj(value))} placeholder="00.000.000/0000-00" inputMode="text" />
                   <Field label="Inscricao estadual" value={form.stateRegistration} onChange={(value) => updateField("stateRegistration", value)} />
@@ -400,9 +400,9 @@ export default function CompanySettingsPage() {
                 </div>
               </Section>
 
-              <Section title="Contatos" description="Responsavel, canais operacionais e contato financeiro.">
+              <Section title="Contatos" description="Responsável, canais operacionais e contato financeiro.">
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  <Field label="Responsavel principal" value={form.contactName} onChange={(value) => updateField("contactName", value)} />
+                  <Field label="Responsável principal" value={form.contactName} onChange={(value) => updateField("contactName", value)} />
                   <Field label="Cargo" value={form.contactRole} onChange={(value) => updateField("contactRole", value)} />
                   <Field label="Telefone" value={form.phone} onChange={(value) => updateField("phone", formatPhone(value))} inputMode="tel" />
                   <Field label="WhatsApp" value={form.whatsapp} onChange={(value) => updateField("whatsapp", formatPhone(value))} inputMode="tel" />
@@ -412,10 +412,10 @@ export default function CompanySettingsPage() {
                 </div>
               </Section>
 
-              <Section title="Endereco" description="Campos separados para melhorar fiscal, contratos e documentos.">
+              <Section title="Endereço" description="Campos separados para melhorar fiscal, contratos e documentos.">
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   <Field label="Logradouro" value={form.address} onChange={(value) => updateField("address", value)} className="md:col-span-2 xl:col-span-2" />
-                  <Field label="Numero" value={form.addressNumber} onChange={(value) => updateField("addressNumber", value)} />
+                  <Field label="Número" value={form.addressNumber} onChange={(value) => updateField("addressNumber", value)} />
                   <Field label="Complemento" value={form.addressComplement} onChange={(value) => updateField("addressComplement", value)} />
                   <Field label="Bairro" value={form.district} onChange={(value) => updateField("district", value)} />
                   <Field label="Cidade" value={form.city} onChange={(value) => updateField("city", value)} />
@@ -464,13 +464,13 @@ export default function CompanySettingsPage() {
                 </div>
               </Section>
 
-              <Section title="Entrega externa" description="Padroes usados pela central de documentos para e-mail, WhatsApp e webhook.">
+              <Section title="Entrega externa" description="Padrões usados pela central de documentos para e-mail, WhatsApp e webhook.">
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  <Field label="Nome do remetente" value={form.deliverySenderName} onChange={(value) => updateField("deliverySenderName", value)} placeholder="Manitec Operacoes" />
+                  <Field label="Nome do remetente" value={form.deliverySenderName} onChange={(value) => updateField("deliverySenderName", value)} placeholder="Manitec Operações" />
                   <Field label="E-mail remetente" type="email" value={form.deliveryFromEmail} onChange={(value) => updateField("deliveryFromEmail", value)} placeholder="documentos@empresa.com.br" />
                   <Field label="Reply-to" type="email" value={form.deliveryReplyToEmail} onChange={(value) => updateField("deliveryReplyToEmail", value)} placeholder="comercial@empresa.com.br" />
-                  <Field label="WhatsApp padrao" value={form.deliveryDefaultWhatsapp} onChange={(value) => updateField("deliveryDefaultWhatsapp", formatPhone(value))} inputMode="tel" placeholder="(11) 99999-0000" />
-                  <Field label="Webhook padrao" type="url" value={form.deliveryDefaultWebhookUrl} onChange={(value) => updateField("deliveryDefaultWebhookUrl", value)} placeholder="https://cliente.com/webhooks/manitec" className="md:col-span-2 xl:col-span-2" />
+                  <Field label="WhatsApp padrão" value={form.deliveryDefaultWhatsapp} onChange={(value) => updateField("deliveryDefaultWhatsapp", formatPhone(value))} inputMode="tel" placeholder="(11) 99999-0000" />
+                  <Field label="Webhook padrão" type="url" value={form.deliveryDefaultWebhookUrl} onChange={(value) => updateField("deliveryDefaultWebhookUrl", value)} placeholder="https://cliente.com/webhooks/manitec" className="md:col-span-2 xl:col-span-2" />
                 </div>
                 <label className="mt-4 block text-sm font-semibold text-slate-700">
                   <span>Assinatura / rodape do envio</span>
@@ -478,9 +478,9 @@ export default function CompanySettingsPage() {
                 </label>
               </Section>
 
-              <Section title="Observacoes internas" description="Anotacoes administrativas, fiscais e operacionais.">
+              <Section title="Observações internas" description="Anotacoes administrativas, fiscais e operacionais.">
                 <label className="block text-sm font-semibold text-slate-700">
-                  <span>Observacoes</span>
+                  <span>Observações</span>
                   <textarea value={form.notes} onChange={(event) => updateField("notes", event.target.value)} rows={5} className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
                 </label>
               </Section>
@@ -553,7 +553,7 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
       <span>{label}</span>
       <div className="mt-1.5 flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2">
         <input type="color" value={value} onChange={(event) => onChange(event.target.value)} className="h-10 w-12 cursor-pointer rounded-lg border border-slate-200 bg-transparent" />
-        <input type="text" value={value} onChange={(event) => onChange(event.target.value)} className="w-full bg-transparent text-sm text-slate-900 outline-none" />
+        <input aria-label={`${label} (código hexadecimal)`} type="text" value={value} onChange={(event) => onChange(event.target.value)} className="w-full bg-transparent text-sm text-slate-900 outline-none" />
       </div>
     </label>
   );

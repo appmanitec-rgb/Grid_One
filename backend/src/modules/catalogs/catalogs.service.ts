@@ -1,3 +1,4 @@
+import { catalogSearchTerms } from '../../common/catalog-search-terms';
 import {
   BadRequestException,
   ConflictException,
@@ -22,6 +23,8 @@ import { CreateCatalogOfferDto } from './dto/create-catalog-offer.dto';
 import { CreateCatalogDto } from './dto/create-catalog.dto';
 import { UpdateCatalogPricingDto } from './dto/update-catalog-pricing.dto';
 import { UpdateCatalogPricingParametersDto } from './dto/update-catalog-pricing-parameters.dto';
+import { commercialVisibility } from '../auth/rules/commercial-privacy.interceptor';
+import { managedProposalScope } from '../auth/rules/commercial-management';
 import { UpdateCatalogDto } from './dto/update-catalog.dto';
 
 import { CatalogListPageDto } from '../../common/list-page.dto';
@@ -29,6 +32,7 @@ import { catalogGroup, catalogPageIndex } from './catalog-list-page';
 
 export type CatalogActor = {
   sub?: string;
+  accessRules?: unknown;
   isSystemMaster?: boolean;
   role?: UserRole;
   accessPolicy?: {
@@ -234,7 +238,7 @@ export class CatalogsService {
   async findOne(id: string, actor?: CatalogActor) {
     const item = await this.prisma.catalogItem.findUnique({
       where: { id },
-      include: this.operationalDetailInclude(),
+      include: this.operationalDetailInclude(actor),
     });
     if (!item) {
       throw new NotFoundException('Item do catalogo nao encontrado.');
@@ -286,11 +290,12 @@ export class CatalogsService {
     };
   }
 
-  async pricingPolicies() {
-    return this.prisma.catalogPricingPolicy.findMany({
+  async pricingPolicies(actor?: CatalogActor) {
+    const rows = await this.prisma.catalogPricingPolicy.findMany({
       where: { isActive: true },
       orderBy: [{ itemType: 'asc' }, { isDefault: 'desc' }, { name: 'asc' }],
     });
+    return this.maskOperationalCosts(rows, this.canViewCostData(actor));
   }
 
   async lookup(
@@ -304,132 +309,61 @@ export class CatalogsService {
     const normalizedType = Object.values(ItemType).includes(type as ItemType)
       ? (type as ItemType)
       : undefined;
+    const groups = catalogSearchTerms(search || '');
+    if (groups.length > 16 || (search?.length || 0) > 256)
+      throw new BadRequestException(
+        'Refine a busca: use até 16 termos e 256 caracteres.',
+      );
+    const fields = [
+      'name',
+      'sku',
+      'manufacturerPartNumber',
+      'legacyCode',
+      'legacySequence',
+      'radarCode',
+      'itemClassification',
+      'acquisitionOrigin',
+      'description',
+      'commercialDescription',
+      'category',
+      'brand',
+    ];
     const where: Prisma.CatalogItemWhereInput = {
       isActive: true,
       ...(normalizedType ? { type: normalizedType } : {}),
-      ...(search
-        ? {
-            OR: [
-              {
-                name: {
-                  contains: search,
-                  mode: Prisma.QueryMode.insensitive,
-                },
-              },
-              {
-                sku: {
-                  contains: search,
-                  mode: Prisma.QueryMode.insensitive,
-                },
-              },
-              {
-                manufacturerPartNumber: {
-                  contains: search,
-                  mode: Prisma.QueryMode.insensitive,
-                },
-              },
-              {
-                legacyCode: {
-                  contains: search,
-                  mode: Prisma.QueryMode.insensitive,
-                },
-              },
-              {
-                legacySequence: {
-                  contains: search,
-                  mode: Prisma.QueryMode.insensitive,
-                },
-              },
-              {
-                radarCode: {
-                  contains: search,
-                  mode: Prisma.QueryMode.insensitive,
-                },
-              },
-              {
-                itemClassification: {
-                  contains: search,
-                  mode: Prisma.QueryMode.insensitive,
-                },
-              },
-              {
-                acquisitionOrigin: {
-                  contains: search,
-                  mode: Prisma.QueryMode.insensitive,
-                },
-              },
-              {
-                description: {
-                  contains: search,
-                  mode: Prisma.QueryMode.insensitive,
-                },
-              },
-              {
-                commercialDescription: {
-                  contains: search,
-                  mode: Prisma.QueryMode.insensitive,
-                },
-              },
-              {
-                category: {
-                  contains: search,
-                  mode: Prisma.QueryMode.insensitive,
-                },
-              },
-              {
-                brand: {
-                  contains: search,
-                  mode: Prisma.QueryMode.insensitive,
-                },
-              },
-              {
-                skuArea: {
-                  name: {
-                    contains: search,
-                    mode: Prisma.QueryMode.insensitive,
+      AND: groups.map((variants) => ({
+        OR: variants.flatMap((term) => [
+          ...fields.map((field) => ({
+            [field]: { contains: term, mode: Prisma.QueryMode.insensitive },
+          })),
+          ...['skuArea', 'skuFamily', 'skuApplication'].map((field) => ({
+            [field]: {
+              name: { contains: term, mode: Prisma.QueryMode.insensitive },
+            },
+          })),
+          {
+            identifiers: {
+              some: {
+                isActive: true,
+                OR: [
+                  {
+                    code: {
+                      contains: term,
+                      mode: Prisma.QueryMode.insensitive,
+                    },
                   },
-                },
-              },
-              {
-                skuFamily: {
-                  name: {
-                    contains: search,
-                    mode: Prisma.QueryMode.insensitive,
+                  {
+                    normalizedCode: {
+                      contains: this.normalizeIdentifier(term),
+                      mode: Prisma.QueryMode.insensitive,
+                    },
                   },
-                },
+                ],
               },
-              {
-                skuApplication: {
-                  name: {
-                    contains: search,
-                    mode: Prisma.QueryMode.insensitive,
-                  },
-                },
-              },
-              {
-                identifiers: {
-                  some: {
-                    isActive: true,
-                    OR: [
-                      {
-                        code: {
-                          contains: search,
-                          mode: Prisma.QueryMode.insensitive,
-                        },
-                      },
-                      {
-                        normalizedCode: {
-                          contains: this.normalizeIdentifier(search),
-                          mode: Prisma.QueryMode.insensitive,
-                        },
-                      },
-                    ],
-                  },
-                },
-              },
-            ],
-          }
-        : {}),
+            },
+          },
+        ]),
+      })),
     };
 
     const items = await this.prisma.catalogItem.findMany({
@@ -1555,9 +1489,9 @@ export class CatalogsService {
   }
 
   private canViewCostData(actor?: CatalogActor) {
-    if (!actor) return false;
-    if (actor.isSystemMaster || actor.role === UserRole.ADMIN) return true;
-    return actor?.accessPolicy?.catalog?.viewCosts === true;
+    return actor
+      ? commercialVisibility({ ...actor, sub: actor.sub || '' }).costs
+      : false;
   }
 
   private async findFinancialApproverId(requesterUserId: string) {
@@ -2131,6 +2065,7 @@ export class CatalogsService {
       'lastCost',
       'taxPercentage',
       'profitMargin',
+      'profitMarginPercent',
       'icmsPercent',
       'pisPercent',
       'cofinsPercent',
@@ -2187,7 +2122,7 @@ export class CatalogsService {
   private parseLookupLimit(value?: string | number) {
     const parsed = Number(value ?? 10);
     if (!Number.isFinite(parsed)) return 10;
-    return Math.min(Math.max(Math.trunc(parsed), 1), 20);
+    return Math.min(Math.max(Math.trunc(parsed), 1), 10);
   }
 
   private nonNegative(value: number | undefined, label: string) {
@@ -2370,7 +2305,7 @@ export class CatalogsService {
     };
   }
 
-  private operationalDetailInclude() {
+  private operationalDetailInclude(actor?: CatalogActor) {
     return {
       skuArea: { select: { id: true, code: true, name: true } },
       skuFamily: { select: { id: true, code: true, name: true, areaId: true } },
@@ -2461,6 +2396,13 @@ export class CatalogsService {
         take: 10,
       },
       proposalItems: {
+        ...(actor?.sub
+          ? {
+              where: {
+                proposal: managedProposalScope({ ...actor, sub: actor.sub }),
+              },
+            }
+          : {}),
         include: {
           proposal: {
             select: {

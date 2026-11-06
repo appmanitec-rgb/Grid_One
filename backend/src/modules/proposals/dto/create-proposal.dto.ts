@@ -19,12 +19,18 @@ import {
   IsDateString,
   IsObject,
   ArrayMinSize,
+  ArrayMaxSize,
   Max,
   Min,
   ValidateNested,
   IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import {
+  TechnicalScopeReviewDto,
+  TechnicalServiceClassificationDto,
+} from '../../technical-scopes/technical-scope.dto';
+import { ProposalIssueAcknowledgementDto } from '../proposal-editor.dto';
 
 export class ProposalPaymentPlanDto {
   @IsIn(['CASH', '50_50', '30_70', 'PREPAID', 'CUSTOM', 'CONFIGURED'])
@@ -95,6 +101,13 @@ class ProposalOperationalExpenseDto {
 }
 
 export class CreateProposalDto {
+  @IsOptional() @IsUUID() editingDraftId?: string;
+  @IsOptional() @IsDateString() expectedUpdatedAt?: string;
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProposalIssueAcknowledgementDto)
+  reviewAcknowledgements?: ProposalIssueAcknowledgementDto[];
   @IsString()
   @IsNotEmpty()
   clientId!: string;
@@ -138,6 +151,18 @@ export class CreateProposalDto {
   @IsString()
   @IsOptional()
   scope?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TechnicalScopeReviewDto)
+  technicalScopeReview?: TechnicalScopeReviewDto;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => TechnicalServiceClassificationDto)
+  technicalScopeClassifications?: TechnicalServiceClassificationDto[];
 
   @IsString()
   @IsOptional()

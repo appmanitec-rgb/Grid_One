@@ -197,7 +197,9 @@ export default function DashboardLayout({
     setColorMode(savedMode);
     applyDashboardTheme(savedTheme, savedMode);
     setAppearanceReady(true);
-    return () => { clearAppliedDashboardTheme(); };
+    return () => {
+      clearAppliedDashboardTheme();
+    };
   }, []);
 
   useEffect(() => {
@@ -316,8 +318,8 @@ export default function DashboardLayout({
       },
       {
         href: "/dashboard/hr/collaborators",
-        label: "Agentes",
-        mobileLabel: "Agentes",
+        label: "Colaboradores",
+        mobileLabel: "Equipe",
         icon: "RH",
         enabled: visiblePages.people,
       },
@@ -354,6 +356,22 @@ export default function DashboardLayout({
   );
 
   const allowedItems = navItems.filter((item) => item.enabled);
+  const mobileItems = allowedItems.filter((item) =>
+    ["/dashboard", "/dashboard/notifications"].includes(item.href),
+  );
+  const currentItem = allowedItems
+    .filter(
+      (item) =>
+        item.href !== "/dashboard" &&
+        (pathname === item.href || pathname.startsWith(item.href + "/")),
+    )
+    .sort((a, b) => b.href.length - a.href.length)[0];
+  const contextualItem =
+    currentItem ||
+    allowedItems.find((item) => item.href === "/dashboard/proposals") ||
+    allowedItems.find((item) => !mobileItems.includes(item));
+  if (contextualItem && !mobileItems.includes(contextualItem))
+    mobileItems.push(contextualItem);
 
   function logout() {
     clearAuthSession();
@@ -385,6 +403,9 @@ export default function DashboardLayout({
       <SessionHeartbeat source="DASHBOARD" />
       <DashboardTableSorting />
       <DashboardTablePagination />
+      <a href="#main-content" className="dashboard-skip-link fixed">
+        Ir para o conteúdo
+      </a>
       <SidebarNavigation
         pathname={pathname}
         access={visiblePages}
@@ -395,11 +416,16 @@ export default function DashboardLayout({
         <TopBar
           appearanceTheme={appearanceTheme}
           colorMode={colorMode}
-          onChangeColorMode={(mode) => { setColorMode(mode); saveStoredDashboardMode(mode); }}
+          onChangeColorMode={(mode) => {
+            setColorMode(mode);
+            saveStoredDashboardMode(mode);
+          }}
           onChangeAppearanceTheme={handleThemeChange}
         />
         <main
           className={`dashboard-main flex-1 overflow-y-auto px-4 pb-24 pt-5 md:px-6 md:pb-10 md:pt-6 ${pathname === "/dashboard/management/users/permissions" ? "dashboard-main--wide" : ""}`}
+          id="main-content"
+          tabIndex={-1}
         >
           <div className="dashboard-container w-full">
             <div className="slide-fade-in">{children}</div>
@@ -409,21 +435,25 @@ export default function DashboardLayout({
 
       <nav
         aria-label="Atalhos rápidos"
-        className="glass-surface fixed inset-x-4 bottom-3 z-30 flex min-w-0 gap-2 rounded-[24px] p-2 md:hidden"
+        className="dashboard-mobile-shortcuts glass-surface fixed inset-x-3 bottom-3 z-30 flex min-w-0 gap-2 rounded-xl p-2 md:hidden"
       >
         <MobileNavigation
           pathname={pathname}
           access={visiblePages}
           onLogout={logout}
         />
-        <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto">
-          {allowedItems.map((item) => {
-            const active = pathname === item.href;
+        <div className="grid min-w-0 flex-1 grid-cols-3 gap-1">
+          {mobileItems.slice(0, 3).map((item) => {
+            const active =
+              pathname === item.href ||
+              (item.href !== "/dashboard" &&
+                pathname.startsWith(item.href + "/"));
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`min-w-[92px] rounded-2xl px-2 py-2 text-center text-[11px] font-semibold ${
+                aria-current={active ? "page" : undefined}
+                className={`flex min-w-0 items-center justify-center break-words rounded-lg px-1 py-2 text-center text-xs font-medium ${
                   active
                     ? "bg-slate-950 text-white shadow-[0_16px_28px_-22px_rgba(15,31,50,0.65)]"
                     : "bg-slate-100/90 text-slate-600"

@@ -1,9 +1,11 @@
 "use client";
+import { InterfaceIcon } from "@/app/dashboard/components/InterfaceIcon";
 import { canUsePortfolio, canScreenAction } from "@/lib/access-rules";
 import { getAccessFromToken } from "@/lib/access";
 
 import { SelectField } from "@/app/dashboard/components/SelectField";
 import Link from "next/link";
+import ProposalEditingDraftList from "./ProposalEditingDraftList";
 import { useRouter } from "next/navigation";
 import {
   DragEvent,
@@ -78,8 +80,7 @@ type FlowColumnSummary = {
   foreignCount: number;
 };
 
-const SECONDARY_BUTTON =
-  "inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-sky-300 hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-50";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 
 export default function ProposalsPage() {
   const [accessReady, setAccessReady] = useState(false);
@@ -416,18 +417,18 @@ export default function ProposalsPage() {
     <div className="dashboard-page space-y-5">
       <PageHero
         loading={loading}
-        eyebrow="Modulo comercial"
+        eyebrow="Módulo comercial"
         title={isClient ? "Minhas propostas" : "Central de propostas"}
         description={
           isClient
             ? "Acompanhe suas propostas, revisoes e itens prontos para decisao."
-            : "Carteira comercial organizada por etapa, valor e prioridade de aprovacao."
+            : "Carteira comercial e aprovações."
         }
         stats={[
           {
             label: "Carteira total",
             value: String(stats.total),
-            helper: "Todas as propostas registradas no modulo.",
+            helper: "Todas as propostas registradas no módulo.",
             tone: "slate",
           },
           {
@@ -461,9 +462,9 @@ export default function ProposalsPage() {
               canUsePortfolio("contracts")) ? (
               <Link
                 href={newProposalHref}
-                className="inline-flex min-h-10 items-center justify-center rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-sky-700"
+                className="app-button app-button-primary"
               >
-                + Nova proposta
+                <InterfaceIcon name="plus" /> Nova proposta
               </Link>
             ) : null}
             <button
@@ -474,124 +475,41 @@ export default function ProposalsPage() {
             >
               {loading ? "Atualizando..." : "Atualizar carteira"}
             </button>
+            {!isClient ? (
+              <button
+                type="button"
+                className="app-icon-button"
+                aria-label="Abrir acompanhamento e rascunhos"
+                title="Acompanhamento e rascunhos"
+                aria-controls="proposal-followup"
+                onClick={() => {
+                  const panel = document.getElementById(
+                    "proposal-followup",
+                  ) as HTMLDetailsElement | null;
+                  if (panel) {
+                    panel.open = true;
+                    panel.scrollIntoView({ block: "start" });
+                    panel.querySelector("summary")?.focus();
+                  }
+                }}
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  className="h-5 w-5"
+                  fill="currentColor"
+                >
+                  <circle cx="5" cy="12" r="2" />
+                  <circle cx="12" cy="12" r="2" />
+                  <circle cx="19" cy="12" r="2" />
+                </svg>
+              </button>
+            ) : null}
           </>
         }
         compact
       />
 
-      {!isClient ? (
-        <section
-          aria-label="Prioridades comerciais"
-          className="grid gap-3 sm:grid-cols-2"
-        >
-          <button
-            type="button"
-            onClick={() => {
-              setCategory("ALL");
-              setQuery("");
-              setStatusFilter("BOARD_REVIEW");
-              setViewMode("list");
-            }}
-            className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition hover:border-sky-300 hover:shadow-md"
-          >
-            <span>
-              <span className="block text-xs font-bold uppercase tracking-[0.14em] text-sky-700">
-                Aguardando diretoria
-              </span>
-              <span className="mt-1 block text-sm text-slate-700">
-                Inclui revisão de desconto
-              </span>
-            </span>
-            <span className="text-2xl font-black text-sky-950">
-              {stats.boardReview}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setCategory("ALL");
-              setQuery("");
-              setStatusFilter("CLIENT_REVIEW");
-              setViewMode("list");
-            }}
-            className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition hover:border-amber-300 hover:shadow-md"
-          >
-            <span>
-              <span className="block text-xs font-bold uppercase tracking-[0.14em] text-amber-700">
-                Aguardando cliente
-              </span>
-              <span className="mt-1 block text-sm text-slate-700">
-                Propostas em análise externa
-              </span>
-            </span>
-            <span className="text-2xl font-black text-amber-950">
-              {stats.clientReview}
-            </span>
-          </button>
-        </section>
-      ) : null}
-
-      {canCreate ? (
-        <details className="dashboard-page-context">
-          <summary>
-            <span>Nova proposta: escolher o tipo</span>
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 20 20"
-              fill="none"
-              className="h-4 w-4"
-            >
-              <path
-                d="m5 7.5 5 5 5-5"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-              />
-            </svg>
-          </summary>
-          <div className="dashboard-page-context-body">
-            <p className="mb-3 text-sm text-slate-600">
-              Escolha o formato para iniciar uma proposta.
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {canUsePortfolio("partsServices") ? (
-                <CreateProposalCard
-                  index="01"
-                  title="Peças e serviços"
-                  description="Manutenção, materiais e atendimento."
-                  href="/dashboard/proposals/new"
-                />
-              ) : null}
-              {canUsePortfolio("generators") ? (
-                <CreateProposalCard
-                  index="02"
-                  title="Gerador"
-                  description="Venda de equipamento e acessórios."
-                  href="/dashboard/proposals/new/generator"
-                />
-              ) : null}
-              {canUsePortfolio("contracts") ? (
-                <CreateProposalCard
-                  index="03"
-                  title="Contrato"
-                  description="Cobertura e serviços recorrentes."
-                  href="/dashboard/proposals/new?proposalType=CONTRACT"
-                />
-              ) : null}
-              {canUsePortfolio("generators") ||
-              canUsePortfolio("partsServices") ||
-              canUsePortfolio("contracts") ? (
-                <CreateProposalCard
-                  index="04"
-                  title="Proposta externa"
-                  description="Registre uma venda de origem externa."
-                  href="/dashboard/proposals/new/external"
-                />
-              ) : null}
-            </div>
-          </div>
-        </details>
-      ) : null}
       {!isClient &&
       !canUsePortfolio("generators") &&
       !canUsePortfolio("partsServices") &&
@@ -604,66 +522,15 @@ export default function ProposalsPage() {
       {notice ? <StatusBanner tone="emerald">{notice}</StatusBanner> : null}
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
 
-      {!isClient && commercialHandoffs.length > 0 ? (
-        <SectionCard
-          eyebrow="Passagem comercial"
-          title="Vendas ganhas aguardando o próximo passo"
-          description="Após o aceite, acompanhe a confirmação da entrada e a continuidade para o contrato ou o pós-venda."
-          actions={
-            <DataPill tone="amber">
-              {commercialHandoffs.length} pendente(s)
-            </DataPill>
-          }
-        >
-          <div className="grid gap-3 lg:grid-cols-2">
-            {commercialHandoffs.slice(0, 6).map(({ proposal, action }) => (
-              <Link
-                key={proposal.id}
-                href={`/dashboard/proposals/${proposal.id}`}
-                className="group flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 transition hover:border-amber-400 hover:bg-amber-50"
-              >
-                <span>
-                  <span className="block text-sm font-bold text-slate-900">
-                    {proposal.code} ·{" "}
-                    {proposal.client?.companyName || "Cliente sem nome"}
-                  </span>
-                  <span className="mt-1 block text-xs text-slate-600">
-                    {action}
-                  </span>
-                </span>
-                <span className="text-xs font-bold text-amber-800 group-hover:underline">
-                  Abrir proposta →
-                </span>
-              </Link>
-            ))}
-          </div>
-          {commercialHandoffs.length > 6 ? (
-            <p className="mt-3 text-xs text-slate-500">
-              Mostrando as 6 mais recentes. As demais seguem identificadas na
-              carteira abaixo.
-            </p>
-          ) : null}
-        </SectionCard>
-      ) : null}
-
       <SectionCard
+        className="proposal-portfolio"
         actionsLayout="below"
-        eyebrow={
-          viewMode === "list" ? "Vista de carteira" : "Vista de operacao"
-        }
         title={
           viewMode === "list"
             ? isClient
               ? "Minhas propostas"
               : "Carteira de propostas"
             : "Kanban de aprovacao"
-        }
-        description={
-          viewMode === "list"
-            ? isClient
-              ? "Acompanhe revisoes, liberacoes e propostas prontas para sua decisao sem entrar no fluxo interno."
-              : "Pesquise propostas por cliente, equipamento ou etapa e acompanhe os valores da carteira."
-            : "Arraste as propostas entre as colunas permitidas para manter o funil vivo e visivel."
         }
         actions={
           <div className="flex w-full flex-col gap-3">
@@ -1001,6 +868,170 @@ export default function ProposalsPage() {
           )
         ) : null}
       </SectionCard>
+      <details id="proposal-followup" className="dashboard-create-panel">
+        <summary>Acompanhamento e rascunhos</summary>
+        <div className="space-y-3 p-3">
+          {" "}
+          {!isClient ? <ProposalEditingDraftList /> : null}
+          {!isClient ? (
+            <section
+              aria-label="Prioridades comerciais"
+              className="grid gap-3 sm:grid-cols-2"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setCategory("ALL");
+                  setQuery("");
+                  setStatusFilter("BOARD_REVIEW");
+                  setViewMode("list");
+                }}
+                className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition hover:border-sky-300 hover:shadow-md"
+              >
+                <span>
+                  <span className="block text-xs font-bold uppercase tracking-[0.14em] text-sky-700">
+                    Aguardando diretoria
+                  </span>
+                  <span className="mt-1 block text-sm text-slate-700">
+                    Inclui revisão de desconto
+                  </span>
+                </span>
+                <span className="text-2xl font-black text-sky-950">
+                  {stats.boardReview}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCategory("ALL");
+                  setQuery("");
+                  setStatusFilter("CLIENT_REVIEW");
+                  setViewMode("list");
+                }}
+                className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition hover:border-amber-300 hover:shadow-md"
+              >
+                <span>
+                  <span className="block text-xs font-bold uppercase tracking-[0.14em] text-amber-700">
+                    Aguardando cliente
+                  </span>
+                  <span className="mt-1 block text-sm text-slate-700">
+                    Propostas em análise externa
+                  </span>
+                </span>
+                <span className="text-2xl font-black text-amber-950">
+                  {stats.clientReview}
+                </span>
+              </button>
+            </section>
+          ) : null}
+          {canCreate ? (
+            <details className="dashboard-page-context">
+              <summary>
+                <span>Nova proposta: escolher o tipo</span>
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  className="h-4 w-4"
+                >
+                  <path
+                    d="m5 7.5 5 5 5-5"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </summary>
+              <div className="dashboard-page-context-body">
+                <p className="mb-3 text-sm text-slate-600">
+                  Escolha o formato para iniciar uma proposta.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  {canUsePortfolio("partsServices") ? (
+                    <CreateProposalCard
+                      index="01"
+                      title="Peças e serviços"
+                      description="Manutenção, materiais e atendimento."
+                      href="/dashboard/proposals/new"
+                    />
+                  ) : null}
+                  {canUsePortfolio("generators") ? (
+                    <CreateProposalCard
+                      index="02"
+                      title="Gerador"
+                      description="Venda de equipamento e acessórios."
+                      href="/dashboard/proposals/new/generator"
+                    />
+                  ) : null}
+                  {canUsePortfolio("contracts") ? (
+                    <CreateProposalCard
+                      index="03"
+                      title="Contrato"
+                      description="Cobertura e serviços recorrentes."
+                      href="/dashboard/proposals/new?proposalType=CONTRACT"
+                    />
+                  ) : null}
+                  {canUsePortfolio("generators") ||
+                  canUsePortfolio("partsServices") ||
+                  canUsePortfolio("contracts") ? (
+                    <CreateProposalCard
+                      index="04"
+                      title="Proposta externa"
+                      description="Registre uma venda de origem externa."
+                      href="/dashboard/proposals/new/external"
+                    />
+                  ) : null}
+                </div>
+              </div>
+            </details>
+          ) : null}
+          {!isClient && commercialHandoffs.length > 0 ? (
+            <SectionCard
+              eyebrow="Passagem comercial"
+              title="Vendas ganhas aguardando o próximo passo"
+              description="Após o aceite, acompanhe a confirmação da entrada e a continuidade para o contrato ou o pós-venda."
+              actions={
+                <DataPill tone="amber">
+                  {commercialHandoffs.length} pendente(s)
+                </DataPill>
+              }
+            >
+              <div className="grid gap-3 lg:grid-cols-2">
+                {commercialHandoffs.slice(0, 6).map(({ proposal, action }) => (
+                  <Link
+                    key={proposal.id}
+                    href={`/dashboard/proposals/${proposal.id}`}
+                    className="group flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 transition hover:border-amber-400 hover:bg-amber-50"
+                  >
+                    <span>
+                      <span className="block text-sm font-bold text-slate-900">
+                        {proposal.code} ·{" "}
+                        {proposal.client?.companyName || "Cliente sem nome"}
+                      </span>
+                      <span className="mt-1 block text-xs text-slate-600">
+                        {action}
+                      </span>
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-800 group-hover:underline">
+                      Abrir proposta{" "}
+                      <InterfaceIcon
+                        name="arrow-right"
+                        className="ml-1 h-4 w-4"
+                      />
+                    </span>
+                  </Link>
+                ))}
+              </div>
+              {commercialHandoffs.length > 6 ? (
+                <p className="mt-3 text-xs text-slate-500">
+                  Mostrando as 6 mais recentes. As demais seguem identificadas
+                  na carteira abaixo.
+                </p>
+              ) : null}
+            </SectionCard>
+          ) : null}
+        </div>
+      </details>
     </div>
   );
 }
@@ -1157,11 +1188,11 @@ function ProposalPortfolioCard({ proposal }: { proposal: ProposalListItem }) {
           </div>
           <Link
             href={"/dashboard/proposals/" + proposal.id}
-            className="inline-flex shrink-0 items-center rounded-xl bg-sky-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-sky-700"
+            className="app-button app-button-primary shrink-0"
           >
             Abrir proposta{" "}
             <span aria-hidden="true" className="ml-2">
-              →
+              <InterfaceIcon name="arrow-right" className="h-4 w-4" />
             </span>
           </Link>
         </div>

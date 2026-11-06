@@ -8,12 +8,14 @@ import {
   Query,
   Req,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { AuditDomain } from '@prisma/client';
 import { Request } from 'express';
 import { RequireAccessPolicy } from '../auth/access-policy.decorator';
 import { AccessPolicyGuard } from '../auth/access-policy.guard';
 import { AuthGuard } from '../auth/auth.guard';
+import { CommercialDataPrivacyInterceptor } from '../auth/rules/commercial-privacy.interceptor';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { StudioImportService } from './studio-import.service';
 import { StudioService } from './studio.service';
@@ -30,6 +32,7 @@ type AuthRequest = Request & {
 };
 
 @Controller('studio')
+@UseInterceptors(CommercialDataPrivacyInterceptor)
 @UseGuards(AuthGuard, AccessPolicyGuard)
 export class StudioController {
   constructor(

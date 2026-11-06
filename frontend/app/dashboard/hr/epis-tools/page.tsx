@@ -1,7 +1,8 @@
 "use client";
+import { formatCalendarDate } from "@/lib/formatters";
 
 import { SelectField } from "@/app/dashboard/components/SelectField";
-import { PageHeader } from "../../components/DashboardPageKit";
+import { FormField, PageHeader } from "../../components/DashboardPageKit";
 
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
@@ -67,8 +68,7 @@ type SearchOption = {
 };
 
 function formatDate(value?: string | null) {
-  if (!value) return "-";
-  return new Date(value).toLocaleDateString("pt-BR");
+  return formatCalendarDate(value);
 }
 
 function normalize(value: string) {
@@ -113,15 +113,17 @@ function matchesSearch(item: HrAssetRow, search: string) {
 
 function firstTextValue(values: unknown[]) {
   const found = values.find(
-    (value): value is string => typeof value === "string" && value.trim().length > 0,
+    (value): value is string =>
+      typeof value === "string" && value.trim().length > 0,
   );
   return found?.trim() || "";
 }
 
 function extractCatalogCaCode(item: CatalogItem) {
-  const specs = item.technicalSpecs && typeof item.technicalSpecs === "object"
-    ? item.technicalSpecs
-    : {};
+  const specs =
+    item.technicalSpecs && typeof item.technicalSpecs === "object"
+      ? item.technicalSpecs
+      : {};
   const specValue = firstTextValue([
     specs.caCode,
     specs.ca,
@@ -331,7 +333,12 @@ export default function EpisToolsPage() {
           }),
         ]);
 
-      if (!assetsRes.ok || !expiringRes.ok || !collaboratorsRes.ok || !catalogsRes.ok) {
+      if (
+        !assetsRes.ok ||
+        !expiringRes.ok ||
+        !collaboratorsRes.ok ||
+        !catalogsRes.ok
+      ) {
         throw new Error("Falha ao carregar dados de EPIs e ferramentas.");
       }
 
@@ -474,7 +481,10 @@ export default function EpisToolsPage() {
 
   function handleUserSearchChange(value: string) {
     setUserSearch(value);
-    if (userId && !collaborators.some((user) => user.id === userId && user.name === value)) {
+    if (
+      userId &&
+      !collaborators.some((user) => user.id === userId && user.name === value)
+    ) {
       setUserId("");
     }
   }
@@ -483,7 +493,9 @@ export default function EpisToolsPage() {
     setCatalogSearch(value);
     if (
       catalogItemId &&
-      !catalogItems.some((item) => item.id === catalogItemId && item.name === value)
+      !catalogItems.some(
+        (item) => item.id === catalogItemId && item.name === value,
+      )
     ) {
       setCatalogItemId("");
     }
@@ -508,7 +520,9 @@ export default function EpisToolsPage() {
       const detailedItem = (await response.json()) as CatalogItem;
       setCatalogItems((current) =>
         current.map((catalog) =>
-          catalog.id === detailedItem.id ? { ...catalog, ...detailedItem } : catalog,
+          catalog.id === detailedItem.id
+            ? { ...catalog, ...detailedItem }
+            : catalog,
         ),
       );
       setTitle(getCatalogDescription(detailedItem));
@@ -528,7 +542,7 @@ export default function EpisToolsPage() {
   async function handleAssignAsset(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!userId || !title.trim()) {
-      setError("Informe colaborador e descricao do item.");
+      setError("Informe colaborador e descrição do item.");
       return;
     }
 
@@ -555,7 +569,9 @@ export default function EpisToolsPage() {
       });
 
       if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, "Falha ao registrar entrega."));
+        throw new Error(
+          await readApiErrorMessage(res, "Falha ao registrar entrega."),
+        );
       }
 
       setUserId("");
@@ -614,17 +630,19 @@ export default function EpisToolsPage() {
     <div className="dashboard-page space-y-5">
       <PageHeader
         eyebrow="Pessoas"
-        title="Controle de EPIs e Ferramentas"
-        description="Ficha por tecnico, rastreio de posse, devolucao, vencimento e calibracao."
-        actions={<>
-<button
-          type="button"
-          onClick={() => setShowFilters((current) => !current)}
-          className="h-10 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-        >
-          {showFilters ? "Fechar filtros" : "Abrir filtros"}
-        </button>
-</>}
+        title="EPIs e ferramentas"
+        description="Acompanhe entregas, devoluções, vencimentos e calibrações por colaborador."
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => setShowFilters((current) => !current)}
+              className="h-10 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              {showFilters ? "Fechar filtros" : "Abrir filtros"}
+            </button>
+          </>
+        }
       />
 
       {message ? (
@@ -639,8 +657,16 @@ export default function EpisToolsPage() {
       ) : null}
 
       <section className="grid gap-3 md:grid-cols-4">
-        <MetricCard label="Itens em posse" value={activeItems.length} tone="blue" />
-        <MetricCard label="EPIs ativos" value={activeEpis.length} tone="green" />
+        <MetricCard
+          label="Itens em posse"
+          value={activeItems.length}
+          tone="blue"
+        />
+        <MetricCard
+          label="EPIs ativos"
+          value={activeEpis.length}
+          tone="green"
+        />
         <MetricCard label="Ferramentas" value={activeTools.length} />
         <MetricCard
           label="Prazos / vencidos"
@@ -657,7 +683,7 @@ export default function EpisToolsPage() {
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Tecnico, item, CA, patrimonio, SKU ou departamento..."
+                placeholder="Técnico, item, CA, patrimônio, SKU ou departamento..."
                 className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium normal-case tracking-normal text-slate-700 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
               />
             </label>
@@ -686,7 +712,7 @@ export default function EpisToolsPage() {
               ))}
             </SelectFilter>
             <SearchField
-              label="Tecnico"
+              label="Técnico"
               value={collaboratorFilterSearch}
               onChange={handleCollaboratorFilterSearchChange}
               onSelect={(option) => {
@@ -694,8 +720,8 @@ export default function EpisToolsPage() {
                 setCollaboratorFilterSearch(option.label);
               }}
               options={collaboratorFilterOptions}
-              placeholder="Buscar tecnico..."
-              emptyLabel="Nenhum tecnico encontrado."
+              placeholder="Buscar técnico..."
+              emptyLabel="Nenhum técnico encontrado."
             />
             <button
               type="button"
@@ -717,13 +743,13 @@ export default function EpisToolsPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                Ficha do tecnico
+                Ficha do técnico
               </p>
               <h2 className="mt-1 text-xl font-black text-zinc-900">
                 {selectedDossier?.name || "Selecione um tecnico"}
               </h2>
               <p className="text-sm text-zinc-500">
-                Itens sob responsabilidade e historico de devolucao.
+                Itens sob responsabilidade e histórico de devolucao.
               </p>
             </div>
             <div className="w-full sm:w-72">
@@ -736,7 +762,8 @@ export default function EpisToolsPage() {
                     selectedDossierUserId &&
                     !collaborators.some(
                       (user) =>
-                        user.id === selectedDossierUserId && user.name === value,
+                        user.id === selectedDossierUserId &&
+                        user.name === value,
                     )
                   ) {
                     setSelectedDossierUserId("");
@@ -748,25 +775,42 @@ export default function EpisToolsPage() {
                 }}
                 options={dossierOptions}
                 placeholder="Digite o nome..."
-                emptyLabel="Nenhum tecnico encontrado."
+                emptyLabel="Nenhum técnico encontrado."
               />
             </div>
           </div>
 
           <div className="mt-4 grid gap-2 sm:grid-cols-3">
-            <MetricCard label="Em posse" value={selectedDossierActiveItems.length} tone="blue" />
+            <MetricCard
+              label="Em posse"
+              value={selectedDossierActiveItems.length}
+              tone="blue"
+            />
             <MetricCard
               label="EPIs"
-              value={selectedDossierActiveItems.filter((item) => item.assetType === "EPI").length}
+              value={
+                selectedDossierActiveItems.filter(
+                  (item) => item.assetType === "EPI",
+                ).length
+              }
               tone="green"
             />
             <MetricCard
               label="Ferramentas"
-              value={selectedDossierActiveItems.filter((item) => item.assetType === "TOOL").length}
+              value={
+                selectedDossierActiveItems.filter(
+                  (item) => item.assetType === "TOOL",
+                ).length
+              }
             />
           </div>
 
-          <div className="mt-4 overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
+          <div
+            className="mt-4 overflow-x-auto"
+            tabIndex={0}
+            role="region"
+            aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas."
+          >
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">
@@ -780,14 +824,16 @@ export default function EpisToolsPage() {
                 {selectedDossierItems.length === 0 ? (
                   <tr>
                     <td className="px-2 py-5 text-sm text-zinc-500" colSpan={4}>
-                      Nenhum item encontrado para este tecnico.
+                      Nenhum item encontrado para este técnico.
                     </td>
                   </tr>
                 ) : (
                   selectedDossierItems.map((item) => (
                     <tr key={item.id} className="border-b border-zinc-100">
                       <td className="px-2 py-2">
-                        <p className="font-semibold text-zinc-800">{item.title}</p>
+                        <p className="font-semibold text-zinc-800">
+                          {item.title}
+                        </p>
                         <p className="text-xs text-zinc-500">
                           {item.caCode || item.catalogItem?.sku || "-"}
                         </p>
@@ -818,17 +864,22 @@ export default function EpisToolsPage() {
               Quem esta com cada ferramenta
             </h2>
             <p className="text-sm text-zinc-500">
-              Posse atual, saida registrada, devolucao e documento vinculado.
+              Posse atual, saída registrada, devolucao e documento vinculado.
             </p>
           </div>
 
-          <div className="mt-4 overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
+          <div
+            className="mt-4 overflow-x-auto"
+            tabIndex={0}
+            role="region"
+            aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas."
+          >
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">
                   <th className="px-2 py-2">Ferramenta</th>
-                  <th className="px-2 py-2">Tecnico</th>
-                  <th className="px-2 py-2">Saida</th>
+                  <th className="px-2 py-2">Técnico</th>
+                  <th className="px-2 py-2">Saída</th>
                   <th className="px-2 py-2">Controle</th>
                 </tr>
               </thead>
@@ -843,13 +894,19 @@ export default function EpisToolsPage() {
                   activeTools.map((item) => (
                     <tr key={item.id} className="border-b border-zinc-100">
                       <td className="px-2 py-2">
-                        <p className="font-semibold text-zinc-800">{item.title}</p>
+                        <p className="font-semibold text-zinc-800">
+                          {item.title}
+                        </p>
                         <p className="text-xs text-zinc-500">
-                          {item.caCode || item.catalogItem?.sku || "Sem patrimonio"}
+                          {item.caCode ||
+                            item.catalogItem?.sku ||
+                            "Sem patrimonio"}
                         </p>
                       </td>
                       <td className="px-2 py-2">
-                        <p className="font-semibold text-zinc-800">{item.user.name}</p>
+                        <p className="font-semibold text-zinc-800">
+                          {item.user.name}
+                        </p>
                         <p className="text-xs text-zinc-500">
                           {item.user.department || "-"}
                         </p>
@@ -872,7 +929,9 @@ export default function EpisToolsPage() {
                         )}
                         <button
                           type="button"
-                          onClick={() => void handleStatusChange(item.id, "RETURNED")}
+                          onClick={() =>
+                            void handleStatusChange(item.id, "RETURNED")
+                          }
                           className="ml-3 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100"
                         >
                           Devolver
@@ -890,9 +949,9 @@ export default function EpisToolsPage() {
       <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-bold text-zinc-900">Registrar saida</h2>
+            <h2 className="text-lg font-bold text-zinc-900">Registrar saída</h2>
             <p className="text-sm text-zinc-500">
-              Vincule EPI ou ferramenta ao tecnico responsavel.
+              Vincule EPI ou ferramenta ao técnico responsável.
             </p>
           </div>
         </div>
@@ -901,7 +960,7 @@ export default function EpisToolsPage() {
           className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-7"
         >
           <SearchField
-            label="Tecnico"
+            label="Técnico"
             value={userSearch}
             onChange={handleUserSearchChange}
             onSelect={(option) => {
@@ -909,8 +968,8 @@ export default function EpisToolsPage() {
               setUserSearch(option.label);
             }}
             options={collaboratorOptions}
-            placeholder="Buscar tecnico..."
-            emptyLabel="Nenhum tecnico encontrado."
+            placeholder="Buscar técnico..."
+            emptyLabel="Nenhum técnico encontrado."
           />
           <SearchField
             label="Item de estoque"
@@ -918,40 +977,54 @@ export default function EpisToolsPage() {
             onChange={handleCatalogSearchChange}
             onSelect={handleCatalogSelect}
             options={catalogOptions}
-            placeholder="Buscar item, SKU ou descricao..."
+            placeholder="Buscar item, SKU ou descrição..."
             emptyLabel="Nenhum item encontrado."
           />
-          <SelectField
-            value={assetType}
-            onChange={(event) => handleAssetTypeChange(event.target.value as AssetType)}
-            className="h-10 rounded-lg border border-zinc-300 px-3 text-sm"
+          <FormField label="Tipo do item">
+            <SelectField
+              value={assetType}
+              onChange={(event) =>
+                handleAssetTypeChange(event.target.value as AssetType)
+              }
+              className="h-10 rounded-lg border border-zinc-300 px-3 text-sm"
+            >
+              {ASSET_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {ASSET_TYPE_LABEL[type]}
+                </option>
+              ))}
+            </SelectField>
+          </FormField>
+          <FormField label="Descrição do item">
+            <input
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="Descrição do item"
+              className="h-10 rounded-lg border border-zinc-300 px-3 text-sm md:col-span-2"
+              required
+            />
+          </FormField>
+          <FormField
+            label={assetType === "EPI" ? "Código CA" : "Patrimônio / série"}
           >
-            {ASSET_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {ASSET_TYPE_LABEL[type]}
-              </option>
-            ))}
-          </SelectField>
-          <input
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder="Descricao do item"
-            className="h-10 rounded-lg border border-zinc-300 px-3 text-sm md:col-span-2"
-            required
-          />
-          <input
-            value={caCode}
-            onChange={(event) => setCaCode(event.target.value)}
-            placeholder={assetType === "EPI" ? "Codigo CA" : "Patrimonio / serie"}
-            className="h-10 rounded-lg border border-zinc-300 px-3 text-sm"
-          />
-          <input
-            type="date"
-            value={deliveredAt}
-            onChange={(event) => setDeliveredAt(event.target.value)}
-            className="h-10 rounded-lg border border-zinc-300 px-3 text-sm"
-            required
-          />
+            <input
+              value={caCode}
+              onChange={(event) => setCaCode(event.target.value)}
+              placeholder={
+                assetType === "EPI" ? "Codigo CA" : "Patrimonio / serie"
+              }
+              className="h-10 rounded-lg border border-zinc-300 px-3 text-sm"
+            />
+          </FormField>
+          <FormField label="Data de entrega">
+            <input
+              type="date"
+              value={deliveredAt}
+              onChange={(event) => setDeliveredAt(event.target.value)}
+              className="h-10 rounded-lg border border-zinc-300 px-3 text-sm"
+              required
+            />
+          </FormField>
           <label className="space-y-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
             <span>
               {assetType === "EPI" ? "Validade do EPI" : "Proxima calibracao"}
@@ -963,15 +1036,18 @@ export default function EpisToolsPage() {
               className="h-10 w-full rounded-lg border border-zinc-300 px-3 text-sm normal-case tracking-normal text-zinc-800"
             />
           </label>
-          <input
-            value={signedTermUrl}
-            onChange={(event) => setSignedTermUrl(event.target.value)}
-            placeholder="URL do termo assinado"
-            className="h-10 rounded-lg border border-zinc-300 px-3 text-sm md:col-span-2"
-          />
+          <FormField label="Termo assinado (URL)">
+            <input
+              value={signedTermUrl}
+              onChange={(event) => setSignedTermUrl(event.target.value)}
+              placeholder="URL do termo assinado"
+              className="h-10 rounded-lg border border-zinc-300 px-3 text-sm md:col-span-2"
+            />
+          </FormField>
           {selectedCatalogItem ? (
             <p className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 md:col-span-3">
-              A saida baixa 1 unidade do estoque. Ao devolver, 1 unidade volta ao almoxarifado principal.
+              A saída baixa 1 unidade do estoque. Ao devolver, 1 unidade volta
+              ao almoxarifado principal.
             </p>
           ) : null}
           <button
@@ -987,9 +1063,9 @@ export default function EpisToolsPage() {
       <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-bold text-zinc-900">Historico geral</h2>
+            <h2 className="text-lg font-bold text-zinc-900">Histórico geral</h2>
             <p className="text-sm text-zinc-500">
-              Entregas, devolucoes, perdas, vencimentos e calibracoes.
+              Entregas, devolucoes, perdas, vencimentos e calibrações.
             </p>
           </div>
           {expiring.length > 0 ? (
@@ -998,15 +1074,20 @@ export default function EpisToolsPage() {
             </span>
           ) : null}
         </div>
-        <div className="mt-4 overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
+        <div
+          className="mt-4 overflow-x-auto"
+          tabIndex={0}
+          role="region"
+          aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas."
+        >
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">
-                <th className="px-2 py-2">Tecnico</th>
+                <th className="px-2 py-2">Técnico</th>
                 <th className="px-2 py-2">Tipo / Item</th>
-                <th className="px-2 py-2">CA / Patrimonio</th>
+                <th className="px-2 py-2">CA / Patrimônio</th>
                 <th className="px-2 py-2">Entrega</th>
-                <th className="px-2 py-2">Validade / calibracao</th>
+                <th className="px-2 py-2">Validade / calibração</th>
                 <th className="px-2 py-2">Status</th>
                 <th className="px-2 py-2">Termo</th>
               </tr>
@@ -1022,12 +1103,18 @@ export default function EpisToolsPage() {
                 filteredItems.map((item) => (
                   <tr key={item.id} className="border-b border-zinc-100">
                     <td className="px-2 py-2">
-                      <p className="font-semibold text-zinc-800">{item.user.name}</p>
-                      <p className="text-xs text-zinc-500">{item.user.department || "-"}</p>
+                      <p className="font-semibold text-zinc-800">
+                        {item.user.name}
+                      </p>
+                      <p className="text-xs text-zinc-500">
+                        {item.user.department || "-"}
+                      </p>
                     </td>
                     <td className="px-2 py-2 text-zinc-700">
                       <p>{ASSET_TYPE_LABEL[item.assetType]}</p>
-                      <p className="font-semibold text-zinc-800">{item.title}</p>
+                      <p className="font-semibold text-zinc-800">
+                        {item.title}
+                      </p>
                     </td>
                     <td className="px-2 py-2 text-zinc-700">
                       <p>{item.caCode || "-"}</p>
@@ -1037,8 +1124,12 @@ export default function EpisToolsPage() {
                           : "-"}
                       </p>
                     </td>
-                    <td className="px-2 py-2 text-zinc-700">{formatDate(item.deliveredAt)}</td>
-                    <td className="px-2 py-2 text-zinc-700">{formatDate(item.expiresAt)}</td>
+                    <td className="px-2 py-2 text-zinc-700">
+                      {formatDate(item.deliveredAt)}
+                    </td>
+                    <td className="px-2 py-2 text-zinc-700">
+                      {formatDate(item.expiresAt)}
+                    </td>
                     <td className="px-2 py-2">
                       <SelectField
                         value={item.status}
@@ -1051,7 +1142,10 @@ export default function EpisToolsPage() {
                         }
                         className="rounded-md border border-zinc-300 px-2 py-1 text-xs disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
                       >
-                        {(item.status === "RETURNED" ? ["RETURNED"] : ASSET_STATUS).map((status) => (
+                        {(item.status === "RETURNED"
+                          ? ["RETURNED"]
+                          : ASSET_STATUS
+                        ).map((status) => (
                           <option key={status} value={status}>
                             {ASSET_STATUS_LABEL[status as AssetStatus]}
                           </option>

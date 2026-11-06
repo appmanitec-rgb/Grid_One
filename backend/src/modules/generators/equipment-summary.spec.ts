@@ -4,13 +4,11 @@ describe('Equipment order summary', () => {
   function setup(role = 'ADMIN') {
     const db = {
       user: {
-        findUnique: jest
-          .fn()
-          .mockResolvedValue({
-            role,
-            linkedClientId: 'client-a',
-            technicianProfile: { id: 'tech-a' },
-          }),
+        findUnique: jest.fn().mockResolvedValue({
+          role,
+          linkedClientId: 'client-a',
+          technicianProfile: { id: 'tech-a' },
+        }),
       },
       generator: {
         findUnique: jest

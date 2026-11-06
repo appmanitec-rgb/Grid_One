@@ -9,11 +9,13 @@ import {
   Query,
   Req,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { RequireAccessPolicy } from '../auth/access-policy.decorator';
 import { AccessPolicyGuard } from '../auth/access-policy.guard';
 import { AuthGuard } from '../auth/auth.guard';
+import { CommercialDataPrivacyInterceptor } from '../auth/rules/commercial-privacy.interceptor';
 import { ClientsService } from './clients.service';
 import { ClientPortalAdminService } from './client-portal-admin.service';
 import { UpdateClientPortalPasswordDto } from './dto/update-client-portal-password.dto';
@@ -28,6 +30,7 @@ import { UpdateClientDto } from './dto/update-client.dto';
 import { ClientListPageDto } from '../../common/list-page.dto';
 
 @Controller('clients')
+@UseInterceptors(CommercialDataPrivacyInterceptor)
 @UseGuards(AuthGuard, AccessPolicyGuard)
 @RequireAccessPolicy('clients.view')
 export class ClientsController {
@@ -59,8 +62,12 @@ export class ClientsController {
 
   @RequireAccessPolicy('clients.view')
   @Get('lookup')
-  lookup(@Query('q') query?: string, @Query('take') take?: string) {
-    return this.clientsService.lookup(query, take);
+  lookup(
+    @Req() req: Request,
+    @Query('q') query?: string,
+    @Query('take') take?: string,
+  ) {
+    return this.clientsService.lookup(query, take, (req as any).user?.sub);
   }
 
   @RequireAccessPolicy('clients.view')

@@ -1,9 +1,14 @@
 import { portfolioForPipeline } from '../auth/rules/access-rules';
 import {
+  managedActivityScope,
+  managementAllowed,
+} from '../auth/rules/commercial-management';
+import {
   opportunityScope,
   proposalScope,
   checkPipeline,
   checkDiscount,
+  ruleActor,
 } from '../auth/rules/commercial-access';
 import {
   BadRequestException,
@@ -47,7 +52,20 @@ export class CrmService {
     const search = query?.trim();
     const limit = this.parseLookupLimit(take);
     const normalizedPipeline = this.normalizePipeline(pipeline);
+    const actor = await ruleActor(this.prisma, actorUserId);
+    const canChooseSeller =
+      actor &&
+      (normalizedPipeline
+        ? managementAllowed(
+            actor,
+            portfolioForPipeline(normalizedPipeline),
+            'team',
+          )
+        : ['generators', 'partsServices', 'contracts'].some((p) =>
+            managementAllowed(actor, p as 'partsServices', 'team'),
+          ));
     const andWhere: Prisma.UserWhereInput[] = [];
+    if (actor && !canChooseSeller) andWhere.push({ id: actor.sub });
     if (search) {
       andWhere.push({
         OR: [
@@ -300,10 +318,9 @@ export class CrmService {
     }
     const offset = Math.max(0, Math.min(10000, Number(skip) || 0));
     const where: Prisma.CrmActivityWhereInput = {
-      OR: [
-        { opportunityId: null },
-        { opportunity: await opportunityScope(this.prisma, actorUserId) },
-      ],
+      ...(actorUserId
+        ? managedActivityScope((await ruleActor(this.prisma, actorUserId))!)
+        : {}),
       ...(clientId ? { clientId } : {}),
       ...(opportunityId ? { opportunityId } : {}),
     };
@@ -343,7 +360,10 @@ export class CrmService {
     let ownerId = actorId;
     if (dto.opportunityId) {
       const opportunity = await this.prisma.salesOpportunity.findUnique({
-        where: { id: dto.opportunityId },
+        where: {
+          id: dto.opportunityId,
+          AND: [await opportunityScope(this.prisma, actorId)],
+        },
         select: { clientId: true, assignedSellerId: true },
       });
       if (!opportunity || opportunity.clientId !== dto.clientId) {
@@ -376,9 +396,16 @@ export class CrmService {
     });
   }
 
-  async updateActivity(id: string, dto: UpdateCrmActivityDto) {
+  async updateActivity(
+    id: string,
+    dto: UpdateCrmActivityDto,
+    actorUserId?: string,
+  ) {
+    const activityScope = actorUserId
+      ? managedActivityScope((await ruleActor(this.prisma, actorUserId))!)
+      : {};
     const existing = await this.prisma.crmActivity.findUnique({
-      where: { id },
+      where: { id, AND: [activityScope] },
     });
     if (!existing) throw new NotFoundException('Atividade nao encontrada.');
     const status = dto.status ?? existing.status;
@@ -422,13 +449,26 @@ export class CrmService {
     const opportunityType =
       dto.opportunityType ?? SalesOpportunityType.FIELD_SERVICE;
     const pipeline = this.resolvePipeline(dto.pipeline, opportunityType);
+    const actor = await ruleActor(this.prisma, actorUserId);
+    const canAssign =
+      actor && managementAllowed(actor, portfolioForPipeline(pipeline), 'team');
+    if (
+      actor &&
+      dto.assignedSellerId &&
+      dto.assignedSellerId !== actor.sub &&
+      !canAssign
+    )
+      throw new BadRequestException(
+        'Somente o administrador responsável pode atribuir a negociação a outro vendedor.',
+      );
+    const assignedSellerId = dto.assignedSellerId || actorUserId;
     await checkPipeline(this.prisma, actorUserId, pipeline);
     await checkDiscount(
       this.prisma,
       actorUserId,
       Number(dto.discountPercent || 0),
     );
-    await this.assertCommercialSeller(dto.assignedSellerId, pipeline);
+    await this.assertCommercialSeller(assignedSellerId, pipeline);
 
     const stage = dto.stage ?? SalesOpportunityStage.PROSPECTION;
     const stageData = this.buildOpportunityStageData(
@@ -444,7 +484,7 @@ export class CrmService {
         siteId: dto.siteId,
         clientAddressId: dto.clientAddressId,
         primaryContactId: dto.primaryContactId,
-        assignedSellerId: dto.assignedSellerId,
+        assignedSellerId,
         pipeline,
         opportunityType,
         stage,
@@ -472,9 +512,19 @@ export class CrmService {
     actorUserId?: string,
   ) {
     const existing = await this.prisma.salesOpportunity.findUnique({
-      where: { id },
+      where: { id, AND: [await opportunityScope(this.prisma, actorUserId)] },
     });
     if (!existing) throw new NotFoundException('Oportunidade nao encontrada.');
+    const actor = await ruleActor(this.prisma, actorUserId);
+    if (
+      actor &&
+      dto.assignedSellerId !== undefined &&
+      dto.assignedSellerId !== existing.assignedSellerId &&
+      !managementAllowed(actor, portfolioForPipeline(existing.pipeline), 'team')
+    )
+      throw new BadRequestException(
+        'Somente o administrador responsável pode trocar o vendedor da negociação.',
+      );
     if (dto.clientId && dto.clientId !== existing.clientId) {
       const activityCount = await this.prisma.crmActivity.count({
         where: { opportunityId: id },
@@ -512,37 +562,55 @@ export class CrmService {
       dto.lossReasonDetail ?? existing.lossReasonDetail ?? undefined,
     );
 
-    return this.prisma.salesOpportunity.update({
-      where: { id },
-      data: {
-        title: dto.title,
-        clientId: dto.clientId,
-        siteId: dto.siteId,
-        clientAddressId: dto.clientAddressId,
-        primaryContactId: dto.primaryContactId,
-        assignedSellerId: dto.assignedSellerId,
-        pipeline,
-        opportunityType,
-        stage: nextStage,
-        temperature: dto.temperature,
-        estimatedValue:
-          dto.estimatedValue !== undefined
-            ? Number(dto.estimatedValue)
-            : undefined,
-        probabilityPercent: dto.probabilityPercent,
-        expectedCloseDate: dto.expectedCloseDate
-          ? new Date(dto.expectedCloseDate)
-          : dto.expectedCloseDate === null
-            ? null
-            : undefined,
-        source: dto.source,
-        notes: dto.notes,
-        ...stageData,
-      },
-      include: {
-        client: { select: { id: true, companyName: true } },
-        assignedSeller: { select: { id: true, name: true } },
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.salesOpportunity.update({
+        where: { id, AND: [await opportunityScope(this.prisma, actorUserId)] },
+        data: {
+          title: dto.title,
+          clientId: dto.clientId,
+          siteId: dto.siteId,
+          clientAddressId: dto.clientAddressId,
+          primaryContactId: dto.primaryContactId,
+          assignedSellerId: dto.assignedSellerId,
+          pipeline,
+          opportunityType,
+          stage: nextStage,
+          temperature: dto.temperature,
+          estimatedValue:
+            dto.estimatedValue !== undefined
+              ? Number(dto.estimatedValue)
+              : undefined,
+          probabilityPercent: dto.probabilityPercent,
+          expectedCloseDate: dto.expectedCloseDate
+            ? new Date(dto.expectedCloseDate)
+            : dto.expectedCloseDate === null
+              ? null
+              : undefined,
+          source: dto.source,
+          notes: dto.notes,
+          ...stageData,
+          ...(nextStage === existing.stage
+            ? { wonAt: existing.wonAt, lostAt: existing.lostAt }
+            : {}),
+        },
+        include: {
+          client: { select: { id: true, companyName: true } },
+          assignedSeller: { select: { id: true, name: true } },
+        },
+      });
+      if (existing.stage !== nextStage)
+        await tx.systemAuditLog.create({
+          data: {
+            domain: 'OPPORTUNITIES',
+            entityType: 'SALES_OPPORTUNITY',
+            entityId: id,
+            action: 'OPPORTUNITY_STAGE_CHANGED',
+            actorUserId,
+            beforePayload: { stage: existing.stage },
+            afterPayload: { stage: nextStage },
+          },
+        });
+      return updated;
     });
   }
 

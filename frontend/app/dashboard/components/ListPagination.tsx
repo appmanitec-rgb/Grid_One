@@ -1,5 +1,6 @@
 "use client";
 
+import { InterfaceIcon } from "./InterfaceIcon";
 import { SelectField } from "@/app/dashboard/components/SelectField";
 import { useEffect, useMemo, useState } from "react";
 
@@ -60,20 +61,20 @@ export default function ListPagination({
   const lastItem = Math.min(page * pageSize, totalItems);
 
   return (
-    <div className="dashboard-list-pagination flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-      <p className="text-xs font-semibold text-slate-500">
+    <nav aria-label="Paginação da lista" className="dashboard-list-pagination flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+      <p aria-live="polite" className="text-xs text-slate-500">
         Exibindo {firstItem}-{lastItem} de {totalItems}
       </p>
 
       <div className="flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-          Itens por pagina
+          Itens por página
           <SelectField
             disabled={disabled}
             value={pageSize}
             onChange={(event) => onPageSizeChange(Number(event.target.value))}
             className="rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-blue-500"
-            aria-label="Itens por pagina"
+            aria-label="Itens por página"
           >
             {PAGE_SIZE_OPTIONS.map((option) => (
               <option key={option} value={option}>
@@ -90,23 +91,23 @@ export default function ListPagination({
           type="button"
           onClick={() => onPageChange(page - 1)}
           disabled={disabled || page <= 1}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-white text-lg font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-          aria-label="Pagina anterior"
-          title="Pagina anterior"
+          className="app-icon-button"
+          aria-label="Página anterior"
+          title="Página anterior"
         >
-          ‹
+          <InterfaceIcon name="chevron-right" className="h-4 w-4 rotate-180" />
         </button>
         <button
           type="button"
           onClick={() => onPageChange(page + 1)}
           disabled={disabled || page >= totalPages}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-white text-lg font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-          aria-label="Proxima pagina"
-          title="Proxima pagina"
+          className="app-icon-button"
+          aria-label="Próxima página"
+          title="Próxima página"
         >
-          ›
+          <InterfaceIcon name="chevron-right" className="h-4 w-4" />
         </button>
       </div>
-    </div>
+    </nav>
   );
 }

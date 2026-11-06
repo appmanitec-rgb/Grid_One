@@ -40,12 +40,9 @@ import {
   RelatedEntityGrid,
 } from "../../components/OperationalLinks";
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
-const DANGER_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
+const DANGER_BUTTON = "app-button app-button-danger";
 
 const CHECKLIST_RESULTS = Object.keys(
   CHECKLIST_RESULT_LABELS,
@@ -251,7 +248,7 @@ export default function ServiceReportDetailPage() {
   async function signReport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!signatureForm.signedByName.trim()) {
-      setError("Informe o responsavel pela assinatura.");
+      setError("Informe o responsável pela assinatura.");
       return;
     }
     await runAction("sign", async () => {
@@ -561,7 +558,7 @@ export default function ServiceReportDetailPage() {
                   disabled={busyKey === "retention-policy"}
                   onClick={() => void updateRetentionPolicy()}
                 >
-                  Retencao/legal hold
+                  Retenção/legal hold
                 </button>
                 <button
                   type="button"
@@ -788,7 +785,7 @@ export default function ServiceReportDetailPage() {
           <Info label="Hash" value={report.documentHash?.slice(0, 24)} />
           <Info label="Storage" value={report.storageDriver || "local"} />
           <Info
-            label="Retencao"
+            label="Retenção"
             value={formatServiceReportDate(report.retentionUntil)}
           />
           <Info
@@ -922,7 +919,7 @@ export default function ServiceReportDetailPage() {
               disabled={!canEdit}
             />
           </FormField>
-          <FormField label="Servico realizado" className="lg:col-span-2">
+          <FormField label="Serviço realizado" className="lg:col-span-2">
             <TextAreaInput
               value={form.performedServices}
               onChange={(event) =>
@@ -948,7 +945,7 @@ export default function ServiceReportDetailPage() {
               disabled={!canEdit}
             />
           </FormField>
-          <FormField label="Observacoes ao cliente">
+          <FormField label="Observações ao cliente">
             <TextAreaInput
               value={form.customerNotes}
               onChange={(event) =>
@@ -961,7 +958,7 @@ export default function ServiceReportDetailPage() {
               disabled={!canEdit}
             />
           </FormField>
-          <FormField label="Observacoes internas">
+          <FormField label="Observações internas">
             <TextAreaInput
               value={form.observations}
               onChange={(event) =>
@@ -1070,7 +1067,7 @@ export default function ServiceReportDetailPage() {
                   }
                   disabled={!canEdit}
                 />
-                Obrigatorio
+                Obrigatório
               </label>
               <TextInput
                 value={item.notes || ""}
@@ -1313,7 +1310,7 @@ export default function ServiceReportDetailPage() {
         description="Assinatura simples coletada em campo, sem certificado digital avancado neste ciclo."
       >
         <form onSubmit={signReport} className="grid gap-4 lg:grid-cols-2">
-          <FormField label="Responsavel">
+          <FormField label="Responsável">
             <TextInput
               value={signatureForm.signedByName}
               onChange={(event) =>

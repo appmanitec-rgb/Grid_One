@@ -11,10 +11,9 @@ import {
   SectionCard,
 } from "../components/DashboardPageKit";
 import { SearchLookup } from "../components/SelectField";
-const secondary =
-  "rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50";
-const primary =
-  "rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50";
+import { InterfaceIcon } from "../components/InterfaceIcon";
+const secondary = "app-button app-button-secondary";
+const primary = "app-button app-button-primary";
 const input =
   "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900";
 const labels: Record<string, string> = {
@@ -166,9 +165,13 @@ function ValidityForm({ onSaved }: { onSaved: () => void }) {
     }
   }
   return (
-    <details className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-      <summary className="cursor-pointer text-sm font-semibold text-blue-700">
-        Registrar ou atualizar validade de produto
+    <details className="group mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <summary className="app-panel-toggle list-none">
+        <span>Registrar ou atualizar validade de produto</span>
+        <InterfaceIcon
+          name="chevron-down"
+          className="h-4 w-4 transition-transform duration-150 group-open:rotate-180 motion-reduce:transition-none"
+        />
       </summary>
       <div className="mt-4 space-y-4">
         <p className="text-xs text-slate-500">
@@ -237,6 +240,10 @@ function ValidityForm({ onSaved }: { onSaved: () => void }) {
           disabled={busy || !selected || !lot.trim() || !expires}
           onClick={() => void save()}
         >
+          <InterfaceIcon
+            name={busy ? "refresh" : "check"}
+            className={busy ? "h-4 w-4 motion-safe:animate-spin" : "h-4 w-4"}
+          />
           {busy ? "Salvando..." : "Salvar validade"}
         </button>
       </div>
@@ -292,6 +299,12 @@ export default function DepartmentDashboard({
               disabled={loading}
               onClick={onRefresh}
             >
+              <InterfaceIcon
+                name="refresh"
+                className={
+                  loading ? "h-4 w-4 motion-safe:animate-spin" : "h-4 w-4"
+                }
+              />
               {loading ? "Atualizando..." : "Atualizar setores"}
             </button>
           }
@@ -309,6 +322,12 @@ export default function DepartmentDashboard({
               disabled={loading}
               onClick={onRefresh}
             >
+              <InterfaceIcon
+                name="refresh"
+                className={
+                  loading ? "h-4 w-4 motion-safe:animate-spin" : "h-4 w-4"
+                }
+              />
               {loading ? "Atualizando..." : "Atualizar dados"}
             </button>
           }
@@ -344,7 +363,7 @@ export default function DepartmentDashboard({
               {card}
             </Link>
           ) : (
-            <div key={metric.id} className="min-w-0">
+            <div key={metric.id} className="department-metric-slot min-w-0">
               {card}
             </div>
           );
@@ -370,6 +389,7 @@ export default function DepartmentDashboard({
                 {section.href ? (
                   <Link href={section.href} className={secondary}>
                     Abrir área
+                    <InterfaceIcon name="arrow-right" className="h-4 w-4" />
                   </Link>
                 ) : null}
               </div>
@@ -446,7 +466,7 @@ export default function DepartmentDashboard({
                   {section.id === "product-validity" &&
                   data.canManageValidity ? (
                     <button
-                      className="mt-2 text-xs font-semibold text-slate-600 underline disabled:opacity-50"
+                      className="app-button app-button-ghost mt-2"
                       disabled={!!busy}
                       onClick={() =>
                         void act(
@@ -493,12 +513,13 @@ export default function DepartmentDashboard({
               <Link
                 key={shortcut.id}
                 href={shortcut.href}
-                className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-800 transition hover:border-blue-400 hover:text-blue-700"
+                className="group flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-800 transition-colors hover:border-blue-300 hover:bg-slate-50 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
               >
-                {shortcut.label}{" "}
-                <span aria-hidden="true" className="float-right">
-                  →
-                </span>
+                <span>{shortcut.label}</span>
+                <InterfaceIcon
+                  name="arrow-right"
+                  className="h-4 w-4 shrink-0 text-slate-400 group-hover:text-blue-700"
+                />
               </Link>
             ))}
           </div>

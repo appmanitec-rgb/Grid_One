@@ -1,4 +1,5 @@
 "use client";
+import { formatCalendarDate } from "@/lib/formatters";
 import { getAccessFromToken, canAccessDashboardPath } from "@/lib/access";
 import { commercialLabel } from "@/lib/commercial-labels";
 
@@ -89,12 +90,9 @@ type PaymentDraft = {
   cancelReason: string;
 };
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
-const DANGER_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:border-rose-300 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
+const DANGER_BUTTON = "app-button app-button-danger";
 
 const STATUS_META: Record<
   PayableStatus,
@@ -108,17 +106,17 @@ const STATUS_META: Record<
   OVERDUE: {
     label: "Vencido",
     tone: "rose",
-    helper: "Titulo vencido ainda impactando o caixa projetado.",
+    helper: "Título vencido ainda impactando o caixa projetado.",
   },
   PAID: {
     label: "Quitado",
     tone: "emerald",
-    helper: "Saida registrada e saldo bancario ja ajustado.",
+    helper: "Saída registrada e saldo bancario já ajustado.",
   },
   CANCELED: {
     label: "Cancelado",
     tone: "slate",
-    helper: "Titulo retirado da carteira sem nova saida.",
+    helper: "Título retirado da carteira sem nova saída.",
   },
 };
 
@@ -516,7 +514,7 @@ export default function AccountsPayablePage() {
         throw new Error(
           await readApiErrorMessage(
             response,
-            "Falha ao atualizar os titulos vencidos.",
+            "Falha ao atualizar os títulos vencidos.",
           ),
         );
       }
@@ -550,7 +548,7 @@ export default function AccountsPayablePage() {
     }
 
     if (amount - outstanding > 0.009) {
-      setError("O valor informado nao pode ultrapassar o saldo do titulo.");
+      setError("O valor informado não pode ultrapassar o saldo do título.");
       return;
     }
 
@@ -614,20 +612,18 @@ export default function AccountsPayablePage() {
 
     if (item.purchaseOrder?.id) {
       setError(
-        "Titulos de pedido de compra devem ser tratados no proprio fluxo de suprimentos.",
+        "Títulos de pedido de compra devem ser tratados no proprio fluxo de suprimentos.",
       );
       return;
     }
 
     if (Number(item.paidAmount || 0) > 0 || item.status === "PAID") {
-      setError("Titulos com pagamento registrado nao podem ser cancelados.");
+      setError("Títulos com pagamento registrado não podem ser cancelados.");
       return;
     }
 
     if (reason.length < 4) {
-      setError(
-        "Descreva o motivo do cancelamento para manter a trilha financeira consistente.",
-      );
+      setError("Informe o motivo do cancelamento.");
       return;
     }
 
@@ -648,13 +644,11 @@ export default function AccountsPayablePage() {
       if (await handleUnauthorized(response)) return;
       if (!response.ok) {
         throw new Error(
-          await readApiErrorMessage(response, "Falha ao cancelar titulo."),
+          await readApiErrorMessage(response, "Falha ao cancelar título."),
         );
       }
 
-      setSuccessMessage(
-        "Titulo cancelado e retirado da esteira de pagamentos.",
-      );
+      setSuccessMessage("Título cancelado.");
       setExpandedId(null);
       await loadData();
     } catch (cancelError: unknown) {
@@ -676,13 +670,13 @@ export default function AccountsPayablePage() {
         description="Organize vencimentos, consulte a origem das despesas e registre pagamentos."
         stats={[
           {
-            label: "Titulos ativos",
+            label: "Títulos ativos",
             value: String(stats.activeCount),
             helper: "Despesas abertas ou vencidas ainda pressionando o caixa.",
             tone: "blue",
           },
           {
-            label: "Saida prevista",
+            label: "Saída prevista",
             value: formatCurrency(stats.outstandingAmount),
             helper: "Montante restante da carteira atual.",
             tone: "amber",
@@ -696,7 +690,7 @@ export default function AccountsPayablePage() {
           {
             label: "Pagamento parcial",
             value: String(stats.partialCount),
-            helper: "Titulos ainda ativos, mas com baixa parcial registrada.",
+            helper: "Títulos ainda ativos, mas com baixa parcial registrada.",
             tone: "emerald",
           },
         ]}
@@ -724,13 +718,13 @@ export default function AccountsPayablePage() {
                 <div>
                   <p className="text-xs text-slate-500">Ligadas a P.O.</p>
                   <p className="mt-1 text-lg font-bold text-slate-950">
-                    {sourceMix.purchaseOrders} titulo(s)
+                    {sourceMix.purchaseOrders} título(s)
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-500">Lancamentos manuais</p>
                   <p className="mt-1 text-lg font-bold text-slate-950">
-                    {sourceMix.manual} titulo(s)
+                    {sourceMix.manual} título(s)
                   </p>
                 </div>
               </div>
@@ -751,16 +745,16 @@ export default function AccountsPayablePage() {
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.75fr)_360px]">
         <SectionCard
-          eyebrow="Carteira operacional"
-          title="Pagamentos com contexto de fornecedor, P.O. e conta de saida"
-          description="Aja na despesa certa sem perder o vinculo com suprimentos, centro de custo e trilha de pagamento."
+          eyebrow="Despesas"
+          title="Despesas e pagamentos"
+          description="Consulte fornecedor, pedido de compra e centro de custo antes de registrar o pagamento."
         >
           <div className="grid gap-3 md:grid-cols-4">
             <FormField label="Busca">
               <TextInput
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Fornecedor, pedido ou descricao"
+                placeholder="Fornecedor, pedido ou descrição"
               />
             </FormField>
 
@@ -839,7 +833,7 @@ export default function AccountsPayablePage() {
           ) : null}
           <div className="mt-4 flex flex-wrap gap-2">
             <DataPill tone="blue">
-              {filteredPayables.length} titulo(s) na visao atual
+              {filteredPayables.length} título(s) na visão atual
             </DataPill>
             <DataPill tone="amber">
               {formatCurrency(stats.outstandingAmount)} em aberto
@@ -867,8 +861,8 @@ export default function AccountsPayablePage() {
               ))
             ) : filteredPayables.length === 0 ? (
               <EmptyState
-                title="Nenhuma despesa encontrada nessa visao"
-                description="Ajuste os filtros ou valide os pedidos aprovados para repovoar a carteira."
+                title="Nenhuma despesa encontrada"
+                description="Ajuste os filtros ou consulte a validação dos pedidos de compra aprovados."
               />
             ) : (
               filteredPayables.map((item) => {
@@ -994,7 +988,7 @@ export default function AccountsPayablePage() {
                     <div className="mt-5 grid gap-3 md:grid-cols-4">
                       <FieldBox>
                         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                          Emissao
+                          Emissão
                         </p>
                         <p className="mt-2 text-sm font-semibold text-slate-900">
                           {formatDate(item.issueDate)}
@@ -1013,7 +1007,7 @@ export default function AccountsPayablePage() {
                           Vencimento
                         </p>
                         <p className="mt-2 text-sm font-semibold text-slate-900">
-                          {formatDate(item.dueDate)}
+                          {formatCalendarDate(item.dueDate)}
                         </p>
                       </FieldBox>
                       <FieldBox>
@@ -1100,7 +1094,7 @@ export default function AccountsPayablePage() {
                         {item.barcode ? (
                           <FieldBox>
                             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                              Codigo de barras
+                              Código de barras
                             </p>
                             <p className="mt-2 break-all text-sm text-slate-700">
                               {item.barcode}
@@ -1115,10 +1109,10 @@ export default function AccountsPayablePage() {
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <div>
                             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                              Historico recente
+                              Histórico recente
                             </p>
                             <p className="mt-1 text-sm text-slate-600">
-                              Ate 3 ultimas saidas registradas para este titulo.
+                              Até 3 ultimas saídas registradas para este título.
                             </p>
                           </div>
                           <DataPill tone="slate">
@@ -1203,7 +1197,7 @@ export default function AccountsPayablePage() {
                             </SelectInput>
                           </FormField>
 
-                          <FormField label="Conta de saida">
+                          <FormField label="Conta de saída">
                             <SelectInput
                               value={draft.bankAccountId}
                               onChange={(event) =>
@@ -1240,7 +1234,7 @@ export default function AccountsPayablePage() {
                         </div>
 
                         <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_220px]">
-                          <FormField label="Observacoes">
+                          <FormField label="Observações">
                             <TextAreaInput
                               value={draft.notes}
                               onChange={(event) =>
@@ -1248,7 +1242,7 @@ export default function AccountsPayablePage() {
                                   notes: event.target.value,
                                 })
                               }
-                              placeholder="Referencia do pagamento, banco, lote ou observacao de conciliacao."
+                              placeholder="Referencia do pagamento, banco, lote ou observação de conciliacao."
                             />
                           </FormField>
 
@@ -1345,7 +1339,7 @@ export default function AccountsPayablePage() {
           <SectionCard
             eyebrow="Prioridades"
             title="Vencimentos imediatos"
-            description="Titulos que merecem atuacao rapida para nao pressionar ainda mais o caixa."
+            description="Despesas vencidas ou com vencimento nos próximos 7 dias."
           >
             <div className="space-y-3">
               {loading ? (
@@ -1356,7 +1350,7 @@ export default function AccountsPayablePage() {
               ) : dueSoon.length === 0 ? (
                 <EmptyState
                   title="Nenhum vencimento urgente"
-                  description="A carteira atual nao possui despesas ativas vencendo nos proximos 7 dias."
+                  description="A carteira atual não possui despesas ativas vencendo nos próximos 7 dias."
                 />
               ) : (
                 dueSoon.map((item) => {
@@ -1403,8 +1397,8 @@ export default function AccountsPayablePage() {
           </SectionCard>
 
           <SectionCard
-            eyebrow="Conexao de fluxo"
-            title="Esteira validada"
+            eyebrow="Consultas relacionadas"
+            title="Pedidos e movimentações"
             description="Acesse os pedidos de compra, pagamentos e movimentos bancários associados."
           >
             <div className="space-y-3">
@@ -1413,7 +1407,7 @@ export default function AccountsPayablePage() {
                   Pedido de compra / contas a pagar
                 </p>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Titulos vindos de P.O. agora ficam evidentes na carteira, em
+                  Títulos vindos de P.O. agora ficam evidentes na carteira, em
                   vez de parecerem apenas mais uma linha solta do financeiro.
                 </p>
               </FieldBox>
@@ -1423,8 +1417,8 @@ export default function AccountsPayablePage() {
                   Pagamento / conta bancaria
                 </p>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  O registro de pagamento expone metodo, conta de saida e
-                  historico, refletindo melhor o impacto no caixa projetado.
+                  O registro de pagamento expone metodo, conta de saída e
+                  histórico, refletindo melhor o impacto no caixa projetado.
                 </p>
               </FieldBox>
 
@@ -1433,7 +1427,7 @@ export default function AccountsPayablePage() {
                   Protecoes de consistencia
                 </p>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Cancelamento de titulo com pagamento ou vinculado a pedido de
+                  Cancelamento de título com pagamento ou vinculado a pedido de
                   compra e sobrepagamento passaram a ser bloqueados para evitar
                   estados financeiros quebrados.
                 </p>
@@ -1442,9 +1436,9 @@ export default function AccountsPayablePage() {
           </SectionCard>
 
           <SectionCard
-            eyebrow="Contas de saida"
+            eyebrow="Contas bancárias"
             title="Contas para pagamento"
-            description="As contas ativas abaixo podem receber a baixa no momento da saida."
+            description="As contas ativas abaixo podem receber a baixa no momento da saída."
           >
             <div className="space-y-3">
               {activeBankAccounts.length === 0 ? (

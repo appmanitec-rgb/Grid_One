@@ -91,8 +91,8 @@ export default function PortalDashboardPage() {
       <PageHeader eyebrow="Central do cliente" title={data.client.tradeName || data.client.companyName} description="Acompanhe os equipamentos, propostas, atendimentos e documentos da sua empresa." />
 
       <div className="flex flex-wrap gap-3">
-        {can("PROPOSALS") && <Link href="/portal/propostas" className="rounded-xl bg-blue-700 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-blue-800">Avaliar minhas propostas</Link>}
-        {can("REQUESTS") && <Link href="/portal/solicitacoes" className="rounded-xl border border-blue-200 bg-white px-5 py-3 text-sm font-bold text-blue-800 hover:bg-blue-50">Solicitar peças ou serviços</Link>}
+        {can("PROPOSALS") && <Link href="/portal/propostas" className="app-button app-button-primary">Avaliar minhas propostas</Link>}
+        {can("REQUESTS") && <Link href="/portal/solicitacoes" className="app-button app-button-secondary">Solicitar peças ou serviços</Link>}
       </div>
 
       <section className="dashboard-metrics-grid">

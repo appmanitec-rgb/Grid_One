@@ -58,9 +58,7 @@ export default function PurchasingWorkspace({
       ) : null}
       {status && !status.enabled ? (
         <InlineMessage tone="warning">
-          {status.configured
-            ? "A nova experiência está desativada. Os documentos existentes continuam disponíveis para acompanhamento."
-            : "A nova experiência aguarda a migração aditiva neste ambiente."}
+          Novas compras estão temporariamente indisponíveis. Consulte os pedidos existentes.
         </InlineMessage>
       ) : null}
       {status ? (

@@ -31,10 +31,8 @@ type EquipmentLine = {
   coverageAmount: string;
 };
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 
 export default function NewContractPage() {
   const router = useRouter();
@@ -88,7 +86,7 @@ export default function NewContractPage() {
 
       if (!clientsRes.ok) {
         throw new Error(
-          await readApiErrorMessage(clientsRes, "Nao foi possivel carregar clientes."),
+          await readApiErrorMessage(clientsRes, "Não foi possivel carregar clientes."),
         );
       }
 
@@ -96,7 +94,7 @@ export default function NewContractPage() {
         throw new Error(
           await readApiErrorMessage(
             equipmentsRes,
-            "Nao foi possivel carregar equipamentos.",
+            "Não foi possivel carregar equipamentos.",
           ),
         );
       }
@@ -255,7 +253,7 @@ export default function NewContractPage() {
           {
             label: "Clientes carregados",
             value: String(clients.length),
-            helper: "Base disponivel para vinculo do contrato.",
+            helper: "Base disponível para vínculo do contrato.",
             tone: "slate",
           },
           {
@@ -267,7 +265,7 @@ export default function NewContractPage() {
           {
             label: "Itens na cobertura",
             value: String(equipmentLines.length),
-            helper: "Equipamentos ja adicionados ao escopo.",
+            helper: "Equipamentos já adicionados ao escopo.",
             tone: "emerald",
           },
           {
@@ -293,11 +291,10 @@ export default function NewContractPage() {
           <FieldBox className="space-y-4 rounded-[28px] border-white/60 bg-white/80 p-5 shadow-[0_22px_60px_-40px_rgba(15,31,50,0.45)]">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                Verificacao de fluxo
+                Cliente e equipamentos
               </p>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Quando voce troca o cliente, os equipamentos antigos invalidos saem do
-                formulario automaticamente. Isso evita erros de vinculo no envio.
+                Selecione o cliente e os equipamentos cobertos pelo contrato. Ao trocar o cliente, revise os equipamentos selecionados.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -320,11 +317,11 @@ export default function NewContractPage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         <SectionCard
           eyebrow="Base do contrato"
-          title="Dados gerais e vigencia"
+          title="Dados gerais e vigência"
           description="Define cliente, status inicial e janela principal do contrato."
         >
           <div className="grid gap-4 md:grid-cols-4">
-            <FormField label="Titulo">
+            <FormField label="Título">
               <TextInput
                 name="title"
                 value={formData.title}
@@ -351,7 +348,7 @@ export default function NewContractPage() {
               <SelectInput name="status" value={formData.status} onChange={changeField}>
                 <option value="ACTIVE">Ativo</option>
                 <option value="SUSPENDED">Suspenso</option>
-                <option value="RENEWAL">Em renovacao</option>
+                <option value="RENEWAL">Em renovação</option>
               </SelectInput>
             </FormField>
             <FormField label="Alerta vencimento (dias)">
@@ -380,7 +377,7 @@ export default function NewContractPage() {
                 required
               />
             </FormField>
-            <FormField label="Recorrencia preventiva" hint="Obrigatorio">
+            <FormField label="Recorrência preventiva" hint="Obrigatorio">
               <SelectInput
                 name="preventiveRecurrence"
                 value={formData.preventiveRecurrence}
@@ -397,7 +394,7 @@ export default function NewContractPage() {
         </SectionCard>
 
         <SectionCard
-          eyebrow="Cobertura tecnica"
+          eyebrow="Cobertura técnica"
           title="Equipamentos cobertos"
           description="Selecione os equipamentos do cliente que serão cobertos pelo contrato."
           actions={
@@ -414,12 +411,12 @@ export default function NewContractPage() {
           {!formData.clientId ? (
             <EmptyState
               title="Selecione o cliente primeiro"
-              description="Os equipamentos disponiveis aparecem somente apos definir o cliente do contrato."
+              description="Os equipamentos disponíveis aparecem somente após definir o cliente do contrato."
             />
           ) : equipmentLines.length === 0 ? (
             <EmptyState
               title="Nenhum equipamento selecionado"
-              description="Adicione ao menos um equipamento para fechar o escopo tecnico do contrato."
+              description="Adicione ao menos um equipamento para fechar o escopo técnico do contrato."
             />
           ) : (
             <div className="space-y-3">
@@ -470,8 +467,8 @@ export default function NewContractPage() {
 
         <SectionCard
           eyebrow="SLA e cobertura"
-          title="Atendimento e pecas"
-          description="Configure tempos de resposta, franquia corretiva e politica de pecas."
+          title="Atendimento e peças"
+          description="Configure tempos de resposta, franquia corretiva e politica de peças."
         >
           <div className="grid gap-4 md:grid-cols-4">
             <FormField label="Tempo resposta (h)">
@@ -490,7 +487,7 @@ export default function NewContractPage() {
                 onChange={changeField}
               />
             </FormField>
-            <FormField label="Cobertura de pecas">
+            <FormField label="Cobertura de peças">
               <SelectInput
                 name="partsCoverage"
                 value={formData.partsCoverage}
@@ -530,7 +527,7 @@ export default function NewContractPage() {
                 required
               />
             </FormField>
-            <FormField label="Indice de reajuste">
+            <FormField label="Índice de reajuste">
               <SelectInput
                 name="adjustmentIndex"
                 value={formData.adjustmentIndex}
@@ -551,7 +548,7 @@ export default function NewContractPage() {
                 onChange={changeField}
               />
             </FormField>
-            <FormField label="Observacoes" className="md:col-span-4">
+            <FormField label="Observações" className="md:col-span-4">
               <TextAreaInput
                 name="notes"
                 value={formData.notes}

@@ -39,11 +39,28 @@ export function PrintDocumentShell({
 }) {
   return (
     <div className="dashboard-page space-y-5">
-      <div className="document-print-toolbar"><PageHeader eyebrow="Documentos" title={title} description={subtitle} actions={<>
-        {backHref ? <Link href={backHref} className={SECONDARY_BUTTON}>{backLabel}</Link> : null}
-        {sourceHref && sourceLabel ? <Link href={sourceHref} className={SECONDARY_BUTTON}>{sourceLabel}</Link> : null}
-        {actions}
-      </>} /></div>
+      <div className="document-print-toolbar">
+        <PageHeader
+          eyebrow="Documentos"
+          title={title}
+          description={subtitle}
+          actions={
+            <>
+              {backHref ? (
+                <Link href={backHref} className={SECONDARY_BUTTON}>
+                  {backLabel}
+                </Link>
+              ) : null}
+              {sourceHref && sourceLabel ? (
+                <Link href={sourceHref} className={SECONDARY_BUTTON}>
+                  {sourceLabel}
+                </Link>
+              ) : null}
+              {actions}
+            </>
+          }
+        />
+      </div>
 
       <article className="document-print-page overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_30px_70px_-50px_rgba(15,23,42,0.34)]">
         <div
@@ -88,16 +105,16 @@ export function PrintDocumentShell({
               </div>
             </div>
 
-            <div className="grid gap-2 text-sm text-slate-600 md:min-w-[240px]">
-              <InfoLine label="Codigo" value={code} />
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm text-slate-600 md:w-[360px] md:shrink-0">
+              <InfoLine label="Código" value={code} />
               <InfoLine label="Empresa" value={company.tradeName} />
-              <InfoLine label="CNPJ" value={company.cnpj || "-"} />
+              <InfoLine label="CNPJ" value={company.cnpj || "Não informado"} />
               <InfoLine
                 label="Contato"
                 value={company.email || company.phone || "-"}
               />
               <InfoLine
-                label="Endereco"
+                label="Endereço"
                 value={formatCompanyAddress(company) || "-"}
               />
             </div>
@@ -198,11 +215,7 @@ export function PrintTable({
   );
 }
 
-export function ToolbarPill({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export function ToolbarPill({ children }: { children: ReactNode }) {
   return (
     <span className="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
       {children}
@@ -216,7 +229,7 @@ function InfoLine({ label, value }: { label: string; value: string }) {
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
         {label}
       </p>
-      <p className="mt-1 text-sm text-slate-800">{value}</p>
+      <p className="mt-1 break-words text-sm text-slate-800">{value}</p>
     </div>
   );
 }

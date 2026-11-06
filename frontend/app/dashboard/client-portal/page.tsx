@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCalendarDate } from "@/lib/formatters";
 import Link from "next/link";
 import { commercialLabel } from "@/lib/commercial-labels";
 import { useEffect, useMemo, useState } from "react";
@@ -19,7 +20,11 @@ type PortalProposal = {
   status: string;
   totalValue: number;
   validUntil?: string | null;
-  generator?: { id: string; name?: string | null; serialNumber?: string | null } | null;
+  generator?: {
+    id: string;
+    name?: string | null;
+    serialNumber?: string | null;
+  } | null;
   generatedContract?: { id: string; code: string; status: string } | null;
 };
 
@@ -35,7 +40,11 @@ type PortalContract = {
   includesFuelManagement?: boolean | null;
   equipments: Array<{
     id: string;
-    generator: { id: string; name?: string | null; serialNumber?: string | null };
+    generator: {
+      id: string;
+      name?: string | null;
+      serialNumber?: string | null;
+    };
   }>;
   invoices: Array<{
     id: string;
@@ -53,7 +62,11 @@ type PortalOrder = {
   scheduledTo?: string | null;
   startedAt?: string | null;
   finishedAt?: string | null;
-  generator?: { id: string; name?: string | null; serialNumber?: string | null } | null;
+  generator?: {
+    id: string;
+    name?: string | null;
+    serialNumber?: string | null;
+  } | null;
   technician?: {
     id: string;
     user?: { id: string; name: string; skillLevel?: string | null } | null;
@@ -100,10 +113,8 @@ type PortalData = {
   receivables: PortalReceivable[];
 };
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800";
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 
 export default function ClientPortalPage() {
   const [data, setData] = useState<PortalData | null>(null);
@@ -132,7 +143,7 @@ export default function ClientPortalPage() {
           throw new Error(
             await readApiErrorMessage(
               response,
-              "Nao foi possivel carregar o portal do cliente.",
+              "Não foi possivel carregar o portal do cliente.",
             ),
           );
         }
@@ -172,9 +183,9 @@ export default function ClientPortalPage() {
         tone: "blue" as const,
       },
       {
-        label: "Aguardando decisao",
+        label: "Aguardando decisão",
         value: String(data?.stats.awaitingClientDecision || 0),
-        helper: "Itens prontos para sua aprovacao ou retorno.",
+        helper: "Itens prontos para sua aprovação ou retorno.",
         tone: "amber" as const,
       },
       {
@@ -201,7 +212,7 @@ export default function ClientPortalPage() {
         description={
           data?.client
             ? `${data.client.tradeName || data.client.companyName} em uma leitura unica de propostas, contratos, atendimento e cobranca.`
-            : "Uma visao consolidada do relacionamento comercial e operacional."
+            : "Consulte propostas, contratos, equipamentos e atendimentos do cliente."
         }
         stats={stats}
         actions={
@@ -243,12 +254,21 @@ export default function ClientPortalPage() {
             <SectionCard
               eyebrow="Conta"
               title={data.client.tradeName || data.client.companyName}
-              description="Dados principais do relacionamento e da operacao do seu contrato."
+              description="Dados principais do relacionamento e da operação do seu contrato."
             >
               <div className="grid gap-3 md:grid-cols-2">
-                <InfoCard label="Contato" value={data.client.contactName || "Nao informado"} />
-                <InfoCard label="Telefone" value={data.client.phone || "Nao informado"} />
-                <InfoCard label="Email" value={data.client.email || "Nao informado"} />
+                <InfoCard
+                  label="Contato"
+                  value={data.client.contactName || "Nao informado"}
+                />
+                <InfoCard
+                  label="Telefone"
+                  value={data.client.phone || "Nao informado"}
+                />
+                <InfoCard
+                  label="Email"
+                  value={data.client.email || "Nao informado"}
+                />
                 <InfoCard
                   label="Cidade base"
                   value={
@@ -262,8 +282,8 @@ export default function ClientPortalPage() {
 
             <SectionCard
               eyebrow="Relacionamento"
-              title="Pulso atual"
-              description="Leitura rapida do que merece atencao imediata."
+              title="Resumo do atendimento"
+              description="Leitura rapida do que merece atenção imediata."
             >
               <div className="space-y-3">
                 <PulseLine
@@ -272,25 +292,34 @@ export default function ClientPortalPage() {
                   tone={data.stats.openOrders > 0 ? "blue" : "slate"}
                 />
                 <PulseLine
-                  label="Titulos vencidos"
+                  label="Títulos vencidos"
                   value={String(data.stats.overdueReceivables)}
                   tone={data.stats.overdueReceivables > 0 ? "rose" : "emerald"}
                 />
                 <PulseLine
-                  label="Condicao comercial"
-                  value={commercialLabel(data.client.paymentTermDefault,"A combinar")}
+                  label="Condição comercial"
+                  value={commercialLabel(
+                    data.client.paymentTermDefault,
+                    "A combinar",
+                  )}
                   tone="slate"
                 />
                 <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 px-4 py-4">
                   <div className="flex flex-wrap items-center gap-2">
-                    <DataPill tone={data.client.isDelinquent ? "rose" : "emerald"}>
-                      {data.client.isDelinquent ? "Atencao financeira" : "Conta regular"}
+                    <DataPill
+                      tone={data.client.isDelinquent ? "rose" : "emerald"}
+                    >
+                      {data.client.isDelinquent
+                        ? "Atencao financeira"
+                        : "Conta regular"}
                     </DataPill>
-                    <DataPill tone="slate">Cliente ID {data.client.id.slice(0, 8)}</DataPill>
+                    <DataPill tone="slate">
+                      Cliente ID {data.client.id.slice(0, 8)}
+                    </DataPill>
                   </div>
                   <p className="mt-3 text-sm text-slate-600">
-                    Quando uma proposta estiver pronta para decisao, ela aparece abaixo com acesso
-                    direto para revisar e responder.
+                    Quando uma proposta estiver pronta para decisão, ela aparece
+                    abaixo com acesso direto para revisar e responder.
                   </p>
                 </div>
               </div>
@@ -300,13 +329,15 @@ export default function ClientPortalPage() {
           <SectionCard
             eyebrow="Comercial"
             title="Propostas recentes"
-            description="Acompanhe o funil e entre nas propostas prontas para sua decisao."
-            actions={<DataPill tone="slate">{data.proposals.length} item(ns)</DataPill>}
+            description="Acompanhe o funil e entre nas propostas prontas para sua decisão."
+            actions={
+              <DataPill tone="slate">{data.proposals.length} item(ns)</DataPill>
+            }
           >
             {data.proposals.length === 0 ? (
               <EmptyState
                 title="Sem propostas no momento"
-                description="Quando houver novas propostas ou revisoes, elas aparecerao aqui."
+                description="Quando houver novas propostas ou revisões, elas aparecerao aqui."
               />
             ) : (
               <div className="grid gap-3 lg:grid-cols-2">
@@ -324,7 +355,13 @@ export default function ClientPortalPage() {
                           {formatCurrency(Number(proposal.totalValue || 0))}
                         </h3>
                       </div>
-                      <DataPill tone={proposal.status === "CLIENT_REVIEW" ? "amber" : "slate"}>
+                      <DataPill
+                        tone={
+                          proposal.status === "CLIENT_REVIEW"
+                            ? "amber"
+                            : "slate"
+                        }
+                      >
                         {statusLabel(proposal.status)}
                       </DataPill>
                     </div>
@@ -332,13 +369,17 @@ export default function ClientPortalPage() {
                       <p>
                         Equipamento:{" "}
                         <strong className="font-semibold text-slate-800">
-                          {proposal.generator?.name || proposal.generator?.serialNumber || "-"}
+                          {proposal.generator?.name ||
+                            proposal.generator?.serialNumber ||
+                            "-"}
                         </strong>
                       </p>
                       <p>
                         Validade:{" "}
                         <strong className="font-semibold text-slate-800">
-                          {proposal.validUntil ? formatDate(proposal.validUntil) : "Sem prazo"}
+                          {proposal.validUntil
+                            ? formatCalendarDate(proposal.validUntil)
+                            : "Sem prazo"}
                         </strong>
                       </p>
                       <p>
@@ -349,7 +390,10 @@ export default function ClientPortalPage() {
                       </p>
                     </div>
                     <div className="mt-4">
-                      <Link href={`/dashboard/proposals/${proposal.id}`} className={SECONDARY_BUTTON}>
+                      <Link
+                        href={`/dashboard/proposals/${proposal.id}`}
+                        className={SECONDARY_BUTTON}
+                      >
                         Abrir proposta
                       </Link>
                     </div>
@@ -363,7 +407,7 @@ export default function ClientPortalPage() {
             <SectionCard
               eyebrow="Contratos"
               title="Cobertura ativa"
-              description="Resumo contratual com equipamentos vinculados e proximos vencimentos."
+              description="Resumo contratual com equipamentos vinculados e próximos vencimentos."
             >
               {data.contracts.length === 0 ? (
                 <EmptyState
@@ -386,18 +430,26 @@ export default function ClientPortalPage() {
                             {contract.title || "Contrato de servico"}
                           </h3>
                         </div>
-                        <DataPill tone={contract.status === "ACTIVE" ? "emerald" : "amber"}>
-                          {contract.status === "ACTIVE" ? "Ativo" : contract.status}
+                        <DataPill
+                          tone={
+                            contract.status === "ACTIVE" ? "emerald" : "amber"
+                          }
+                        >
+                          {contract.status === "ACTIVE"
+                            ? "Ativo"
+                            : contract.status}
                         </DataPill>
                       </div>
                       <div className="mt-4 grid gap-3 md:grid-cols-2">
                         <InfoCard
-                          label="Vigencia"
-                          value={`${formatDate(contract.startDate)} ate ${formatDate(contract.endDate)}`}
+                          label="Vigência"
+                          value={`${formatCalendarDate(contract.startDate)} ate ${formatCalendarDate(contract.endDate)}`}
                         />
                         <InfoCard
                           label="Mensalidade"
-                          value={formatCurrency(Number(contract.recurringAmount || 0))}
+                          value={formatCurrency(
+                            Number(contract.recurringAmount || 0),
+                          )}
                         />
                         <InfoCard
                           label="SLA"
@@ -421,7 +473,7 @@ export default function ClientPortalPage() {
             <SectionCard
               eyebrow="Atendimento"
               title="Ordens recentes"
-              description="Execucao tecnica ligada ao seu contrato e aos seus equipamentos."
+              description="Execucao técnica ligada ao seu contrato e aos seus equipamentos."
             >
               {data.orders.length === 0 ? (
                 <EmptyState
@@ -438,31 +490,45 @@ export default function ClientPortalPage() {
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                            Ordem de servico
+                            Ordem de serviço
                           </p>
                           <h3 className="mt-2 text-lg font-bold text-slate-950">
                             {order.title}
                           </h3>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          <DataPill tone={order.status === "COMPLETED" ? "emerald" : "blue"}>
+                          <DataPill
+                            tone={
+                              order.status === "COMPLETED" ? "emerald" : "blue"
+                            }
+                          >
                             {orderStatusLabel(order.status)}
                           </DataPill>
-                          <DataPill tone="slate">{commercialLabel(order.priority)}</DataPill>
+                          <DataPill tone="slate">
+                            {commercialLabel(order.priority)}
+                          </DataPill>
                         </div>
                       </div>
                       <div className="mt-4 grid gap-3 md:grid-cols-2">
                         <InfoCard
                           label="Equipamento"
-                          value={order.generator?.name || order.generator?.serialNumber || "-"}
+                          value={
+                            order.generator?.name ||
+                            order.generator?.serialNumber ||
+                            "-"
+                          }
                         />
                         <InfoCard
-                          label="Tecnico"
+                          label="Técnico"
                           value={order.technician?.user?.name || "A definir"}
                         />
                         <InfoCard
                           label="Agenda"
-                          value={order.scheduledTo ? formatDate(order.scheduledTo) : "Sem agenda"}
+                          value={
+                            order.scheduledTo
+                              ? formatDate(order.scheduledTo)
+                              : "Sem agenda"
+                          }
                         />
                         <InfoCard
                           label="Contrato"
@@ -478,10 +544,12 @@ export default function ClientPortalPage() {
 
           <SectionCard
             eyebrow="Cobranca"
-            title="Titulos em aberto"
-            description="Visao financeira consolidada de contratos e ordens cobradas."
+            title="Títulos em aberto"
+            description="Visão financeira consolidada de contratos e ordens cobradas."
             actions={
-              <DataPill tone={data.stats.overdueReceivables > 0 ? "rose" : "emerald"}>
+              <DataPill
+                tone={data.stats.overdueReceivables > 0 ? "rose" : "emerald"}
+              >
                 {data.stats.overdueReceivables > 0
                   ? `${data.stats.overdueReceivables} vencido(s)`
                   : "Sem atrasos"}
@@ -490,7 +558,7 @@ export default function ClientPortalPage() {
           >
             {data.receivables.length === 0 ? (
               <EmptyState
-                title="Nenhum titulo aberto"
+                title="Nenhum título aberto"
                 description="Quando houver cobranca em andamento, ela aparecera aqui."
               />
             ) : (
@@ -498,7 +566,8 @@ export default function ClientPortalPage() {
                 {data.receivables.map((receivable) => {
                   const outstanding = Math.max(
                     0,
-                    Number(receivable.netAmount || 0) - Number(receivable.paidAmount || 0),
+                    Number(receivable.netAmount || 0) -
+                      Number(receivable.paidAmount || 0),
                   );
                   return (
                     <article
@@ -508,19 +577,31 @@ export default function ClientPortalPage() {
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                            {receivable.contract?.code || receivable.maintenanceOrder?.title || "Titulo"}
+                            {receivable.contract?.code ||
+                              receivable.maintenanceOrder?.title ||
+                              "Titulo"}
                           </p>
                           <h3 className="mt-2 text-lg font-bold text-slate-950">
                             {receivable.description}
                           </h3>
                         </div>
-                        <DataPill tone={receivable.status === "OVERDUE" ? "rose" : "slate"}>
+                        <DataPill
+                          tone={
+                            receivable.status === "OVERDUE" ? "rose" : "slate"
+                          }
+                        >
                           {receivableStatusLabel(receivable.status)}
                         </DataPill>
                       </div>
                       <div className="mt-4 grid gap-3 md:grid-cols-2">
-                        <InfoCard label="Vencimento" value={formatDate(receivable.dueDate)} />
-                        <InfoCard label="Saldo" value={formatCurrency(outstanding)} />
+                        <InfoCard
+                          label="Vencimento"
+                          value={formatCalendarDate(receivable.dueDate)}
+                        />
+                        <InfoCard
+                          label="Saldo"
+                          value={formatCurrency(outstanding)}
+                        />
                       </div>
                     </article>
                   );
@@ -562,7 +643,9 @@ function PulseLine({
   };
 
   return (
-    <div className={`flex items-center justify-between rounded-[22px] border px-4 py-3 ${toneClass[tone]}`}>
+    <div
+      className={`flex items-center justify-between rounded-[22px] border px-4 py-3 ${toneClass[tone]}`}
+    >
       <span className="text-sm font-medium">{label}</span>
       <span className="text-sm font-bold">{value}</span>
     </div>

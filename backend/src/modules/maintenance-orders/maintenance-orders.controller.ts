@@ -21,6 +21,7 @@ import { ListMaintenanceOrdersQueryDto } from './dto/list-maintenance-orders-que
 import { SubmitVisitReportDto } from './dto/submit-visit-report.dto';
 import { UpdateMaintenanceOrderDto } from './dto/update-maintenance-order.dto';
 import { MaintenanceOrdersService } from './maintenance-orders.service';
+import { TechnicalAuthorizationDto } from './dto/technical-authorization.dto';
 
 @Controller('maintenance-orders')
 @UseGuards(AuthGuard, AccessPolicyGuard)
@@ -61,6 +62,20 @@ export class MaintenanceOrdersController {
     this.assertOrderUpdatePermission(req, dto.status);
     const actorUserId = this.extractUserId(req);
     return this.maintenanceOrdersService.update(id, dto, actorUserId);
+  }
+
+  @RequireAccessPolicy('orders.update')
+  @Patch(':id/technical-authorizations')
+  recordTechnicalAuthorization(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: TechnicalAuthorizationDto,
+  ) {
+    return this.maintenanceOrdersService.recordTechnicalAuthorization(
+      id,
+      dto,
+      this.extractUserId(req),
+    );
   }
 
   @RequireAccessPolicy('maintenanceOrders.submitVisitReport')

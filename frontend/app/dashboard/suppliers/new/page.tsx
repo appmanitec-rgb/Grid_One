@@ -125,7 +125,7 @@ export default function SupplierFormPage() {
         throw new Error(
           await readApiErrorMessage(
             res,
-            "Nao foi possivel carregar fornecedor para edicao.",
+            "Não foi possivel carregar fornecedor para edição.",
           ),
         );
       }
@@ -297,7 +297,7 @@ export default function SupplierFormPage() {
             tone: "slate",
           },
           {
-            label: "Catalogo disponivel",
+            label: "Catalogo disponível",
             value: String(catalogItems.length),
             helper: "itens possiveis para associacao",
             tone: "emerald",
@@ -313,7 +313,7 @@ export default function SupplierFormPage() {
 
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
       {loadingSupplier ? (
-        <StatusBanner tone="blue">Carregando fornecedor para edicao...</StatusBanner>
+        <StatusBanner tone="blue">Carregando fornecedor para edição...</StatusBanner>
       ) : null}
 
       <form onSubmit={handleSubmit} className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.9fr)]">
@@ -324,13 +324,13 @@ export default function SupplierFormPage() {
             description="Informacoes principais para identificar e acionar o fornecedor."
           >
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <FormField label="Razao social" className="md:col-span-2">
+              <FormField label="Razão social" className="md:col-span-2">
                 <TextInput
                   name="companyName"
                   value={formData.companyName}
                   onChange={onChange}
                   required
-                  placeholder="Razao social do parceiro"
+                  placeholder="Razão social do parceiro"
                 />
               </FormField>
 
@@ -370,7 +370,7 @@ export default function SupplierFormPage() {
                 />
               </FormField>
 
-              <FormField label="Condicao de pagamento" className="md:col-span-2">
+              <FormField label="Condição de pagamento" className="md:col-span-2">
                 <SuggestionInput aria-label="Condição de pagamento"
                   name="paymentTerm"
                   value={formData.paymentTerm}
@@ -389,8 +389,8 @@ export default function SupplierFormPage() {
 
           <SectionCard
             eyebrow="Fiscal"
-            title="Endereco e registros"
-            description="Concentramos dados formais e de localizacao em um unico bloco."
+            title="Endereço e registros"
+            description="Concentramos dados formais e de localização em um unico bloco."
           >
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <FormField label="Inscricao estadual">
@@ -440,12 +440,12 @@ export default function SupplierFormPage() {
                 />
               </FormField>
 
-              <FormField label="Endereco" className="md:col-span-2">
+              <FormField label="Endereço" className="md:col-span-2">
                 <TextInput
                   name="address"
                   value={formData.address}
                   onChange={onChange}
-                  placeholder="Endereco completo"
+                  placeholder="Endereço completo"
                 />
               </FormField>
             </div>
@@ -454,7 +454,7 @@ export default function SupplierFormPage() {
           <SectionCard
             eyebrow="Performance"
             title="Atuacao e avaliacao"
-            description="Categorias, marcas e notas para orientar decisao de compra."
+            description="Categorias, marcas e notas para orientar decisão de compra."
           >
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <FormField label="Categorias" hint="Separadas por virgula">
@@ -462,7 +462,7 @@ export default function SupplierFormPage() {
                   name="categories"
                   value={formData.categories}
                   onChange={onChange}
-                  placeholder="Ex: motores, filtros, servicos"
+                  placeholder="Ex: motores, filtros, serviços"
                 />
               </FormField>
 
@@ -499,12 +499,12 @@ export default function SupplierFormPage() {
                 />
               </FormField>
 
-              <FormField label="Observacoes" className="md:col-span-2">
+              <FormField label="Observações" className="md:col-span-2">
                 <TextAreaInput
                   name="notes"
                   value={formData.notes}
                   onChange={onChange}
-                  placeholder="Contexto comercial, observacoes fiscais, restricoes ou acordos especiais."
+                  placeholder="Contexto comercial, observações fiscais, restricoes ou acordos especiais."
                 />
               </FormField>
             </div>
@@ -515,7 +515,7 @@ export default function SupplierFormPage() {
           <SectionCard
             eyebrow="Negociacao"
             title="Itens por fornecedor"
-            description="Aqui entram SKU do parceiro, preco, lead time e item principal."
+            description="Aqui entram SKU do parceiro, preço, lead time e item principal."
             actions={
               <button
                 type="button"
@@ -575,11 +575,11 @@ export default function SupplierFormPage() {
                             onChange={(event) =>
                               updateItem(index, { supplierSku: event.target.value })
                             }
-                            placeholder="Codigo interno do parceiro"
+                            placeholder="Código interno do parceiro"
                           />
                         </FormField>
 
-                        <FormField label="Preco">
+                        <FormField label="Preço">
                           <TextInput
                             type="number"
                             step="0.01"
@@ -624,7 +624,7 @@ export default function SupplierFormPage() {
 
           <SectionCard
             eyebrow="Fechamento"
-            title="Revisao final"
+            title="Revisão final"
             description="Conferir antes de salvar ajuda a reduzir cadastros incompletos e informacao solta."
           >
             <div className="space-y-3">

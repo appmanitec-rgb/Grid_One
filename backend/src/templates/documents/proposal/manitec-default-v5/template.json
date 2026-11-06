@@ -1,0 +1,24 @@
+{
+  "title": "PROPOSTA COMERCIAL {{proposal.number}}",
+  "sections": [
+    {
+      "heading": "IDENTIFICAÇÃO DAS PARTES",
+      "paragraphs": [
+        "{{company.legalName}} | {{company.document}} | {{company.address}}",
+        "{{client.companyName}} | {{client.document}} | {{client.address}}"
+      ]
+    },
+    {
+      "heading": "RESUMO DO INVESTIMENTO",
+      "paragraphs": [
+        "Peças {{proposal.summaryMaterialsTotal}} | Serviços {{proposal.summaryLaborTotal}}",
+        "Total {{proposal.total}}",
+        "Pagamento {{brandedProposal.payment}}",
+        "Prazo {{brandedProposal.execution}}"
+      ]
+    }
+  ],
+  "footer": [
+    "Proposta {{proposal.number}}"
+  ]
+}

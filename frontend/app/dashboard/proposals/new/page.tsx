@@ -1,11 +1,51 @@
 "use client";
-import { canUsePortfolio, getDetailedAccess } from "@/lib/access-rules";
+import {
+  canUsePortfolio,
+  canScreenAction,
+  getDetailedAccess,
+} from "@/lib/access-rules";
 
 import {
   SelectField,
   SearchLookup,
 } from "@/app/dashboard/components/SelectField";
-import { PageHeader } from "../../components/DashboardPageKit";
+import { PageHeader, FormField } from "../../components/DashboardPageKit";
+import { InterfaceIcon } from "../../components/InterfaceIcon";
+import EquipmentItemsPicker from "./EquipmentItemsPicker";
+import ProposalConference from "./ProposalConference";
+import CommercialDraftTools from "../CommercialDraftTools";
+import PublishedTemplatePicker from "../PublishedTemplatePicker";
+import { useProposalEditingDraft } from "./useProposalEditingDraft";
+import { insertEquipmentItems } from "./equipment-item-insertion";
+import {
+  financialComposition,
+  reviewProposal,
+  moneyCents,
+  paymentSummary,
+  type ReviewIssue,
+  type ReviewAcknowledgement,
+  type ReviewLine,
+} from "@/lib/proposal-review";
+import { getAccessFromToken } from "@/lib/access";
+import EditOverlay from "../../components/EditOverlay";
+import { formatCurrency } from "@/lib/formatters";
+import { selectedLookupRecord } from "@/lib/search";
+import PdfPreview from "../../components/PdfPreview";
+import { readPreviewWithRetry } from "@/lib/pdf-preview";
+import TechnicalScopeGenerator from "../TechnicalScopeGenerator";
+import TechnicalServiceClassificationPanel from "../TechnicalServiceClassificationPanel";
+import {
+  storedTechnicalClassifications,
+  type TechnicalServiceClassification,
+} from "@/lib/technical-scopes";
+import type {
+  TechnicalScopeRequest,
+  TechnicalScopeReview,
+} from "@/lib/technical-scopes";
+import {
+  buildEquipmentItemSets,
+  toggleEquipmentItemSetSelection,
+} from "./equipment-item-sets";
 import {
   ProposalSteps,
   ProposalFinancialDock,
@@ -22,13 +62,12 @@ import {
   type ProposalPaymentPlan,
 } from "@/lib/proposal-payment-plan";
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, apiUrl, readApiErrorMessage } from "@/lib/api";
 import { loadControlOptions, type ControlOption } from "@/lib/control-options";
 import { confirmDeletion } from "@/lib/confirm-action";
 import OperationalExpensesEditor, {
-  operationalExpensesTotal,
   type OperationalExpenseSelection,
 } from "../OperationalExpensesEditor";
 import {
@@ -39,6 +78,8 @@ import {
 } from "./proposal-assistance";
 
 type CatalogItem = {
+  description?: string | null;
+  commercialDescription?: string | null;
   id: string;
   name: string;
   sku?: string | null;
@@ -162,6 +203,7 @@ type PaymentProfile = {
 };
 
 type EditableProposal = {
+  updatedAt?: string;
   id: string;
   code: string;
   status: string;
@@ -174,6 +216,7 @@ type EditableProposal = {
   user?: SellerOption | null;
   salesOpportunityId?: string | null;
   scope?: string | null;
+  technicalScopeSnapshot?: unknown;
   freight?: string | null;
   validUntil?: string | null;
   paymentTerm?: string | null;
@@ -256,60 +299,6 @@ function roundMoney(value: number) {
   return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 }
 
-type CommercialBreakdownRow = {
-  key: "EXPENSES" | "PARTS" | "SERVICES";
-  label: string;
-  subtotal: number;
-  discountEligible: boolean;
-  discount: number;
-  total: number;
-};
-
-function buildCommercialBreakdown(
-  entries: Array<
-    Pick<
-      CommercialBreakdownRow,
-      "key" | "label" | "subtotal" | "discountEligible"
-    >
-  >,
-  totalDiscount: number,
-): CommercialBreakdownRow[] {
-  const normalized = entries.map((entry) => ({
-    ...entry,
-    subtotal: roundMoney(entry.subtotal),
-  }));
-  const discountableTotal = roundMoney(
-    normalized.reduce(
-      (sum, entry) => sum + (entry.discountEligible ? entry.subtotal : 0),
-      0,
-    ),
-  );
-  const discount = Math.min(discountableTotal, roundMoney(totalDiscount));
-  const positiveEntries = normalized.filter(
-    (entry) => entry.discountEligible && entry.subtotal > 0,
-  );
-  let allocated = 0;
-
-  return normalized.map((entry) => {
-    const positiveIndex = positiveEntries.findIndex(
-      (positive) => positive.key === entry.key,
-    );
-    const isLastPositive = positiveIndex === positiveEntries.length - 1;
-    const entryDiscount =
-      !entry.discountEligible || entry.subtotal <= 0 || discountableTotal <= 0
-        ? 0
-        : isLastPositive
-          ? roundMoney(discount - allocated)
-          : roundMoney((discount * entry.subtotal) / discountableTotal);
-    allocated = roundMoney(allocated + entryDiscount);
-    return {
-      ...entry,
-      discount: entryDiscount,
-      total: roundMoney(entry.subtotal - entryDiscount),
-    };
-  });
-}
-
 function onlyDigits(value: string) {
   return value.replace(/\D/g, "");
 }
@@ -317,7 +306,7 @@ function onlyDigits(value: string) {
 function normalizeCommercialTerm(value?: string | null) {
   return commercialLabel(value, "")
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .trim()
     .toLowerCase()
     .replace(/\s+/g, " ");
@@ -382,7 +371,16 @@ function SearchableSelect({
       value={value}
       options={items.map((item) => ({
         value: item.id,
-        label: [item.code || item.sku, item.name].filter(Boolean).join(" · "),
+        label: [
+          item.code || item.sku,
+          item.name,
+          item.type === "SERVICE" ? formatCurrency(item.basePrice || 0) : null,
+          item.type === "SERVICE"
+            ? item.commercialDescription || item.description
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
       }))}
       onSelect={onChange}
       onSearch={onSearch}
@@ -509,6 +507,23 @@ export default function NewProposalPage() {
   useEffect(() => setAccessReady(true), []);
 
   const [step, setStep] = useState(0);
+  const [expectedUpdatedAt, setExpectedUpdatedAt] = useState("");
+  const [reviewAcknowledgements, setReviewAcknowledgements] = useState<
+    ReviewAcknowledgement[]
+  >([]);
+  const [serverIssues, setServerIssues] = useState<ReviewIssue[] | null>(null);
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [reviewError, setReviewError] = useState("");
+  const [reviewAttempt, setReviewAttempt] = useState(0);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [previewRenderedKey, setPreviewRenderedKey] = useState("");
+  const submitAction = useRef<"submit" | "preview" | null>(null);
+  const submissionLock = useRef(false);
+  const [equipmentUndo, setEquipmentUndo] = useState<{
+    parts: RowItem[];
+    labor: RowItem[];
+    after: string;
+  } | null>(null);
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingProposalId, setEditingProposalId] = useState("");
@@ -517,13 +532,15 @@ export default function NewProposalPage() {
   const [proposalFormType, setProposalFormType] = useState<
     "PARTS_AND_SERVICES" | "CONTRACT"
   >("PARTS_AND_SERVICES");
-  const USER_ROLE = "NORMAL" as string;
   const [feedback, setFeedback] = useState<{
     kind: "success" | "error";
     text: string;
   } | null>(null);
 
   const [clients, setClients] = useState<Client[]>([]);
+  const [selectedClientDetails, setSelectedClientDetails] =
+    useState<Client | null>(null);
+  const previewButtonRef = useRef<HTMLButtonElement>(null);
   const [partOptions, setPartOptions] = useState<CatalogItem[]>([]);
   const [accessoryRules, setAccessoryRules] = useState<ProposalAccessoryRule[]>(
     [],
@@ -593,8 +610,10 @@ export default function NewProposalPage() {
   const [sellerSearch, setSellerSearch] = useState("");
   const [sellerDropdownOpen, setSellerDropdownOpen] = useState(false);
   const [sellerLookupLoading, setSellerLookupLoading] = useState(false);
-  const [serviceType, setServiceType] = useState("");
   const [loadingBaseItems, setLoadingBaseItems] = useState(false);
+  const [equipmentItemsOpen, setEquipmentItemsOpen] = useState(false);
+  const [machineBaseItemsError, setMachineBaseItemsError] = useState("");
+  const [baseItemsReload, setBaseItemsReload] = useState(0);
   const [machineBaseItems, setMachineBaseItems] = useState<MachineBaseItem[]>(
     [],
   );
@@ -611,6 +630,13 @@ export default function NewProposalPage() {
   >([]);
 
   const [scope, setScope] = useState("");
+  const [technicalScopeClassifications, setTechnicalScopeClassifications] =
+    useState<TechnicalServiceClassification[]>([]);
+  const [technicalScopeSnapshot, setTechnicalScopeSnapshot] =
+    useState<unknown>(null);
+  const [technicalScopeReview, setTechnicalScopeReview] = useState<
+    TechnicalScopeReview | undefined
+  >(undefined);
   const [selectedScopeTemplateIds, setSelectedScopeTemplateIds] = useState<
     string[]
   >([]);
@@ -689,6 +715,7 @@ export default function NewProposalPage() {
           );
         }
         setEditingProposalCode(draft.code);
+        setExpectedUpdatedAt(draft.updatedAt || "");
         setProposalFormType(draft.type);
         setSelectedClientId(draft.clientId);
         setClientSearch(
@@ -714,6 +741,11 @@ export default function NewProposalPage() {
             ...current.filter((item) => item.id !== draft.userId),
           ]);
         setScope(draft.scope || "");
+        setTechnicalScopeSnapshot(draft.technicalScopeSnapshot ?? null);
+        setTechnicalScopeClassifications(
+          storedTechnicalClassifications(draft.technicalScopeSnapshot),
+        );
+        setTechnicalScopeReview(undefined);
         setFreight(draft.freight || "FOB");
         setValidUntil(draft.validUntil?.slice(0, 10) || "");
         setPaymentTerm(draft.paymentTerm || "");
@@ -1002,7 +1034,7 @@ export default function NewProposalPage() {
           throw new Error(
             await readApiErrorMessage(
               res,
-              "Nao foi possivel carregar a oportunidade vinculada.",
+              "Não foi possivel carregar a oportunidade vinculada.",
             ),
           );
         }
@@ -1051,6 +1083,7 @@ export default function NewProposalPage() {
       )
       .then((client) => {
         if (!client || cancelled) return;
+        setSelectedClientDetails(client);
         setClients((current) => [
           client,
           ...current.filter((item) => item.id !== client.id),
@@ -1139,8 +1172,9 @@ export default function NewProposalPage() {
     [generators, selectedClientId],
   );
   const selectedClient = useMemo(
-    () => clients.find((client) => client.id === selectedClientId) ?? null,
-    [clients, selectedClientId],
+    () =>
+      selectedLookupRecord(clients, selectedClientId, selectedClientDetails),
+    [clients, selectedClientId, selectedClientDetails],
   );
   const clientHasCommercialHistory = Boolean(selectedClient?._count?.proposals);
 
@@ -1318,7 +1352,7 @@ export default function NewProposalPage() {
     setHourlyServices((prev) => [
       ...prev,
       {
-        description: "Servico por hora",
+        description: "Serviço por hora",
         hourType: firstRate.hourType,
         technicianType: firstRate.technicianType,
         hours: "1",
@@ -1518,7 +1552,7 @@ export default function NewProposalPage() {
       });
       if (!res.ok) {
         throw new Error(
-          await readApiErrorMessage(res, "Falha ao cadastrar maquina."),
+          await readApiErrorMessage(res, "Falha ao cadastrar máquina."),
         );
       }
 
@@ -1618,37 +1652,46 @@ export default function NewProposalPage() {
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     setMachineBaseItems([]);
     setSelectedMachineBaseItemIds([]);
-    if (!selectedEquipmentId || !serviceType) return;
+    setMachineBaseItemsError("");
+    if (!selectedEquipmentId) {
+      setLoadingBaseItems(false);
+      setEquipmentItemsOpen(false);
+      return;
+    }
 
     setLoadingBaseItems(true);
     void apiFetch(
-      apiUrl(
-        `/generators/${selectedEquipmentId}/base-items?group=${serviceType}`,
-      ),
-      { cache: "no-store" },
+      apiUrl("/generators/" + selectedEquipmentId + "/base-items"),
+      {
+        cache: "no-store",
+        signal: controller.signal,
+      },
     )
       .then(async (res) => {
         if (!res.ok) {
           throw new Error(
-            await readApiErrorMessage(res, "Falha ao buscar itens da maquina."),
+            await readApiErrorMessage(
+              res,
+              "Falha ao buscar itens do equipamento.",
+            ),
           );
         }
         const payload = (await res.json()) as MachineBaseItem[];
         if (cancelled) return;
+        if (!Array.isArray(payload))
+          throw new Error("Não foi possível ler os itens do equipamento.");
         setMachineBaseItems(payload);
-        setSelectedMachineBaseItemIds(payload.map((item) => item.id));
       })
       .catch((loadError: unknown) => {
         if (!cancelled) {
-          setFeedback({
-            kind: "error",
-            text:
-              loadError instanceof Error
-                ? loadError.message
-                : "Erro ao carregar itens da maquina.",
-          });
+          setMachineBaseItemsError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Erro ao carregar itens do equipamento.",
+          );
         }
       })
       .finally(() => {
@@ -1657,58 +1700,226 @@ export default function NewProposalPage() {
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [selectedEquipmentId, serviceType]);
+  }, [selectedEquipmentId, baseItemsReload]);
 
-  const addItemsFromEquipmentBase = () => {
-    const selectedItems = machineBaseItems.filter((item) =>
-      selectedMachineBaseItemIds.includes(item.id),
+  const existingEquipmentCatalogIds = useMemo(
+    () =>
+      new Set(
+        [...parts, ...labor].map((item) => item.catalogItemId).filter(Boolean),
+      ),
+    [parts, labor],
+  );
+  const equipmentItemSetDefinitions = useMemo(
+    () => buildEquipmentItemSets(machineBaseItems),
+    [machineBaseItems],
+  );
+  const equipmentPickerItems = useMemo(
+    () =>
+      machineBaseItems.map((item) => ({
+        id: item.id,
+        catalogItemId: item.catalogItemId,
+        alreadyAdded: existingEquipmentCatalogIds.has(item.catalogItemId),
+        name: item.catalogItem?.name || "Item sem cadastro disponível",
+        sku: item.catalogItem?.sku || item.catalogItem?.code,
+        quantity: item.quantity,
+        searchTerms: equipmentItemSetDefinitions
+          .filter((group) => group.itemIds.includes(item.id))
+          .map((group) => group.id + " " + group.label)
+          .join(" "),
+        group:
+          item.serviceGroup === "OUTROS"
+            ? "Outros"
+            : item.serviceGroup === "TROCA_MANGUEIRAS"
+              ? "TM"
+              : item.serviceGroup,
+        disabled: !item.catalogItem,
+        disabledReason: !item.catalogItem
+          ? "Cadastro do item indisponível"
+          : existingEquipmentCatalogIds.has(item.catalogItemId)
+            ? "Já incluído na proposta"
+            : undefined,
+      })),
+    [
+      machineBaseItems,
+      existingEquipmentCatalogIds,
+      equipmentItemSetDefinitions,
+    ],
+  );
+  const availableEquipmentItemIds = useMemo(
+    () =>
+      new Set(
+        equipmentPickerItems
+          .filter((item) => !item.disabled)
+          .map((item) => item.id),
+      ),
+    [equipmentPickerItems],
+  );
+  const equipmentItemSets = useMemo(
+    () =>
+      equipmentItemSetDefinitions.map((group) => ({
+        ...group,
+        itemIds: group.itemIds.filter((id) =>
+          availableEquipmentItemIds.has(id),
+        ),
+      })),
+    [equipmentItemSetDefinitions, availableEquipmentItemIds],
+  );
+
+  function selectEquipmentItemSet(groupId: string) {
+    const group = equipmentItemSets.find((item) => item.id === groupId);
+    if (!group) return;
+    setSelectedMachineBaseItemIds((current) =>
+      toggleEquipmentItemSetSelection(current, group.itemIds),
     );
-    if (selectedItems.length === 0) {
+  }
+
+  function toggleEquipmentItem(id: string) {
+    if (!availableEquipmentItemIds.has(id)) return;
+    setSelectedMachineBaseItemIds((current) =>
+      current.includes(id)
+        ? current.filter((itemId) => itemId !== id)
+        : [...current, id],
+    );
+  }
+
+  function openEquipmentItemPicker() {
+    setSelectedMachineBaseItemIds((current) =>
+      current.filter((id) => availableEquipmentItemIds.has(id)),
+    );
+    setEquipmentItemsOpen(true);
+  }
+
+  const addItemsFromEquipmentBase = (
+    mode: "add" | "sum" | "separate" = "add",
+    reason = "",
+  ) => {
+    const selected = machineBaseItems.filter(
+      (item) =>
+        selectedMachineBaseItemIds.includes(item.id) && item.catalogItem,
+    );
+    if (!selected.length) return;
+    if (mode === "separate" && reason.trim().length < 8) {
       setFeedback({
         kind: "error",
-        text: "Selecione ao menos um item da maquina.",
+        text: "Explique por que as linhas precisam ficar separadas.",
       });
       return;
     }
-
-    const existingIds = new Set(
-      [...parts, ...labor].map((item) => item.catalogItemId).filter(Boolean),
-    );
-    const uniqueItems = selectedItems.filter(
-      (item) => !existingIds.has(item.catalogItemId),
-    );
-    const duplicates = selectedItems.length - uniqueItems.length;
-    const toPart: RowItem[] = uniqueItems
-      .filter((item) => item.catalogItem?.type !== "SERVICE")
-      .map((item) => ({
-        catalogItemId: item.catalogItemId,
-        quantity: String(item.quantity ?? 1),
-        unitPrice: String(item.catalogItem?.basePrice ?? 0),
-        origin: "MACHINE",
-      }));
-    const toLabor: RowItem[] = uniqueItems
-      .filter((item) => item.catalogItem?.type === "SERVICE")
-      .map((item) => ({
-        catalogItemId: item.catalogItemId,
-        quantity: String(item.quantity ?? 1),
-        unitPrice: String(item.catalogItem?.basePrice ?? 0),
-        origin: "MACHINE",
-      }));
-
-    setPartOptions((current) =>
-      mergeCatalogOptions(current, toPart, machineBaseItems),
-    );
-    setServiceOptions((current) =>
-      mergeCatalogOptions(current, toLabor, machineBaseItems),
-    );
-    setParts((current) => [...current, ...toPart]);
-    setLabor((current) => [...current, ...toLabor]);
-    setFeedback({
-      kind: "success",
-      text: `${uniqueItems.length} item(ns) da maquina adicionado(s)${duplicates ? `; ${duplicates} duplicado(s) ignorado(s)` : ""}.`,
-    });
+    try {
+      const next = insertEquipmentItems(parts, labor, selected, mode);
+      setPartOptions((current) =>
+        mergeCatalogOptions(current, next.parts, machineBaseItems),
+      );
+      setServiceOptions((current) =>
+        mergeCatalogOptions(current, next.services, machineBaseItems),
+      );
+      setEquipmentUndo({
+        parts,
+        labor,
+        after: JSON.stringify([next.parts, next.services]),
+      });
+      setParts(next.parts);
+      setLabor(next.services);
+      if (mode === "separate") {
+        const duplicates = reviewProposal({
+          items: [
+            ...next.parts.map((row) => ({
+              kind: "PART_MATERIAL",
+              catalogItemId: row.catalogItemId,
+              quantity: Number(row.quantity),
+              unitPrice: Number(row.unitPrice),
+            })),
+            ...next.services.map((row) => ({
+              kind: "CATALOG_SERVICE",
+              catalogItemId: row.catalogItemId,
+              quantity: Number(row.quantity),
+              unitPrice: Number(row.unitPrice),
+            })),
+          ],
+        }).issues.filter((issue) => issue.code === "DUPLICATE_ITEM");
+        setReviewAcknowledgements((current) => [
+          ...current.filter((ack) => ack.code !== "DUPLICATE_ITEM"),
+          ...duplicates.map((issue) => ({
+            code: issue.code,
+            signature: issue.signature,
+            reason: reason.trim(),
+          })),
+        ]);
+      }
+      setEquipmentItemsOpen(false);
+      setSelectedMachineBaseItemIds([]);
+      setFeedback({
+        kind: "success",
+        text: selected.length + " item(ns) conferido(s) e adicionado(s).",
+      });
+    } catch (error) {
+      setFeedback({
+        kind: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Confira os itens selecionados.",
+      });
+    }
   };
+
+  const technicalScopeRequest = useMemo<TechnicalScopeRequest>(
+    () => ({
+      proposalId: editingProposalId || undefined,
+      clientId: selectedClientId || undefined,
+      generatorId: selectedEquipmentId || undefined,
+      type: proposalFormType,
+      technicalScopeClassifications,
+      items: [
+        ...parts
+          .filter((item) => item.catalogItemId)
+          .map((item, index) => ({
+            key: "part-" + index,
+            kind: "PART_MATERIAL",
+            catalogItemId: item.catalogItemId,
+            quantity: Number(item.quantity || 0),
+          })),
+        ...labor
+          .filter((item) => item.catalogItemId)
+          .map((item, index) => ({
+            key: "service-" + index,
+            kind: "CATALOG_SERVICE",
+            catalogItemId: item.catalogItemId,
+            quantity: Number(item.quantity || 0),
+          })),
+        ...hourlyServices
+          .filter((item) => item.description.trim() || Number(item.hours) > 0)
+          .map((item, index) => ({
+            key: "hourly-" + index,
+            kind: "HOURLY_SERVICE",
+            description: item.description || "Serviço por hora",
+            quantity: 1,
+            hours: Number(item.hours || 0),
+          })),
+        ...otherItems
+          .filter((item) => item.description.trim())
+          .map((item, index) => ({
+            key: "other-" + index,
+            kind: "OTHER",
+            description: item.description,
+            quantity: Number(item.quantity || 0),
+          })),
+      ],
+    }),
+    [
+      editingProposalId,
+      selectedClientId,
+      selectedEquipmentId,
+      proposalFormType,
+      parts,
+      labor,
+      hourlyServices,
+      otherItems,
+      technicalScopeClassifications,
+    ],
+  );
 
   const selectedPartItems = useMemo(
     () => [
@@ -1888,124 +2099,73 @@ export default function NewProposalPage() {
     setFeedback(null);
   }
 
-  const partsTotal = useMemo(
-    () =>
-      parts.reduce(
-        (acc, item) =>
-          acc + Number(item.quantity || 0) * Number(item.unitPrice || 0),
-        0,
-      ),
-    [parts],
+  const financialLines: ReviewLine[] = [
+    ...parts
+      .filter((row) => row.catalogItemId)
+      .map((row) => ({
+        kind: "PART_MATERIAL",
+        catalogItemId: row.catalogItemId,
+        quantity: Number(row.quantity),
+        unitPrice: Number(row.unitPrice),
+        referenceUnitPrice:
+          partOptions.find((item) => item.id === row.catalogItemId)
+            ?.basePrice || 0,
+      })),
+    ...labor
+      .filter((row) => row.catalogItemId)
+      .map((row) => ({
+        kind: "CATALOG_SERVICE",
+        catalogItemId: row.catalogItemId,
+        quantity: Number(row.quantity),
+        unitPrice: Number(row.unitPrice),
+      })),
+    ...hourlyServices.map((row) => ({
+      kind: "HOURLY_SERVICE",
+      description: row.description,
+      quantity: 1,
+      hours: Number(row.hours),
+      unitPrice: hourlyRateFor(row),
+      discountPercent: Number(row.discountPercent),
+    })),
+    ...otherItems
+      .filter((row) => row.description.trim())
+      .map((row) => ({
+        kind: "OTHER",
+        description: row.description,
+        quantity: Number(row.quantity),
+        unitPrice: Number(row.unitPrice),
+      })),
+  ];
+  const undiscounted = financialComposition(
+    financialLines,
+    operationalExpenses,
+    0,
+    allowOperationalExpenseDiscount,
   );
-  const laborTotal = useMemo(
-    () =>
-      labor.reduce(
-        (acc, item) =>
-          acc + Number(item.quantity || 0) * Number(item.unitPrice || 0),
-        0,
-      ),
-    [labor],
+  const partsSubtotal = undiscounted.parts,
+    servicesSubtotal = undiscounted.services,
+    expensesTotal = undiscounted.expenses,
+    subtotal = undiscounted.subtotal,
+    discountableSubtotal = undiscounted.eligible;
+  const configuredDiscount = getDetailedAccess();
+  const maxDiscountAllowed = configuredDiscount.unrestricted
+    ? discountableSubtotal
+    : roundMoney(
+        (discountableSubtotal * configuredDiscount.discountLimit) / 100,
+      );
+  const finalDiscount = roundMoney(
+    discountType === "PERCENTAGE"
+      ? (discountableSubtotal * (Number(discountInput) || 0)) / 100
+      : Number(discountInput) || 0,
   );
-  const hourlyTotal = useMemo(
-    () =>
-      hourlyServices.reduce((acc, item) => {
-        const rate =
-          hourlyRates.find(
-            (entry) =>
-              entry.hourType === item.hourType &&
-              entry.technicianType === item.technicianType,
-          )?.unitPrice ?? 0;
-        const gross = Number(item.hours || 0) * rate;
-        const discount = Math.min(
-          100,
-          Math.max(0, Number(item.discountPercent || 0)),
-        );
-        return acc + gross * (1 - discount / 100);
-      }, 0),
-    [hourlyServices, hourlyRates],
+  const financial = financialComposition(
+    financialLines,
+    operationalExpenses,
+    finalDiscount,
+    allowOperationalExpenseDiscount,
   );
-  const otherTotal = useMemo(
-    () =>
-      otherItems.reduce(
-        (acc, item) =>
-          acc + Number(item.quantity || 0) * Number(item.unitPrice || 0),
-        0,
-      ),
-    [otherItems],
-  );
-  const expensesTotal = roundMoney(
-    operationalExpensesTotal(operationalExpenses),
-  );
-  const partsSubtotal = roundMoney(partsTotal);
-  const servicesSubtotal = roundMoney(laborTotal + hourlyTotal + otherTotal);
-  const subtotal = roundMoney(expensesTotal + partsSubtotal + servicesSubtotal);
-  const discountableSubtotal = roundMoney(
-    partsSubtotal +
-      servicesSubtotal +
-      (allowOperationalExpenseDiscount ? expensesTotal : 0),
-  );
-
-  const maxDiscountAllowed =
-    USER_ROLE === "ADMIN"
-      ? discountableSubtotal
-      : roundMoney(discountableSubtotal * 0.07);
-
-  const finalDiscount = useMemo(() => {
-    if (discountType === "PERCENTAGE") {
-      let percent = Math.min(100, Math.max(0, Number(discountInput) || 0));
-      if (USER_ROLE === "NORMAL" && percent > 7) percent = 7;
-      return roundMoney(discountableSubtotal * (percent / 100));
-    }
-
-    let value = Math.max(0, Number(discountInput) || 0);
-    value = Math.min(value, discountableSubtotal);
-    if (USER_ROLE === "NORMAL" && value > maxDiscountAllowed)
-      value = maxDiscountAllowed;
-    return roundMoney(value);
-  }, [
-    discountInput,
-    discountType,
-    discountableSubtotal,
-    maxDiscountAllowed,
-    USER_ROLE,
-  ]);
-
-  const commercialBreakdown = useMemo(
-    () =>
-      buildCommercialBreakdown(
-        [
-          {
-            key: "EXPENSES",
-            label: "Despesas operacionais",
-            subtotal: expensesTotal,
-            discountEligible: allowOperationalExpenseDiscount,
-          },
-          {
-            key: "PARTS",
-            label: "Peças e materiais",
-            subtotal: partsSubtotal,
-            discountEligible: true,
-          },
-          {
-            key: "SERVICES",
-            label: "Serviços",
-            subtotal: servicesSubtotal,
-            discountEligible: true,
-          },
-        ],
-        finalDiscount,
-      ),
-    [
-      allowOperationalExpenseDiscount,
-      expensesTotal,
-      finalDiscount,
-      partsSubtotal,
-      servicesSubtotal,
-    ],
-  );
-  const grandTotal = roundMoney(
-    commercialBreakdown.reduce((sum, entry) => sum + entry.total, 0),
-  );
+  const commercialBreakdown = financial.breakdown;
+  const grandTotal = financial.total;
   const effectiveDiscountPercent =
     discountableSubtotal > 0 ? (finalDiscount / discountableSubtotal) * 100 : 0;
   const composedPayment = paymentComposition(grandTotal, paymentPlan);
@@ -2019,13 +2179,318 @@ export default function NewProposalPage() {
     ? Math.max(1, composedPayment.count)
     : Math.max(1, Number(installmentCount || 1));
   const installmentValue = remainingAfterEntry / installments;
+  const realPaymentSummary = paymentSummary(
+    grandTotal,
+    entryAmount,
+    paymentPlan ? composedPayment.count : installments,
+    firstDueDate,
+    Number(installmentIntervalDays),
+  );
 
   const hitDiscountLimit =
-    USER_ROLE === "NORMAL" &&
-    ((discountType === "PERCENTAGE" && Number(discountInput) > 7) ||
-      (discountType === "VALUE" && Number(discountInput) > maxDiscountAllowed));
+    !configuredDiscount.unrestricted && finalDiscount > maxDiscountAllowed;
   const latestInspection = linkedOpportunity?.inspections?.[0] || null;
 
+  const restoreEditingDraft = useCallback((value: Record<string, unknown>) => {
+    if (value.selectedClientId !== undefined)
+      setSelectedClientId(value.selectedClientId as typeof selectedClientId);
+    if (value.selectedEquipmentId !== undefined)
+      setSelectedEquipmentId(
+        value.selectedEquipmentId as typeof selectedEquipmentId,
+      );
+    if (value.selectedSellerId !== undefined)
+      setSelectedSellerId(value.selectedSellerId as typeof selectedSellerId);
+    if (value.clientSearch !== undefined)
+      setClientSearch(value.clientSearch as typeof clientSearch);
+    if (value.equipmentSearch !== undefined)
+      setEquipmentSearch(value.equipmentSearch as typeof equipmentSearch);
+    if (value.sellerSearch !== undefined)
+      setSellerSearch(value.sellerSearch as typeof sellerSearch);
+    if (value.proposalFormType !== undefined)
+      setProposalFormType(value.proposalFormType as typeof proposalFormType);
+    if (value.parts !== undefined) setParts(value.parts as typeof parts);
+    if (value.labor !== undefined) setLabor(value.labor as typeof labor);
+    if (value.hourlyServices !== undefined)
+      setHourlyServices(value.hourlyServices as typeof hourlyServices);
+    if (value.otherItems !== undefined)
+      setOtherItems(value.otherItems as typeof otherItems);
+    if (value.operationalExpenses !== undefined)
+      setOperationalExpenses(
+        value.operationalExpenses as typeof operationalExpenses,
+      );
+    if (value.scope !== undefined) setScope(value.scope as typeof scope);
+    if (Array.isArray(value.technicalScopeClassifications))
+      setTechnicalScopeClassifications(
+        value.technicalScopeClassifications as TechnicalServiceClassification[],
+      );
+    if (value.technicalScopeReview !== undefined)
+      setTechnicalScopeReview(
+        value.technicalScopeReview as typeof technicalScopeReview,
+      );
+    if (value.technicalScopeSnapshot !== undefined)
+      setTechnicalScopeSnapshot(
+        value.technicalScopeSnapshot as typeof technicalScopeSnapshot,
+      );
+    if (value.freight !== undefined)
+      setFreight(value.freight as typeof freight);
+    if (value.validUntil !== undefined)
+      setValidUntil(value.validUntil as typeof validUntil);
+    if (value.paymentTerm !== undefined)
+      setPaymentTerm(value.paymentTerm as typeof paymentTerm);
+    if (value.deliveryLeadTimeDays !== undefined)
+      setDeliveryLeadTimeDays(
+        value.deliveryLeadTimeDays as typeof deliveryLeadTimeDays,
+      );
+    if (value.partsPaymentProfileId !== undefined)
+      setPartsPaymentProfileId(
+        value.partsPaymentProfileId as typeof partsPaymentProfileId,
+      );
+    if (value.servicesPaymentProfileId !== undefined)
+      setServicesPaymentProfileId(
+        value.servicesPaymentProfileId as typeof servicesPaymentProfileId,
+      );
+    if (value.paymentPlan !== undefined)
+      setPaymentPlan(value.paymentPlan as typeof paymentPlan);
+    if (value.hasDownPayment !== undefined)
+      setHasDownPayment(value.hasDownPayment as typeof hasDownPayment);
+    if (value.downPaymentAmount !== undefined)
+      setDownPaymentAmount(value.downPaymentAmount as typeof downPaymentAmount);
+    if (value.installmentCount !== undefined)
+      setInstallmentCount(value.installmentCount as typeof installmentCount);
+    if (value.installmentIntervalDays !== undefined)
+      setInstallmentIntervalDays(
+        value.installmentIntervalDays as typeof installmentIntervalDays,
+      );
+    if (value.firstDueDate !== undefined)
+      setFirstDueDate(value.firstDueDate as typeof firstDueDate);
+    if (value.internalNotes !== undefined)
+      setInternalNotes(value.internalNotes as typeof internalNotes);
+    if (value.externalNotes !== undefined)
+      setExternalNotes(value.externalNotes as typeof externalNotes);
+    if (value.discountType !== undefined)
+      setDiscountType(value.discountType as typeof discountType);
+    if (value.discountInput !== undefined)
+      setDiscountInput(value.discountInput as typeof discountInput);
+    if (value.allowOperationalExpenseDiscount !== undefined)
+      setAllowOperationalExpenseDiscount(
+        value.allowOperationalExpenseDiscount as typeof allowOperationalExpenseDiscount,
+      );
+    if (value.reviewAcknowledgements !== undefined)
+      setReviewAcknowledgements(
+        value.reviewAcknowledgements as typeof reviewAcknowledgements,
+      );
+    if (value.step !== undefined) setStep(value.step as typeof step);
+    if (value.editingProposalId !== undefined)
+      setEditingProposalId(value.editingProposalId as typeof editingProposalId);
+    if (value.editingProposalCode !== undefined)
+      setEditingProposalCode(
+        value.editingProposalCode as typeof editingProposalCode,
+      );
+    if (value.expectedUpdatedAt !== undefined)
+      setExpectedUpdatedAt(value.expectedUpdatedAt as typeof expectedUpdatedAt);
+    if (value.assistanceReviews !== undefined)
+      setAssistanceReviews(value.assistanceReviews as typeof assistanceReviews);
+    if (value.assistanceReasons !== undefined)
+      setAssistanceReasons(value.assistanceReasons as typeof assistanceReasons);
+    if (Array.isArray(value.selectedParts))
+      setPartOptions(value.selectedParts as CatalogItem[]);
+    if (Array.isArray(value.selectedServices))
+      setServiceOptions(value.selectedServices as CatalogItem[]);
+    if (Array.isArray(value.selectedClients))
+      setClients(value.selectedClients as Client[]);
+    if (Array.isArray(value.selectedGenerators))
+      setGenerators(value.selectedGenerators as Generator[]);
+    if (Array.isArray(value.selectedSellers))
+      setSellers(value.selectedSellers as SellerOption[]);
+    setDraftLoaded(true);
+  }, []);
+  const editingFormData = {
+    selectedClientId,
+    selectedEquipmentId,
+    selectedSellerId,
+    clientSearch,
+    equipmentSearch,
+    sellerSearch,
+    proposalFormType,
+    parts,
+    labor,
+    hourlyServices,
+    otherItems,
+    operationalExpenses,
+    scope,
+    technicalScopeReview,
+    technicalScopeClassifications,
+    technicalScopeSnapshot,
+    freight,
+    validUntil,
+    paymentTerm,
+    deliveryLeadTimeDays,
+    partsPaymentProfileId,
+    servicesPaymentProfileId,
+    paymentPlan,
+    hasDownPayment,
+    downPaymentAmount,
+    installmentCount,
+    installmentIntervalDays,
+    firstDueDate,
+    internalNotes,
+    externalNotes,
+    discountType,
+    discountInput,
+    allowOperationalExpenseDiscount,
+    reviewAcknowledgements,
+    step,
+    editingProposalId,
+    editingProposalCode,
+    expectedUpdatedAt,
+    assistanceReviews,
+    assistanceReasons,
+    discount: finalDiscount,
+    selectedParts: partOptions.filter((item) =>
+      parts.some((row) => row.catalogItemId === item.id),
+    ),
+    selectedServices: serviceOptions.filter((item) =>
+      labor.some((row) => row.catalogItemId === item.id),
+    ),
+    selectedClients: clients.filter((item) => item.id === selectedClientId),
+    selectedGenerators: generators.filter(
+      (item) => item.id === selectedEquipmentId,
+    ),
+    selectedSellers: sellers.filter((item) => item.id === selectedSellerId),
+  };
+  const editor = useProposalEditingDraft(
+    editingFormData,
+    restoreEditingDraft,
+    !editingProposalId || draftLoaded,
+  );
+  const canEditProposal = editingProposalId
+    ? getAccessFromToken().proposals.update &&
+      canScreenAction("proposals", "update")
+    : getAccessFromToken().proposals.create &&
+      canScreenAction("proposals", "create");
+  const localReview = reviewProposal({
+    clientId: selectedClientId,
+    sellerId: selectedSellerId,
+    type: proposalFormType,
+    items: financialLines,
+    expenses: operationalExpenses,
+    discount: finalDiscount,
+    allowExpenseDiscount: allowOperationalExpenseDiscount,
+    paymentTerm,
+    paymentPlan,
+    hasDownPayment,
+    downPaymentAmount: Number(downPaymentAmount),
+    installmentCount: Number(installmentCount),
+    discountLimit: configuredDiscount.discountLimit,
+    unrestricted: configuredDiscount.unrestricted,
+    paymentProfiles: paymentProfiles
+      .filter((profile) =>
+        [partsPaymentProfileId, servicesPaymentProfileId].includes(profile.id),
+      )
+      .map((profile) => ({
+        purpose: profile.purpose,
+        issuerCompanyId: profile.issuerCompany?.id,
+      })),
+    requiredPaymentPurposes: [
+      ...(partsSubtotal > 0 &&
+      paymentProfiles.some((profile) => profile.purpose === "PARTS")
+        ? ["PARTS"]
+        : []),
+      ...(servicesSubtotal > 0 &&
+      paymentProfiles.some((profile) => profile.purpose === "SERVICES")
+        ? ["SERVICES"]
+        : []),
+    ],
+    expenseRules: editor.context?.expenseRules,
+    scopeText: scope,
+    scopeSnapshot: technicalScopeSnapshot as Parameters<
+      typeof reviewProposal
+    >[0]["scopeSnapshot"],
+    acknowledgements: reviewAcknowledgements,
+  });
+  const conferenceKey = JSON.stringify(editingFormData);
+  useEffect(() => {
+    if (!editor.enabled || step !== 3 || (editingProposalId && !draftLoaded))
+      return;
+    const controller = new AbortController();
+    setServerIssues(null);
+    setReviewError("");
+    const timer = window.setTimeout(() => {
+      setReviewBusy(true);
+      void apiFetch("/proposals/editor/conference", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          data: editingFormData,
+          proposalId: editingProposalId || undefined,
+        }),
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          if (!response.ok)
+            throw new Error(
+              await readApiErrorMessage(response, "Falha na conferência."),
+            );
+          const report = (await response.json()) as { issues: ReviewIssue[] };
+          if (!controller.signal.aborted) setServerIssues(report.issues);
+        })
+        .catch((error) => {
+          if (!controller.signal.aborted)
+            setReviewError(
+              error instanceof Error
+                ? error.message
+                : "Falha ao conferir. Tente novamente.",
+            );
+          if (!controller.signal.aborted)
+            setFeedback({
+              kind: "error",
+              text:
+                error instanceof Error
+                  ? error.message
+                  : "Confira a conexão para validar.",
+            });
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setReviewBusy(false);
+        });
+    }, 450);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+    // The serialized form intentionally controls incremental revalidation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conferenceKey, editor.enabled, step, reviewAttempt]);
+  useEffect(
+    () => () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    },
+    [previewUrl],
+  );
+  function navigateIssue(issue: ReviewIssue) {
+    changeStep(issue.step);
+    window.setTimeout(() => {
+      const selector =
+        issue.field === "seller"
+          ? "#proposal-review-seller"
+          : issue.field === "client"
+            ? "#proposal-review-client"
+            : issue.field === "discount"
+              ? "#proposal-review-discount"
+              : issue.field === "expenses"
+                ? '[aria-label^="Quantidade de"]'
+                : issue.field === "serviceTechnical"
+                  ? "#proposal-service-technical"
+                  : issue.field === "scope"
+                    ? "#proposal-review-scope"
+                    : issue.field === "payment"
+                      ? '[aria-label="Condição de pagamento"]'
+                      : 'input:not([type="hidden"])';
+      document
+        .querySelector<HTMLElement>("#proposal-form " + selector)
+        ?.focus();
+    }, 80);
+  }
   function changeStep(next: number) {
     setStep(Math.max(0, Math.min(PROPOSAL_STEPS.length - 1, next)));
     setFeedback(null);
@@ -2182,6 +2647,10 @@ export default function NewProposalPage() {
   }
 
   function nextStep() {
+    if (editor.enabled) {
+      changeStep(step + 1);
+      return;
+    }
     const issue = validateStep(step);
     if (issue) {
       showStepError(step, issue);
@@ -2192,12 +2661,16 @@ export default function NewProposalPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (isSubmitting) return;
+    if (isSubmitting || submissionLock.current) return;
+    if (editor.enabled && !submitAction.current) {
+      await editor.save().catch(() => {});
+      return;
+    }
     if (step < PROPOSAL_STEPS.length - 1) {
       nextStep();
       return;
     }
-    for (let index = 0; index < 3; index += 1) {
+    for (let index = 0; !editor.enabled && index < 3; index += 1) {
       const issue = validateStep(index, true);
       if (issue) {
         showStepError(index, issue);
@@ -2212,6 +2685,7 @@ export default function NewProposalPage() {
       )
       .join("\n");
 
+    submissionLock.current = true;
     setIsSubmitting(true);
     setFeedback(null);
 
@@ -2241,12 +2715,14 @@ export default function NewProposalPage() {
         unitPrice: hourlyRateFor(item),
         discountPercent: Number(item.discountPercent || 0),
       })),
-      ...otherItems.map((item) => ({
-        kind: "OTHER",
-        description: item.description,
-        quantity: Number(item.quantity || 0),
-        unitPrice: Number(item.unitPrice || 0),
-      })),
+      ...otherItems
+        .filter((item) => item.description.trim())
+        .map((item) => ({
+          kind: "OTHER",
+          description: item.description,
+          quantity: Number(item.quantity || 0),
+          unitPrice: Number(item.unitPrice || 0),
+        })),
     ];
 
     const payload = {
@@ -2256,6 +2732,16 @@ export default function NewProposalPage() {
       userId: selectedSellerId,
       type: proposalFormType,
       scope,
+      technicalScopeReview,
+      technicalScopeClassifications,
+      editingDraftId: undefined as string | undefined,
+      expectedUpdatedAt:
+        editor.enabled && editingProposalId
+          ? expectedUpdatedAt || undefined
+          : undefined,
+      reviewAcknowledgements: editor.enabled
+        ? reviewAcknowledgements
+        : undefined,
       freight,
       validUntil: validUntil || undefined,
       paymentTerm: paymentTerm || undefined,
@@ -2294,6 +2780,46 @@ export default function NewProposalPage() {
     };
 
     try {
+      if (editor.enabled) {
+        const draft = await editor.save();
+        payload.editingDraftId = draft.id;
+        const check = await apiFetch("/proposals/editor/conference", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            data: editingFormData,
+            proposalId: editingProposalId || undefined,
+          }),
+        });
+        if (!check.ok)
+          throw new Error(
+            await readApiErrorMessage(
+              check,
+              "Não foi possível conferir a proposta.",
+            ),
+          );
+        const report = (await check.json()) as {
+          issues: ReviewIssue[];
+          readyForApproval: boolean;
+          totals: { total: number };
+        };
+        setServerIssues(report.issues);
+        if (!report.readyForApproval) {
+          setStep(3);
+          setFeedback({
+            kind: "error",
+            text: "Confira as pendências indicadas antes de continuar. O rascunho foi salvo.",
+          });
+          return;
+        }
+        if (moneyCents(report.totals.total) !== moneyCents(grandTotal)) {
+          setFeedback({
+            kind: "error",
+            text: "Uma tarifa ou preço do cadastro mudou. Confira os valores atuais antes de liberar; o preenchimento foi preservado.",
+          });
+          return;
+        }
+      }
       const res = await apiFetch(
         apiUrl(
           editingProposalId ? `/proposals/${editingProposalId}` : "/proposals",
@@ -2317,7 +2843,63 @@ export default function NewProposalPage() {
 
       const createdProposal = (await res.json().catch(() => null)) as {
         id?: string;
+        code?: string;
+        updatedAt?: string;
       } | null;
+      const savedId = createdProposal?.id || editingProposalId;
+      if (savedId) setEditingProposalId(savedId);
+      if (createdProposal?.code) setEditingProposalCode(createdProposal.code);
+      if (createdProposal?.updatedAt)
+        setExpectedUpdatedAt(createdProposal.updatedAt);
+      // Persist the exact commercial version produced by this editor, not a later
+      // version from another tab. Recovery retains the same concurrency baseline.
+      if (
+        editor.enabled &&
+        savedId &&
+        createdProposal?.updatedAt &&
+        getAccessFromToken().proposals.update
+      ) {
+        await editor.save({
+          editingProposalId: savedId,
+          expectedUpdatedAt: createdProposal.updatedAt,
+          editingProposalCode: createdProposal.code || editingProposalCode,
+        });
+      }
+      if (editor.enabled && savedId && submitAction.current === "preview") {
+        setPreviewRenderedKey("");
+        const preview = await readPreviewWithRetry(() =>
+          apiFetch(`/documents/proposals/${savedId}/draft-preview`, {
+            method: "GET",
+            cache: "no-store",
+          }),
+        );
+        if (!preview.ok)
+          throw new Error(
+            await readApiErrorMessage(
+              preview,
+              "Não foi possível abrir a prévia.",
+            ),
+          );
+        setPreviewUrl(URL.createObjectURL(await preview.blob()));
+        setFeedback({
+          kind: "success",
+          text: "PDF da prévia recebido. Confira a renderização na janela aberta.",
+        });
+        return;
+      }
+      if (editor.enabled && savedId && submitAction.current === "submit") {
+        const approval = await apiFetch(`/proposals/${savedId}/submit-board`, {
+          method: "POST",
+        });
+        if (!approval.ok)
+          throw new Error(
+            await readApiErrorMessage(
+              approval,
+              "Rascunho salvo; confira as pendências antes de solicitar aprovação.",
+            ),
+          );
+        editor.complete();
+      }
       setFeedback({
         kind: "success",
         text: editingProposalId
@@ -2330,12 +2912,17 @@ export default function NewProposalPage() {
           : "/dashboard/proposals",
       );
       router.refresh();
-    } catch {
+    } catch (error) {
       setFeedback({
         kind: "error",
-        text: "Erro de comunicacao com o servidor.",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Erro de comunicacao com o servidor.",
       });
     } finally {
+      submissionLock.current = false;
+      submitAction.current = null;
       setIsSubmitting(false);
     }
   }
@@ -2468,8 +3055,16 @@ export default function NewProposalPage() {
 
       <form
         id="proposal-form"
+        inert={isSubmitting}
+        aria-busy={isSubmitting}
         onSubmit={handleSubmit}
         noValidate
+        onClickCapture={() => {
+          editor.metrics.current.clicks += 1;
+        }}
+        onChangeCapture={() => {
+          editor.metrics.current.edits += 1;
+        }}
         className="proposal-wizard space-y-5"
       >
         <p className="text-xs text-slate-500">
@@ -2484,6 +3079,51 @@ export default function NewProposalPage() {
           current={step}
           onChange={changeStep}
         />
+        {editor.enabled && canEditProposal ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+            <p className="text-xs text-[var(--text-muted)]" role="status">
+              {editor.message ||
+                "Você pode salvar um rascunho em qualquer etapa."}
+            </p>
+            {(!editor.loaded || editor.recoveryConflict) && editor.message ? (
+              <button
+                type="button"
+                className="app-button app-button-secondary"
+                onClick={editor.retryRecovery}
+              >
+                {editor.recoveryConflict
+                  ? "Reabrir versão do sistema"
+                  : "Tentar recuperar"}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="app-button app-button-secondary"
+              disabled={editor.saving || isSubmitting || !editor.loaded}
+              onClick={() => void editor.save().catch(() => {})}
+            >
+              {editor.saving ? "Salvando..." : "Salvar rascunho"}
+            </button>
+          </div>
+        ) : null}
+        {equipmentUndo &&
+        equipmentUndo.after === JSON.stringify([parts, labor]) ? (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] p-3 text-sm">
+            <span>Itens do equipamento adicionados e conferidos.</span>
+            <button
+              type="button"
+              className="app-button app-button-secondary"
+              onClick={() => {
+                setParts(equipmentUndo.parts);
+                setLabor(equipmentUndo.labor);
+                setEquipmentUndo(null);
+                setFeedback({ kind: "success", text: "Inclusão desfeita." });
+              }}
+            >
+              Desfazer inclusão
+            </button>
+          </div>
+        ) : null}
         {feedback ? (
           <div
             role="alert"
@@ -2522,6 +3162,7 @@ export default function NewProposalPage() {
                       <input
                         type="text"
                         value={clientSearch}
+                        id="proposal-review-client"
                         onChange={(e) => {
                           setClientSearch(e.target.value);
                           setSelectedClientId("");
@@ -2633,11 +3274,11 @@ export default function NewProposalPage() {
                       <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-xl">
                         {equipmentLookupLoading ? (
                           <p className="p-3 text-sm text-zinc-500">
-                            Buscando maquinas...
+                            Buscando máquinas...
                           </p>
                         ) : availableGenerators.length === 0 ? (
                           <p className="p-3 text-sm text-zinc-500">
-                            Nenhuma maquina encontrada.
+                            Nenhuma máquina encontrada.
                           </p>
                         ) : (
                           availableGenerators.slice(0, 10).map((gen) => (
@@ -2682,7 +3323,7 @@ export default function NewProposalPage() {
                   </button>
                 </div>
 
-                <div>
+                <div className="md:col-span-2">
                   <label className="mb-1 block text-sm font-medium text-zinc-700">
                     Vendedor
                   </label>
@@ -2700,6 +3341,7 @@ export default function NewProposalPage() {
                       <input
                         type="text"
                         value={sellerSearch}
+                        id="proposal-review-seller"
                         onChange={(e) => {
                           setSellerSearch(e.target.value);
                           setSelectedSellerId("");
@@ -2752,34 +3394,6 @@ export default function NewProposalPage() {
                     </div>
                   )}
                 </div>
-
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-zinc-700">
-                    Tipo de Servico
-                  </label>
-                  <SelectField
-                    searchable
-                    value={serviceType}
-                    onChange={(e) => setServiceType(e.target.value)}
-                    disabled={!selectedEquipmentId}
-                    className="w-full rounded-lg border border-zinc-300 bg-white p-2.5 font-semibold text-emerald-700 disabled:bg-zinc-100"
-                    aria-label="Tipo de serviço"
-                  >
-                    <option value="">Selecione</option>
-                    <option value="TBC">TBC - bateria e carregador</option>
-                    <option value="TOF">TOF - troca de oleo e filtros</option>
-                    <option value="TROCA_MANGUEIRAS">
-                      Troca de mangueiras
-                    </option>
-                    <option value="ARREFECIMENTO">
-                      Sistema de arrefecimento
-                    </option>
-                    <option value="TM">TM</option>
-                    <option value="TB">TB</option>
-                    <option value="TMA">TMA</option>
-                    <option value="OUTROS">Outros</option>
-                  </SelectField>
-                </div>
               </div>
 
               {quickClientOpen && !linkedOpportunity ? (
@@ -2787,7 +3401,7 @@ export default function NewProposalPage() {
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                     <input
                       className="rounded border border-emerald-200 bg-white p-2 text-sm"
-                      placeholder="Razao social/nome"
+                      placeholder="Razão social/nome"
                       value={quickClient.companyName}
                       onChange={(e) =>
                         setQuickClient((current) => ({
@@ -2853,7 +3467,7 @@ export default function NewProposalPage() {
                     />
                     <input
                       className="rounded border border-emerald-200 bg-white p-2 text-sm md:col-span-2"
-                      placeholder="Endereco"
+                      placeholder="Endereço"
                       value={quickClient.address}
                       onChange={(e) =>
                         setQuickClient((current) => ({
@@ -2946,7 +3560,7 @@ export default function NewProposalPage() {
                     />
                     <input
                       className="rounded border border-sky-200 bg-white p-2 text-sm"
-                      placeholder="Numero de serie"
+                      placeholder="Número de série"
                       value={quickGenerator.serialNumber}
                       onChange={(e) =>
                         setQuickGenerator((current) => ({
@@ -2992,7 +3606,7 @@ export default function NewProposalPage() {
                     />
                     <input
                       className="rounded border border-sky-200 bg-white p-2 text-sm md:col-span-3"
-                      placeholder="Observacao"
+                      placeholder="Observação"
                       value={quickGenerator.notes}
                       onChange={(e) =>
                         setQuickGenerator((current) => ({
@@ -3012,82 +3626,6 @@ export default function NewProposalPage() {
                   </div>
                 </div>
               ) : null}
-
-              {selectedEquipmentId && serviceType ? (
-                <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-bold text-sky-950">
-                        Itens cadastrados nesta maquina
-                      </p>
-                      <p className="text-xs text-sky-700">
-                        Escolha o que deve entrar na proposta. Duplicidades
-                        serao ignoradas.
-                      </p>
-                    </div>
-                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-sky-700">
-                      Origem: maquina instalada
-                    </span>
-                  </div>
-                  {loadingBaseItems ? (
-                    <p className="mt-3 text-sm text-sky-700">
-                      Carregando itens...
-                    </p>
-                  ) : machineBaseItems.length === 0 ? (
-                    <p className="mt-3 rounded-md bg-white p-3 text-sm text-zinc-500">
-                      Nenhum item cadastrado para este tipo de manutencao.
-                    </p>
-                  ) : (
-                    <div className="mt-3 grid gap-2 md:grid-cols-2">
-                      {machineBaseItems.map((item) => (
-                        <label
-                          key={item.id}
-                          className="flex cursor-pointer items-start gap-3 rounded-md border border-sky-100 bg-white p-3"
-                        >
-                          <input
-                            type="checkbox"
-                            className="mt-1"
-                            checked={selectedMachineBaseItemIds.includes(
-                              item.id,
-                            )}
-                            onChange={(event) =>
-                              setSelectedMachineBaseItemIds((current) =>
-                                event.target.checked
-                                  ? [...current, item.id]
-                                  : current.filter((id) => id !== item.id),
-                              )
-                            }
-                          />
-                          <span>
-                            <span className="block text-sm font-semibold text-zinc-800">
-                              {item.catalogItem?.name || "Item do catalogo"}
-                            </span>
-                            <span className="block text-xs text-zinc-500">
-                              Qtd. {item.quantity}{" "}
-                              {item.isCustomized
-                                ? "| personalizada"
-                                : item.sourceModelBaseItemId
-                                  ? "| herdada do modelo"
-                                  : "| exclusiva da maquina"}
-                            </span>
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={addItemsFromEquipmentBase}
-                    disabled={
-                      loadingBaseItems ||
-                      selectedMachineBaseItemIds.length === 0
-                    }
-                    className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Adicionar selecionados
-                  </button>
-                </div>
-              ) : null}
             </div>
             <ProposalFormSection
               title="Manitec e pagamento"
@@ -3105,6 +3643,11 @@ export default function NewProposalPage() {
                     className="w-full rounded-lg border border-zinc-300 p-2.5"
                     aria-label="Validade"
                   />
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">
+                    Opcional nas regras atuais. Deixe vazio para manter a
+                    proposta sem data de validade informada, ou defina a data
+                    acordada.
+                  </p>
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-zinc-700">
@@ -3167,31 +3710,65 @@ export default function NewProposalPage() {
         ) : null}
         {step === 1 ? (
           <div className="space-y-5">
+            <CommercialDraftTools
+              portfolio={
+                proposalFormType === "CONTRACT" ? "contracts" : "partsServices"
+              }
+              revenue={grandTotal}
+              lines={financialLines}
+            />
             <div id="proposal-parts-section" className="proposal-form-section">
-              <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-bold text-zinc-800">
                     Peças e materiais
                   </h2>
                   <p className="text-xs text-zinc-500">
-                    Itens adicionais usam a base geral do sistema.
+                    Adicione itens do equipamento ou pesquise no catálogo geral.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={addPart}
-                  className="rounded-md bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-600 hover:bg-blue-100"
-                >
-                  + Adicionar peca
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={openEquipmentItemPicker}
+                    disabled={!selectedEquipmentId}
+                    className="app-button app-button-secondary"
+                  >
+                    <InterfaceIcon name="plus" className="h-4 w-4" />
+                    Adicionar itens do equipamento
+                  </button>
+                  <button
+                    type="button"
+                    onClick={addPart}
+                    className="app-button app-button-primary"
+                  >
+                    <InterfaceIcon name="plus" className="h-4 w-4" />
+                    Adicionar peça
+                  </button>
+                </div>
               </div>
-
-              {parts.length === 0 ? (
-                <p className="text-sm italic text-zinc-500">
-                  Nenhuma peca adicionada.
+              {!selectedEquipmentId ? (
+                <p className="mb-4 text-sm text-slate-500">
+                  Selecione um equipamento em Dados comerciais para consultar
+                  seus itens.
                 </p>
               ) : null}
 
+              {parts.length === 0 ? (
+                <p className="text-sm italic text-zinc-500">
+                  Nenhuma peça adicionada.
+                </p>
+              ) : null}
+
+              {selectedEquipmentId && parts.length ? (
+                <p
+                  className="mb-3 text-sm text-[var(--text-muted)]"
+                  role="note"
+                >
+                  Selecionar o equipamento não comprova a compatibilidade da
+                  peça. Confira código, modelo e aplicação antes de contratar.
+                </p>
+              ) : null}
               {parts.map((part, index) => (
                 <div key={`part-${index}`} className="proposal-item-row">
                   <div className="proposal-item-name">
@@ -3208,7 +3785,7 @@ export default function NewProposalPage() {
                         updatePart(index, "catalogItemId", val)
                       }
                       onSearch={(term) => void lookupCatalog("PART", term)}
-                      placeholder="Nome ou codigo"
+                      placeholder="Nome ou código"
                     />
                   </div>
                   <div className="w-20">
@@ -3219,6 +3796,7 @@ export default function NewProposalPage() {
                       type="number"
                       min="1"
                       value={part.quantity}
+                      aria-label={`Qtd da peça ${index + 1}`}
                       onChange={(e) =>
                         updatePart(index, "quantity", e.target.value)
                       }
@@ -3227,11 +3805,12 @@ export default function NewProposalPage() {
                   </div>
                   <div className="w-32">
                     <label className="mb-1 block text-xs font-medium text-zinc-500">
-                      Preco (R$)
+                      Preço (R$)
                     </label>
                     <input
                       type="number"
                       value={part.unitPrice}
+                      aria-label={`Preço da peça ${index + 1}`}
                       disabled
                       className="w-full rounded-md border border-zinc-200 bg-zinc-100 p-2 text-sm font-medium text-zinc-500"
                     />
@@ -3456,7 +4035,7 @@ export default function NewProposalPage() {
                     Serviços do catálogo
                   </h2>
                   <p className="text-xs text-zinc-500">
-                    Servicos adicionais usam a base geral do sistema.
+                    Serviços adicionais usam a base geral do sistema.
                   </p>
                 </div>
                 <button
@@ -3464,13 +4043,13 @@ export default function NewProposalPage() {
                   onClick={addLabor}
                   className="rounded-md bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-600 hover:bg-blue-100"
                 >
-                  + Adicionar servico
+                  + Adicionar serviço
                 </button>
               </div>
 
               {labor.length === 0 ? (
                 <p className="text-sm italic text-zinc-500">
-                  Nenhum servico adicionado.
+                  Nenhum serviço adicionado.
                 </p>
               ) : null}
 
@@ -3490,7 +4069,7 @@ export default function NewProposalPage() {
                         updateLabor(index, "catalogItemId", val)
                       }
                       onSearch={(term) => void lookupCatalog("SERVICE", term)}
-                      placeholder="Nome ou codigo"
+                      placeholder="Nome ou código"
                     />
                   </div>
                   <div className="w-20">
@@ -3501,6 +4080,7 @@ export default function NewProposalPage() {
                       type="number"
                       min="1"
                       value={lab.quantity}
+                      aria-label={`Qtd do serviço ${index + 1}`}
                       onChange={(e) =>
                         updateLabor(index, "quantity", e.target.value)
                       }
@@ -3513,7 +4093,7 @@ export default function NewProposalPage() {
                     </label>
                     <output
                       className="block w-full rounded-md border border-zinc-300 bg-white p-2 text-sm font-bold text-purple-700"
-                      aria-label="Valor definido no cadastro do servico"
+                      aria-label="Valor definido no cadastro do serviço"
                     >
                       {lab.catalogItemId
                         ? `R$ ${formatMoney(Number(lab.unitPrice || 0))}`
@@ -3572,7 +4152,7 @@ export default function NewProposalPage() {
 
               {hourlyServices.length === 0 ? (
                 <p className="text-sm italic text-zinc-500">
-                  Nenhum servico por hora adicionado.
+                  Nenhum serviço por hora adicionado.
                 </p>
               ) : null}
 
@@ -3589,73 +4169,84 @@ export default function NewProposalPage() {
                     key={`hourly-${index}`}
                     className="mb-3 grid grid-cols-1 gap-3 rounded-lg border border-amber-100 bg-amber-50 p-3 md:grid-cols-6"
                   >
-                    <input
-                      className="rounded-md border border-amber-200 bg-white p-2 text-sm md:col-span-2"
-                      placeholder="Descricao"
-                      value={item.description}
-                      onChange={(e) =>
-                        updateHourlyService(
-                          index,
-                          "description",
-                          e.target.value,
-                        )
-                      }
-                    />
-                    <SelectField
-                      value={item.hourType}
-                      onChange={(e) =>
-                        updateHourlyService(index, "hourType", e.target.value)
-                      }
-                      className="rounded-md border border-amber-200 bg-white p-2 text-sm"
+                    <FormField
+                      label="Descrição do atendimento"
+                      className="md:col-span-2"
                     >
-                      {hourTypes
-                        .filter((option) =>
-                          hourlyRates.some(
-                            (rate) => rate.hourType === option.value,
-                          ),
-                        )
-                        .map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                    </SelectField>
-                    <SelectField
-                      value={item.technicianType}
-                      onChange={(e) =>
-                        updateHourlyService(
-                          index,
-                          "technicianType",
-                          e.target.value,
-                        )
-                      }
-                      className="rounded-md border border-amber-200 bg-white p-2 text-sm"
-                    >
-                      {technicianTypes
-                        .filter((option) =>
-                          hourlyRates.some(
-                            (rate) =>
-                              rate.hourType === item.hourType &&
-                              rate.technicianType === option.value,
-                          ),
-                        )
-                        .map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                    </SelectField>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.25"
-                      value={item.hours}
-                      onChange={(e) =>
-                        updateHourlyService(index, "hours", e.target.value)
-                      }
-                      className="rounded-md border border-amber-200 bg-white p-2 text-sm"
-                      placeholder="Horas"
-                    />
+                      <input
+                        className="rounded-md border border-amber-200 bg-white p-2 text-sm md:col-span-2"
+                        placeholder="Descrição"
+                        value={item.description}
+                        onChange={(e) =>
+                          updateHourlyService(
+                            index,
+                            "description",
+                            e.target.value,
+                          )
+                        }
+                      />
+                    </FormField>
+                    <FormField label="Tipo de hora">
+                      <SelectField
+                        value={item.hourType}
+                        onChange={(e) =>
+                          updateHourlyService(index, "hourType", e.target.value)
+                        }
+                        className="rounded-md border border-amber-200 bg-white p-2 text-sm"
+                      >
+                        {hourTypes
+                          .filter((option) =>
+                            hourlyRates.some(
+                              (rate) => rate.hourType === option.value,
+                            ),
+                          )
+                          .map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                      </SelectField>
+                    </FormField>
+                    <FormField label="Tipo de técnico">
+                      <SelectField
+                        value={item.technicianType}
+                        onChange={(e) =>
+                          updateHourlyService(
+                            index,
+                            "technicianType",
+                            e.target.value,
+                          )
+                        }
+                        className="rounded-md border border-amber-200 bg-white p-2 text-sm"
+                      >
+                        {technicianTypes
+                          .filter((option) =>
+                            hourlyRates.some(
+                              (rate) =>
+                                rate.hourType === item.hourType &&
+                                rate.technicianType === option.value,
+                            ),
+                          )
+                          .map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                      </SelectField>
+                    </FormField>
+                    <FormField label="Horas">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.25"
+                        value={item.hours}
+                        onChange={(e) =>
+                          updateHourlyService(index, "hours", e.target.value)
+                        }
+                        className="rounded-md border border-amber-200 bg-white p-2 text-sm"
+                        placeholder="Horas"
+                      />
+                    </FormField>
                     <output
                       className="rounded-md border border-amber-200 bg-white p-2 text-sm font-semibold text-amber-900"
                       aria-label="Valor da hora definido no Studio"
@@ -3707,35 +4298,41 @@ export default function NewProposalPage() {
                   key={`other-${index}`}
                   className="mb-3 grid grid-cols-1 gap-3 rounded-lg border border-zinc-100 bg-zinc-50 p-3 md:grid-cols-[1fr_100px_140px_auto]"
                 >
-                  <input
-                    className="rounded-md border border-zinc-300 p-2 text-sm"
-                    placeholder="Descricao do item"
-                    value={item.description}
-                    onChange={(e) =>
-                      updateOtherItem(index, "description", e.target.value)
-                    }
-                  />
-                  <input
-                    type="number"
-                    min="1"
-                    className="rounded-md border border-zinc-300 p-2 text-sm"
-                    placeholder="Qtd"
-                    value={item.quantity}
-                    onChange={(e) =>
-                      updateOtherItem(index, "quantity", e.target.value)
-                    }
-                  />
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className="rounded-md border border-zinc-300 p-2 text-sm"
-                    placeholder="Valor"
-                    value={item.unitPrice}
-                    onChange={(e) =>
-                      updateOtherItem(index, "unitPrice", e.target.value)
-                    }
-                  />
+                  <FormField label="Descrição do item">
+                    <input
+                      className="rounded-md border border-zinc-300 p-2 text-sm"
+                      placeholder="Descrição do item"
+                      value={item.description}
+                      onChange={(e) =>
+                        updateOtherItem(index, "description", e.target.value)
+                      }
+                    />
+                  </FormField>
+                  <FormField label="Quantidade">
+                    <input
+                      type="number"
+                      min="1"
+                      className="rounded-md border border-zinc-300 p-2 text-sm"
+                      placeholder="Qtd"
+                      value={item.quantity}
+                      onChange={(e) =>
+                        updateOtherItem(index, "quantity", e.target.value)
+                      }
+                    />
+                  </FormField>
+                  <FormField label="Valor unitário (R$)">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="rounded-md border border-zinc-300 p-2 text-sm"
+                      placeholder="Valor"
+                      value={item.unitPrice}
+                      onChange={(e) =>
+                        updateOtherItem(index, "unitPrice", e.target.value)
+                      }
+                    />
+                  </FormField>
                   <button
                     type="button"
                     onClick={() => removeOtherItem(index)}
@@ -3746,6 +4343,28 @@ export default function NewProposalPage() {
                 </div>
               ))}
             </div>
+            {editor.enabled && technicalScopeRequest.items.length > 0 ? (
+              <>
+                <TechnicalServiceClassificationPanel
+                  request={technicalScopeRequest}
+                  disabled={isSubmitting}
+                  onChange={(value) => {
+                    setTechnicalScopeClassifications(value);
+                    setTechnicalScopeReview(undefined);
+                  }}
+                />
+                <TechnicalScopeGenerator
+                  request={technicalScopeRequest}
+                  scope={scope}
+                  snapshot={technicalScopeSnapshot}
+                  canGenerate={Boolean(selectedClientId)}
+                  onApply={(text, review) => {
+                    setScope(text);
+                    setTechnicalScopeReview(review);
+                  }}
+                />
+              </>
+            ) : null}
             <div className="proposal-form-section">
               <h2 className="mb-5 text-base font-bold text-slate-900">
                 Despesas da operação
@@ -3759,6 +4378,92 @@ export default function NewProposalPage() {
         ) : null}
         {step === 3 ? (
           <div className="space-y-5">
+            <CommercialDraftTools
+              mode="costs"
+              portfolio={
+                proposalFormType === "CONTRACT" ? "contracts" : "partsServices"
+              }
+              revenue={grandTotal}
+              lines={financialLines}
+            />
+            {editor.enabled ? (
+              <>
+                <p
+                  className="text-sm text-[var(--text-muted)]"
+                  aria-label="Plano real de pagamento"
+                >
+                  {realPaymentSummary}
+                </p>
+                <ProposalConference
+                  issues={serverIssues ?? localReview.issues}
+                  acknowledgements={reviewAcknowledgements}
+                  busy={reviewBusy || (serverIssues === null && !reviewError)}
+                  error={reviewError}
+                  onRetry={() => setReviewAttempt((attempt) => attempt + 1)}
+                  documentRendered={previewRenderedKey === conferenceKey}
+                  onNavigate={navigateIssue}
+                  onAcknowledge={(value) =>
+                    setReviewAcknowledgements((current) => [
+                      ...current.filter(
+                        (ack) =>
+                          !(
+                            ack.code === value.code &&
+                            ack.signature === value.signature
+                          ),
+                      ),
+                      value,
+                    ])
+                  }
+                />
+                <div className="flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    className="app-button app-button-secondary"
+                    disabled={
+                      isSubmitting ||
+                      editor.saving ||
+                      !editor.loaded ||
+                      !canEditProposal
+                    }
+                    onClick={() => {
+                      submitAction.current = "preview";
+                      (
+                        document.getElementById(
+                          "proposal-form",
+                        ) as HTMLFormElement
+                      ).requestSubmit();
+                    }}
+                    ref={previewButtonRef}
+                  >
+                    Visualizar proposta
+                  </button>
+                  {getAccessFromToken().proposals.update &&
+                  canScreenAction("proposals", "update") ? (
+                    <button
+                      type="button"
+                      className="app-button app-button-primary"
+                      disabled={
+                        isSubmitting ||
+                        editor.saving ||
+                        reviewBusy ||
+                        !editor.loaded ||
+                        !canEditProposal
+                      }
+                      onClick={() => {
+                        submitAction.current = "submit";
+                        (
+                          document.getElementById(
+                            "proposal-form",
+                          ) as HTMLFormElement
+                        ).requestSubmit();
+                      }}
+                    >
+                      Solicitar aprovação
+                    </button>
+                  ) : null}
+                </div>
+              </>
+            ) : null}
             <ProposalFormSection
               title="Confira os dados comerciais"
               description="Você pode voltar a qualquer etapa antes de salvar."
@@ -3793,136 +4498,207 @@ export default function NewProposalPage() {
               title="Escopo e observações"
               description="Defina o que será entregue e as informações que o cliente verá na proposta."
             >
+              <PublishedTemplatePicker
+                proposalId={editingProposalId || undefined}
+                portfolio={
+                  proposalFormType === "CONTRACT"
+                    ? "contracts"
+                    : "partsServices"
+                }
+                category={
+                  labor.length || hourlyServices.length
+                    ? "SERVICE_SCOPE"
+                    : "PARTS_SCOPE"
+                }
+                previewValues={{
+                  "cliente.nome":
+                    selectedClient?.companyName ||
+                    selectedClient?.tradeName ||
+                    "Cliente não selecionado",
+                  "vendedor.nome": sellerSearch || "Vendedor não selecionado",
+                  "proposta.codigo": editingProposalCode || "Rascunho",
+                  "proposta.total": formatCurrency(grandTotal),
+                  "proposta.validade": validUntil
+                    ? new Date(validUntil + "T12:00:00").toLocaleDateString(
+                        "pt-BR",
+                      )
+                    : "Validade não informada",
+                  "proposta.itens": financialLines
+                    .map(
+                      (line, index) =>
+                        line.description ||
+                        [...partOptions, ...serviceOptions].find(
+                          (item) => item.id === line.catalogItemId,
+                        )?.name ||
+                        `Item ${index + 1}`,
+                    )
+                    .join("\n"),
+                  "proposta.escopo": scope || "Escopo ainda não preenchido",
+                  "equipamento.nome":
+                    equipmentSearch || "Equipamento não selecionado",
+                }}
+                onApply={(value) => {
+                  setScope(value.body);
+                  setTechnicalScopeReview(undefined);
+                  setReviewAcknowledgements([]);
+                }}
+              />
               <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
                 <div className="md:col-span-4">
                   <label className="mb-1 block text-sm font-medium text-zinc-700">
                     Escopo
                   </label>
-                  <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-zinc-500">
-                        Biblioteca de escopos prontos
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        <label className="cursor-pointer rounded border border-sky-200 bg-white px-3 py-1.5 text-xs font-semibold text-sky-800">
-                          {scopeUploadBusy
-                            ? "Importando..."
-                            : "Selecionar TXT do computador"}
-                          <input
-                            type="file"
-                            accept=".txt,text/plain"
-                            disabled={scopeUploadBusy}
-                            className="sr-only"
-                            onChange={(event) => {
-                              void uploadScopeTxt(event.target.files?.[0]);
-                              event.currentTarget.value = "";
-                            }}
-                          />
-                        </label>
-                        <button
-                          type="button"
-                          onClick={appendScopeTemplates}
-                          disabled={selectedScopeTemplates.length === 0}
-                          className="rounded bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
-                        >
-                          Adicionar ao escopo
-                        </button>
+                  <TechnicalScopeGenerator
+                    request={technicalScopeRequest}
+                    scope={scope}
+                    snapshot={technicalScopeSnapshot}
+                    canGenerate={
+                      Boolean(selectedClientId) &&
+                      technicalScopeRequest.items.length > 0
+                    }
+                    onApply={(text, review) => {
+                      setScope(text);
+                      setTechnicalScopeReview(review);
+                    }}
+                  />
+                  <details className="mb-3 rounded-xl border border-slate-200 p-3">
+                    <summary className="cursor-pointer text-sm font-medium">
+                      Modelos anteriores e importação
+                    </summary>
+                    <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-bold uppercase tracking-[0.14em] text-zinc-500">
+                          Biblioteca de escopos prontos
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <label className="cursor-pointer rounded border border-sky-200 bg-white px-3 py-1.5 text-xs font-semibold text-sky-800">
+                            {scopeUploadBusy
+                              ? "Importando..."
+                              : "Selecionar TXT do computador"}
+                            <input
+                              type="file"
+                              accept=".txt,text/plain"
+                              disabled={scopeUploadBusy}
+                              className="sr-only"
+                              onChange={(event) => {
+                                void uploadScopeTxt(event.target.files?.[0]);
+                                event.currentTarget.value = "";
+                              }}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={appendScopeTemplates}
+                            disabled={selectedScopeTemplates.length === 0}
+                            className="rounded bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                          >
+                            Adicionar ao escopo
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                    <p className="mb-2 text-xs leading-5 text-zinc-600">
-                      A pesquisa mostra apenas escopos já importados. Selecione
-                      um arquivo .txt do seu computador para salvá-lo nesta
-                      biblioteca.
-                    </p>
-                    <input
-                      type="search"
-                      value={scopeSearch}
-                      onChange={(event) => setScopeSearch(event.target.value)}
-                      placeholder="Pesquisar escopos por nome, arquivo ou categoria"
-                      className="mb-3 w-full rounded-lg border border-zinc-300 bg-white p-2 text-sm"
-                    />
-                    <div className="grid max-h-64 grid-cols-1 gap-2 overflow-y-auto md:grid-cols-3">
-                      {scopeTemplates
-                        .filter((template) =>
+                      <p className="mb-2 text-xs leading-5 text-zinc-600">
+                        A pesquisa mostra apenas escopos já importados.
+                        Selecione um arquivo .txt do seu computador para
+                        salvá-lo nesta biblioteca.
+                      </p>
+                      <label
+                        htmlFor="proposal-scope-search"
+                        className="mb-1 block text-xs font-medium text-zinc-600"
+                      >
+                        Pesquisar escopos
+                      </label>
+                      <input
+                        id="proposal-scope-search"
+                        type="search"
+                        value={scopeSearch}
+                        onChange={(event) => setScopeSearch(event.target.value)}
+                        placeholder="Pesquisar escopos por nome, arquivo ou categoria"
+                        className="mb-3 w-full rounded-lg border border-zinc-300 bg-white p-2 text-sm"
+                      />
+                      <div className="grid max-h-64 grid-cols-1 gap-2 overflow-y-auto md:grid-cols-3">
+                        {scopeTemplates
+                          .filter((template) =>
+                            `${template.name} ${template.category || ""} ${template.sourceFileName || ""}`
+                              .toLocaleLowerCase("pt-BR")
+                              .includes(
+                                scopeSearch.trim().toLocaleLowerCase("pt-BR"),
+                              ),
+                          )
+                          .map((template) => (
+                            <label
+                              key={template.id}
+                              className="flex items-start gap-2 rounded border border-zinc-200 bg-white p-2 text-sm"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedScopeTemplateIds.includes(
+                                  template.id,
+                                )}
+                                onChange={(e) => {
+                                  setSelectedScopeTemplateIds((current) =>
+                                    e.target.checked
+                                      ? [...current, template.id]
+                                      : current.filter(
+                                          (id) => id !== template.id,
+                                        ),
+                                  );
+                                }}
+                              />
+                              <span>
+                                <span className="block font-semibold text-zinc-800">
+                                  {template.name}
+                                </span>
+                                <span className="block text-xs text-zinc-500">
+                                  {template.sourceFileName ||
+                                    template.category ||
+                                    "Escopo comercial"}
+                                </span>
+                              </span>
+                            </label>
+                          ))}
+                      </div>
+                      {scopeTemplatesLoading ? (
+                        <p className="mt-2 text-sm text-zinc-500">
+                          Carregando escopos...
+                        </p>
+                      ) : scopeTemplatesError ? (
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-700">
+                          <span>{scopeTemplatesError}</span>
+                          <button
+                            type="button"
+                            onClick={() => void loadScopeTemplates()}
+                            className="underline"
+                          >
+                            Tentar novamente
+                          </button>
+                        </div>
+                      ) : scopeTemplates.length === 0 ? (
+                        <p className="mt-2 text-sm text-zinc-500">
+                          Ainda não há TXT importado. Use “Selecionar TXT do
+                          computador” para adicionar o primeiro.
+                        </p>
+                      ) : !scopeTemplates.some((template) =>
                           `${template.name} ${template.category || ""} ${template.sourceFileName || ""}`
                             .toLocaleLowerCase("pt-BR")
                             .includes(
                               scopeSearch.trim().toLocaleLowerCase("pt-BR"),
                             ),
-                        )
-                        .map((template) => (
-                          <label
-                            key={template.id}
-                            className="flex items-start gap-2 rounded border border-zinc-200 bg-white p-2 text-sm"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selectedScopeTemplateIds.includes(
-                                template.id,
-                              )}
-                              onChange={(e) => {
-                                setSelectedScopeTemplateIds((current) =>
-                                  e.target.checked
-                                    ? [...current, template.id]
-                                    : current.filter(
-                                        (id) => id !== template.id,
-                                      ),
-                                );
-                              }}
-                            />
-                            <span>
-                              <span className="block font-semibold text-zinc-800">
-                                {template.name}
-                              </span>
-                              <span className="block text-xs text-zinc-500">
-                                {template.sourceFileName ||
-                                  template.category ||
-                                  "Escopo comercial"}
-                              </span>
-                            </span>
-                          </label>
-                        ))}
+                        ) ? (
+                        <p className="mt-2 text-sm text-zinc-500">
+                          Nenhum escopo corresponde à pesquisa.
+                        </p>
+                      ) : null}
+                      {combinedScopeText ? (
+                        <pre className="mt-3 max-h-52 overflow-y-auto whitespace-pre-wrap rounded border border-zinc-200 bg-white p-3 text-xs leading-5 text-zinc-700">
+                          {combinedScopeText}
+                        </pre>
+                      ) : null}
                     </div>
-                    {scopeTemplatesLoading ? (
-                      <p className="mt-2 text-sm text-zinc-500">
-                        Carregando escopos...
-                      </p>
-                    ) : scopeTemplatesError ? (
-                      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-700">
-                        <span>{scopeTemplatesError}</span>
-                        <button
-                          type="button"
-                          onClick={() => void loadScopeTemplates()}
-                          className="underline"
-                        >
-                          Tentar novamente
-                        </button>
-                      </div>
-                    ) : scopeTemplates.length === 0 ? (
-                      <p className="mt-2 text-sm text-zinc-500">
-                        Ainda não há TXT importado. Use “Selecionar TXT do
-                        computador” para adicionar o primeiro.
-                      </p>
-                    ) : !scopeTemplates.some((template) =>
-                        `${template.name} ${template.category || ""} ${template.sourceFileName || ""}`
-                          .toLocaleLowerCase("pt-BR")
-                          .includes(
-                            scopeSearch.trim().toLocaleLowerCase("pt-BR"),
-                          ),
-                      ) ? (
-                      <p className="mt-2 text-sm text-zinc-500">
-                        Nenhum escopo corresponde à pesquisa.
-                      </p>
-                    ) : null}
-                    {combinedScopeText ? (
-                      <pre className="mt-3 max-h-52 overflow-y-auto whitespace-pre-wrap rounded border border-zinc-200 bg-white p-3 text-xs leading-5 text-zinc-700">
-                        {combinedScopeText}
-                      </pre>
-                    ) : null}
-                  </div>
+                  </details>
                   <textarea
                     rows={8}
                     value={scope}
+                    id="proposal-review-scope"
                     onChange={(e) => setScope(e.target.value)}
                     className="w-full rounded-lg border border-zinc-300 p-3 text-sm"
                     aria-label="Escopo da proposta"
@@ -4007,6 +4783,7 @@ export default function NewProposalPage() {
                       type="number"
                       min="0"
                       value={discountInput}
+                      id="proposal-review-discount"
                       onChange={(e) => setDiscountInput(e.target.value)}
                       className={`w-full rounded-md border p-2 text-sm font-bold focus:outline-none ${
                         hitDiscountLimit
@@ -4022,9 +4799,9 @@ export default function NewProposalPage() {
 
                   {hitDiscountLimit ? (
                     <p className="col-span-2 mt-1 text-xs font-bold text-red-500">
-                      Limite de vendedor atingido. Max:{" "}
+                      Acima da sua alçada. Limite para liberação:{" "}
                       {discountType === "PERCENTAGE"
-                        ? "7%"
+                        ? configuredDiscount.discountLimit + "%"
                         : `R$ ${formatMoney(maxDiscountAllowed)}`}
                     </p>
                   ) : null}
@@ -4144,29 +4921,79 @@ export default function NewProposalPage() {
           ]}
           total={grandTotal}
           payment={
-            entryAmount > 0
-              ? "Entrada de R$ " +
-                formatMoney(entryAmount) +
-                (remainingAfterEntry > 0
-                  ? " + saldo em " + installments + " parcela(s)"
-                  : " · antecipado")
-              : installments + "x de R$ " + formatMoney(installmentValue)
+            editor.enabled
+              ? realPaymentSummary
+              : entryAmount > 0
+                ? "Entrada de R$ " +
+                  formatMoney(entryAmount) +
+                  (remainingAfterEntry > 0
+                    ? " + saldo em " + installments + " parcela(s)"
+                    : " · antecipado")
+                : installments + "x de R$ " + formatMoney(installmentValue)
           }
           current={step}
           steps={PROPOSAL_STEPS.length}
           onBack={() => changeStep(step - 1)}
           onNext={nextStep}
-          saving={isSubmitting}
+          saving={isSubmitting || editor.saving}
           disabled={
             (Boolean(editingProposalId) && !draftLoaded) ||
-            Boolean(selectedClient?.proposalCreationBlocked)
+            (!editor.enabled &&
+              Boolean(selectedClient?.proposalCreationBlocked)) ||
+            (editor.enabled && (!editor.loaded || !canEditProposal))
           }
           saveLabel={
-            editingProposalId ? "Salvar alterações" : "Salvar proposta"
+            editor.enabled
+              ? "Salvar rascunho"
+              : editingProposalId
+                ? "Salvar alterações"
+                : "Salvar proposta"
           }
-          formId="proposal-form"
+          formId={editor.enabled ? undefined : "proposal-form"}
+          onSave={
+            editor.enabled
+              ? () => void editor.save().catch(() => {})
+              : undefined
+          }
         />
       </form>
+      {previewUrl ? (
+        <EditOverlay
+          open
+          title="Prévia da proposta para o cliente"
+          eyebrow="Conferência interna"
+          returnFocusRef={previewButtonRef}
+          onClose={() => setPreviewUrl("")}
+        >
+          <div className="space-y-3 p-4">
+            <p className="text-sm text-[var(--text-muted)]">
+              Prévia com os dados públicos e o modelo do documento. A proposta
+              ainda depende das aprovações; esta ação não envia nem publica.
+            </p>
+            <PdfPreview
+              url={previewUrl}
+              onRendered={() => setPreviewRenderedKey(conferenceKey)}
+            />
+          </div>
+        </EditOverlay>
+      ) : null}
+      {equipmentItemsOpen ? (
+        <EquipmentItemsPicker
+          open
+          equipmentName={equipmentSearch || undefined}
+          items={equipmentPickerItems}
+          groups={equipmentItemSets}
+          selectedIds={selectedMachineBaseItemIds}
+          onToggleItem={toggleEquipmentItem}
+          onGroupSelect={selectEquipmentItemSet}
+          onConfirm={addItemsFromEquipmentBase}
+          onClose={() => setEquipmentItemsOpen(false)}
+          onClearSelection={() => setSelectedMachineBaseItemIds([])}
+          loading={loadingBaseItems}
+          error={machineBaseItemsError}
+          onRetry={() => setBaseItemsReload((current) => current + 1)}
+        />
+      ) : null}
     </div>
   );
 }

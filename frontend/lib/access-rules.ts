@@ -3,6 +3,22 @@ import type { AccessPolicy } from "./access";
 import { decodeJwtPayload, getStoredAccessToken } from "./auth-session";
 export type DetailedAccessRules = {
   version: 1;
+  commercialManagement?: Partial<
+    Record<
+      "generators" | "partsServices" | "contracts",
+      Partial<
+        Record<
+          | "responsible"
+          | "team"
+          | "costs"
+          | "margins"
+          | "templates"
+          | "publishTemplates",
+          boolean
+        >
+      >
+    >
+  >;
   profileId?: string;
   screens: Record<string, { view: boolean; actions: Record<string, boolean> }>;
   commercial: {
@@ -20,6 +36,19 @@ export function emptyRules(): DetailedAccessRules {
     commercial: { generators: false, partsServices: false, contracts: false },
     orderTypes: {},
     onCallShifts: [],
+  };
+}
+export function completeDetailedAccessRules(
+  value?: Partial<DetailedAccessRules> | null,
+): DetailedAccessRules {
+  const defaults = emptyRules();
+  return {
+    ...defaults,
+    ...value,
+    screens: { ...value?.screens },
+    commercial: { ...defaults.commercial, ...value?.commercial },
+    orderTypes: { ...value?.orderTypes },
+    onCallShifts: Array.isArray(value?.onCallShifts) ? value.onCallShifts : [],
   };
 }
 export function getDetailedAccess() {

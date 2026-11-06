@@ -1,4 +1,5 @@
 "use client";
+import ListPagination from "../../components/ListPagination";
 import { SelectField } from "@/app/dashboard/components/SelectField";
 import { commercialLabel } from "@/lib/commercial-labels";
 
@@ -11,6 +12,7 @@ import { apiFetch, readApiErrorMessage } from "@/lib/api";
 import {
   booleanOptions,
   formatStudioValue,
+  studioCsvValue,
   getFieldValue,
   normalizeEditableValue,
   type StudioField,
@@ -56,7 +58,7 @@ type ImportPreviewResult = {
   rows: ImportPreviewRow[];
 };
 
-const PAGE_SIZE = 50;
+const DEFAULT_PAGE_SIZE = 20;
 
 export default function DataExplorer({
   resource,
@@ -78,6 +80,7 @@ export default function DataExplorer({
     direction: "asc",
   });
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [visibleKeys, setVisibleKeys] = useState<string[]>([]);
   const [selected, setSelected] = useState<StudioRecord | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -92,12 +95,18 @@ export default function DataExplorer({
   const [executingImport, setExecutingImport] = useState(false);
   const [importError, setImportError] = useState("");
   const [access, setAccess] = useState(() => getAccessFromToken());
-  const [paymentIssuers, setPaymentIssuers] = useState<Array<{ id: string; companyName: string; cnpj: string }>>([]);
+  const [paymentIssuers, setPaymentIssuers] = useState<
+    Array<{ id: string; companyName: string; cnpj: string }>
+  >([]);
   const [paymentIssuerLoadError, setPaymentIssuerLoadError] = useState("");
-  const paymentIssuerOptions = useMemo(() => paymentIssuers.map((issuer) => ({
-    value: issuer.id,
-    label: `${issuer.companyName} · ${issuer.cnpj}`,
-  })), [paymentIssuers]);
+  const paymentIssuerOptions = useMemo(
+    () =>
+      paymentIssuers.map((issuer) => ({
+        value: issuer.id,
+        label: `${issuer.companyName} · ${issuer.cnpj}`,
+      })),
+    [paymentIssuers],
+  );
 
   const editableFields = useMemo(
     () =>
@@ -110,9 +119,14 @@ export default function DataExplorer({
       ),
     [resource.fields],
   );
-  const canViewData = (access.studio.dataView || access.studio.access) &&
-    (resource.key !== "proposalPaymentProfiles" || access.finance.view || access.finance.update);
-  const canEditData = resource.canEdit && access.studio.dataEdit &&
+  const canViewData =
+    (access.studio.dataView || access.studio.access) &&
+    (resource.key !== "proposalPaymentProfiles" ||
+      access.finance.view ||
+      access.finance.update);
+  const canEditData =
+    resource.canEdit &&
+    access.studio.dataEdit &&
     (resource.key !== "proposalPaymentProfiles" || access.finance.update);
   const canExportData = resource.canExport && access.studio.dataExport;
   const canImportData =
@@ -152,20 +166,42 @@ export default function DataExplorer({
     let cancelled = false;
     void (async () => {
       try {
-        const response = await apiFetch("/studio/payment-issuers", { cache: "no-store" });
-        if (!response.ok) throw new Error("Nao foi possivel carregar as empresas emitentes.");
-        const issuers = await response.json() as Array<{ id: string; companyName: string | null; cnpj: string | null }>;
+        const response = await apiFetch("/studio/payment-issuers", {
+          cache: "no-store",
+        });
+        if (!response.ok)
+          throw new Error("Nao foi possivel carregar as empresas emitentes.");
+        const issuers = (await response.json()) as Array<{
+          id: string;
+          companyName: string | null;
+          cnpj: string | null;
+        }>;
         if (!cancelled) {
-          setPaymentIssuers(issuers.filter((issuer) =>
-            Boolean(issuer.companyName?.trim()) && (issuer.cnpj || "").replace(/\D/g, "").length === 14,
-          ).map((issuer) => ({ id: issuer.id, companyName: issuer.companyName!.trim(), cnpj: issuer.cnpj! })));
+          setPaymentIssuers(
+            issuers
+              .filter(
+                (issuer) =>
+                  Boolean(issuer.companyName?.trim()) &&
+                  (issuer.cnpj || "").replace(/\D/g, "").length === 14,
+              )
+              .map((issuer) => ({
+                id: issuer.id,
+                companyName: issuer.companyName!.trim(),
+                cnpj: issuer.cnpj!,
+              })),
+          );
           setPaymentIssuerLoadError("");
         }
       } catch {
-        if (!cancelled) setPaymentIssuerLoadError("Nao foi possivel carregar as empresas emitentes.");
+        if (!cancelled)
+          setPaymentIssuerLoadError(
+            "Nao foi possivel carregar as empresas emitentes.",
+          );
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [resource.key]);
 
   useEffect(() => {
@@ -254,13 +290,16 @@ export default function DataExplorer({
     setDraft((current) => {
       const next = { ...current, [key]: value };
       if (resource.key !== "proposalPaymentProfiles") return next;
-      const issuer = paymentIssuers.find((item) => item.id === String(next.issuerCompanyId || ""));
+      const issuer = paymentIssuers.find(
+        (item) => item.id === String(next.issuerCompanyId || ""),
+      );
       if (key === "issuerCompanyId") {
         next.beneficiary = issuer?.companyName || "";
         next.beneficiaryDocument = issuer?.cnpj.replace(/\D/g, "") || "";
       }
       if (key === "issuerCompanyId" || key === "method") {
-        next.pixKey = next.method === "PIX" ? (issuer?.cnpj.replace(/\D/g, "") || "") : "";
+        next.pixKey =
+          next.method === "PIX" ? issuer?.cnpj.replace(/\D/g, "") || "" : "";
       }
       return next;
     });
@@ -301,12 +340,20 @@ export default function DataExplorer({
         body[field.key] = normalizeEditableValue(draft[field.key] ?? "", field);
       }
       if (resource.key === "proposalPaymentProfiles") {
-        const issuer = paymentIssuers.find((item) => item.id === body.issuerCompanyId);
-        if (!issuer) throw new Error("Selecione uma empresa emitente com CNPJ cadastrado.");
+        const issuer = paymentIssuers.find(
+          (item) => item.id === body.issuerCompanyId,
+        );
+        if (!issuer)
+          throw new Error(
+            "Selecione uma empresa emitente com CNPJ cadastrado.",
+          );
         if (!String(body.name || "").trim() || !body.purpose || !body.method) {
-          throw new Error("Informe o nome do perfil, o destino e o meio de pagamento.");
+          throw new Error(
+            "Informe o nome do perfil, o destino e o meio de pagamento.",
+          );
         }
-        body.beneficiary = String(body.beneficiary || "").trim() || issuer.companyName;
+        body.beneficiary =
+          String(body.beneficiary || "").trim() || issuer.companyName;
         body.beneficiaryDocument = issuer.cnpj.replace(/\D/g, "");
         if (body.method === "PIX") body.pixKey = issuer.cnpj.replace(/\D/g, "");
       }
@@ -324,7 +371,7 @@ export default function DataExplorer({
         throw new Error(
           await readApiErrorMessage(
             response,
-            "Nao foi possivel salvar o registro.",
+            "Não foi possivel salvar o registro.",
           ),
         );
       }
@@ -413,13 +460,11 @@ export default function DataExplorer({
     });
   }, [query, resource.fields, rows, sort]);
 
-  const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const paginatedRows = filteredRows.slice(
-    (page - 1) * PAGE_SIZE,
-    page * PAGE_SIZE,
+    (page - 1) * pageSize,
+    page * pageSize,
   );
-  const firstIndex = filteredRows.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const lastIndex = Math.min(page * PAGE_SIZE, filteredRows.length);
 
   function toggleSort(field: StudioField) {
     if (!field.sortable) return;
@@ -501,7 +546,7 @@ export default function DataExplorer({
         throw new Error(
           await readApiErrorMessage(
             response,
-            "Nao foi possivel gerar a previa da importacao.",
+            "Não foi possivel gerar a prévia da importação.",
           ),
         );
       }
@@ -528,7 +573,7 @@ export default function DataExplorer({
         throw new Error(
           await readApiErrorMessage(
             response,
-            "Nao foi possivel executar a importacao.",
+            "Não foi possivel executar a importação.",
           ),
         );
       }
@@ -568,7 +613,7 @@ export default function DataExplorer({
   if (!canViewData) {
     return (
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm font-semibold text-amber-900">
-        Seu perfil nao possui permissao para visualizar dados pelo Manitec
+        Seu perfil não possui permissão para visualizar dados pelo Manitec
         Studio.
       </div>
     );
@@ -580,54 +625,54 @@ export default function DataExplorer({
         eyebrow="Manitec Studio"
         title={resource.pluralLabel}
         description={resource.description}
-        actions={<>
-<div className="flex flex-wrap gap-2">
-            {resource.createHref && resource.canCreate && canEditData ? (
-              <Link
-                href={resource.createHref}
-                className="inline-flex min-h-10 items-center justify-center rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-              >
-                Novo registro
-              </Link>
-            ) : null}
-            {!resource.createHref && resource.canCreate && canEditData ? (
-              <button
-                type="button"
-                onClick={openNewRecord}
-                className="inline-flex min-h-10 items-center justify-center rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-              >
-                Novo registro
-              </button>
-            ) : null}
-            {canImportData ? (
-              <button
-                type="button"
-                onClick={() => setShowImport((prev) => !prev)}
-                className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Importar
-              </button>
-            ) : null}
-            {canExportData ? (
-              <button
-                type="button"
-                onClick={exportCsv}
-                className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Exportar CSV
-              </button>
-            ) : null}
-          </div>
-</>}
+        actions={
+          <>
+            <div className="flex flex-wrap gap-2">
+              {resource.createHref && resource.canCreate && canEditData ? (
+                <Link
+                  href={resource.createHref}
+                  className="inline-flex min-h-10 items-center justify-center rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                >
+                  Novo registro
+                </Link>
+              ) : null}
+              {!resource.createHref && resource.canCreate && canEditData ? (
+                <button
+                  type="button"
+                  onClick={openNewRecord}
+                  className="inline-flex min-h-10 items-center justify-center rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                >
+                  Novo registro
+                </button>
+              ) : null}
+              {canImportData ? (
+                <button
+                  type="button"
+                  onClick={() => setShowImport((prev) => !prev)}
+                  className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Importar
+                </button>
+              ) : null}
+              {canExportData ? (
+                <button
+                  type="button"
+                  onClick={exportCsv}
+                  className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Exportar CSV
+                </button>
+              ) : null}
+            </div>
+          </>
+        }
       />
-<div className="mt-5 grid gap-3 md:grid-cols-3">
-          <Metric label="Registros" value={String(rows.length)} />
-          <Metric label="Resultado atual" value={String(filteredRows.length)} />
-          <Metric
-            label="Campos visiveis"
-            value={String(visibleFields.length)}
-          />
-        </div>
+      <p className="py-3 text-sm text-[var(--text-muted)]" aria-live="polite">
+        <strong className="text-[var(--foreground)]">
+          {filteredRows.length.toLocaleString("pt-BR")}
+        </strong>{" "}
+        de {rows.length.toLocaleString("pt-BR")} registros
+      </p>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -646,7 +691,7 @@ export default function DataExplorer({
               onClick={() => setShowColumns((prev) => !prev)}
               className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
             >
-              Colunas
+              Colunas ({visibleFields.length})
             </button>
             <button
               type="button"
@@ -683,12 +728,12 @@ export default function DataExplorer({
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="text-sm font-bold text-amber-950">
-                  Importacao controlada
+                  Importação controlada
                 </p>
                 <p className="mt-1 text-sm leading-6 text-amber-900">
-                  O Studio le CSV ou XLSX, mostra a previa e so grava depois da
-                  confirmacao. Linhas sem os campos obrigatorios e duplicados
-                  sao ignoradas, com validacao e auditoria.
+                  O Studio le CSV ou XLSX, mostra a prévia e so grava depois da
+                  confirmacao. Linhas sem os campos obrigatórios e duplicados
+                  sao ignoradas, com validação e auditoria.
                 </p>
                 {resource.importHelp ? (
                   <p className="mt-2 text-sm leading-6 text-amber-900">
@@ -699,7 +744,7 @@ export default function DataExplorer({
                   <p className="mt-2 text-sm font-semibold leading-6 text-amber-950">
                     O modelo inclui {resource.importExamples.length} linhas
                     marcadas como EXEMPLO. Elas sao ignoradas automaticamente na
-                    importacao; substitua ou exclua essas linhas antes de enviar
+                    importação; substitua ou exclua essas linhas antes de enviar
                     seus dados.
                   </p>
                 ) : null}
@@ -727,7 +772,7 @@ export default function DataExplorer({
             </div>
             {importing ? (
               <p className="mt-4 rounded-xl border border-amber-200 bg-white p-3 text-sm font-semibold text-amber-900">
-                Gerando previa da importacao...
+                Gerando prévia da importação...
               </p>
             ) : null}
             {importError ? (
@@ -799,7 +844,12 @@ export default function DataExplorer({
                     {executingImport ? "Executando..." : "Confirmar importacao"}
                   </button>
                 </div>
-                <div className="mt-4 overflow-x-auto rounded-xl border border-amber-200 bg-white" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
+                <div
+                  className="mt-4 overflow-x-auto rounded-xl border border-amber-200 bg-white"
+                  tabIndex={0}
+                  role="region"
+                  aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas."
+                >
                   <table className="w-full text-left text-sm">
                     <thead className="bg-amber-50 text-xs uppercase tracking-[0.14em] text-amber-900">
                       <tr>
@@ -864,8 +914,17 @@ export default function DataExplorer({
           </button>
         </div>
         <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div ref={tableScrollRef} className="overflow-x-auto scroll-smooth" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
-            <table className="w-full border-collapse text-left">
+          <div
+            ref={tableScrollRef}
+            className="overflow-x-auto scroll-smooth"
+            tabIndex={0}
+            role="region"
+            aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas."
+          >
+            <table
+              data-pagination-skip="true"
+              className="w-full border-collapse text-left"
+            >
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-sm text-slate-500">
                   {visibleFields.map((field) => (
@@ -956,7 +1015,7 @@ export default function DataExplorer({
                             href={resource.detailHref(row.id)}
                             className="ml-4 text-sm font-semibold text-slate-500 hover:text-slate-900 hover:underline"
                           >
-                            Modulo
+                            Módulo
                           </Link>
                         ) : null}
                       </td>
@@ -975,34 +1034,17 @@ export default function DataExplorer({
               </tbody>
             </table>
           </div>
-          <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-3 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
-            <span>
-              {firstIndex}-{lastIndex} de {filteredRows.length}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={page <= 1}
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold disabled:opacity-40"
-              >
-                Anterior
-              </button>
-              <span className="font-semibold">
-                {page} / {pageCount}
-              </span>
-              <button
-                type="button"
-                disabled={page >= pageCount}
-                onClick={() =>
-                  setPage((current) => Math.min(pageCount, current + 1))
-                }
-                className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold disabled:opacity-40"
-              >
-                Proxima
-              </button>
-            </div>
-          </div>
+          <ListPagination
+            totalItems={filteredRows.length}
+            page={Math.min(page, pageCount)}
+            pageSize={pageSize}
+            disabled={loading}
+            onPageChange={setPage}
+            onPageSizeChange={(value) => {
+              setPageSize(value);
+              setPage(1);
+            }}
+          />
         </section>
         <div className="hidden items-center md:flex">
           <button
@@ -1056,7 +1098,7 @@ export default function DataExplorer({
                 </h3>
                 {resource.editable && canEditData ? (
                   <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
-                    Edicao controlada
+                    Edição controlada
                   </span>
                 ) : (
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
@@ -1067,35 +1109,78 @@ export default function DataExplorer({
 
               {resource.editable && canEditData && editableFields.length > 0 ? (
                 <div className="grid gap-3">
-                  {editableFields.filter((field) => {
-                    if (resource.key !== "proposalPaymentProfiles") return true;
-                    if (["beneficiaryDocument", "pixKey"].includes(field.key)) return false;
-                    if (["bankName", "agency", "accountNumber", "boletoInstructions"].includes(field.key)) return draft.method === "BOLETO";
-                    if (field.key === "pixCopyPaste") return draft.method === "PIX";
-                    return true;
-                  }).map((field) => (
-                    <EditField
-                      key={field.key}
-                      field={field.key === "issuerCompanyId" ? { ...field, options: paymentIssuerOptions } : field}
-                      value={draft[field.key]}
-                      onChange={(value) => changeDraftField(field.key, value)}
-                    />
-                  ))}
-                  {resource.key === "proposalPaymentProfiles" && draft.issuerCompanyId ? (
+                  {editableFields
+                    .filter((field) => {
+                      if (resource.key !== "proposalPaymentProfiles")
+                        return true;
+                      if (["beneficiaryDocument", "pixKey"].includes(field.key))
+                        return false;
+                      if (
+                        [
+                          "bankName",
+                          "agency",
+                          "accountNumber",
+                          "boletoInstructions",
+                        ].includes(field.key)
+                      )
+                        return draft.method === "BOLETO";
+                      if (field.key === "pixCopyPaste")
+                        return draft.method === "PIX";
+                      return true;
+                    })
+                    .map((field) => (
+                      <EditField
+                        key={field.key}
+                        field={
+                          field.key === "issuerCompanyId"
+                            ? { ...field, options: paymentIssuerOptions }
+                            : field
+                        }
+                        value={draft[field.key]}
+                        onChange={(value) => changeDraftField(field.key, value)}
+                      />
+                    ))}
+                  {resource.key === "proposalPaymentProfiles" &&
+                  draft.issuerCompanyId ? (
                     <p className="rounded-xl bg-sky-50 p-3 text-sm text-sky-900">
-                      O CNPJ da empresa selecionada será usado como documento do favorecido{draft.method === "PIX" ? " e chave PIX" : ""}.
-                      {draft.method === "PIX" ? " O código PIX copia e cola é opcional e só é necessário para mostrar um QR Code." : ""}
+                      O CNPJ da empresa selecionada será usado como documento do
+                      favorecido{draft.method === "PIX" ? " e chave PIX" : ""}.
+                      {draft.method === "PIX"
+                        ? " O código PIX copia e cola é opcional e só é necessário para mostrar um QR Code."
+                        : ""}
                     </p>
                   ) : null}
-                  {resource.key === "proposalPaymentProfiles" && !paymentIssuerLoadError && paymentIssuers.length === 0 ? (
-                    <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
-                      Cadastre uma empresa com nome e CNPJ em <Link className="font-bold underline" href="/dashboard/company-settings">Empresa</Link> antes de criar a conta.
+                  {resource.key === "proposalPaymentProfiles" &&
+                  !paymentIssuerLoadError &&
+                  paymentIssuers.length === 0 ? (
+                    <p
+                      role="alert"
+                      className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900"
+                    >
+                      Cadastre uma empresa com nome e CNPJ em{" "}
+                      <Link
+                        className="font-bold underline"
+                        href="/dashboard/company-settings"
+                      >
+                        Empresa
+                      </Link>{" "}
+                      antes de criar a conta.
                     </p>
                   ) : null}
-                  {resource.key === "proposalPaymentProfiles" && paymentIssuerLoadError ? (
-                    <p role="alert" className="text-sm text-red-700">{paymentIssuerLoadError}</p>
+                  {resource.key === "proposalPaymentProfiles" &&
+                  paymentIssuerLoadError ? (
+                    <p role="alert" className="text-sm text-red-700">
+                      {paymentIssuerLoadError}
+                    </p>
                   ) : null}
-                  {error ? <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+                  {error ? (
+                    <p
+                      role="alert"
+                      className="rounded-xl bg-red-50 p-3 text-sm text-red-700"
+                    >
+                      {error}
+                    </p>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => void saveRecord()}
@@ -1136,7 +1221,7 @@ export default function DataExplorer({
             {!isCreating ? (
               <section>
                 <h3 className="mb-3 text-sm font-bold uppercase tracking-[0.16em] text-slate-500">
-                  Historico
+                  Histórico
                 </h3>
                 {auditError ? (
                   <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
@@ -1217,7 +1302,7 @@ function EditField({
           onChange={(event) => onChange(event.target.value)}
           className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium normal-case text-slate-800"
         >
-          <option value="">Nao informado</option>
+          <option value="">Não informado</option>
           {(field.options || []).map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
@@ -1252,17 +1337,6 @@ function EditField({
         className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium normal-case text-slate-800"
       />
     </label>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-black text-slate-950">{value}</p>
-    </div>
   );
 }
 
@@ -1335,7 +1409,7 @@ function formatCsvValue(
   ) {
     return "";
   }
-  return formatStudioValue(value, field);
+  return studioCsvValue(value, field, preserveEmptyValues);
 }
 
 function spreadsheetRowsToCsv(rows: unknown[][]) {

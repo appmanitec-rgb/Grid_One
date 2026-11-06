@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { InterfaceIcon } from "./InterfaceIcon";
 import { preparePhoto } from "../profile/ProfilePhotoField";
 
 export function RecordPhoto({ value, label, className = "" }: {
@@ -60,15 +61,16 @@ export default function RecordPhotoField({ value, label, onChange, canEdit, disa
     <section aria-label={label} className="mb-5 grid gap-4 sm:grid-cols-[220px_minmax(0,1fr)]">
       <RecordPhoto value={value} label={label} />
       <div className="min-w-0 self-center">
-        <h3 className="text-base font-bold text-slate-950">{label}</h3>
+        <h3 className="text-base font-semibold text-slate-950">{label}</h3>
         <p className="mt-1 text-sm text-slate-500">A mesma imagem aparece no resumo e na ficha completa.</p>
         {canEdit ? <>
           <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" aria-label={"Anexar " + label.toLocaleLowerCase("pt-BR")} disabled={disabled || reading} onChange={event => void attach(event.target.files?.[0])} className="sr-only" />
-          <div className="mt-3 flex flex-wrap gap-3">
-            <button type="button" disabled={disabled || reading} onClick={() => input.current?.click()} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" disabled={disabled || reading} onClick={() => input.current?.click()} className="app-button app-button-secondary">
+              <InterfaceIcon name={reading ? "refresh" : value ? "edit" : "plus"} className={reading ? "h-4 w-4 motion-safe:animate-spin" : "h-4 w-4"} />
               {reading ? "Preparando foto..." : value ? "Trocar foto" : "Anexar foto"}
             </button>
-            {value ? <button type="button" disabled={disabled || reading} onClick={() => { onChange(""); setError(""); }} className="text-sm font-semibold text-red-700 disabled:opacity-50">Remover foto</button> : null}
+            {value ? <button type="button" disabled={disabled || reading} onClick={() => { onChange(""); setError(""); }} className="app-button app-button-danger"><InterfaceIcon name="trash" className="h-4 w-4" />Remover foto</button> : null}
           </div>
           <p className="mt-2 text-xs text-slate-500">JPG, PNG ou WebP, até 5 MB. Confirme em Salvar alterações.</p>
         </> : null}

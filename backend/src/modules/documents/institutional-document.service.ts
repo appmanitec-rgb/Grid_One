@@ -1,6 +1,13 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { Injectable } from '@nestjs/common';
+import { proposalClientLayout } from './proposal-client-layout';
+import { proposalBrandedLayout } from './proposal-branded-layout';
+import { proposalPaymentLayout } from './proposal-payment-layout';
 import { DocumentTemplateKind } from './document-template.service';
+import {
+  moneyCents,
+  roundedLineTotal,
+} from '../proposals/proposal-review.domain';
 
 type AnyRecord = Record<string, any>;
 
@@ -15,6 +22,9 @@ export type InstitutionalDocumentContext = {
   technicalScope: Record<string, unknown>;
   signatures: Record<string, unknown>;
   metadata: Record<string, unknown>;
+  clientProposal?: Record<string, unknown>;
+  brandedProposal?: Record<string, unknown>;
+  proposalPayment?: Record<string, unknown>;
   consultant?: Record<string, unknown>;
   manager?: Record<string, unknown>;
   service?: Record<string, unknown>;
@@ -97,7 +107,7 @@ export class InstitutionalDocumentService {
       number: this.safe(payload.document?.code),
       date: this.formatDate(payload.document?.issuedAt),
       createdAt: this.formatDate(payload.document?.issuedAt),
-      validUntil: this.formatDate(payload.document?.validUntil),
+      validUntil: this.formatCalendarDate(payload.document?.validUntil),
       status: this.safe(payload.document?.statusLabel),
       title: this.safe(
         payload.salesOpportunity?.title ||
@@ -106,7 +116,10 @@ export class InstitutionalDocumentService {
             : 'Proposta comercial MANITEC'),
       ),
       total: this.formatCurrency(payload.document?.totalValue),
-      paymentTerms: this.safe(payload.document?.paymentTerm, '-'),
+      paymentTerms: this.safe(
+        payload.document?.paymentSummary || payload.document?.paymentTerm,
+        '-',
+      ),
       paymentMethod: this.safe(payload.document?.paymentDetails, '-'),
       deliveryTerms: payload.document?.deliveryLeadTimeDays
         ? `${payload.document.deliveryLeadTimeDays} dia(s)`
@@ -126,7 +139,7 @@ export class InstitutionalDocumentService {
       exclusions:
         'Obras civis, infraestrutura externa e itens nao descritos no escopo.',
       notes: this.safe(
-        payload.document?.paymentDetails || payload.document?.externalNotes,
+        payload.document?.externalNotes,
         'Sem observacoes adicionais.',
       ),
       freight: this.safe(payload.document?.freight, '-'),
@@ -142,7 +155,7 @@ export class InstitutionalDocumentService {
       expensesComposition: expenseComposition,
       materialsTotal: this.formatCurrency(0),
       discountTotal: this.formatCurrency(0),
-      taxes: 'Inclusos conforme regime fiscal aplicavel.',
+      taxes: 'Inclusos conforme regime fiscal aplicável.',
       validationCode: this.safe(payload.document?.id, '-'),
       validationUrl: '-',
     };
@@ -194,6 +207,79 @@ export class InstitutionalDocumentService {
       ),
     );
     const seller = payload.seller || payload.user || {};
+    const commercialLines = this.records(payload.items).map((item) => ({
+      kind: this.safe(item.kind, 'OTHER'),
+      quantity: Number(item.quantity ?? 1),
+      hours: item.hours == null ? undefined : Number(item.hours),
+      unitPrice: Number(item.unitPrice || 0),
+      discountPercent: Number(item.discountPercent || 0),
+    }));
+    const materialCents = moneyCents(
+      roundedLineTotal(
+        commercialLines.filter((item) => !item.kind.includes('SERVICE')),
+      ),
+    );
+    const itemCents = moneyCents(roundedLineTotal(commercialLines));
+    const accounts = this.records(payload.document?.paymentSelections).filter(
+      (account) =>
+        (account.purpose === 'PARTS' && parts.length > 0) ||
+        (account.purpose === 'SERVICES' && services.length > 0),
+    );
+    const billingSummary = accounts
+      .map((account) =>
+        [
+          account.purpose === 'PARTS' ? 'Peças e materiais' : 'Serviços',
+          this.safe(
+            account.issuerCompanyName || account.beneficiary,
+            'Emitente não informado',
+          ),
+          `CPF/CNPJ: ${this.safe(account.beneficiaryDocument, 'Não informado')}`,
+        ].join(' · '),
+      )
+      .join('\n');
+    const proposalLayout = {
+      expensesIncluded:
+        [
+          ['DISPLACEMENT', 'Deslocamento'],
+          ['MEAL', 'Alimentação'],
+          ['TOLL', 'Pedágio'],
+          ['LODGING', 'Hospedagem'],
+          ['PARKING', 'Estacionamento'],
+        ]
+          .filter(([type]) => selectedExpenseTypes.has(type))
+          .map(([, label]) => label)
+          .join(', ') || 'Sem despesas operacionais previstas',
+      summaryMaterialsTotal: this.formatCurrency(materialCents / 100),
+      summaryLaborTotal: this.formatCurrency((itemCents - materialCents) / 100),
+      generalDiscountTotal: this.formatCurrency(payload.document?.discount),
+      billingSummary:
+        billingSummary ||
+        'Emitente conforme os dados de recebimento indicados nas condições comerciais.',
+      contactSummary:
+        [
+          this.safe(client.contactName),
+          this.safe(client.phone),
+          this.safe(client.email),
+        ]
+          .filter((value) => value && value !== '-')
+          .join(' · ') || 'Contato não informado',
+      deliveryTerms:
+        payload.document?.deliveryLeadTimeDays != null
+          ? `${payload.document.deliveryLeadTimeDays} dia(s)`
+          : 'A confirmar com o planejamento',
+      validUntil: payload.document?.validUntil
+        ? proposal.validUntil
+        : 'Não informada',
+      freightLabel:
+        (
+          {
+            FOB: 'Por conta do cliente (FOB)',
+            CIF: 'Por conta da Manitec (CIF)',
+            SEM_FRETE: 'Sem frete',
+            NONE: 'Sem frete',
+          } as Record<string, string>
+        )[this.safe(payload.document?.freight)] || proposal.freight,
+    };
     const scopeItems = this.textItems(
       proposal.scope,
       'Escopo tecnico informado.',
@@ -206,6 +292,15 @@ export class InstitutionalDocumentService {
     return {
       company,
       client,
+      clientProposal: proposalClientLayout(payload),
+      proposalPayment: proposalPaymentLayout(payload),
+      brandedProposal: {
+        ...proposalBrandedLayout(payload),
+        partsBeforeLast: parts.slice(0, -1),
+        partsLast: parts.slice(-1),
+        servicesBeforeLast: services.slice(0, -1),
+        servicesLast: services.slice(-1),
+      },
       contact: this.contact(payload.client),
       record: {
         type: 'proposal',
@@ -281,7 +376,7 @@ export class InstitutionalDocumentService {
       exclusions,
       services,
       metadata: this.metadata(templateKey, payload.document?.id),
-      proposal,
+      proposal: { ...proposal, ...proposalLayout },
     };
   }
 
@@ -603,6 +698,10 @@ export class InstitutionalDocumentService {
   private company(company?: AnyRecord | null) {
     return {
       name: this.safe(company?.tradeName || company?.companyName, 'MANITEC'),
+      legalName: this.safe(
+        company?.companyName || company?.tradeName,
+        'Não informado',
+      ),
       document: this.safe(company?.cnpj, '-'),
       stateRegistration: this.safe(company?.stateRegistration, '-'),
       municipalRegistration: this.safe(company?.municipalRegistration, '-'),
@@ -642,6 +741,7 @@ export class InstitutionalDocumentService {
 
     return {
       id: this.safe(client?.id, '-'),
+      code: this.safe(client?.code || client?.legacyCode, 'Não informado'),
       name: this.safe(client?.tradeName || client?.companyName, '-'),
       companyName: this.safe(client?.companyName, '-'),
       tradeName: this.safe(client?.tradeName, '-'),
@@ -682,7 +782,7 @@ export class InstitutionalDocumentService {
 
   private equipment(generator?: AnyRecord | null) {
     return {
-      name: this.safe(generator?.name, 'Nao vinculado'),
+      name: this.safe(generator?.name, 'Não vinculado'),
       serialNumber: this.safe(generator?.serialNumber, '-'),
       serial: this.safe(generator?.serialNumber, '-'),
       type: this.safe(
@@ -788,6 +888,13 @@ export class InstitutionalDocumentService {
     return `${new Intl.NumberFormat('pt-BR', {
       maximumFractionDigits: 2,
     }).format(Number(value || 0))}%`;
+  }
+
+  private formatCalendarDate(value?: Date | string | null) {
+    if (!value) return '-';
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return '-';
+    return date.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
   }
 
   private formatDate(value?: Date | string | null) {

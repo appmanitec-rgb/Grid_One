@@ -1,4 +1,5 @@
 "use client";
+import { InterfaceIcon } from "@/app/dashboard/components/InterfaceIcon";
 import { canUsePortfolio } from "@/lib/access-rules";
 
 import { SelectField } from "@/app/dashboard/components/SelectField";
@@ -221,7 +222,7 @@ export default function GeneratorProposalWizardPage() {
             throw new Error(
               await readApiErrorMessage(
                 response,
-                "Nao foi possivel carregar a oportunidade.",
+                "Não foi possivel carregar a oportunidade.",
               ),
             );
           }
@@ -728,7 +729,7 @@ export default function GeneratorProposalWizardPage() {
 
       {!loading && step === 0 ? (
         <SectionCard
-          title="Cliente e responsavel comercial"
+          title="Cliente e responsável comercial"
           description="A oportunidade de venda preenche automaticamente estes dados quando estiver vinculada."
         >
           {linkedOpportunity ? (
@@ -870,7 +871,7 @@ export default function GeneratorProposalWizardPage() {
                 options={LOAD_OPTIONS}
               />
             </Field>
-            <Field label="Aplicacao">
+            <Field label="Aplicação">
               <Select
                 value={application}
                 onChange={setApplication}
@@ -973,7 +974,7 @@ export default function GeneratorProposalWizardPage() {
           ) : null}
           {recommendation?.requiresEngineeringReview ? (
             <StatusBanner tone="amber">
-              Validacao tecnica recomendada:{" "}
+              Validação técnica recomendada:{" "}
               {recommendation.engineeringReviewReasons.join(" ")}
             </StatusBanner>
           ) : null}
@@ -995,7 +996,7 @@ export default function GeneratorProposalWizardPage() {
               className={INPUT_CLASS}
               value={manualSearch}
               onChange={(event) => setManualSearch(event.target.value)}
-              placeholder="Buscar codigo, linha ou modelo"
+              placeholder="Buscar código, linha ou modelo"
             />
             <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {manualCatalog.slice(0, 10).map((generator) => (
@@ -1014,8 +1015,8 @@ export default function GeneratorProposalWizardPage() {
 
       {!loading && step === 3 ? (
         <SectionCard
-          title="Configuracao da venda"
-          description="Confirme quantidade e acrescente servicos ou itens comerciais."
+          title="Configuração da venda"
+          description="Confirme quantidade e acrescente serviços ou itens comerciais."
         >
           <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
             <p className="font-bold text-slate-950">
@@ -1059,7 +1060,7 @@ export default function GeneratorProposalWizardPage() {
                     })
                   }
                 />
-                <Field label="Item / servico">
+                <Field label="Item / serviço">
                   <input
                     className={INPUT_CLASS}
                     value={entry.description}
@@ -1144,7 +1145,7 @@ export default function GeneratorProposalWizardPage() {
                   rows={5}
                   value={installationNotes}
                   onChange={(event) => setInstallationNotes(event.target.value)}
-                  placeholder="Acesso, infraestrutura, tubulacao, icamento e observacoes."
+                  placeholder="Acesso, infraestrutura, tubulacao, icamento e observações."
                 />
               </Field>
               {selectedInspection ? (
@@ -1172,7 +1173,7 @@ export default function GeneratorProposalWizardPage() {
 
       {!loading && step === 5 ? (
         <SectionCard
-          title="Condicoes comerciais"
+          title="Condições comerciais"
           description="Defina somente as excecoes; os dados do equipamento vieram do Studio."
         >
           <div className="grid gap-4 md:grid-cols-3">
@@ -1231,7 +1232,7 @@ export default function GeneratorProposalWizardPage() {
               />
             </Field>
             <Summary label="Valor final" value={money(total)} />
-            <Field label="Observacoes para o cliente">
+            <Field label="Observações para o cliente">
               <textarea
                 className={INPUT_CLASS}
                 rows={4}
@@ -1239,7 +1240,7 @@ export default function GeneratorProposalWizardPage() {
                 onChange={(event) => setExternalNotes(event.target.value)}
               />
             </Field>
-            <Field label="Observacoes internas">
+            <Field label="Observações internas">
               <textarea
                 className={INPUT_CLASS}
                 rows={4}
@@ -1278,7 +1279,7 @@ export default function GeneratorProposalWizardPage() {
 
       {!loading && step === 6 ? (
         <SectionCard
-          title="Revisao da proposta"
+          title="Revisão da proposta"
           description="Confira os dados antes de criar o rascunho oficial da proposta."
         >
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -1313,8 +1314,8 @@ export default function GeneratorProposalWizardPage() {
           {recommendation?.requiresEngineeringReview ? (
             <div className="mt-5">
               <StatusBanner tone="amber">
-                A proposta sera criada em rascunho com recomendacao de validacao
-                tecnica.
+                A proposta sera criada em rascunho com recomendacao de validação
+                técnica.
               </StatusBanner>
             </div>
           ) : null}
@@ -1537,16 +1538,16 @@ function GeneratorCard({
         {money(generator.commercialPrice)}
       </p>
       {!compact && generator.reasons?.length ? (
-        <ul className="mt-3 space-y-1 text-xs text-emerald-800">
+        <ul aria-label="Motivos da recomendação" className="mt-3 space-y-1 text-xs text-emerald-800">
           {generator.reasons.map((reason) => (
-            <li key={reason}>✓ {reason}</li>
+            <li key={reason} className="flex items-start gap-2"><InterfaceIcon name="check" className="mt-0.5 h-4 w-4 shrink-0" /><span>{reason}</span></li>
           ))}
         </ul>
       ) : null}
       {!compact && generator.warnings?.length ? (
-        <ul className="mt-2 space-y-1 text-xs text-amber-800">
+        <ul aria-label="Avisos do equipamento" className="mt-2 space-y-1 text-xs text-amber-800">
           {generator.warnings.map((warning) => (
-            <li key={warning}>⚠ {warning}</li>
+            <li key={warning} className="flex items-start gap-2"><InterfaceIcon name="info" className="mt-0.5 h-4 w-4 shrink-0" /><span>{warning}</span></li>
           ))}
         </ul>
       ) : null}

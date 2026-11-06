@@ -1,4 +1,5 @@
 "use client";
+import { FormField } from "../components/DashboardPageKit";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -80,7 +81,14 @@ type GeneratorSnapshot = {
   activeOrderCount: number;
   activeOrders: MonitoringOrder[];
   automationOpen: boolean;
-  lastEvent: Omit<MonitoringEvent, "generator" | "activeOrderCount" | "activeOrders" | "automationOpen" | "severity"> & {
+  lastEvent: Omit<
+    MonitoringEvent,
+    | "generator"
+    | "activeOrderCount"
+    | "activeOrders"
+    | "automationOpen"
+    | "severity"
+  > & {
     receivedAt: string;
   };
 };
@@ -98,10 +106,8 @@ type MonitoringOverview = {
   generatorSnapshots: GeneratorSnapshot[];
 };
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 
 const EMPTY_OVERVIEW: MonitoringOverview = {
   stats: {
@@ -141,13 +147,15 @@ export default function MonitoringPage() {
     setError("");
 
     try {
-      const res = await apiFetch(apiUrl("/telemetry/overview"), { cache: "no-store" });
+      const res = await apiFetch(apiUrl("/telemetry/overview"), {
+        cache: "no-store",
+      });
       if (await handleUnauthorized(res)) return;
       if (!res.ok) {
         throw new Error(
           await readApiErrorMessage(
             res,
-            "Nao foi possivel carregar o monitoramento operacional.",
+            "Não foi possivel carregar o monitoramento operacional.",
           ),
         );
       }
@@ -173,8 +181,13 @@ export default function MonitoringPage() {
     const term = search.trim().toLowerCase();
 
     return overview.recentEvents.filter((event) => {
-      if (severityFilter === "AUTOMATION" && !event.automationOpen) return false;
-      if (severityFilter !== "ALL" && severityFilter !== "AUTOMATION" && event.severity !== severityFilter) {
+      if (severityFilter === "AUTOMATION" && !event.automationOpen)
+        return false;
+      if (
+        severityFilter !== "ALL" &&
+        severityFilter !== "AUTOMATION" &&
+        event.severity !== severityFilter
+      ) {
         return false;
       }
 
@@ -218,11 +231,11 @@ export default function MonitoringPage() {
           {
             label: "Baixo combustivel",
             value: String(overview.stats.lowFuelGenerators),
-            helper: "Casos que podem disparar abastecimento automatico.",
+            helper: "Casos que podem disparar abastecimento automático.",
             tone: "amber",
           },
           {
-            label: "Automacoes abertas",
+            label: "Automações abertas",
             value: String(overview.stats.automationOpenOrders),
             helper: "O.S. de abastecimento ativas ligadas a telemetria.",
             tone: "emerald",
@@ -230,7 +243,11 @@ export default function MonitoringPage() {
         ]}
         actions={
           <>
-            <button type="button" onClick={() => void loadOverview()} className={SECONDARY_BUTTON}>
+            <button
+              type="button"
+              onClick={() => void loadOverview()}
+              className={SECONDARY_BUTTON}
+            >
               Atualizar radar
             </button>
           </>
@@ -242,9 +259,9 @@ export default function MonitoringPage() {
                 Verificacao de fluxo
               </p>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Antes a pagina so relistava O.S. Agora ela enxerga o evento de telemetria,
-                identifica resposta operacional em andamento e evidencia quando a automacao
-                ja abriu uma O.S. de abastecimento.
+                Antes a pagina so relistava O.S. Agora ela enxerga o evento de
+                telemetria, identifica resposta operacional em andamento e
+                evidencia quando a automação já abriu uma O.S. de abastecimento.
               </p>
             </div>
             <Pulse
@@ -269,30 +286,40 @@ export default function MonitoringPage() {
         <SectionCard
           eyebrow="Eventos recentes"
           title="Alertas e telemetria operacional"
-          description="Pesquise por gerador, cliente, site ou tipo de alarme e veja rapidamente se a resposta ja caiu em O.S. ou ainda pede despacho."
+          description="Pesquise por gerador, cliente, site ou tipo de alarme e veja rapidamente se a resposta já caiu em O.S. ou ainda pede despacho."
           actions={
             <div className="flex w-full flex-col gap-3 xl:w-auto xl:min-w-[680px] xl:flex-row xl:items-center xl:justify-end">
-              <TextInput
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Buscar por gerador, cliente, site ou O.S...."
-                className="xl:min-w-[320px]"
-              />
-              <SelectInput
-                value={severityFilter}
-                onChange={(event) =>
-                  setSeverityFilter(
-                    event.target.value as "ALL" | MonitoringSeverity | "AUTOMATION",
-                  )
-                }
-                className="xl:w-[230px]"
+              <FormField
+                className="min-w-0 flex-1"
+                label="Buscar equipamento ou evento"
               >
-                <option value="ALL">Todos os eventos</option>
-                <option value="critical">Criticos</option>
-                <option value="warning">Avisos</option>
-                <option value="ok">Estaveis</option>
-                <option value="AUTOMATION">Com automacao aberta</option>
-              </SelectInput>
+                <TextInput
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Buscar por gerador, cliente, site ou O.S...."
+                  className="xl:min-w-[320px]"
+                />
+              </FormField>
+              <FormField className="min-w-0 flex-1" label="Situação do evento">
+                <SelectInput
+                  value={severityFilter}
+                  onChange={(event) =>
+                    setSeverityFilter(
+                      event.target.value as
+                        | "ALL"
+                        | MonitoringSeverity
+                        | "AUTOMATION",
+                    )
+                  }
+                  className="xl:w-[230px]"
+                >
+                  <option value="ALL">Todos os eventos</option>
+                  <option value="critical">Criticos</option>
+                  <option value="warning">Avisos</option>
+                  <option value="ok">Estaveis</option>
+                  <option value="AUTOMATION">Com automação aberta</option>
+                </SelectInput>
+              </FormField>
             </div>
           }
         >
@@ -319,7 +346,7 @@ export default function MonitoringPage() {
         </SectionCard>
 
         <SectionCard
-          eyebrow="Pulso da frota"
+          eyebrow="Situação da frota"
           title="Ultimo status por gerador"
           description="Leitura consolidada por equipamento para priorizar quem pede visita, abastecimento ou apenas acompanhamento."
         >
@@ -332,7 +359,7 @@ export default function MonitoringPage() {
           {!loading && overview.generatorSnapshots.length === 0 ? (
             <EmptyState
               title="Nenhuma informação de monitoramento recebida"
-              description="Assim que os primeiros eventos chegarem, o monitoramento passa a montar o pulso da frota."
+              description="A situação da frota aparecerá aqui quando os primeiros eventos forem recebidos."
             />
           ) : null}
 
@@ -361,30 +388,42 @@ function TelemetryEventCard({ event }: { event: MonitoringEvent }) {
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-lg font-bold text-slate-950">{event.generator.name}</p>
+            <p className="text-lg font-bold text-slate-950">
+              {event.generator.name}
+            </p>
             <DataPill tone={severityTone(event.severity)}>
               {severityLabel(event.severity)}
             </DataPill>
             <DataPill tone={alarmTone(event.alarmType, event.severity)}>
               {alarmLabel(event.alarmType)}
             </DataPill>
-            {event.automationOpen ? <DataPill tone="amber">Automacao em curso</DataPill> : null}
+            {event.automationOpen ? (
+              <DataPill tone="amber">Automação em curso</DataPill>
+            ) : null}
             {event.activeOrderCount > 0 ? (
-              <DataPill tone="blue">{event.activeOrderCount} O.S. ativa(s)</DataPill>
+              <DataPill tone="blue">
+                {event.activeOrderCount} O.S. ativa(s)
+              </DataPill>
             ) : (
               <DataPill tone="slate">Sem O.S. vinculada</DataPill>
             )}
           </div>
 
           <p className="max-w-4xl text-sm leading-6 text-slate-600">
-            {event.generator.client?.companyName || "Cliente nao identificado"} • {siteLabel}
-            {event.generator.serialNumber ? ` • Serie ${event.generator.serialNumber}` : ""}
+            {event.generator.client?.companyName || "Cliente nao identificado"}{" "}
+            • {siteLabel}
+            {event.generator.serialNumber
+              ? ` • Serie ${event.generator.serialNumber}`
+              : ""}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
           {primaryOrder ? (
-            <Link href={`/dashboard/orders/${primaryOrder.id}`} className={PRIMARY_BUTTON}>
+            <Link
+              href={`/dashboard/orders/${primaryOrder.id}`}
+              className={PRIMARY_BUTTON}
+            >
               Abrir O.S.
             </Link>
           ) : (
@@ -392,7 +431,10 @@ function TelemetryEventCard({ event }: { event: MonitoringEvent }) {
               Despachar resposta
             </Link>
           )}
-          <Link href={`/dashboard/equipments/${event.generator.id}`} className={SECONDARY_BUTTON}>
+          <Link
+            href={`/dashboard/equipments/${event.generator.id}`}
+            className={SECONDARY_BUTTON}
+          >
             Abrir equipamento
           </Link>
           {primaryOrder?.auvoLink ? (
@@ -418,7 +460,7 @@ function TelemetryEventCard({ event }: { event: MonitoringEvent }) {
         <EventSignal
           label="Combustivel"
           value={formatFuel(event.fuelLevelPercent)}
-          helper="Leitura usada para disparar abastecimento automatico."
+          helper="Leitura usada para disparar abastecimento automático."
           tone={fuelTone(event.fuelLevelPercent)}
         />
         <EventSignal
@@ -463,8 +505,8 @@ function TelemetryEventCard({ event }: { event: MonitoringEvent }) {
         ) : (
           <FieldBox className="rounded-[22px] border-slate-200 bg-slate-50/80 p-4">
             <p className="text-sm leading-6 text-slate-600">
-              Nenhuma O.S. ativa ligada a este gerador neste momento. Se o alerta pedir
-              resposta, o proximo passo e cair no despacho.
+              Nenhuma O.S. ativa ligada a este gerador neste momento. Se o
+              alerta pedir resposta, o próximo passo e cair no despacho.
             </p>
           </FieldBox>
         )}
@@ -480,9 +522,12 @@ function GeneratorSnapshotCard({ snapshot }: { snapshot: GeneratorSnapshot }) {
     <article className="rounded-[24px] border border-slate-200 bg-white/90 px-4 py-4 shadow-[0_20px_50px_-42px_rgba(15,31,50,0.35)]">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-base font-semibold text-slate-950">{snapshot.generator.name}</p>
+          <p className="text-base font-semibold text-slate-950">
+            {snapshot.generator.name}
+          </p>
           <p className="mt-1 text-sm text-slate-600">
-            {snapshot.generator.client?.companyName || "Cliente nao identificado"}
+            {snapshot.generator.client?.companyName ||
+              "Cliente nao identificado"}
           </p>
         </div>
         <DataPill tone={severityTone(snapshot.severity)}>
@@ -492,12 +537,18 @@ function GeneratorSnapshotCard({ snapshot }: { snapshot: GeneratorSnapshot }) {
 
       <div className="mt-3 flex flex-wrap gap-2">
         {snapshot.generator.operationalStatus ? (
-          <DataPill tone={operationalTone(snapshot.generator.operationalStatus)}>
+          <DataPill
+            tone={operationalTone(snapshot.generator.operationalStatus)}
+          >
             {operationalStatusLabel(snapshot.generator.operationalStatus)}
           </DataPill>
         ) : null}
-        <DataPill tone="blue">{alarmLabel(snapshot.lastEvent.alarmType)}</DataPill>
-        {snapshot.automationOpen ? <DataPill tone="amber">Abastecimento aberto</DataPill> : null}
+        <DataPill tone="blue">
+          {alarmLabel(snapshot.lastEvent.alarmType)}
+        </DataPill>
+        {snapshot.automationOpen ? (
+          <DataPill tone="amber">Abastecimento aberto</DataPill>
+        ) : null}
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -521,7 +572,10 @@ function GeneratorSnapshotCard({ snapshot }: { snapshot: GeneratorSnapshot }) {
 
       <div className="mt-4 flex flex-wrap gap-3">
         {primaryOrder ? (
-          <Link href={`/dashboard/orders/${primaryOrder.id}`} className={PRIMARY_BUTTON}>
+          <Link
+            href={`/dashboard/orders/${primaryOrder.id}`}
+            className={PRIMARY_BUTTON}
+          >
             Abrir O.S.
           </Link>
         ) : (
@@ -529,7 +583,10 @@ function GeneratorSnapshotCard({ snapshot }: { snapshot: GeneratorSnapshot }) {
             Acionar despacho
           </Link>
         )}
-        <Link href={`/dashboard/equipments/${snapshot.generator.id}`} className={SECONDARY_BUTTON}>
+        <Link
+          href={`/dashboard/equipments/${snapshot.generator.id}`}
+          className={SECONDARY_BUTTON}
+        >
           Equipamento
         </Link>
       </div>
@@ -543,26 +600,35 @@ function ActiveOrderRow({ order }: { order: MonitoringOrder }) {
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-semibold text-slate-900">{order.title}</p>
+            <p className="text-sm font-semibold text-slate-900">
+              {order.title}
+            </p>
             <DataPill tone={orderStatusTone(order.status)}>
               {orderStatusLabel(order.status)}
             </DataPill>
             <DataPill tone={priorityTone(order.priority)}>
               {priorityLabel(order.priority)}
             </DataPill>
-            {order.type ? <DataPill tone="slate">{orderTypeLabel(order.type)}</DataPill> : null}
+            {order.type ? (
+              <DataPill tone="slate">{orderTypeLabel(order.type)}</DataPill>
+            ) : null}
           </div>
           <p className="mt-2 text-sm text-slate-600">
             {order.technician?.name
               ? `Tecnico: ${order.technician.name}`
               : "Aguardando tecnico"}
             {order.contract?.code ? ` • Contrato ${order.contract.code}` : ""}
-            {order.scheduledTo ? ` • Agenda ${formatDateTime(order.scheduledTo)}` : ""}
+            {order.scheduledTo
+              ? ` • Agenda ${formatDateTime(order.scheduledTo)}`
+              : ""}
           </p>
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <Link href={`/dashboard/orders/${order.id}`} className={SECONDARY_BUTTON}>
+          <Link
+            href={`/dashboard/orders/${order.id}`}
+            className={SECONDARY_BUTTON}
+          >
             Ver O.S.
           </Link>
           {order.auvoLink ? (
@@ -751,7 +817,10 @@ function fuelTone(fuel?: number | null): Tone {
   return "emerald";
 }
 
-function batteryTone(battery?: number | null, gridOnline?: boolean | null): Tone {
+function batteryTone(
+  battery?: number | null,
+  gridOnline?: boolean | null,
+): Tone {
   if (gridOnline === false) return "rose";
   if (battery === null || typeof battery === "undefined") return "slate";
   if (battery < 12) return "amber";
@@ -759,10 +828,16 @@ function batteryTone(battery?: number | null, gridOnline?: boolean | null): Tone
 }
 
 function thermalTone(coolant?: number | null, oil?: number | null): Tone {
-  if ((coolant !== null && typeof coolant !== "undefined" && coolant >= 98) || (oil !== null && typeof oil !== "undefined" && oil <= 20)) {
+  if (
+    (coolant !== null && typeof coolant !== "undefined" && coolant >= 98) ||
+    (oil !== null && typeof oil !== "undefined" && oil <= 20)
+  ) {
     return "rose";
   }
-  if ((coolant !== null && typeof coolant !== "undefined" && coolant >= 90) || (oil !== null && typeof oil !== "undefined" && oil <= 30)) {
+  if (
+    (coolant !== null && typeof coolant !== "undefined" && coolant >= 90) ||
+    (oil !== null && typeof oil !== "undefined" && oil <= 30)
+  ) {
     return "amber";
   }
   return "emerald";
@@ -788,8 +863,12 @@ function formatBattery(value?: number | null) {
 }
 
 function formatThermal(coolant?: number | null, oil?: number | null) {
-  const temp = coolant === null || typeof coolant === "undefined" ? "--" : `${coolant.toFixed(0)} C`;
-  const pressure = oil === null || typeof oil === "undefined" ? "--" : `${oil.toFixed(0)}`;
+  const temp =
+    coolant === null || typeof coolant === "undefined"
+      ? "--"
+      : `${coolant.toFixed(0)} C`;
+  const pressure =
+    oil === null || typeof oil === "undefined" ? "--" : `${oil.toFixed(0)}`;
   return `${temp} / ${pressure}`;
 }
 

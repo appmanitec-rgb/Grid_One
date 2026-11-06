@@ -79,10 +79,8 @@ type FinancialPeriodClosing = {
   reopenReason?: string | null;
 };
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 
 const ORIGIN_LABEL: Record<MovementOriginType, string> = {
   ACCOUNTS_RECEIVABLE_PAYMENT: "Recebimento",
@@ -339,10 +337,10 @@ export default function BankMovementsPage() {
       );
       if (!response.ok) {
         throw new Error(
-          await readApiErrorMessage(response, "Falha ao fechar periodo."),
+          await readApiErrorMessage(response, "Falha ao fechar período."),
         );
       }
-      setSuccessMessage("Periodo financeiro fechado.");
+      setSuccessMessage("Período financeiro fechado.");
       await loadData();
     } catch (actionError: unknown) {
       setError(
@@ -373,10 +371,10 @@ export default function BankMovementsPage() {
       );
       if (!response.ok) {
         throw new Error(
-          await readApiErrorMessage(response, "Falha ao reabrir periodo."),
+          await readApiErrorMessage(response, "Falha ao reabrir período."),
         );
       }
-      setSuccessMessage("Periodo financeiro reaberto.");
+      setSuccessMessage("Período financeiro reaberto.");
       await loadData();
     } catch (actionError: unknown) {
       setError(
@@ -407,7 +405,7 @@ export default function BankMovementsPage() {
             tone: "emerald",
           },
           {
-            label: "Saidas",
+            label: "Saídas",
             value: formatCurrency(payload.totals.debits),
             tone: "rose",
           },
@@ -426,7 +424,7 @@ export default function BankMovementsPage() {
 
       <SectionCard
         title="Filtros"
-        description="Consulte movimentos por conta, periodo, tipo e origem."
+        description="Consulte movimentos por conta, período, tipo e origem."
       >
         <div className="grid gap-3 md:grid-cols-5">
           <FormField label="Conta">
@@ -459,7 +457,7 @@ export default function BankMovementsPage() {
               }
             />
           </FormField>
-          <FormField label="Ate">
+          <FormField label="Até">
             <TextInput
               type="date"
               value={filters.to}
@@ -483,7 +481,7 @@ export default function BankMovementsPage() {
             >
               <option value="">Todos</option>
               <option value="CREDIT">Entrada</option>
-              <option value="DEBIT">Saida</option>
+              <option value="DEBIT">Saída</option>
             </SelectInput>
           </FormField>
           <FormField label="Origem">
@@ -509,7 +507,7 @@ export default function BankMovementsPage() {
 
       <SectionCard
         title="Fechamento mensal"
-        description="Periodo fechado bloqueia novas baixas, pagamentos e estornos dentro do mes."
+        description="O fechamento do período bloqueia novos recebimentos, pagamentos e estornos no mês."
         actions={
           <button
             type="button"
@@ -528,7 +526,7 @@ export default function BankMovementsPage() {
         }
       >
         <div className="grid gap-3 md:grid-cols-[16rem_1fr]">
-          <FormField label="Periodo">
+          <FormField label="Período">
             <TextInput
               type="month"
               value={periodMonth}
@@ -553,7 +551,7 @@ export default function BankMovementsPage() {
         </div>
       </SectionCard>
 
-      <SectionCard title="Movimentos" description="Lancamentos do ledger">
+      <SectionCard title="Movimentos" description="Lançamentos financeiros">
         {loading ? (
           <EmptyState
             title="Carregando extrato"
@@ -575,10 +573,10 @@ export default function BankMovementsPage() {
               <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
                 <tr>
                   <th className="px-3 py-3">Data</th>
-                  <th className="px-3 py-3">Descricao</th>
+                  <th className="px-3 py-3">Descrição</th>
                   <th className="px-3 py-3">Origem</th>
                   <th className="px-3 py-3 text-right">Entrada</th>
-                  <th className="px-3 py-3 text-right">Saida</th>
+                  <th className="px-3 py-3 text-right">Saída</th>
                   <th className="px-3 py-3 text-right">Saldo</th>
                   <th className="px-3 py-3">Status</th>
                   <th className="dashboard-sticky-actions px-3 py-3">Acoes</th>

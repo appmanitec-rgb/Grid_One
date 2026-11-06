@@ -240,32 +240,37 @@ export function cloneDeliveryTemplateMap(
       const rawDocument = source[documentType];
       const documentTemplates =
         rawDocument && typeof rawDocument === "object"
-          ? (rawDocument as Partial<Record<DeliveryChannel, DeliveryTemplateEntry>>)
+          ? (rawDocument as Partial<
+              Record<DeliveryChannel, DeliveryTemplateEntry>
+            >)
           : {};
 
       documentAccumulator[documentType] = DELIVERY_CHANNEL_OPTIONS.reduce<
         DeliveryTemplateMap[DeliveryDocumentType]
-      >((channelAccumulator, channel) => {
-        const defaults = DEFAULT_DELIVERY_TEMPLATES[documentType][channel];
-        const rawChannel = documentTemplates[channel];
-        const entry =
-          rawChannel && typeof rawChannel === "object"
-            ? rawChannel
-            : ({} as DeliveryTemplateEntry);
+      >(
+        (channelAccumulator, channel) => {
+          const defaults = DEFAULT_DELIVERY_TEMPLATES[documentType][channel];
+          const rawChannel = documentTemplates[channel];
+          const entry =
+            rawChannel && typeof rawChannel === "object"
+              ? rawChannel
+              : ({} as DeliveryTemplateEntry);
 
-        channelAccumulator[channel] = {
-          subject:
-            typeof entry.subject === "string"
-              ? entry.subject
-              : (defaults.subject ?? ""),
-          message:
-            typeof entry.message === "string"
-              ? entry.message
-              : (defaults.message ?? ""),
-        };
+          channelAccumulator[channel] = {
+            subject:
+              typeof entry.subject === "string"
+                ? entry.subject
+                : (defaults.subject ?? ""),
+            message:
+              typeof entry.message === "string"
+                ? entry.message
+                : (defaults.message ?? ""),
+          };
 
-        return channelAccumulator;
-      }, {} as DeliveryTemplateMap[DeliveryDocumentType]);
+          return channelAccumulator;
+        },
+        {} as DeliveryTemplateMap[DeliveryDocumentType],
+      );
 
       return documentAccumulator;
     },
@@ -284,7 +289,10 @@ export function renderDeliveryTemplate(
     .replaceAll("{documentCode}", context.documentCode || context.documentLabel)
     .replaceAll("{counterpartName}", context.counterpartName || "cliente")
     .replaceAll("{companyLabel}", context.companyLabel || "Manitec")
-    .replaceAll("{companyContacts}", context.companyContacts || "responda este contato")
+    .replaceAll(
+      "{companyContacts}",
+      context.companyContacts || "responda este contato",
+    )
     .replaceAll("{shareUrl}", context.shareUrl || "[link seguro]")
     .replaceAll("{taggoUrl}", context.taggoUrl || MANITEC_TAGGO_URL)
     .replaceAll("{recipientName}", context.recipientName || "cliente");
@@ -306,6 +314,7 @@ async function parseJsonOrThrow<T>(
 }
 
 export async function createDocumentDelivery(input: {
+  requestKey?: string;
   channel: DeliveryChannel;
   documentType: DeliveryDocumentType;
   documentId: string;
@@ -403,13 +412,16 @@ export async function approveSharedProposal(
     note?: string;
   },
 ) {
-  const response = await fetch(apiUrl(`/deliveries/share/${token}/proposal-approval`), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
+  const response = await fetch(
+    apiUrl(`/deliveries/share/${token}/proposal-approval`),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
     },
-    body: JSON.stringify(input),
-  });
+  );
 
   return parseJsonOrThrow<SharedProposalApprovalResponse>(
     response,

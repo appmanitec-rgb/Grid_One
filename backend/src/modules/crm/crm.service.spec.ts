@@ -16,6 +16,7 @@ describe('CrmService', () => {
     user: {
       findMany: jest.Mock;
       findFirst: jest.Mock;
+      findUnique: jest.Mock;
     };
     salesOpportunity: {
       create: jest.Mock;
@@ -38,6 +39,19 @@ describe('CrmService', () => {
       user: {
         findMany: jest.fn(),
         findFirst: jest.fn(),
+        findUnique: jest
+          .fn()
+          .mockImplementation(({ where }: { where: { id: string } }) => ({
+            id: where.id,
+            role: UserRole.ADMIN,
+            accessRules: {
+              commercialManagement: {
+                generators: { responsible: true, team: true },
+                partsServices: { responsible: true, team: true },
+                contracts: { responsible: true, team: true },
+              },
+            },
+          })),
       },
       salesOpportunity: {
         create: jest.fn(),
@@ -70,7 +84,7 @@ describe('CrmService', () => {
     expect(database.user.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          role: UserRole.SALES,
+          role: { in: [UserRole.SALES, UserRole.MANAGER, UserRole.ADMIN] },
           isActive: true,
           AND: expect.arrayContaining([
             expect.objectContaining({
@@ -82,17 +96,12 @@ describe('CrmService', () => {
             }),
             expect.objectContaining({
               OR: expect.arrayContaining([
-                { department: null },
+                { role: UserRole.ADMIN },
+                { isSystemMaster: true },
                 {
-                  department: {
-                    equals: 'Comercial',
-                    mode: 'insensitive',
-                  },
-                },
-                {
-                  department: {
-                    contains: 'Contrato',
-                    mode: 'insensitive',
+                  accessRules: {
+                    path: ['commercial', 'contracts'],
+                    equals: true,
                   },
                 },
               ]),
@@ -106,7 +115,7 @@ describe('CrmService', () => {
           department: true,
         },
         orderBy: { name: 'asc' },
-        take: 20,
+        take: 10,
       }),
     );
   });
@@ -143,7 +152,7 @@ describe('CrmService', () => {
       expect.objectContaining({
         where: expect.objectContaining({
           id: '550e8400-e29b-41d4-a716-446655440001',
-          role: UserRole.SALES,
+          role: { in: [UserRole.SALES, UserRole.MANAGER, UserRole.ADMIN] },
           isActive: true,
           AND: expect.any(Array),
         }),
@@ -189,6 +198,7 @@ describe('CrmService', () => {
     expect(database.salesOpportunity.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
+          AND: [{}],
           stage: SalesOpportunityStage.PROSPECTION,
           pipeline: SalesOpportunityPipeline.COMMERCIAL_01_GENERATORS,
           opportunityType: SalesOpportunityType.GENERATOR_SALE,
@@ -296,6 +306,7 @@ describe('CrmService', () => {
     expect(database.salesOpportunity.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
+          AND: [{}],
           stage: {
             notIn: [SalesOpportunityStage.WON, SalesOpportunityStage.LOST],
           },

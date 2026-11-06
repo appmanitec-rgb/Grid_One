@@ -62,7 +62,7 @@ export default function StudioHistoryPage() {
       });
       if (!response.ok) {
         throw new Error(
-          await readApiErrorMessage(response, "Nao foi possivel carregar o historico."),
+          await readApiErrorMessage(response, "Não foi possivel carregar o histórico."),
         );
       }
       const payload = await response.json();
@@ -118,7 +118,7 @@ export default function StudioHistoryPage() {
           Voltar
         </button>
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm font-semibold text-amber-900">
-          Seu perfil nao possui permissao para visualizar o historico do Manitec Studio.
+          Seu perfil não possui permissão para visualizar o histórico do Manitec Studio.
         </div>
       </div>
     );
@@ -129,7 +129,7 @@ export default function StudioHistoryPage() {
       <PageHeader
         eyebrow="Manitec Studio"
         title="Histórico de atividades"
-        description="Eventos auditados pelo sistema. Edicoes feitas pelo Studio devem ficar rastreaveis por usuario, registro e origem nas proximas etapas."
+        description="Eventos auditados pelo sistema. Edicoes feitas pelo Studio devem ficar rastreaveis por usuário, registro e origem nas próximas etapas."
       />
 
 
@@ -140,7 +140,7 @@ export default function StudioHistoryPage() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Acao, usuario, entidade ou ID..."
+              placeholder="Acao, usuário, entidade ou ID..."
               className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm font-medium normal-case text-slate-800 outline-none focus:border-blue-500"
             />
           </label>
@@ -180,7 +180,7 @@ export default function StudioHistoryPage() {
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-sm text-slate-500">
                 <th className="p-4 font-semibold">Data</th>
-                <th className="p-4 font-semibold">Usuario</th>
+                <th className="p-4 font-semibold">Usuário</th>
                 <th className="p-4 font-semibold">Dominio</th>
                 <th className="p-4 font-semibold">Entidade</th>
                 <th className="p-4 font-semibold">Acao</th>
@@ -191,7 +191,7 @@ export default function StudioHistoryPage() {
               {loading ? (
                 <tr>
                   <td colSpan={6} className="p-8 text-center text-slate-500">
-                    Carregando historico...
+                    Carregando histórico...
                   </td>
                 </tr>
               ) : null}

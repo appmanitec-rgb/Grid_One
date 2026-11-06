@@ -1,4 +1,5 @@
 "use client";
+import { formatCalendarDate } from "@/lib/formatters";
 import { commercialLabel } from "@/lib/commercial-labels";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
@@ -113,7 +114,9 @@ export default function TechniciansPage() {
     const total = technicians.length;
     const active = technicians.filter((row) => row.user.isActive).length;
     const inDispatch = technicians.filter((row) =>
-      row.orders.some((order) => order.status === "OPEN" || order.status === "IN_PROGRESS"),
+      row.orders.some(
+        (order) => order.status === "OPEN" || order.status === "IN_PROGRESS",
+      ),
     ).length;
 
     const warningDate = new Date();
@@ -167,7 +170,11 @@ export default function TechniciansPage() {
 
   function closeEditor() {
     if (saving) return;
-    if (JSON.stringify(form) !== JSON.stringify(originalEditDraft.current) && !window.confirm("Descartar as alterações deste técnico?")) return;
+    if (
+      JSON.stringify(form) !== JSON.stringify(originalEditDraft.current) &&
+      !window.confirm("Descartar as alterações deste técnico?")
+    )
+      return;
     resetForm();
   }
 
@@ -200,7 +207,7 @@ export default function TechniciansPage() {
     setError("");
 
     if (!editingId && !form.userId) {
-      setError("Selecione um usuario para criar o tecnico.");
+      setError("Selecione um usuário para criar o técnico.");
       return;
     }
 
@@ -210,7 +217,7 @@ export default function TechniciansPage() {
       .filter(Boolean);
 
     if (skills.length === 0) {
-      setError("Informe ao menos uma skill tecnica.");
+      setError("Informe ao menos uma skill técnica.");
       return;
     }
 
@@ -227,7 +234,9 @@ export default function TechniciansPage() {
       };
 
       const res = await apiFetch(
-        editingId ? `${API_URL}/technicians/${editingId}` : `${API_URL}/technicians`,
+        editingId
+          ? `${API_URL}/technicians/${editingId}`
+          : `${API_URL}/technicians`,
         {
           method: editingId ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
@@ -236,9 +245,9 @@ export default function TechniciansPage() {
       );
 
       if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as
-          | { message?: string | string[] }
-          | null;
+        const body = (await res.json().catch(() => null)) as {
+          message?: string | string[];
+        } | null;
         const apiMessage = Array.isArray(body?.message)
           ? body?.message.join("; ")
           : body?.message;
@@ -264,7 +273,9 @@ export default function TechniciansPage() {
   }
 
   async function handleDelete(row: TechnicianRow) {
-    const confirmed = window.confirm(`Deseja remover o tecnico ${row.user.name}?`);
+    const confirmed = window.confirm(
+      `Deseja remover o tecnico ${row.user.name}?`,
+    );
     if (!confirmed) return;
 
     setMessage("");
@@ -276,9 +287,9 @@ export default function TechniciansPage() {
       });
 
       if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as
-          | { message?: string | string[] }
-          | null;
+        const body = (await res.json().catch(() => null)) as {
+          message?: string | string[];
+        } | null;
         const apiMessage = Array.isArray(body?.message)
           ? body?.message.join("; ")
           : body?.message;
@@ -309,15 +320,15 @@ export default function TechniciansPage() {
         description="Gerencie profissionais, especialidades, disponibilidade e certificações."
         stats={[
           {
-            label: "Tecnicos",
+            label: "Técnicos",
             value: String(kpis.total),
-            helper: "perfis tecnicos cadastrados",
+            helper: "perfis técnicos cadastrados",
             tone: "blue",
           },
           {
             label: "Ativos",
             value: String(kpis.active),
-            helper: "disponiveis no ecossistema",
+            helper: "disponíveis no ecossistema",
             tone: "emerald",
           },
           {
@@ -337,192 +348,222 @@ export default function TechniciansPage() {
           editingId ? (
             <InlineMessage tone="warning">
               Editando o cadastro de{" "}
-              <strong>{editingTechnician?.user.name || "tecnico selecionado"}</strong>.
+              <strong>
+                {editingTechnician?.user.name || "tecnico selecionado"}
+              </strong>
+              .
             </InlineMessage>
           ) : (
             <InlineMessage>
-              Organize as especialidades, regiões de atendimento e disponibilidade
-              da equipe técnica.
+              Organize as especialidades, regiões de atendimento e
+              disponibilidade da equipe técnica.
             </InlineMessage>
           )
         }
       />
 
       {message ? <StatusBanner tone="emerald">{message}</StatusBanner> : null}
-      {error && !editingId ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
+      {error && !editingId ? (
+        <StatusBanner tone="rose">{error}</StatusBanner>
+      ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(340px,0.9fr)_minmax(0,1.35fr)]">
-        <EditOverlay open={Boolean(editingId)} title={editingTechnician?.user.name || "Técnico"} busy={saving} onClose={closeEditor}>
-        <SectionCard
-          eyebrow="Cadastro"
-          title={editingId ? "Atualizar tecnico" : "Novo tecnico"}
-          description="Os campos principais ficam concentrados aqui para o gestor cadastrar ou corrigir dados sem disputar espaco com a tabela."
-          actions={
-            editingId ? (
-              <button
-                type="button"
-                onClick={closeEditor}
-                className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-              >
-                Cancelar edicao
-              </button>
-            ) : (
-              <DataPill tone="blue">
-                {availableUsers.length} colaboradores disponiveis
-              </DataPill>
-            )
-          }
+        <EditOverlay
+          open={Boolean(editingId)}
+          title={editingTechnician?.user.name || "Técnico"}
+          busy={saving}
+          onClose={closeEditor}
         >
-          {editingId && error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
-          <form
-            onSubmit={(event) => void handleSubmit(event)}
-            className="grid grid-cols-1 gap-4 md:grid-cols-2"
-          >
-            {editingId ? (
-              <FormField label="Usuario" className="md:col-span-2">
-                <FieldBox>
-                  Usuario vinculado: {editingTechnician?.user.name || "-"}
-                </FieldBox>
-              </FormField>
-            ) : (
-              <FormField label="Usuario" className="md:col-span-2">
-                <SelectInput
-                  value={form.userId}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, userId: event.target.value }))
-                  }
-                  required
+          <SectionCard
+            eyebrow="Cadastro"
+            title={editingId ? "Atualizar tecnico" : "Novo tecnico"}
+            description="Os campos principais ficam concentrados aqui para o gestor cadastrar ou corrigir dados sem disputar espaco com a tabela."
+            actions={
+              editingId ? (
+                <button
+                  type="button"
+                  onClick={closeEditor}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                 >
-                  <option value="">Selecionar usuario</option>
-                  {availableUsers.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.name} ({user.role})
-                    </option>
-                  ))}
-                </SelectInput>
-              </FormField>
-            )}
-
-            <FormField label="CPF">
-              <TextInput
-                value={form.cpf}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, cpf: event.target.value }))
-                }
-                placeholder="CPF"
-                required
-              />
-            </FormField>
-
-            <FormField label="Telefone">
-              <TextInput
-                value={form.phone}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, phone: event.target.value }))
-                }
-                placeholder="Telefone"
-                required
-              />
-            </FormField>
-
-            <FormField label="Latitude" hint="Opcional">
-              <TextInput
-                value={form.latitude}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, latitude: event.target.value }))
-                }
-                placeholder="Latitude"
-                type="number"
-                step="0.000001"
-              />
-            </FormField>
-
-            <FormField label="Longitude" hint="Opcional">
-              <TextInput
-                value={form.longitude}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, longitude: event.target.value }))
-                }
-                placeholder="Longitude"
-                type="number"
-                step="0.000001"
-              />
-            </FormField>
-
-            <FormField
-              label="Skills"
-              className="md:col-span-2"
-              hint="Separadas por virgula"
+                  Cancelar edição
+                </button>
+              ) : (
+                <DataPill tone="blue">
+                  {availableUsers.length} colaboradores disponíveis
+                </DataPill>
+              )
+            }
+          >
+            {editingId && error ? (
+              <StatusBanner tone="rose">{error}</StatusBanner>
+            ) : null}
+            <form
+              onSubmit={(event) => void handleSubmit(event)}
+              className="grid grid-cols-1 gap-4 md:grid-cols-2"
             >
-              <TextInput
-                value={form.skills}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, skills: event.target.value }))
-                }
-                placeholder="Ex: eletrica, paralelismo, nr-35"
-                required
-              />
-            </FormField>
+              {editingId ? (
+                <FormField label="Usuário" className="md:col-span-2">
+                  <FieldBox>
+                    Usuário vinculado: {editingTechnician?.user.name || "-"}
+                  </FieldBox>
+                </FormField>
+              ) : (
+                <FormField label="Usuário" className="md:col-span-2">
+                  <SelectInput
+                    value={form.userId}
+                    onChange={(event) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        userId: event.target.value,
+                      }))
+                    }
+                    required
+                  >
+                    <option value="">Selecionar usuário</option>
+                    {availableUsers.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name} ({user.role})
+                      </option>
+                    ))}
+                  </SelectInput>
+                </FormField>
+              )}
 
-            <div className="flex flex-wrap gap-3 md:col-span-2">
-              <button
-                type="submit"
-                disabled={saving}
-                className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white shadow-[0_18px_32px_-24px_rgba(15,31,50,0.7)] transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              <FormField label="CPF">
+                <TextInput
+                  value={form.cpf}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, cpf: event.target.value }))
+                  }
+                  placeholder="CPF"
+                  required
+                />
+              </FormField>
+
+              <FormField label="Telefone">
+                <TextInput
+                  value={form.phone}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, phone: event.target.value }))
+                  }
+                  placeholder="Telefone"
+                  required
+                />
+              </FormField>
+
+              <FormField label="Latitude" hint="Opcional">
+                <TextInput
+                  value={form.latitude}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      latitude: event.target.value,
+                    }))
+                  }
+                  placeholder="Latitude"
+                  type="number"
+                  step="0.000001"
+                />
+              </FormField>
+
+              <FormField label="Longitude" hint="Opcional">
+                <TextInput
+                  value={form.longitude}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      longitude: event.target.value,
+                    }))
+                  }
+                  placeholder="Longitude"
+                  type="number"
+                  step="0.000001"
+                />
+              </FormField>
+
+              <FormField
+                label="Skills"
+                className="md:col-span-2"
+                hint="Separadas por virgula"
               >
-                {saving
-                  ? "Salvando..."
-                  : editingId
-                    ? "Atualizar tecnico"
-                    : "Cadastrar tecnico"}
-              </button>
-              {!editingId ? (
-                <div className="flex items-center">
-                  <DataPill tone="slate">
-                    Cobertura e capacidade no mesmo painel
-                  </DataPill>
-                </div>
-              ) : null}
-            </div>
-          </form>
-        </SectionCard>
+                <TextInput
+                  value={form.skills}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, skills: event.target.value }))
+                  }
+                  placeholder="Ex: eletrica, paralelismo, nr-35"
+                  required
+                />
+              </FormField>
+
+              <div className="flex flex-wrap gap-3 md:col-span-2">
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white shadow-[0_18px_32px_-24px_rgba(15,31,50,0.7)] transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {saving
+                    ? "Salvando..."
+                    : editingId
+                      ? "Atualizar tecnico"
+                      : "Cadastrar tecnico"}
+                </button>
+                {!editingId ? (
+                  <div className="flex items-center">
+                    <DataPill tone="slate">
+                      Cobertura e capacidade no mesmo painel
+                    </DataPill>
+                  </div>
+                ) : null}
+              </div>
+            </form>
+          </SectionCard>
         </EditOverlay>
 
         <SectionCard
-          eyebrow="Operacao"
+          eyebrow="Operação"
           title="Quadro atual da equipe"
-          description="A tabela foi deixada mais respirada para leitura rapida de contato, carga, certificacoes e localizacao."
+          description="A tabela foi deixada mais respirada para leitura rapida de contato, carga, certificações e localização."
           actions={
             loading ? (
               <DataPill tone="slate">Atualizando</DataPill>
             ) : (
-              <DataPill tone="blue">{technicians.length} perfis exibidos</DataPill>
+              <DataPill tone="blue">
+                {technicians.length} perfis exibidos
+              </DataPill>
             )
           }
         >
           {loading ? (
             <EmptyState
-              title="Carregando equipe tecnica"
-              description="Buscando tecnicos, certificacoes e ordens vinculadas."
+              title="Carregando equipe técnica"
+              description="Buscando técnicos, certificações e ordens vinculadas."
             />
           ) : technicians.length === 0 ? (
             <EmptyState
-              title="Nenhum tecnico cadastrado"
-              description="Assim que o primeiro perfil tecnico for criado, ele aparece aqui com carga, skills e rastreio."
+              title="Nenhum técnico cadastrado"
+              description="Assim que o primeiro perfil técnico for criado, ele aparece aqui com carga, skills e rastreio."
             />
           ) : (
             <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white">
-              <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
+              <div
+                className="overflow-x-auto"
+                tabIndex={0}
+                role="region"
+                aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas."
+              >
                 <table className="min-w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50/90 text-left text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                      <th className="px-4 py-3">Tecnico</th>
+                      <th className="px-4 py-3">Técnico</th>
                       <th className="px-4 py-3">Contato</th>
                       <th className="px-4 py-3">Skills</th>
                       <th className="px-4 py-3">Carga</th>
-                      <th className="px-4 py-3">Certificacoes</th>
+                      <th className="px-4 py-3">Certificações</th>
                       <th className="px-4 py-3">Posicao</th>
-                      <th className="dashboard-sticky-actions px-4 py-3 text-right">Acoes</th>
+                      <th className="dashboard-sticky-actions px-4 py-3 text-right">
+                        Acoes
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
@@ -545,7 +586,12 @@ export default function TechniciansPage() {
                           className="align-top transition hover:bg-slate-50/70"
                         >
                           <td className="px-4 py-4">
-                            <button type="button" onClick={() => fillFormFromRow(row)} className="dashboard-record-link text-left font-semibold" title="Abrir cadastro do técnico">
+                            <button
+                              type="button"
+                              onClick={() => fillFormFromRow(row)}
+                              className="dashboard-record-link text-left font-semibold"
+                              title="Abrir cadastro do técnico"
+                            >
                               {row.user.name}
                             </button>
                             <p className="mt-1 text-xs text-slate-500">
@@ -562,20 +608,29 @@ export default function TechniciansPage() {
                           <td className="px-4 py-4">
                             <div className="flex max-w-xs flex-wrap gap-1.5">
                               {row.skills.map((skill) => (
-                                <DataPill key={`${row.id}-${skill}`} tone="slate">
+                                <DataPill
+                                  key={`${row.id}-${skill}`}
+                                  tone="slate"
+                                >
                                   {skill}
                                 </DataPill>
                               ))}
                             </div>
                           </td>
                           <td className="px-4 py-4 text-slate-700">
-                            <DataPill tone={openOrders.length > 0 ? "amber" : "slate"}>
+                            <DataPill
+                              tone={openOrders.length > 0 ? "amber" : "slate"}
+                            >
                               {openOrders.length} O.S. abertas
                             </DataPill>
                             <div className="mt-2 space-y-1">
                               {openOrders.slice(0, 2).map((order) => (
-                                <p key={order.id} className="text-xs text-slate-500">
-                                  {order.title} ({commercialLabel(order.status)})
+                                <p
+                                  key={order.id}
+                                  className="text-xs text-slate-500"
+                                >
+                                  {order.title} ({commercialLabel(order.status)}
+                                  )
                                 </p>
                               ))}
                               {openOrders.length === 0 ? (
@@ -591,24 +646,27 @@ export default function TechniciansPage() {
                             </p>
                             {nextCertification ? (
                               <p className="mt-1 text-xs text-slate-500">
-                                {nextCertification.code} ate{" "}
-                                {new Date(
+                                {nextCertification.code} até{" "}
+                                {formatCalendarDate(
                                   nextCertification.validUntil,
-                                ).toLocaleDateString("pt-BR")}
+                                )}
                               </p>
                             ) : (
                               <p className="mt-1 text-xs text-slate-500">
-                                Sem certificacao cadastrada
+                                Sem certificação cadastrada
                               </p>
                             )}
                           </td>
                           <td className="px-4 py-4 text-slate-700">
                             {hasCoordinates ? (
                               <p>
-                                {row.latitude?.toFixed(6)}, {row.longitude?.toFixed(6)}
+                                {row.latitude?.toFixed(6)},{" "}
+                                {row.longitude?.toFixed(6)}
                               </p>
                             ) : (
-                              <span className="text-slate-500">Nao informado</span>
+                              <span className="text-slate-500">
+                                Não informado
+                              </span>
                             )}
                           </td>
                           <td className="dashboard-sticky-actions px-4 py-4 text-right">

@@ -2,7 +2,10 @@
 
 import { SelectField } from "@/app/dashboard/components/SelectField";
 
-import { PageHeader } from "../components/DashboardPageKit";
+import {
+  MetricCard as SummaryMetric,
+  PageHeader,
+} from "../components/DashboardPageKit";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -68,8 +71,21 @@ export default function CatalogPage() {
     setHydrated(true);
   }, []);
 
-  const { items: filteredItems, total, loading, error, refresh: refreshItems, paginationProps, sort, direction, onSort, hasLoaded } = usePagedList<CatalogItem>({
-    endpoint: "/catalogs/page", filters: { group: activeGroup }, search,
+  const {
+    items: filteredItems,
+    total,
+    loading,
+    error,
+    refresh: refreshItems,
+    paginationProps,
+    sort,
+    direction,
+    onSort,
+    hasLoaded,
+  } = usePagedList<CatalogItem>({
+    endpoint: "/catalogs/page",
+    filters: { group: activeGroup },
+    search,
   });
   const [summary, setSummary] = useState<CatalogSummary | null>(null);
   const [summaryError, setSummaryError] = useState("");
@@ -85,12 +101,26 @@ export default function CatalogPage() {
     setSummaryError("");
     async function loadSummary() {
       try {
-        const response = await apiFetch("/catalogs/list-summary", { cache: "no-store", signal: controller.signal });
-        if (!response.ok) throw new Error(await readApiErrorMessage(response, "Não foi possível atualizar os indicadores."));
-        const next = await response.json() as CatalogSummary;
+        const response = await apiFetch("/catalogs/list-summary", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok)
+          throw new Error(
+            await readApiErrorMessage(
+              response,
+              "Não foi possível atualizar os indicadores.",
+            ),
+          );
+        const next = (await response.json()) as CatalogSummary;
         if (!controller.signal.aborted) setSummary(next);
       } catch (error) {
-        if (!controller.signal.aborted) setSummaryError(error instanceof Error ? error.message : "Não foi possível atualizar os indicadores.");
+        if (!controller.signal.aborted)
+          setSummaryError(
+            error instanceof Error
+              ? error.message
+              : "Não foi possível atualizar os indicadores.",
+          );
       }
     }
     void loadSummary();
@@ -106,28 +136,36 @@ export default function CatalogPage() {
     <div className="dashboard-page space-y-5">
       <PageHeader
         eyebrow="Suprimentos"
-        title="Catálogo de peças e serviços"
-        description="Consulte itens, preços, estoque e dados para propostas e atendimentos."
-        actions={<>
-<div className="flex flex-wrap items-center gap-2">
-          {hydrated && canViewSuppliers && (
+        title="Peças e serviços"
+        description="Catálogo, preços e aplicações."
+        actions={
+          <>
             <Link
-              href="/dashboard/suppliers"
-              className="ml-2 rounded-lg border border-zinc-300 bg-white px-4 py-2.5 font-semibold text-zinc-700 transition-colors hover:bg-zinc-100"
+              href="/dashboard/catalog/technical-library"
+              className="app-button app-button-secondary"
             >
-              Fornecedores
+              Biblioteca técnica
             </Link>
-          )}
-          {hydrated && canCreateItem && (
-            <Link
-              href="/dashboard/catalog/new"
-              className="ml-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-lg font-semibold transition-colors shadow-sm"
-            >
-              Novo Item
-            </Link>
-          )}
-        </div>
-</>}
+            <div className="flex flex-wrap items-center gap-2">
+              {hydrated && canViewSuppliers && (
+                <Link
+                  href="/dashboard/suppliers"
+                  className="ml-2 rounded-lg border border-zinc-300 bg-white px-4 py-2.5 font-semibold text-zinc-700 transition-colors hover:bg-zinc-100"
+                >
+                  Fornecedores
+                </Link>
+              )}
+              {hydrated && canCreateItem && (
+                <Link
+                  href="/dashboard/catalog/new"
+                  className="ml-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-lg font-semibold transition-colors shadow-sm"
+                >
+                  Novo Item
+                </Link>
+              )}
+            </div>
+          </>
+        }
       />
 
       {error && (
@@ -146,10 +184,16 @@ export default function CatalogPage() {
         </div>
       )}
 
-      <section className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-4">
-        <Metric title="Itens ativos" value={summary ? String(metrics.total) : "—"} />
-        <Metric title="Pecas" value={summary ? String(metrics.parts) : "—"} />
-        <Metric title="Servicos" value={summary ? String(metrics.services) : "—"} />
+      <section className="dashboard-metrics-grid">
+        <Metric
+          title="Itens ativos"
+          value={summary ? String(metrics.total) : "—"}
+        />
+        <Metric title="Peças" value={summary ? String(metrics.parts) : "—"} />
+        <Metric
+          title="Serviços"
+          value={summary ? String(metrics.services) : "—"}
+        />
         <Metric
           title="Baixo estoque"
           value={summary ? String(metrics.lowStock) : "—"}
@@ -157,10 +201,18 @@ export default function CatalogPage() {
         />
       </section>
 
-      {summaryError ? <p role="status" className="text-sm text-amber-700">
-        {summaryError}{" "}
-        <button type="button" className="font-semibold underline" onClick={() => setSummaryRevision((current) => current + 1)}>Atualizar indicadores</button>
-      </p> : null}
+      {summaryError ? (
+        <p role="status" className="text-sm text-amber-700">
+          {summaryError}{" "}
+          <button
+            type="button"
+            className="font-semibold underline"
+            onClick={() => setSummaryRevision((current) => current + 1)}
+          >
+            Atualizar indicadores
+          </button>
+        </p>
+      ) : null}
       <section className="mb-4 rounded-xl border border-zinc-200 bg-white p-4">
         <div className="mb-3 flex items-center gap-2">
           <label
@@ -181,7 +233,7 @@ export default function CatalogPage() {
           id="catalog-search"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Item, SKU, PN, outros codigos, descricao ou localizacao..."
+          placeholder="Item, SKU, PN, outros códigos, descrição ou localização..."
           className="w-full rounded-lg border border-zinc-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
         />
         {showFilters ? (
@@ -192,7 +244,9 @@ export default function CatalogPage() {
               onChange={(value) => setActiveGroup(value as CatalogGroupKey)}
               options={buildCatalogGroups(metrics.groups).map((group) => ({
                 value: group.key,
-                label: summary ? `${group.label} (${group.count})` : group.label,
+                label: summary
+                  ? `${group.label} (${group.count})`
+                  : group.label,
               }))}
             />
           </div>
@@ -220,16 +274,68 @@ export default function CatalogPage() {
       </section>
 
       <div className="bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden">
-        <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
-          <table data-pagination-skip="true" data-sort-skip="true" aria-busy={loading} className="w-full text-left border-collapse">
+        <div
+          className="overflow-x-auto"
+          tabIndex={0}
+          role="region"
+          aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas."
+        >
+          <table
+            data-pagination-skip="true"
+            data-sort-skip="true"
+            aria-busy={loading}
+            className="w-full text-left border-collapse"
+          >
             <thead>
               <tr className="bg-zinc-50 text-zinc-500 text-sm border-b border-zinc-200">
-                <ListSortHeader column="name" sort={sort} direction={direction} onSort={onSort}>Item</ListSortHeader>
-                <ListSortHeader column="description" sort={sort} direction={direction} onSort={onSort}>Descricao</ListSortHeader>
-                <ListSortHeader column="sku" sort={sort} direction={direction} onSort={onSort}>SKU / PN</ListSortHeader>
-                <ListSortHeader column="type" sort={sort} direction={direction} onSort={onSort}>Tipo</ListSortHeader>
-                <ListSortHeader column="stock" sort={sort} direction={direction} onSort={onSort}>Saldo</ListSortHeader>
-                <ListSortHeader column="price" sort={sort} direction={direction} onSort={onSort}>Venda sugerida</ListSortHeader>
+                <ListSortHeader
+                  column="name"
+                  sort={sort}
+                  direction={direction}
+                  onSort={onSort}
+                >
+                  Item
+                </ListSortHeader>
+                <ListSortHeader
+                  column="description"
+                  sort={sort}
+                  direction={direction}
+                  onSort={onSort}
+                >
+                  Descrição
+                </ListSortHeader>
+                <ListSortHeader
+                  column="sku"
+                  sort={sort}
+                  direction={direction}
+                  onSort={onSort}
+                >
+                  SKU / PN
+                </ListSortHeader>
+                <ListSortHeader
+                  column="type"
+                  sort={sort}
+                  direction={direction}
+                  onSort={onSort}
+                >
+                  Tipo
+                </ListSortHeader>
+                <ListSortHeader
+                  column="stock"
+                  sort={sort}
+                  direction={direction}
+                  onSort={onSort}
+                >
+                  Saldo
+                </ListSortHeader>
+                <ListSortHeader
+                  column="price"
+                  sort={sort}
+                  direction={direction}
+                  onSort={onSort}
+                >
+                  Venda sugerida
+                </ListSortHeader>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200">
@@ -249,7 +355,11 @@ export default function CatalogPage() {
                           type="button"
                           onClick={() => setSelectedItemId(item.id)}
                           className="dashboard-record-link text-left"
-                          title={item.type === "SERVICE" ? "Abrir resumo do serviço" : "Abrir resumo da peça"}
+                          title={
+                            item.type === "SERVICE"
+                              ? "Abrir resumo do serviço"
+                              : "Abrir resumo da peça"
+                          }
                         >
                           {item.name}
                         </button>
@@ -317,7 +427,13 @@ export default function CatalogPage() {
       </div>
       <ListPagination {...paginationProps} />
       {selectedItemId ? (
-        <QuickRecordEditor kind="catalog" id={selectedItemId} canEdit={canUpdateItem} onClose={() => setSelectedItemId(null)} onSaved={loadItems} />
+        <QuickRecordEditor
+          kind="catalog"
+          id={selectedItemId}
+          canEdit={canUpdateItem}
+          onClose={() => setSelectedItemId(null)}
+          onSaved={loadItems}
+        />
       ) : null}
     </div>
   );
@@ -332,19 +448,13 @@ function Metric({
   value: string;
   tone?: "slate" | "amber" | "emerald";
 }) {
-  const toneClass =
-    tone === "amber"
-      ? "border-amber-200 bg-amber-50 text-amber-800"
-      : tone === "emerald"
-        ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-        : "border-zinc-200 bg-white text-zinc-900";
   return (
-    <div className={`rounded-xl border p-4 ${toneClass}`}>
-      <p className="text-xs font-bold uppercase tracking-wide opacity-70">
-        {title}
-      </p>
-      <p className="mt-1 text-2xl font-bold">{value}</p>
-    </div>
+    <SummaryMetric
+      label={title}
+      value={value}
+      tone={tone}
+      loading={value === "—"}
+    />
   );
 }
 
@@ -377,18 +487,52 @@ function SelectFilter({
   );
 }
 
-
-type CatalogSummary = { total: number; parts: number; services: number; lowStock: number; groups: Record<CatalogGroupKey, number> };
-const EMPTY_CATALOG_SUMMARY: CatalogSummary = { total: 0, parts: 0, services: 0, lowStock: 0, groups: { all: 0, internal: 0, technicalTools: 0, generatorParts: 0, services: 0, lowStock: 0 } };
+type CatalogSummary = {
+  total: number;
+  parts: number;
+  services: number;
+  lowStock: number;
+  groups: Record<CatalogGroupKey, number>;
+};
+const EMPTY_CATALOG_SUMMARY: CatalogSummary = {
+  total: 0,
+  parts: 0,
+  services: 0,
+  lowStock: 0,
+  groups: {
+    all: 0,
+    internal: 0,
+    technicalTools: 0,
+    generatorParts: 0,
+    services: 0,
+    lowStock: 0,
+  },
+};
 function buildCatalogGroups(groups: Record<CatalogGroupKey, number>) {
-  return ([
-    ["all", "Todos"], ["internal", "Uso interno"], ["technicalTools", "Ferramentas tecnicas"],
-    ["generatorParts", "Pecas de geradores"], ["services", "Servicos"], ["lowStock", "Baixo estoque"],
-  ] as const).map(([key, label]) => ({ key, label, count: groups[key] }));
+  return (
+    [
+      ["all", "Todos"],
+      ["internal", "Uso interno"],
+      ["technicalTools", "Ferramentas tecnicas"],
+      ["generatorParts", "Pecas de geradores"],
+      ["services", "Servicos"],
+      ["lowStock", "Baixo estoque"],
+    ] as const
+  ).map(([key, label]) => ({ key, label, count: groups[key] }));
 }
 function classifyCatalogItem(item: CatalogItem) {
-  return item.catalogGroup ?? (item.type === "SERVICE" ? "services" : "generatorParts");
+  return (
+    item.catalogGroup ??
+    (item.type === "SERVICE" ? "services" : "generatorParts")
+  );
 }
-function catalogGroupLabel(group: Exclude<CatalogGroupKey, "all" | "lowStock">) {
-  return { internal: "Uso interno", technicalTools: "Ferramenta tecnica", generatorParts: "Peca de gerador", services: "Servico" }[group];
+function catalogGroupLabel(
+  group: Exclude<CatalogGroupKey, "all" | "lowStock">,
+) {
+  return {
+    internal: "Uso interno",
+    technicalTools: "Ferramenta tecnica",
+    generatorParts: "Peca de gerador",
+    services: "Servico",
+  }[group];
 }

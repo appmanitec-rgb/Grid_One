@@ -1,7 +1,12 @@
 import { DatabaseService } from '../../../database/database.service';
 import { Prisma } from '@prisma/client';
 import {
-  allowedPortfolios,
+  managedProposalScope,
+  managedOpportunityScope,
+  managementAllowed,
+} from './commercial-management';
+import { ForbiddenException } from '@nestjs/common';
+import {
   assertDiscount,
   assertOrderCreation,
   assertPortfolio,
@@ -32,48 +37,16 @@ export async function proposalScope(
   id?: string,
 ): Promise<Prisma.ProposalWhereInput> {
   const actor = await ruleActor(db, id);
-  if (!actor || unrestricted(actor) || actor.role === 'CLIENT') return {};
-  const portfolios = allowedPortfolios(actor);
-  return {
-    type: {
-      in: [
-        ...(portfolios.includes('generators')
-          ? ['GENERATOR_SALE' as const]
-          : []),
-        ...(portfolios.includes('contracts') ? ['CONTRACT' as const] : []),
-        ...(portfolios.includes('partsServices')
-          ? [
-              'PARTS' as const,
-              'SERVICES' as const,
-              'PARTS_AND_SERVICES' as const,
-            ]
-          : []),
-      ],
-    },
-  };
+  if (!actor || actor.role === 'CLIENT') return {};
+  return managedProposalScope(actor);
 }
 export async function opportunityScope(
   db: DatabaseService,
   id?: string,
 ): Promise<Prisma.SalesOpportunityWhereInput> {
   const actor = await ruleActor(db, id);
-  if (!actor || unrestricted(actor)) return {};
-  const portfolios = allowedPortfolios(actor);
-  return {
-    pipeline: {
-      in: [
-        ...(portfolios.includes('generators')
-          ? ['COMMERCIAL_01_GENERATORS' as const]
-          : []),
-        ...(portfolios.includes('contracts')
-          ? ['COMMERCIAL_02_CONTRACTS' as const]
-          : []),
-        ...(portfolios.includes('partsServices')
-          ? ['COMMERCIAL_03_PARTS_SERVICES' as const]
-          : []),
-      ],
-    },
-  };
+  if (!actor) return {};
+  return managedOpportunityScope(actor);
 }
 export async function checkProposalType(
   db: DatabaseService,
@@ -83,6 +56,19 @@ export async function checkProposalType(
   const actor = await ruleActor(db, id);
   if (actor && actor.role !== 'CLIENT')
     assertPortfolio(actor, portfolioForProposal(type));
+}
+export async function checkCommercialSeller(
+  db: DatabaseService,
+  actorId: string | undefined,
+  type: string,
+  sellerId: string,
+) {
+  if (!actorId || actorId === sellerId) return;
+  const actor = await ruleActor(db, actorId);
+  if (!actor || !managementAllowed(actor, portfolioForProposal(type), 'team'))
+    throw new ForbiddenException(
+      'Somente o administrador responsável pode atribuir propostas a outro vendedor.',
+    );
 }
 export async function checkPipeline(
   db: DatabaseService,

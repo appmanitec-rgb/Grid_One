@@ -103,10 +103,8 @@ const TYPE_LABEL: Record<BankAccountType, string> = {
   CASHBOX: "Caixa",
 };
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("pt-BR", {
@@ -512,7 +510,7 @@ export default function BankAccountsPage() {
           {
             label: "Contas ativas",
             value: String(stats.activeCount),
-            helper: "Disponiveis para novas baixas e conciliacoes.",
+            helper: "Disponíveis para novas baixas e conciliacoes.",
             tone: "blue",
           },
           {
@@ -528,9 +526,9 @@ export default function BankAccountsPage() {
             tone: "emerald",
           },
           {
-            label: "Saidas rastreadas",
+            label: "Saídas rastreadas",
             value: formatCurrency(stats.outflowTracked),
-            helper: "Volume pago com conta de saida vinculada.",
+            helper: "Volume pago com conta de saída vinculada.",
             tone: "amber",
           },
         ]}
@@ -572,8 +570,8 @@ export default function BankAccountsPage() {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_380px]">
         <SectionCard
           eyebrow="Mapa das contas"
-          title="Saldos, uso e historico por conta"
-          description="Veja quais contas realmente participam do fluxo e quais ja podem sair da operacao sem sumir da trilha financeira."
+          title="Saldos e histórico por conta"
+          description="Consulte o saldo, as movimentações e a situação de cada conta."
         >
           <div className="space-y-4">
             {loading ? (
@@ -594,7 +592,7 @@ export default function BankAccountsPage() {
             ) : accounts.length === 0 ? (
               <EmptyState
                 title="Nenhuma conta cadastrada"
-                description="Cadastre a primeira conta para amarrar recebimentos, pagamentos e caixa."
+                description="Cadastre uma conta para registrar os pagamentos e recebimentos."
               />
             ) : (
               accounts.map((account) => {
@@ -690,7 +688,7 @@ export default function BankAccountsPage() {
                       </FieldBox>
                       <FieldBox>
                         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                          Saidas
+                          Saídas
                         </p>
                         <p className="mt-2 text-sm font-semibold text-slate-900">
                           {formatCurrency(summary.outflowAmount)}
@@ -747,10 +745,10 @@ export default function BankAccountsPage() {
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <div>
                             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                              Historico recente
+                              Histórico recente
                             </p>
                             <p className="mt-1 text-sm text-slate-600">
-                              Ate 3 movimentos rastreados para a conta.
+                              Até 3 movimentos rastreados para a conta.
                             </p>
                           </div>
                           <DataPill tone="slate">
@@ -793,11 +791,11 @@ export default function BankAccountsPage() {
           <EditOverlay open={Boolean(editingId)} title={draft.name || "Conta bancária"} busy={saving} onClose={closeEditor}>
           <SectionCard
             eyebrow={editingId ? "Editar conta" : "Nova conta"}
-            title={editingId ? "Governanca da conta selecionada" : "Cadastrar nova conta"}
+            title={editingId ? "Editar conta bancária" : "Cadastrar nova conta"}
             description={
               editingId
-                ? "Atualize dados cadastrais ou tire a conta da operacao nova sem perder o historico."
-                : "Crie a conta que vai receber baixas, suportar pagamentos ou representar caixa operacional."
+                ? "Atualize os dados cadastrais ou inative a conta mantendo o histórico."
+                : "Cadastre a conta usada nos pagamentos, recebimentos ou no caixa."
             }
           >
             {editingId && error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
@@ -811,7 +809,7 @@ export default function BankAccountsPage() {
                 <TextInput
                   value={draft.name}
                   onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
-                  placeholder="Ex.: Banco Principal Operacao"
+                  placeholder="Ex.: Banco Principal Operação"
                 />
               </FormField>
 
@@ -860,7 +858,7 @@ export default function BankAccountsPage() {
                     onChange={(event) =>
                       setDraft((current) => ({ ...current, accountNumber: event.target.value }))
                     }
-                    placeholder="Numero da conta"
+                    placeholder="Número da conta"
                   />
                 </FormField>
               </div>
@@ -932,7 +930,7 @@ export default function BankAccountsPage() {
 
           <SectionCard
             eyebrow="Ultimos movimentos"
-            title="Pulso da tesouraria"
+            title="Movimentações recentes"
             description="Resumo das movimentacoes mais recentes com conta vinculada."
           >
             <div className="space-y-3">
@@ -943,8 +941,8 @@ export default function BankAccountsPage() {
                 </div>
               ) : recentMovements.length === 0 ? (
                 <EmptyState
-                  title="Sem movimentacoes rastreadas"
-                  description="Recebimentos e pagamentos ainda nao registraram contas bancarias vinculadas."
+                  title="Nenhuma movimentação vinculada"
+                  description="Recebimentos e pagamentos ainda não registraram contas bancarias vinculadas."
                 />
               ) : (
                 recentMovements.map((movement) => (
@@ -975,29 +973,29 @@ export default function BankAccountsPage() {
           </SectionCard>
 
           <SectionCard
-            eyebrow="Conexao de fluxo"
-            title="Esteira validada"
-            description="Como a governanca de contas conversa com o restante do financeiro."
+            eyebrow="Consultas relacionadas"
+            title="Pagamentos e recebimentos"
+            description="Consulte os pagamentos e recebimentos vinculados às contas."
           >
             <div className="space-y-3">
               <FieldBox>
-                <p className="text-sm font-semibold text-slate-900">Conta ativa na operacao nova</p>
+                <p className="text-sm font-semibold text-slate-900">Conta ativa na operação nova</p>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
                   Recebiveis e pagaveis usam apenas contas ativas na interface, reduzindo erro operacional.
                 </p>
               </FieldBox>
 
               <FieldBox>
-                <p className="text-sm font-semibold text-slate-900">Conta inativa com historico preservado</p>
+                <p className="text-sm font-semibold text-slate-900">Conta inativa com histórico preservado</p>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Inativar remove a conta da operacao nova, mas mantem intacta a trilha de entradas e saidas ja feitas.
+                  Uma conta inativa deixa de aparecer em novos lançamentos. O histórico de movimentações é mantido.
                 </p>
               </FieldBox>
 
               <FieldBox>
-                <p className="text-sm font-semibold text-slate-900">Caixa refletido no modulo certo</p>
+                <p className="text-sm font-semibold text-slate-900">Caixa refletido no módulo certo</p>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Os saldos aqui continuam sendo a base da leitura executiva do fluxo de caixa e da conciliacao dos modulos financeiros.
+                  Os saldos aqui continuam sendo a base da leitura executiva do fluxo de caixa e da conciliacao dos módulos financeiros.
                 </p>
               </FieldBox>
             </div>

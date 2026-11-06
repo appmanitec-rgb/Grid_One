@@ -1,11 +1,16 @@
-import { ServiceUnavailableException, Injectable } from '@nestjs/common';
+import {
+  ServiceUnavailableException,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { execFile } from 'child_process';
 import { existsSync } from 'fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { promisify } from 'util';
+import { createHash } from 'crypto';
 
 const execFileAsync = promisify(execFile);
 
@@ -17,6 +22,9 @@ export type DocxToPdfStatus = {
 
 @Injectable()
 export class DocxToPdfService {
+  private readonly logger = new Logger(DocxToPdfService.name);
+  private readonly recent = new Map<string, Buffer>();
+  private readonly converting = new Map<string, Promise<Buffer>>();
   constructor(private readonly configService: ConfigService) {}
 
   status(): DocxToPdfStatus {
@@ -40,6 +48,38 @@ export class DocxToPdfService {
     buffer: Buffer;
     fileName: string;
   }): Promise<Buffer> {
+    const source = Buffer.from(input.buffer);
+    const key = createHash('sha256').update(source).digest('hex');
+    const cached = this.recent.get(key);
+    if (cached) {
+      this.recent.delete(key);
+      this.recent.set(key, cached);
+      return Buffer.from(cached);
+    }
+    const pending = this.converting.get(key);
+    if (pending) return Buffer.from(await pending);
+    const task = this.convertFresh({ ...input, buffer: source });
+    this.converting.set(key, task);
+    try {
+      const pdf = await task;
+      // At most 16 MiB; only valid conversions are reusable, never a failed attempt.
+      if (pdf.length <= 2 * 1024 * 1024) {
+        this.recent.set(key, Buffer.from(pdf));
+        if (this.recent.size > 8) {
+          const oldest = this.recent.keys().next();
+          if (!oldest.done) this.recent.delete(oldest.value);
+        }
+      }
+      return Buffer.from(pdf);
+    } finally {
+      this.converting.delete(key);
+    }
+  }
+
+  private async convertFresh(input: {
+    buffer: Buffer;
+    fileName: string;
+  }): Promise<Buffer> {
     const binaryPath = this.resolveBinaryPath();
 
     if (!binaryPath) {
@@ -54,7 +94,7 @@ export class DocxToPdfService {
     const docxPath = join(tempDir, `${baseName}.docx`);
     const pdfPath = join(tempDir, `${baseName}.pdf`);
     const timeoutMs = Number(
-      this.configService.get<string>('LIBREOFFICE_TIMEOUT_MS') || 15_000,
+      this.configService.get<string>('LIBREOFFICE_TIMEOUT_MS') || 75_000,
     );
 
     try {
@@ -76,7 +116,8 @@ export class DocxToPdfService {
         ],
         {
           timeout:
-            Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 15_000,
+            Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 75_000,
+          cwd: dirname(binaryPath),
           windowsHide: true,
           maxBuffer: 1024 * 1024,
         },
@@ -91,9 +132,12 @@ export class DocxToPdfService {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'erro desconhecido';
-      throw new ServiceUnavailableException(
-        `Falha ao converter DOCX para PDF via LibreOffice: ${message}`,
-      );
+      this.logger.warn(`Conversão DOCX/PDF não concluída: ${message}`);
+      throw new ServiceUnavailableException({
+        code: 'DOCX_PDF_CONVERSION_FAILED',
+        message:
+          'Não foi possível concluir a conversão do Word para PDF. Tente novamente ou baixe o DOCX. Os documentos aprovados permanecem preservados.',
+      });
     } finally {
       try {
         await rm(tempDir, {
@@ -122,8 +166,11 @@ export class DocxToPdfService {
       this.configService.get<string>('LIBREOFFICE_BIN') ||
       this.configService.get<string>('SOFFICE_BIN');
     const candidates = [
+      configured?.replace(/soffice\.exe$/i, 'soffice.com'),
       configured,
+      'C:\\Program Files\\LibreOffice\\program\\soffice.com',
       'C:\\Program Files\\LibreOffice\\program\\soffice.exe',
+      'C:\\Program Files (x86)\\LibreOffice\\program\\soffice.com',
       'C:\\Program Files (x86)\\LibreOffice\\program\\soffice.exe',
       '/usr/bin/libreoffice',
       '/usr/bin/soffice',

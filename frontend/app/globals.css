@@ -721,7 +721,18 @@ h3 {
 .dashboard-sidebar-rail { transition: opacity 80ms linear; }
 .dashboard-sidebar[data-expanded="true"] .dashboard-sidebar-rail { opacity: 0; }
 
-.dashboard-sidebar[data-touch="true"] { width: 296px; }
+.dashboard-sidebar[data-expanded="true"] { width: 296px; }
+.dashboard-brand-link { padding:4px; }
+.dashboard-brand-image { width:100%; height:100%; object-fit:contain; }
+.dashboard-sidebar[data-expanded="true"] .dashboard-sidebar-brand { justify-content:space-between; gap:12px; }
+.dashboard-sidebar[data-expanded="true"] .dashboard-brand-link { width:168px; border-radius:8px; }
+.dashboard-sidebar-controls { display:flex; gap:4px; }
+.dashboard-sidebar-control { display:flex; width:36px; height:36px; align-items:center; justify-content:center; border:1px solid rgba(171,194,220,.2); border-radius:8px; background:rgba(255,255,255,.04); color:#c5d6eb; cursor:pointer; }
+.dashboard-sidebar-control:hover { background:rgba(255,255,255,.1); color:#fff; }
+.dashboard-sidebar-control[aria-pressed="true"] { color:#a6ceff; border-color:#80b3f7; background:rgba(75,140,225,.16); }
+.dashboard-sidebar-control:focus-visible,.dashboard-sidebar-open:focus-visible { outline:2px solid #7db5f5; outline-offset:2px; }
+.dashboard-sidebar-open { display:flex; flex:none; min-height:48px; width:48px; margin:8px auto 0; flex-direction:column; align-items:center; justify-content:center; gap:3px; border:1px solid rgba(171,194,220,.2); border-radius:10px; color:#d9e5f5; font-size:10px; cursor:pointer; }
+.dashboard-sidebar-open:hover { background:rgba(255,255,255,.08); }
 
 .dashboard-sidebar-drawer {
   position: absolute;
@@ -1295,7 +1306,7 @@ tbody tr:hover .dashboard-sticky-actions {
 
 .dashboard-sidebar-drawer { box-shadow: 20px 0 48px -24px rgba(3, 8, 20, .62); border-right-color: rgba(171, 194, 220, .12); }
 .dashboard-menu-search { border-bottom: 1px solid rgba(171,194,220,.07); margin-bottom: 6px; }
-.dashboard-menu-caption { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:0 1px 12px; color:#e3ebf5; font-size:13px; font-weight:650; letter-spacing:-.015em; }
+.dashboard-menu-caption { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:0 1px 8px; color:#e3ebf5; font-size:13px; font-weight:650; letter-spacing:-.015em; }
 .dashboard-menu-area-count { color:#8e9fb5; font-size:10px; font-weight:500; letter-spacing:0; }
 .dashboard-menu-search-input { color-scheme:dark; background:rgba(255,255,255,.035); border-color:rgba(171,194,220,.13); border-radius:10px; font-size:12px; box-shadow:inset 0 1px 1px rgba(0,0,0,.04); transition:border-color 120ms,box-shadow 120ms,background-color 120ms; }
 .dashboard-menu-search-input::placeholder { color:#93a5bd; }
@@ -1314,7 +1325,7 @@ tbody tr:hover .dashboard-sticky-actions {
 .dashboard-nav-section[data-active="true"] > .dashboard-nav-heading { background:rgba(143,177,221,.065); }
 .dashboard-nav-section[data-active="true"] > .dashboard-nav-heading > span:first-child > span:last-child { color:#f0f5fc; }
 .dashboard-nav-section[data-active="true"] .dashboard-nav-icon { color:var(--nav-color) !important; background:color-mix(in srgb,var(--nav-color) 9%,transparent) !important; }
-.dashboard-nav-heading > span:last-child > span { min-width:18px; text-align:center; padding:2px 4px; border-radius:5px; color:#9cadc2; background:rgba(255,255,255,.035); font-size:10px; }
+.dashboard-nav-heading > span:last-child > .dashboard-nav-badge { min-width:20px; text-align:center; padding:2px 5px; border-radius:5px; color:#c7e1ff; background:rgba(75,140,225,.18); font-size:10px; }
 .dashboard-nav-chevron { color:#6f849d; flex-shrink:0; transition:transform 130ms ease,color 130ms ease; }
 .dashboard-nav-heading[aria-expanded="true"] .dashboard-nav-chevron { transform:rotate(90deg); color:#a4b6cd; }
 .dashboard-nav-children { margin-top:4px; margin-bottom:5px; padding-top:2px; border-left-color:rgba(159,181,209,.14); }
@@ -1337,7 +1348,7 @@ tbody tr:hover .dashboard-sticky-actions {
 /* Collapsed rail: centered controls with their own surfaces and clear glyphs. */
 .dashboard-sidebar-rail-list { scrollbar-gutter:auto; scrollbar-width:none; overscroll-behavior:contain; }
 .dashboard-sidebar-rail-list::-webkit-scrollbar { display:none; width:0; }
-.dashboard-sidebar-rail-list > .dashboard-sidebar-toggle { flex:0 0 48px; width:48px; height:48px; margin:0 auto; border-radius:14px; }
+.dashboard-sidebar-rail-list > .dashboard-sidebar-toggle { flex:0 0 44px; width:48px; height:44px; margin:0 auto; border-radius:12px; }
 .dashboard-sidebar-rail .dashboard-sidebar-toggle:not(.bg-sky-500) { color:#d9e5f5; background:linear-gradient(145deg,rgba(255,255,255,.085),rgba(255,255,255,.035)) !important; border-color:rgba(177,202,232,.15) !important; box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 3px 6px rgba(3,8,20,.12); }
 .dashboard-sidebar-rail .dashboard-sidebar-toggle .dashboard-nav-icon { color:inherit !important; background:transparent !important; border-color:transparent; }
 .dashboard-sidebar-rail .dashboard-sidebar-toggle .dashboard-nav-icon svg { width:22px; height:22px; stroke-width:1.9; }

@@ -38,12 +38,22 @@ describe('commercial access integration points', () => {
     expect(
       await proposalScope(db as unknown as DatabaseService, 'sales'),
     ).toEqual({
-      type: { in: ['PARTS', 'SERVICES', 'PARTS_AND_SERVICES'] },
+      OR: [
+        {
+          type: { in: ['PARTS', 'SERVICES', 'PARTS_AND_SERVICES'] },
+          OR: [
+            { userId: 'sales' },
+            { salesOpportunity: { assignedSellerId: 'sales' } },
+          ],
+        },
+      ],
     });
     expect(
       await opportunityScope(db as unknown as DatabaseService, 'sales'),
     ).toEqual({
-      pipeline: { in: ['COMMERCIAL_03_PARTS_SERVICES'] },
+      OR: [
+        { pipeline: 'COMMERCIAL_03_PARTS_SERVICES', assignedSellerId: 'sales' },
+      ],
     });
   });
   it('blocks a direct proposal URL and a linked opportunity from another portfolio', async () => {

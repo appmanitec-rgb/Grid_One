@@ -825,6 +825,7 @@ enum DocumentAccessResult {
 }
 
 model User {
+  proposalEditingDrafts ProposalEditingDraft[]
   procurementRequests    ProcurementRequest[]
   procurementAttachments ProcurementAttachment[]
   id                     String                  @id @default(uuid())
@@ -936,6 +937,9 @@ model User {
 
   @@index([linkedClientId])
   @@map("users")
+  commercialHandoffTasks CommercialHandoffTask[] @relation("CommercialHandoffOwner")
+  technicalScopeVersions ProposalTechnicalScopeVersion[] @relation("TechnicalScopeVersionActor")
+
 }
 
 model TeamPost {
@@ -1715,6 +1719,7 @@ model CatalogItem {
   purchaseOrderItems        PurchaseOrderItem[]
   hrAssetAssignments        HrAssetAssignment[]
   priceRevisions            CatalogPriceRevision[]
+  technicalProfile          CatalogTechnicalProfile?
   commercialGenerator       CommercialGenerator?
 
   @@index([skuAreaId])
@@ -2194,7 +2199,46 @@ model GeneratorBaseItem {
   @@map("generator_base_items")
 }
 
+model ProposalEditingDraft {
+  id String @id @default(uuid())
+  ownerUserId String
+  owner User @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  proposalId String?
+  proposal Proposal? @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  formData Json
+  revision Int @default(1)
+  lastRequestKey String
+  lastRequestHash String
+  clicks Int @default(0)
+  edits Int @default(0)
+  firstReadyAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([ownerUserId, updatedAt])
+  @@index([proposalId])
+  @@map("proposal_editing_drafts")
+}
+
+// Immutable customer documents, created only by explicit board approval in phase 1.
+// Separate from delivery queues: creating this snapshot never sends or publishes it.
+model ProposalDocumentSnapshot {
+  proposalId      String   @id
+  proposal        Proposal @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  publicData      Json
+  pdfBytes        Bytes
+  docxBytes       Bytes
+  html            String?
+  templateKey     String
+  templateVersion String
+  approvedBy      String
+  createdAt       DateTime @default(now())
+
+  @@map("proposal_document_snapshots")
+}
+
 model Proposal {
+  editingDrafts ProposalEditingDraft[]
+  customerDocumentSnapshot ProposalDocumentSnapshot?
   id                       String         @id @default(uuid())
   code                     String         @unique
   status                   ProposalStatus @default(DRAFT)
@@ -2247,6 +2291,8 @@ model Proposal {
   commercialGenerator   CommercialGenerator? @relation(fields: [commercialGeneratorId], references: [id], onDelete: SetNull)
   sizingSnapshot        Json?
   commercialSnapshot    Json?
+  technicalScopeSnapshot Json?
+  technicalScopeVersions ProposalTechnicalScopeVersion[]
 
   externalReference              String?
   externalCurrency               String? @default("BRL")
@@ -2270,11 +2316,15 @@ model Proposal {
   salesOrder        SalesOrder?
   executionOrder    MaintenanceOrder?    @relation("ExecutionProposalOrder")
   receivables       AccountsReceivable[] @relation("ProposalReceivables")
+  commercialEstimate CommercialProposalEstimate?
+  commercialHandoffTasks CommercialHandoffTask[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("proposals")
+  @@index([userId, type, status, updatedAt])
+  @@index([type, status, validUntil])
 }
 
 model OperationalExpenseRate {
@@ -2335,6 +2385,7 @@ model SalesOpportunity {
   @@index([assignedSellerId])
   @@index([clientId, stage])
   @@map("sales_opportunities")
+  @@index([assignedSellerId, pipeline, stage, updatedAt], map: "sales_opportunity_owner_pipeline_stage_idx")
 }
 
 model CrmActivity {
@@ -2361,6 +2412,8 @@ model CrmActivity {
   @@index([opportunityId, occurredAt])
   @@index([status, dueAt])
   @@map("crm_activities")
+  @@index([ownerId, status, dueAt])
+  @@index([opportunityId, status, dueAt])
 }
 
 model CommercialInspection {
@@ -4773,4 +4826,119 @@ model ProcurementAttachment {
 
   @@index([entityType, entityId])
   @@map("procurement_attachments")
+}
+
+
+/// Explicit, versioned technical classification; independent of SKU classification.
+model TechnicalScopeFamily {
+  id             String   @id @default(uuid())
+  code           String   @unique
+  name           String
+  kind           String
+  definitionJson Json?
+  version        Int      @default(1)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
+
+  @@index([isActive, kind])
+  @@map("technical_scope_families")
+}
+
+model TechnicalScopeProcedure {
+  id             String   @id @default(uuid())
+  code           String   @unique
+  name           String
+  category       String?
+  definitionJson Json
+  version        Int      @default(1)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
+
+  @@index([isActive, category])
+  @@map("technical_scope_procedures")
+}
+
+model CatalogTechnicalProfile {
+  id                     String      @id @default(uuid())
+  catalogItemId          String      @unique
+  catalogItem            CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  familyCodes            String[]    @default([])
+  procedureCodes         String[]    @default([])
+  includedProcedureCodes String[]    @default([])
+  compatibility          Json?
+  isActive               Boolean     @default(true)
+  version                Int         @default(1)
+  createdAt              DateTime    @default(now())
+  updatedAt              DateTime    @default(now()) @updatedAt
+
+  @@index([isActive])
+  @@map("catalog_technical_profiles")
+}
+
+model ProposalTechnicalScopeVersion {
+  id          String   @id @default(uuid())
+  proposalId  String
+  proposal    Proposal @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  version     Int
+  snapshot    Json
+  text        String
+  sourceHash  String
+  actorUserId String?
+  actorUser   User?    @relation("TechnicalScopeVersionActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@unique([proposalId, version])
+  @@index([proposalId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("proposal_technical_scope_versions")
+}
+
+// Internal estimates remain separate from customer documents and approved snapshots.
+model CommercialProposalEstimate {
+  id String @id @default(uuid())
+  proposalId String @unique
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  version Int @default(1)
+  sourceHash String
+  snapshot Json
+  actorUserId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@map("commercial_proposal_estimates")
+}
+
+model CommercialContentTemplate {
+  id String @id @default(uuid())
+  key String
+  version Int
+  portfolio String
+  category String
+  name String
+  subject String?
+  body String
+  createdByUserId String
+  publishedByUserId String?
+  publishedAt DateTime?
+  createdAt DateTime @default(now())
+  @@unique([key, version])
+  @@index([portfolio, category, publishedAt])
+  @@map("commercial_content_templates")
+}
+
+model CommercialHandoffTask {
+  id String @id @default(uuid())
+  proposalId String
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  step String
+  ownerId String
+  owner User @relation("CommercialHandoffOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  dueAt DateTime
+  version Int @default(1)
+  updatedByUserId String
+  updatedAt DateTime @updatedAt
+  @@unique([proposalId, step])
+  @@index([ownerId, dueAt])
+  @@map("commercial_handoff_tasks")
 }

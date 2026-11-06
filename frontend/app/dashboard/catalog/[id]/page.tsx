@@ -1,4 +1,6 @@
 "use client";
+import { formatCalendarDate } from "@/lib/formatters";
+import TechnicalScopeCatalogPanel from "../TechnicalScopeCatalogPanel";
 
 import { RecordPhoto } from "../../components/RecordPhotoField";
 import { PageHeader } from "../../components/DashboardPageKit";
@@ -339,7 +341,7 @@ export default function CatalogItemDetailPage() {
           throw new Error(
             await readApiErrorMessage(
               res,
-              "Nao foi possivel carregar a ficha do item.",
+              "Não foi possivel carregar a ficha do item.",
             ),
           );
         }
@@ -383,7 +385,7 @@ export default function CatalogItemDetailPage() {
         throw new Error(
           await readApiErrorMessage(
             res,
-            "Nao foi possivel registrar a decisao.",
+            "Não foi possivel registrar a decisão.",
           ),
         );
       }
@@ -445,96 +447,113 @@ export default function CatalogItemDetailPage() {
         eyebrow="Suprimentos"
         title={item.type === "SERVICE" ? "Ficha do serviço" : "Ficha da peça"}
         description="Dados do cadastro, histórico, ordens de serviço e fornecedores."
-        actions={<>
-<div className="flex flex-wrap gap-2">
-          <PermissionAwareLink
-            href="/dashboard/catalog"
-            permission="catalog.view"
-            className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
-          >
-            Catalogo
-          </PermissionAwareLink>
-          <PermissionAwareLink
-            href="/dashboard/inventory"
-            permission="inventory.view"
-            className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
-          >
-            Estoque
-          </PermissionAwareLink>
-          {canAdjust ? (
-            <PermissionAwareLink
-              href="/dashboard/inventory"
-              permission="inventory.adjust"
-              className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
-            >
-              Ajustar saldo
-            </PermissionAwareLink>
-          ) : null}
-          {canEdit ? (
-            <PermissionAwareLink
-              href={`/dashboard/catalog/new?editItemId=${item.id}`}
-              permission="catalog.update"
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
-            >
-              Editar cadastro
-            </PermissionAwareLink>
-          ) : null}
-        </div>
-</>}
+        actions={
+          <>
+            <div className="flex flex-wrap gap-2">
+              <PermissionAwareLink
+                href="/dashboard/catalog"
+                permission="catalog.view"
+                className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
+              >
+                Catalogo
+              </PermissionAwareLink>
+              <PermissionAwareLink
+                href="/dashboard/inventory"
+                permission="inventory.view"
+                className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
+              >
+                Estoque
+              </PermissionAwareLink>
+              {canAdjust ? (
+                <PermissionAwareLink
+                  href="/dashboard/inventory"
+                  permission="inventory.adjust"
+                  className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+                >
+                  Ajustar saldo
+                </PermissionAwareLink>
+              ) : null}
+              {canEdit ? (
+                <PermissionAwareLink
+                  href={`/dashboard/catalog/new?editItemId=${item.id}`}
+                  permission="catalog.update"
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
+                >
+                  Editar cadastro
+                </PermissionAwareLink>
+              ) : null}
+            </div>
+          </>
+        }
       />
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5">
-        <div className={item.photoUrl ? "grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)]" : undefined}>
-          {item.photoUrl ? <RecordPhoto value={item.photoUrl} label={item.type === "SERVICE" ? "Foto do serviço" : "Foto da peça"} /> : null}
-        <div className="flex min-w-0 flex-col items-start justify-between gap-4 sm:flex-row sm:flex-wrap">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="break-words text-2xl font-bold text-zinc-900">{item.name}</h2>
-              <Badge tone={item.isActive ? "emerald" : "slate"}>
-                {item.isActive ? "Ativo" : "Inativo"}
-              </Badge>
-              <Badge tone={item.type === "PART" ? "blue" : "purple"}>
-                {item.type === "PART" ? "Peça" : "Serviço"}
-              </Badge>
-              {summary?.isLowStock ? (
-                <Badge tone="rose">Baixo estoque</Badge>
-              ) : null}
-            </div>
-            <p className="mt-2 text-sm text-zinc-500">
-              SKU interno {item.sku || "-"} | PN{" "}
-              {item.manufacturerPartNumber || "-"} |{" "}
-              {item.category || "Sem categoria"}
-            </p>
-            <p className="mt-3 max-w-4xl text-sm text-zinc-700">
-              {item.description ||
-                item.commercialDescription ||
-                "Sem descricao cadastrada."}
-            </p>
-          </div>
-          <div className="w-full rounded-xl border border-zinc-200 bg-zinc-50 p-4 sm:w-48 sm:shrink-0">
-            <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">
-              Fornecedor principal
-            </p>
-            {primarySupplier ? (
-              <Link
-                href={`/dashboard/suppliers/${primarySupplier.supplier.id}`}
-                className="mt-1 block text-sm font-bold text-blue-700 hover:underline"
-              >
-                {primarySupplier.supplier.companyName}
-              </Link>
-            ) : (
-              <p className="mt-1 text-sm font-semibold text-zinc-700">
-                {item.supplier || "Nao definido"}
+        <div
+          className={
+            item.photoUrl
+              ? "grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)]"
+              : undefined
+          }
+        >
+          {item.photoUrl ? (
+            <RecordPhoto
+              value={item.photoUrl}
+              label={
+                item.type === "SERVICE" ? "Foto do serviço" : "Foto da peça"
+              }
+            />
+          ) : null}
+          <div className="flex min-w-0 flex-col items-start justify-between gap-4 sm:flex-row sm:flex-wrap">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="break-words text-2xl font-bold text-zinc-900">
+                  {item.name}
+                </h2>
+                <Badge tone={item.isActive ? "emerald" : "slate"}>
+                  {item.isActive ? "Ativo" : "Inativo"}
+                </Badge>
+                <Badge tone={item.type === "PART" ? "blue" : "purple"}>
+                  {item.type === "PART" ? "Peça" : "Serviço"}
+                </Badge>
+                {summary?.isLowStock ? (
+                  <Badge tone="rose">Baixo estoque</Badge>
+                ) : null}
+              </div>
+              <p className="mt-2 text-sm text-zinc-500">
+                SKU interno {item.sku || "-"} | PN{" "}
+                {item.manufacturerPartNumber || "-"} |{" "}
+                {item.category || "Sem categoria"}
               </p>
-            )}
-            <p className="mt-1 text-xs text-zinc-500">
-              Prazo:{" "}
-              {primarySupplier?.leadTimeDays != null
-                ? `${primarySupplier.leadTimeDays} dia(s)`
-                : "-"}
-            </p>
+              <p className="mt-3 max-w-4xl text-sm text-zinc-700">
+                {item.description ||
+                  item.commercialDescription ||
+                  "Sem descricao cadastrada."}
+              </p>
+            </div>
+            <div className="w-full rounded-xl border border-zinc-200 bg-zinc-50 p-4 sm:w-48 sm:shrink-0">
+              <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">
+                Fornecedor principal
+              </p>
+              {primarySupplier ? (
+                <Link
+                  href={`/dashboard/suppliers/${primarySupplier.supplier.id}`}
+                  className="mt-1 block text-sm font-bold text-blue-700 hover:underline"
+                >
+                  {primarySupplier.supplier.companyName}
+                </Link>
+              ) : (
+                <p className="mt-1 text-sm font-semibold text-zinc-700">
+                  {item.supplier || "Nao definido"}
+                </p>
+              )}
+              <p className="mt-1 text-xs text-zinc-500">
+                Prazo:{" "}
+                {primarySupplier?.leadTimeDays != null
+                  ? `${primarySupplier.leadTimeDays} dia(s)`
+                  : "-"}
+              </p>
+            </div>
           </div>
-        </div>
         </div>
       </section>
 
@@ -548,7 +567,7 @@ export default function CatalogItemDetailPage() {
           value={formatNumber(summary?.reservedQty ?? 0)}
         />
         <Metric
-          title="Disponivel"
+          title="Disponível"
           value={formatNumber(
             summary?.availableQty ?? Number(item.stockCurrent || 0),
           )}
@@ -568,7 +587,7 @@ export default function CatalogItemDetailPage() {
           onClick={setActiveTab}
         />
         <TabButton
-          label="Precos"
+          label="Preços"
           value="pricing"
           active={activeTab}
           onClick={setActiveTab}
@@ -586,7 +605,7 @@ export default function CatalogItemDetailPage() {
           onClick={setActiveTab}
         />
         <TabButton
-          label="Tecnico/Fiscal"
+          label="Técnico/Fiscal"
           value="technical"
           active={activeTab}
           onClick={setActiveTab}
@@ -599,7 +618,7 @@ export default function CatalogItemDetailPage() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h2 className="text-lg font-bold text-zinc-900">
-                  Identificacao e codigos
+                  Identificação e códigos
                 </h2>
                 <p className="mt-1 text-sm text-amber-800">
                   O SKU pertence a Manitec; os demais identificadores vieram dos
@@ -610,13 +629,13 @@ export default function CatalogItemDetailPage() {
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <Info label="SKU interno" value={item.sku || "-"} />
-              <Info label="Codigo PX (legado)" value={item.legacyCode || "-"} />
+              <Info label="Código PX (legado)" value={item.legacyCode || "-"} />
               <Info
                 label="Seq. PX (legado)"
                 value={item.legacySequence || "-"}
               />
               <Info
-                label="Codigo Radar (legado)"
+                label="Código Radar (legado)"
                 value={item.radarCode || "-"}
               />
             </div>
@@ -656,7 +675,7 @@ export default function CatalogItemDetailPage() {
                     </div>
                     <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
                       <Info
-                        label="Fisico"
+                        label="Físico"
                         value={formatNumber(balance.physicalQty)}
                       />
                       <Info
@@ -664,7 +683,7 @@ export default function CatalogItemDetailPage() {
                         value={formatNumber(balance.reservedQty)}
                       />
                       <Info
-                        label="Disponivel"
+                        label="Disponível"
                         value={formatNumber(available)}
                       />
                       <Info
@@ -702,7 +721,7 @@ export default function CatalogItemDetailPage() {
               />
               <Info label="Origem" value={item.acquisitionOrigin || "-"} />
               <Info label="Marca" value={item.brand || "-"} />
-              <Info label="Localizacao" value={item.storageLocation || "-"} />
+              <Info label="Localização" value={item.storageLocation || "-"} />
               <Info
                 label="Venda sugerida"
                 value={formatCurrency(item.basePrice)}
@@ -752,11 +771,11 @@ export default function CatalogItemDetailPage() {
                     Formacao protegida
                   </p>
                   <h2 className="mt-1 text-lg font-bold text-zinc-900">
-                    Custo minimo, venda sugerida e aprovacao financeira
+                    Custo minimo, venda sugerida e aprovação financeira
                   </h2>
                   <p className="mt-1 text-sm text-zinc-600">
-                    Os padroes vem do Studio. Somente alteracoes de impostos,
-                    comissao, margem e custos operacionais aguardam a decisao do
+                    Os padrões vem do Studio. Somente alteracoes de impostos,
+                    comissão, margem e custos operacionais aguardam a decisão do
                     Financeiro.
                   </p>
                 </div>
@@ -768,7 +787,7 @@ export default function CatalogItemDetailPage() {
                     <p className="mt-1 text-xs text-zinc-500">
                       Tributos{" "}
                       {formatNumber(pricingContext.policy.salesTaxPercent)}% |
-                      Comissao{" "}
+                      Comissão{" "}
                       {formatNumber(pricingContext.policy.commissionPercent)}% |
                       Margem{" "}
                       {formatNumber(pricingContext.policy.profitMarginPercent)}%
@@ -796,8 +815,8 @@ export default function CatalogItemDetailPage() {
                         Valores vigentes deste produto
                       </p>
                       <p className="mt-1 text-xs text-zinc-500">
-                        Alteracoes nestes percentuais exigem aprovacao do
-                        Financeiro. Cotacoes de fornecedor nao entram neste
+                        Alteracoes nestes percentuais exigem aprovação do
+                        Financeiro. Cotações de fornecedor não entram neste
                         fluxo.
                       </p>
                     </div>
@@ -817,7 +836,7 @@ export default function CatalogItemDetailPage() {
                     <SmallPercent label="IPI" value={item.ipiPercent} />
                     <SmallPercent label="ISS" value={item.issPercent} />
                     <SmallPercent
-                      label="Comissao"
+                      label="Comissão"
                       value={item.commissionPercent}
                     />
                     <SmallPercent label="Margem" value={item.profitMargin} />
@@ -838,7 +857,7 @@ export default function CatalogItemDetailPage() {
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="font-bold text-zinc-900">
-                              Solicitacao de {approval.requesterUser.name}
+                              Solicitação de {approval.requesterUser.name}
                             </p>
                             <Badge
                               tone={
@@ -874,7 +893,7 @@ export default function CatalogItemDetailPage() {
                             )}
                           />
                           <PriceTile
-                            label="Preco solicitado"
+                            label="Preço solicitado"
                             value={formatCurrency(
                               payload.finalSalePrice as number,
                             )}
@@ -894,7 +913,7 @@ export default function CatalogItemDetailPage() {
                         <SmallPercent label="IPI" value={payload.ipiPercent} />
                         <SmallPercent label="ISS" value={payload.issPercent} />
                         <SmallPercent
-                          label="Comissao"
+                          label="Comissão"
                           value={payload.commissionPercent}
                         />
                         <SmallPercent
@@ -918,7 +937,7 @@ export default function CatalogItemDetailPage() {
                                 }));
                                 setPricingError("");
                               }}
-                              placeholder="Parecer financeiro (obrigatorio para reprovar)"
+                              placeholder="Parecer financeiro (obrigatório para reprovar)"
                               aria-describedby={`pricing-rejection-help-${approval.id}`}
                               className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
                             />
@@ -967,14 +986,14 @@ export default function CatalogItemDetailPage() {
           ) : null}
 
           <TraceSection
-            title="Ofertas e cotacoes vigentes"
+            title="Ofertas e cotações vigentes"
             empty="Nenhuma oferta registrada para este item."
           >
             {(item.supplierOffers || []).map((offer) => (
               <TraceRow
                 key={offer.id}
                 title={`${offer.supplier.companyName}${offer.isPreferred ? " | Preferencial" : ""}`}
-                subtitle={`${offer.quoteNumber || `v${offer.version}`} | ${commercialLabel(offer.status)} | Validade ${formatDate(offer.validUntil)} | ${commercialLabel(offer.paymentTerm,"Pagamento não definido")}`}
+                subtitle={`${offer.quoteNumber || `v${offer.version}`} | ${commercialLabel(offer.status)} | Validade ${formatCalendarDate(offer.validUntil)} | ${commercialLabel(offer.paymentTerm, "Pagamento não definido")}`}
                 value={`${formatCurrency(offer.effectiveUnitCost)} / un.`}
                 extraHref={`/dashboard/suppliers/${offer.supplier.id}`}
                 extraLabel="Fornecedor"
@@ -983,14 +1002,14 @@ export default function CatalogItemDetailPage() {
           </TraceSection>
 
           <TraceSection
-            title="Historico de revisoes de preco"
+            title="Histórico de revisões de preço"
             empty="Nenhuma revisao de preco registrada."
           >
             {(item.priceRevisions || []).map((revision) => (
               <TraceRow
                 key={revision.id}
                 title={`${formatCurrency(revision.finalSalePrice)} - ${revision.supplier?.companyName || "Fornecedor nao informado"}`}
-                subtitle={`${formatDate(revision.createdAt)} | Custo ${formatCurrency(revision.calculatedPurchaseCost)} | Validade ${formatDate(revision.validFrom)} ate ${formatDate(revision.validUntil)}`}
+                subtitle={`${formatDate(revision.createdAt)} | Custo ${formatCurrency(revision.calculatedPurchaseCost)} | Validade ${formatDate(revision.validFrom)} ate ${formatCalendarDate(revision.validUntil)}`}
                 value={`M ${formatNumber(revision.profitMarginPercent)}%`}
                 extraHref={
                   revision.supplier?.id
@@ -1003,7 +1022,7 @@ export default function CatalogItemDetailPage() {
           </TraceSection>
 
           <TraceSection
-            title="Historico de vendas"
+            title="Histórico de vendas"
             empty="Nenhuma proposta utilizou este item ainda."
           >
             {(item.proposalItems || []).map((entry) => (
@@ -1147,7 +1166,7 @@ export default function CatalogItemDetailPage() {
                     }
                   />
                   <Info
-                    label="Preco"
+                    label="Preço"
                     value={
                       supplierItem.supplierPrice == null
                         ? "Restrito"
@@ -1156,9 +1175,11 @@ export default function CatalogItemDetailPage() {
                   />
                   <Info
                     label="Pagamento"
-                    value={
-                      commercialLabel(supplierItem.purchasePaymentTerm || supplierItem.supplier.paymentTerm, "?")
-                    }
+                    value={commercialLabel(
+                      supplierItem.purchasePaymentTerm ||
+                        supplierItem.supplier.paymentTerm,
+                      "?",
+                    )}
                   />
                   <Info
                     label="Imposto compra"
@@ -1185,15 +1206,21 @@ export default function CatalogItemDetailPage() {
 
       {activeTab === "technical" ? (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          <div className="xl:col-span-2">
+            <TechnicalScopeCatalogPanel
+              catalogItemId={item.id}
+              canEdit={canEdit}
+            />
+          </div>
           <section className="rounded-xl border border-zinc-200 bg-white p-5">
-            <h2 className="text-lg font-bold text-zinc-900">Dados tecnicos</h2>
+            <h2 className="text-lg font-bold text-zinc-900">Dados técnicos</h2>
             <p className="mt-2 text-sm text-zinc-600">
               {item.applicationNotes || "Sem observacoes de aplicacao."}
             </p>
             <div className="mt-4">
               <KeyValueList
                 data={item.technicalSpecs}
-                emptyLabel="Sem especificacoes tecnicas adicionais."
+                emptyLabel="Sem especificacoes técnicas adicionais."
               />
             </div>
           </section>

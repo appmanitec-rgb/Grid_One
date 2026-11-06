@@ -15,6 +15,7 @@ import {
   SalesOrderStatus,
 } from '@prisma/client';
 import { randomBytes } from 'crypto';
+import { managedProposalScope } from '../auth/rules/commercial-management';
 import { DatabaseService } from '../../database/database.service';
 import { createApprovedProposalOrder } from '../proposals/proposal-work-order';
 import { assertProposalFinancialRelease } from '../proposals/proposal-financial-release';
@@ -26,6 +27,7 @@ import {
 
 type Actor = {
   sub?: string;
+  accessRules?: unknown;
   role?: string;
   isSystemMaster?: boolean;
   accessPolicy?: {
@@ -61,8 +63,10 @@ export class SalesOrdersService {
       ? (filters.status as SalesOrderStatus)
       : undefined;
     const query = filters.query?.trim().slice(0, 100);
+    const commercialScope = this.commercialScope(actor);
     const rows = await this.prisma.salesOrder.findMany({
       where: {
+        ...(commercialScope ? { AND: [{ proposal: commercialScope }] } : {}),
         ...(status ? { status } : {}),
         ...(filters.proposalId ? { proposalId: filters.proposalId } : {}),
         ...(filters.orderId ? { id: filters.orderId } : {}),
@@ -139,7 +143,12 @@ export class SalesOrdersService {
     const actor = this.actor(actorValue);
     this.requirePermission(actor, 'view');
     const order = await this.prisma.salesOrder.findUnique({
-      where: { id },
+      where: {
+        id,
+        ...(this.commercialScope(actor)
+          ? { proposal: this.commercialScope(actor) }
+          : {}),
+      },
       include: {
         client: {
           select: { id: true, companyName: true, tradeName: true, cnpj: true },
@@ -215,6 +224,9 @@ export class SalesOrdersService {
         type: ProposalType.PARTS,
         status: ProposalStatus.WON,
         salesOrder: { is: null },
+        ...(this.commercialScope(actor)
+          ? { AND: [this.commercialScope(actor)!] }
+          : {}),
       },
       select: {
         id: true,
@@ -916,11 +928,29 @@ export class SalesOrdersService {
       actor.accessPolicy?.finance?.view === true
     );
   }
+  private commercialScope(actor: Actor): Prisma.ProposalWhereInput | undefined {
+    // Authenticated commercial readers use the same record scope as proposals.
+    // Operational/finance roles retain their separately authorized fulfillment view.
+    if (!actor.sub) return undefined;
+    if (
+      ['ADMIN', 'MANAGER', 'SALES', 'ENGINEER_APPLICATION'].includes(
+        actor.role || '',
+      ) ||
+      (actor.accessPolicy?.proposals?.view &&
+        !actor.accessPolicy?.finance?.view)
+    )
+      return managedProposalScope({ ...actor, sub: actor.sub });
+    return undefined;
+  }
 
   private requirePermission(
     actor: Actor,
     action: 'view' | 'reserve' | 'deliver' | 'manage' | 'return',
   ) {
+    if (actor.role === 'CLIENT')
+      throw new ForbiddenException(
+        'Pedidos internos devem ser consultados pela central do cliente.',
+      );
     if (actor.isSystemMaster || actor.role === 'ADMIN') return;
     const access = actor.accessPolicy;
     const allowed =

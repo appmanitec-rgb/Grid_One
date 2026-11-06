@@ -1,4 +1,5 @@
 "use client";
+import { FormField } from "@/app/dashboard/components/DashboardPageKit";
 
 import { SelectField } from "@/app/dashboard/components/SelectField";
 import Link from "next/link";
@@ -50,10 +51,8 @@ type OrderListItem = {
   } | null;
 };
 
-const PRIMARY_BUTTON =
-  "inline-flex min-h-10 items-center justify-center rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-sky-300 hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 
 export default function OrdersPage() {
   const router = useRouter();
@@ -86,7 +85,7 @@ export default function OrdersPage() {
         throw new Error(
           await readApiErrorMessage(
             res,
-            "Nao foi possivel carregar as ordens.",
+            "Não foi possivel carregar as ordens.",
           ),
         );
       }
@@ -158,14 +157,14 @@ export default function OrdersPage() {
       <PageHero
         loading={loading}
         asideLayout="side"
-        eyebrow="Execucao em campo"
+        eyebrow="Operação"
         title="Ordens de serviço"
-        description="Acompanhe a execução, distribua atendimentos e resolva as prioridades da equipe."
+        description="Atendimentos, responsáveis e prioridades da equipe."
         stats={[
           {
             label: "Ordens abertas",
             value: String(stats.open),
-            helper: "Itens ainda aguardando tracao operacional.",
+            helper: "O.S. que aguardam início do atendimento.",
             tone: "amber",
           },
           {
@@ -175,7 +174,7 @@ export default function OrdersPage() {
             tone: "blue",
           },
           {
-            label: "Sem tecnico",
+            label: "Sem técnico",
             value: String(stats.unattended),
             helper: "Itens que ainda pedem alocacao.",
             tone: "rose",
@@ -232,30 +231,34 @@ export default function OrdersPage() {
 
       <SectionCard
         actionsLayout="below"
-        eyebrow="Fila operacional"
+        eyebrow="Atendimentos"
         title="Ordens em acompanhamento"
         description="Encontre rapidamente uma ordem por cliente, equipamento, contrato ou situação."
         actions={
-          <div className="flex w-full flex-col gap-3 xl:w-auto xl:min-w-[640px] xl:flex-row xl:items-center xl:justify-end">
-            <TextInput
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar por titulo, cliente, equipamento ou contrato..."
-              className="xl:min-w-[320px]"
-            />
-            <SelectField
-              value={statusFilter}
-              onChange={(event) =>
-                setStatusFilter(event.target.value as "ALL" | OrderStatus)
-              }
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-3 text-sm text-slate-900 transition focus:border-sky-400 focus:bg-white focus:ring-4 focus:ring-sky-100 xl:w-[220px]"
-            >
-              <option value="ALL">Todos os status</option>
-              <option value="OPEN">Abertas</option>
-              <option value="IN_PROGRESS">Em andamento</option>
-              <option value="COMPLETED">Concluidas</option>
-              <option value="CANCELED">Canceladas</option>
-            </SelectField>
+          <div className="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_180px]">
+            <FormField label="Buscar O.S.">
+              <TextInput
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Buscar por título, cliente, equipamento ou contrato..."
+                className="xl:min-w-[320px]"
+              />
+            </FormField>
+            <FormField label="Situação">
+              <SelectField
+                value={statusFilter}
+                onChange={(event) =>
+                  setStatusFilter(event.target.value as "ALL" | OrderStatus)
+                }
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-3 text-sm text-slate-900 transition focus:border-sky-400 focus:bg-white focus:ring-4 focus:ring-sky-100 xl:w-[220px]"
+              >
+                <option value="ALL">Todos os status</option>
+                <option value="OPEN">Abertas</option>
+                <option value="IN_PROGRESS">Em andamento</option>
+                <option value="COMPLETED">Concluidas</option>
+                <option value="CANCELED">Canceladas</option>
+              </SelectField>
+            </FormField>
           </div>
         }
       >
@@ -324,12 +327,12 @@ function OrderCard({ order }: { order: OrderListItem }) {
               <DataPill tone="blue">{order.contract.code}</DataPill>
             ) : null}
             {needsAttention ? (
-              <DataPill tone="amber">Pede atencao</DataPill>
+              <DataPill tone="amber">Pede atenção</DataPill>
             ) : null}
           </div>
 
           <p className="max-w-3xl text-sm leading-6 text-slate-600">
-            {order.description || "Sem descricao operacional registrada."}
+            {order.description || "Nenhuma descrição registrada."}
           </p>
         </div>
 
@@ -365,7 +368,7 @@ function OrderCard({ order }: { order: OrderListItem }) {
           tone="blue"
         />
         <OrderInfo
-          label="Tecnico"
+          label="Técnico"
           value={order.technician?.user?.name || "Aguardando alocacao"}
           helper={
             order.technician?.user?.skillLevel

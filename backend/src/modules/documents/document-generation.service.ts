@@ -50,6 +50,7 @@ export class DocumentGenerationService {
   async generateDocx(
     kind: DocumentTemplateKind,
     payload: Record<string, unknown>,
+    frozen?: Awaited<ReturnType<VisualDocumentService['getPublished']>>,
   ): Promise<GeneratedInstitutionalDocument> {
     const template = this.templates.loadInstitutional(kind);
     const context = this.institutionalDocuments.buildContext(
@@ -70,7 +71,12 @@ export class DocumentGenerationService {
             ? VisualDocumentKind.SERVICE_REPORT
             : null;
     const word = visualKind
-      ? await this.visualDocuments?.renderPublishedWord(visualKind, payload)
+      ? await this.visualDocuments?.renderPublishedWord(
+          visualKind,
+          payload,
+          undefined,
+          frozen,
+        )
       : null;
     if (word) {
       return {
@@ -86,7 +92,7 @@ export class DocumentGenerationService {
       };
     }
     const visual = visualKind
-      ? await this.visualDocuments?.renderPublished(visualKind, payload)
+      ? await this.visualDocuments?.renderPublished(visualKind, payload, frozen)
       : null;
     if (visual) {
       const rendered = this.docxRenderer.renderVisual({
@@ -120,8 +126,22 @@ export class DocumentGenerationService {
   async generatePdfFromDocx(
     kind: DocumentTemplateKind,
     payload: Record<string, unknown>,
+    frozen?: Awaited<ReturnType<VisualDocumentService['getPublished']>>,
   ): Promise<GeneratedInstitutionalPdf> {
-    const docx = await this.generateDocx(kind, payload);
+    const docx = await this.generateDocx(kind, payload, frozen);
+    return {
+      ...(await this.convertRenderedDocxToPdf(docx)),
+      context: docx.context,
+      template: docx.template,
+    };
+  }
+
+  async convertRenderedDocxToPdf(docx: {
+    buffer: Buffer;
+    fileName: string;
+    templateKey: string;
+    templateVersion: string;
+  }): Promise<Omit<GeneratedInstitutionalPdf, 'context' | 'template'>> {
     const pdfBuffer = await this.docxToPdf.convertDocxToPdf({
       buffer: docx.buffer,
       fileName: docx.fileName,
@@ -134,9 +154,9 @@ export class DocumentGenerationService {
       checksumSha256: createHash('sha256').update(pdfBuffer).digest('hex'),
       templateKey: docx.templateKey,
       templateVersion: docx.templateVersion,
-      sourceDocxChecksumSha256: docx.checksumSha256,
-      context: docx.context,
-      template: docx.template,
+      sourceDocxChecksumSha256: createHash('sha256')
+        .update(docx.buffer)
+        .digest('hex'),
     };
   }
 

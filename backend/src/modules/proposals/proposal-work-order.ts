@@ -1,6 +1,7 @@
 import { Prisma, ProposalItemKind, ProposalType } from '@prisma/client';
 import { BadRequestException } from '@nestjs/common';
 import { proposalEntryPending } from './proposal-financial-release';
+import { buildOrderTechnicalScopeChecklist } from '../technical-scopes/technical-scope-execution';
 
 type ApprovedProposal = {
   id: string;
@@ -85,12 +86,22 @@ export async function createApprovedProposalOrder(
     select: { catalogItemId: true, quantity: true },
   });
 
+  const source = await tx.proposal.findUnique({
+    where: { id: proposal.id },
+    select: { scope: true, technicalScopeSnapshot: true },
+  });
+  const checklist = buildOrderTechnicalScopeChecklist({
+    proposalId: proposal.id,
+    scope: source?.scope,
+    snapshot: source?.technicalScopeSnapshot,
+  });
   return tx.maintenanceOrder.upsert({
     where: { sourceProposalId: proposal.id },
     update: {},
     create: {
       title: `OS Automatica - Proposta ${proposal.code}`,
       description: `Ordem gerada automaticamente apos aprovacao do cliente. Valor: R$ ${proposal.totalValue}`,
+      checklistData: checklist as Prisma.InputJsonValue | undefined,
       sourceProposalId: proposal.id,
       generatorId: proposal.generatorId,
       siteId: generator?.currentSiteId ?? null,

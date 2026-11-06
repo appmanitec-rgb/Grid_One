@@ -37,10 +37,15 @@ export default function PortalProposalDetailPage() {
       setLoading(true);
       setError("");
       try {
-        const payload = await customerPortalGet<PortalProposal>(`/proposals/${params.id}`);
+        const payload = await customerPortalGet<PortalProposal>(
+          `/proposals/${params.id}`,
+        );
         if (!cancelled) setProposal(payload);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Falha ao carregar proposta.");
+        if (!cancelled)
+          setError(
+            err instanceof Error ? err.message : "Falha ao carregar proposta.",
+          );
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -64,13 +69,18 @@ export default function PortalProposalDetailPage() {
         decisionMode === "APPROVE"
           ? `/proposals/${params.id}/approve`
           : `/proposals/${params.id}/reject`;
-      const payload = await customerPortalPost<{ proposal: PortalProposal; message: string }>(path, { note });
+      const payload = await customerPortalPost<{
+        proposal: PortalProposal;
+        message: string;
+      }>(path, { note });
       setProposal(payload.proposal);
       setSuccess(payload.message);
       setDecisionMode(null);
       setNote("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao registrar decisão.");
+      setError(
+        err instanceof Error ? err.message : "Falha ao registrar decisão.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -86,7 +96,9 @@ export default function PortalProposalDetailPage() {
       );
       downloadPortalBlob(blob, `proposta-${proposal.code}.docx`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao baixar documento.");
+      setError(
+        err instanceof Error ? err.message : "Falha ao baixar documento.",
+      );
     } finally {
       setDownloadingDocument(false);
     }
@@ -116,12 +128,39 @@ export default function PortalProposalDetailPage() {
 
   return (
     <div className="dashboard-page space-y-5">
-      <PageHeader eyebrow="Proposta comercial" title={`Proposta ${proposal.code}`} description={<>{proposal.generator?.name || "Sem equipamento"} · Validade {formatPortalDate(proposal.validUntil)}</>} meta={<><span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">{statusLabel(proposal.status)}</span><strong className="text-lg text-slate-950">{formatPortalCurrency(proposal.totalValue)}</strong></>} actions={<><Link href="/portal/propostas" className="rounded-lg border border-slate-200 bg-white text-slate-700">Voltar para propostas</Link><div className="mt-3 flex flex-wrap justify-start gap-2 lg:justify-end">
+      <PageHeader
+        eyebrow="Proposta comercial"
+        title={`Proposta ${proposal.code}`}
+        description={
+          <>
+            {proposal.generator?.name || "Sem equipamento"} · Validade{" "}
+            {formatPortalDate(proposal.validUntil)}
+          </>
+        }
+        meta={
+          <>
+            <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">
+              {statusLabel(proposal.status)}
+            </span>
+            <strong className="text-lg text-slate-950">
+              {formatPortalCurrency(proposal.totalValue)}
+            </strong>
+          </>
+        }
+        actions={
+          <>
+            <Link
+              href="/portal/propostas"
+              className="app-button app-button-secondary"
+            >
+              Voltar para propostas
+            </Link>
+            <div className="mt-3 flex flex-wrap justify-start gap-2 lg:justify-end">
               <button
                 type="button"
                 disabled={downloadingPdf}
                 onClick={() => void downloadPdf()}
-                className="rounded-md bg-blue-700 px-4 py-2 text-sm font-bold text-white hover:bg-blue-600 disabled:opacity-60"
+                className="app-button app-button-primary"
               >
                 {downloadingPdf ? "Gerando PDF..." : "Baixar PDF"}
               </button>
@@ -129,11 +168,14 @@ export default function PortalProposalDetailPage() {
                 type="button"
                 disabled={downloadingDocument}
                 onClick={() => void downloadDocument()}
-                className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                className="app-button app-button-secondary"
               >
                 {downloadingDocument ? "Gerando DOCX..." : "Baixar DOCX"}
               </button>
-            </div></>} />
+            </div>
+          </>
+        }
+      />
 
       {error ? <State text={error} tone="error" /> : null}
       {success ? <State text={success} tone="success" /> : null}
@@ -149,24 +191,36 @@ export default function PortalProposalDetailPage() {
                   className="portal-list-row grid grid-cols-[1fr_auto_auto] gap-3 border-b border-slate-100 px-3 py-3 last:border-b-0"
                 >
                   <div>
-                    <p className="font-bold text-slate-900">{item.catalogItem.name}</p>
-                    <p className="text-sm text-slate-500">{item.catalogItem.commercialDescription || item.catalogItem.sku || "-"}</p>
+                    <p className="font-bold text-slate-900">
+                      {item.catalogItem.name}
+                    </p>
+                    <p className="text-sm text-slate-500">
+                      {item.catalogItem.commercialDescription ||
+                        item.catalogItem.sku ||
+                        "-"}
+                    </p>
                   </div>
                   <span className="text-sm font-semibold text-slate-600">
                     {item.quantity} {item.catalogItem.unit || "un"}
                   </span>
-                  <strong className="text-right text-sm text-slate-900">{formatPortalCurrency(item.totalPrice)}</strong>
+                  <strong className="text-right text-sm text-slate-900">
+                    {formatPortalCurrency(item.totalPrice)}
+                  </strong>
                 </div>
               ))
             ) : (
-              <p className="p-3 text-sm text-slate-500">Nenhum item detalhado nesta proposta.</p>
+              <p className="p-3 text-sm text-slate-500">
+                Nenhum item detalhado nesta proposta.
+              </p>
             )}
           </div>
 
           {proposal.scope || proposal.externalNotes ? (
             <div className="mt-4 rounded-md bg-slate-50 p-3 text-sm text-slate-600">
               {proposal.scope ? <p>{proposal.scope}</p> : null}
-              {proposal.externalNotes ? <p className="mt-2">{proposal.externalNotes}</p> : null}
+              {proposal.externalNotes ? (
+                <p className="mt-2">{proposal.externalNotes}</p>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -175,10 +229,26 @@ export default function PortalProposalDetailPage() {
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="text-lg font-extrabold text-slate-950">Condições</h2>
             <dl className="mt-3 space-y-2 text-sm">
-              <Info label="Pagamento" value={commercialLabel(proposal.paymentTerm,"—")} />
+              <Info
+                label="Pagamento"
+                value={
+                  proposal.paymentSummary ||
+                  commercialLabel(proposal.paymentTerm, "—")
+                }
+              />
               <Info label="Frete" value={proposal.freight || "-"} />
-              <Info label="Prazo" value={proposal.deliveryLeadTimeDays ? `${proposal.deliveryLeadTimeDays} dias` : "-"} />
-              <Info label="Validade" value={formatPortalDate(proposal.validUntil)} />
+              <Info
+                label="Prazo"
+                value={
+                  proposal.deliveryLeadTimeDays
+                    ? `${proposal.deliveryLeadTimeDays} dias`
+                    : "-"
+                }
+              />
+              <Info
+                label="Validade"
+                value={formatPortalDate(proposal.validUntil)}
+              />
             </dl>
           </section>
 
@@ -214,7 +284,9 @@ export default function PortalProposalDetailPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
           <div className="w-full max-w-lg rounded-lg bg-white p-5 shadow-xl">
             <h2 className="text-xl font-extrabold text-slate-950">
-              {decisionMode === "APPROVE" ? "Confirmar aprovação" : "Confirmar reprovação"}
+              {decisionMode === "APPROVE"
+                ? "Confirmar aprovação"
+                : "Confirmar reprovação"}
             </h2>
             <p className="mt-2 text-sm text-slate-500">
               {decisionMode === "APPROVE"
@@ -240,7 +312,7 @@ export default function PortalProposalDetailPage() {
                 type="button"
                 onClick={() => void submitDecision()}
                 disabled={submitting}
-                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500 disabled:opacity-60"
+                className="app-button app-button-primary"
               >
                 {submitting ? "Registrando..." : "Confirmar"}
               </button>
@@ -262,5 +334,10 @@ function Info({ label, value }: { label: string; value: string }) {
 }
 
 function State({ text, tone }: { text: string; tone?: "error" | "success" }) {
-  return <WorkspaceState title={text} tone={tone || (/^Carregando/i.test(text) ? "loading" : "empty")} />;
+  return (
+    <WorkspaceState
+      title={text}
+      tone={tone || (/^Carregando/i.test(text) ? "loading" : "empty")}
+    />
+  );
 }

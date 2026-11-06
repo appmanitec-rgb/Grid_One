@@ -60,7 +60,7 @@ export default function FleetPage() {
               </tr>
             </thead>
             <tbody>
-              {!items.length ? <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-500">{loading ? "Carregando..." : error ? "Dados indisponíveis." : "Nenhum veículo cadastrado."}</td></tr> : null}
+              {!items.length ? <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-500">{loading ? "Carregando..." : error ? "Dados indisponíveis." : "Nenhum veículo cadastrado. A frota reúne os veículos informados nos cadastros da empresa."}</td></tr> : null}
               {items.map((row) => (
                 <tr key={row.id} className="border-b border-zinc-100">
                   <td className="px-2 py-2 font-semibold text-zinc-800">{row.plate}</td>

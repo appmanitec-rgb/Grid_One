@@ -84,6 +84,11 @@ ${this.documentBrand()}${paragraphs.join('')}
   }
 
   private readonly legacyVariables: Array<[string, string]> = [
+    ['!propostapecasmanitec.dataset', ''],
+    ['!propostaservicosmanitec.dataset', ''],
+    ['!propostapecasresumo.dataset', ''],
+    ['!propostaservicosresumo.dataset', ''],
+    ['!propostaitens.dataset', ''],
     ['!pecasrelatorio.dataset', ''],
     ['!servicosrel.dataset', ''],
     ['!dadosequipamentosjoin.dataset', ''],
@@ -265,6 +270,22 @@ ${this.documentBrand()}${paragraphs.join('')}
             continue;
           const path = replacement.match(/^{{([\w.[\]]+)}}$/)?.[1];
           if (path) paths.add(path);
+          else if (
+            marker.toLowerCase().includes('propostapecasmanitec.dataset')
+          )
+            paths.add('__proposal_parts_branded__');
+          else if (
+            marker.toLowerCase().includes('propostaservicosmanitec.dataset')
+          )
+            paths.add('__proposal_services_branded__');
+          else if (marker.toLowerCase().includes('propostapecasresumo.dataset'))
+            paths.add('__proposal_parts_summary__');
+          else if (
+            marker.toLowerCase().includes('propostaservicosresumo.dataset')
+          )
+            paths.add('__proposal_services_summary__');
+          else if (marker.toLowerCase().includes('propostaitens.dataset'))
+            paths.add('__proposal_items__');
           else if (marker.toLowerCase().includes('pecasrelatorio.dataset'))
             paths.add('__proposal_parts__');
           else if (marker.toLowerCase().includes('servicosrel.dataset'))
@@ -290,21 +311,39 @@ ${this.documentBrand()}${paragraphs.join('')}
           const legacy = this.legacyVariables.map(
             ([marker, replacement]): [string, string] => {
               const path = replacement.match(/^{{([\w.[\]]+)}}$/)?.[1];
-              const special = marker
+              const summaryPath = marker
                 .toLowerCase()
-                .includes('pecasrelatorio.dataset')
-                ? '__proposal_parts__'
-                : marker.toLowerCase().includes('servicosrel.dataset')
-                  ? '__proposal_services__'
+                .includes('propostapecasresumo.dataset')
+                ? '__proposal_parts_summary__'
+                : marker
+                      .toLowerCase()
+                      .includes('propostaservicosresumo.dataset')
+                  ? '__proposal_services_summary__'
+                  : null;
+              const special =
+                (marker.toLowerCase().includes('propostapecasmanitec.dataset')
+                  ? '__proposal_parts_branded__'
                   : marker
                         .toLowerCase()
-                        .includes('dadosequipamentosjoin.dataset')
-                    ? '__contract_items__'
-                    : marker
-                          .toLowerCase()
-                          .includes('prodcontratopxjoin.dataset')
-                      ? '__contract_services__'
-                      : null;
+                        .includes('propostaservicosmanitec.dataset')
+                    ? '__proposal_services_branded__'
+                    : null) ||
+                summaryPath ||
+                (marker.toLowerCase().includes('propostaitens.dataset')
+                  ? '__proposal_items__'
+                  : marker.toLowerCase().includes('pecasrelatorio.dataset')
+                    ? '__proposal_parts__'
+                    : marker.toLowerCase().includes('servicosrel.dataset')
+                      ? '__proposal_services__'
+                      : marker
+                            .toLowerCase()
+                            .includes('dadosequipamentosjoin.dataset')
+                        ? '__contract_items__'
+                        : marker
+                              .toLowerCase()
+                              .includes('prodcontratopxjoin.dataset')
+                          ? '__contract_services__'
+                          : null);
               const label = labelsByPath[path || special || ''];
               return [marker, label ? `«${label}»` : replacement];
             },
@@ -515,6 +554,50 @@ ${this.documentBrand()}${paragraphs.join('')}
         .replace(/<w:p\b[\s\S]*?<\/w:p>/g, (paragraph) => {
           const text = this.extractWordParagraphText(paragraph).trim();
           const onlyField = fields.find((field) => text === `«${field.label}»`);
+          if (onlyField?.sourcePath === '__proposal_parts_branded__')
+            return this.proposalBrandedItemsTable('parts');
+          if (onlyField?.sourcePath === '__proposal_services_branded__')
+            return this.proposalBrandedItemsTable('services');
+          if (onlyField?.sourcePath === 'brandedProposal.contractorText')
+            return this.proposalObligationParagraphs('contractor');
+          if (onlyField?.sourcePath === 'brandedProposal.clientText')
+            return this.proposalObligationParagraphs('client');
+          if (
+            onlyField?.sourcePath?.startsWith('proposalPayment.') &&
+            !this.wordValue(onlyField.sourcePath, context)
+          )
+            return '';
+          if (
+            onlyField?.sourcePath?.startsWith('brandedProposal.') &&
+            [
+              'installationNote',
+              'customerNotes',
+              'paymentPending',
+              'demonstrationNote',
+              'arithmeticWarning',
+            ].includes(onlyField.sourcePath.split('.')[1]) &&
+            !this.wordValue(onlyField.sourcePath, context)
+          )
+            return '';
+          if (onlyField?.sourcePath === 'clientProposal.activities')
+            return this.proposalScopeParagraphs();
+          if (
+            onlyField?.sourcePath &&
+            [
+              'clientProposal.installationNote',
+              'clientProposal.paymentPending',
+              'clientProposal.arithmeticNote',
+              'brandedProposal.billingNote',
+            ].includes(onlyField.sourcePath) &&
+            !this.wordValue(onlyField.sourcePath, context)
+          )
+            return '';
+          if (onlyField?.sourcePath === '__proposal_parts_summary__')
+            return this.proposalClientItemsTable('parts');
+          if (onlyField?.sourcePath === '__proposal_services_summary__')
+            return this.proposalClientItemsTable('services');
+          if (onlyField?.sourcePath === '__proposal_items__')
+            return this.proposalItemsTable();
           if (onlyField?.sourcePath === '__proposal_parts__')
             return this.legacyProposalItemsTable('parts');
           if (onlyField?.sourcePath === '__proposal_services__')
@@ -665,8 +748,27 @@ ${this.documentBrand()}${paragraphs.join('')}
 
   private renderLegacyParagraph(paragraph: string) {
     const text = this.extractWordParagraphText(paragraph);
+    if (text.trim() === '{{brandedProposal.contractorText}}')
+      return this.proposalObligationParagraphs('contractor');
+    if (text.trim() === '{{brandedProposal.clientText}}')
+      return this.proposalObligationParagraphs('client');
+    if (text.trim() === '{{clientProposal.activities}}')
+      return this.proposalScopeParagraphs();
     if (!this.hasLegacyMarker(text)) return paragraph;
     const normalized = text.toLocaleLowerCase('pt-BR');
+    if (normalized.includes('!propostapecasmanitec.dataset'))
+      return this.proposalBrandedItemsTable('parts');
+    if (normalized.includes('!propostaservicosmanitec.dataset'))
+      return this.proposalBrandedItemsTable('services');
+
+    if (normalized.includes('!propostapecasresumo.dataset'))
+      return this.proposalClientItemsTable('parts');
+    if (normalized.includes('!propostaservicosresumo.dataset'))
+      return this.proposalClientItemsTable('services');
+
+    if (normalized.includes('!propostaitens.dataset')) {
+      return this.proposalItemsTable();
+    }
 
     if (normalized.includes('!pecasrelatorio.dataset')) {
       return this.legacyProposalItemsTable('parts');
@@ -795,6 +897,65 @@ ${this.documentBrand()}${paragraphs.join('')}
         '{{total}}',
       ])}{{/${rowsPath}}}`,
     ]);
+  }
+
+  private proposalObligationParagraphs(kind: 'contractor' | 'client') {
+    const paragraph = (keepNext: boolean) =>
+      `<w:p><w:pPr><w:keepLines/>${keepNext ? '<w:keepNext/>' : ''}<w:ind w:left="220" w:hanging="220"/><w:spacing w:after="45" w:line="255" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="21"/></w:rPr><w:t xml:space="preserve">- {{description}}</w:t></w:r></w:p>`;
+    return `{{#brandedProposal.${kind}Chain}}${paragraph(true)}{{/brandedProposal.${kind}Chain}}{{#brandedProposal.${kind}Last}}${paragraph(false)}{{/brandedProposal.${kind}Last}}`;
+  }
+
+  private proposalBrandedItemsTable(rowsPath: 'parts' | 'services') {
+    const widths = [3600, 1100, 650, 550, 1300, 850, 1588];
+    const row = (
+      values: string[],
+      mode: 'head' | 'body' | 'total' = 'body',
+      keepWithSubtotal = false,
+    ) =>
+      `<w:tr><w:trPr><w:cantSplit/>${mode === 'head' ? '<w:tblHeader/>' : ''}</w:trPr>${values.map((value, index) => `<w:tc><w:tcPr><w:tcW w:w="${widths[index]}" w:type="dxa"/><w:vAlign w:val="center"/>${mode !== 'body' ? `<w:shd w:fill="${mode === 'head' ? 'E8F2FA' : 'F1F5F9'}"/>` : ''}</w:tcPr><w:p><w:pPr>${keepWithSubtotal ? '<w:keepNext/>' : ''}<w:spacing w:before="40" w:after="40" w:line="240" w:lineRule="auto"/><w:jc w:val="${index > 3 ? 'right' : index > 1 ? 'center' : 'left'}"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="19"/>${mode !== 'body' ? '<w:b/><w:color w:val="005AA8"/>' : ''}</w:rPr><w:t xml:space="preserve">${this.escapeXml(value)}</w:t></w:r></w:p></w:tc>`).join('')}</w:tr>`;
+    const category =
+      rowsPath === 'parts' ? 'Peças / descrição' : 'Serviços / descrição';
+    const total =
+      rowsPath === 'parts'
+        ? '{{proposal.summaryMaterialsTotal}}'
+        : '{{proposal.summaryLaborTotal}}';
+    const values = [
+      '{{description}}',
+      '{{sku}}',
+      '{{quantity}}',
+      '{{unit}}',
+      '{{unitPrice}}',
+      '{{discountPercent}}',
+      '{{total}}',
+    ];
+    return `<w:tbl><w:tblPr><w:tblW w:w="9638" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="70" w:type="dxa"/><w:bottom w:w="70" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar><w:tblBorders><w:bottom w:val="single" w:sz="4" w:color="D9E2EB"/><w:insideH w:val="single" w:sz="4" w:color="D9E2EB"/></w:tblBorders></w:tblPr><w:tblGrid>${widths.map((width) => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>${row([category, 'Código', 'Qtd.', 'Un.', 'Unitário', 'Desc.', 'Total'], 'head')}{{#brandedProposal.${rowsPath}BeforeLast}}${row(values)}{{/brandedProposal.${rowsPath}BeforeLast}}{{#brandedProposal.${rowsPath}Last}}${row(values, 'body', true)}{{/brandedProposal.${rowsPath}Last}}${row(['Subtotal', '', '', '', '', '', total], 'total')}</w:tbl>`;
+  }
+
+  private proposalScopeParagraphs() {
+    return '{{#clientProposal.activityParagraphs}}<w:p><w:pPr><w:keepLines/><w:widowControl/><w:spacing w:after="0" w:line="255" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="21"/></w:rPr><w:t xml:space="preserve">{{description}}</w:t></w:r></w:p>{{/clientProposal.activityParagraphs}}';
+  }
+
+  private proposalClientItemsTable(rowsPath: 'parts' | 'services') {
+    const widths = [4288, 650, 600, 1450, 900, 1750];
+    const row = (
+      values: string[],
+      type: 'header' | 'body' | 'subtotal' = 'body',
+    ) =>
+      `<w:tr><w:trPr><w:cantSplit/>${type === 'header' ? '<w:tblHeader/>' : ''}</w:trPr>${values.map((value, index) => `<w:tc><w:tcPr><w:tcW w:w="${widths[index]}" w:type="dxa"/>${type !== 'body' ? `<w:shd w:fill="${type === 'header' ? '173652' : 'F1F4F7'}"/>` : ''}<w:vAlign w:val="center"/></w:tcPr><w:p><w:pPr><w:spacing w:before="35" w:after="35" w:line="230" w:lineRule="auto"/><w:jc w:val="${index > 2 ? 'right' : index > 0 ? 'center' : 'left'}"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="19"/>${type !== 'body' ? '<w:b/>' : ''}${type === 'header' ? '<w:color w:val="FFFFFF"/>' : ''}</w:rPr><w:t xml:space="preserve">${this.escapeXml(value)}</w:t></w:r></w:p></w:tc>`).join('')}</w:tr>`;
+    const category =
+      rowsPath === 'parts' ? 'Peças e materiais' : 'Serviços e mão de obra';
+    const subtotal =
+      rowsPath === 'parts'
+        ? '{{proposal.summaryMaterialsTotal}}'
+        : '{{proposal.summaryLaborTotal}}';
+    return `<w:tbl><w:tblPr><w:tblW w:w="9638" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="65" w:type="dxa"/><w:bottom w:w="65" w:type="dxa"/><w:left w:w="90" w:type="dxa"/><w:right w:w="90" w:type="dxa"/></w:tblCellMar><w:tblBorders><w:top w:val="single" w:sz="3" w:color="D9D9D9"/><w:bottom w:val="single" w:sz="3" w:color="D9D9D9"/><w:insideH w:val="single" w:sz="3" w:color="D9D9D9"/></w:tblBorders></w:tblPr><w:tblGrid>${widths.map((width) => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>${row([category, 'Qtd.', 'Un.', 'Preço unit.', 'Desc.', 'Total'], 'header')}{{#${rowsPath}}}${row(['{{description}}\nCódigo {{sku}}', '{{quantity}}', '{{unit}}', '{{unitPrice}}', '{{discountPercent}}', '{{total}}'])}{{/${rowsPath}}}${row(['Subtotal', '', '', '', '', subtotal], 'subtotal')}</w:tbl>`;
+  }
+
+  private proposalItemsTable() {
+    const widths = [3500, 1050, 600, 500, 1200, 700, 1250];
+    const row = (values: string[], header = false) =>
+      `<w:tr><w:trPr><w:cantSplit/>${header ? '<w:tblHeader/>' : ''}</w:trPr>${values.map((value, index) => `<w:tc><w:tcPr><w:tcW w:w="${widths[index]}" w:type="dxa"/>${header ? '<w:shd w:fill="16324F"/>' : ''}<w:vAlign w:val="top"/></w:tcPr><w:p><w:pPr><w:spacing w:before="50" w:after="50" w:line="240" w:lineRule="auto"/>${index > 1 ? '<w:jc w:val="right"/>' : ''}</w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="18"/>${header ? '<w:b/><w:color w:val="FFFFFF"/>' : ''}</w:rPr><w:t xml:space="preserve">${this.escapeXml(value)}</w:t></w:r></w:p></w:tc>`).join('')}</w:tr>`;
+    return `<w:tbl><w:tblPr><w:tblW w:w="8800" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="70" w:type="dxa"/><w:left w:w="75" w:type="dxa"/><w:bottom w:w="70" w:type="dxa"/><w:right w:w="75" w:type="dxa"/></w:tblCellMar><w:tblBorders><w:bottom w:val="single" w:sz="4" w:color="CBD5E1"/><w:insideH w:val="single" w:sz="4" w:color="E2E8F0"/></w:tblBorders></w:tblPr><w:tblGrid>${widths.map((width) => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>${row(['Descrição', 'Código', 'Qtd.', 'Un.', 'Unitário', 'Desc.', 'Total'], true)}{{#items}}${row(['{{description}}', '{{sku}}', '{{quantity}}', '{{unit}}', '{{unitPrice}}', '{{discountPercent}}', '{{total}}'])}{{/items}}</w:tbl>`;
   }
 
   private legacyContractEquipmentsTable() {
@@ -1443,11 +1604,85 @@ ${this.documentBrand()}${paragraphs.join('')}
   }
 
   private renderXmlTemplate(template: string, context: RenderContext) {
-    return this.renderVariables(
-      this.renderLoops(template, context, true),
+    const rendered = this.renderVariables(
+      this.renderLoops(
+        this.proposalLayoutRegions(template, context),
+        context,
+        true,
+      ),
       context,
       true,
     );
+    return rendered.replace(
+      /(<w:t\b[^>]*>)([\s\S]*?)(<\/w:t>)/g,
+      (_match, open: string, content: string, close: string) =>
+        `${open}${content.replace(/\r\n|\n|\r/g, `${close}<w:br/>${open}`)}${close}`,
+    );
+  }
+
+  private proposalLayoutRegions(xml: string, context: RenderContext) {
+    const layout = context.clientProposal as
+      | Record<string, unknown>
+      | undefined;
+    const branded = context.brandedProposal as
+      | Record<string, unknown>
+      | undefined;
+    if (!layout && !branded) return xml;
+    xml = xml.replace(/<w:p\b[\s\S]*?<\/w:p>/g, (paragraph) => {
+      const field = this.extractWordParagraphText(paragraph)
+        .trim()
+        .match(
+          /^{{clientProposal\.(installationNote|paymentPending|arithmeticNote)}}$/,
+        )?.[1];
+      const brandedField = this.extractWordParagraphText(paragraph)
+        .trim()
+        .match(
+          /^{{brandedProposal\.(installationNote|paymentPending|arithmeticWarning|customerNotes|demonstrationNote|billingNote)}}$/,
+        )?.[1];
+      const paymentField = this.extractWordParagraphText(paragraph)
+        .trim()
+        .match(/^{{(proposalPayment\.[\w.]+)}}$/)?.[1];
+      return (field && !layout?.[field]) ||
+        (brandedField && !branded?.[brandedField]) ||
+        (paymentField && !this.resolvePath(paymentField, context))
+        ? ''
+        : paragraph;
+    });
+    const extended = layout?.extendedLayout === true;
+    for (const [name, visible] of [
+      ['manitec_compact_items', !extended],
+      ['manitec_extended_summary', extended],
+      ['manitec_extended_items', extended],
+      ['manitec_v4_warranty', branded?.warrantyConfirmed === true],
+    ] as const) {
+      const paragraphs = [...xml.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)];
+      const start = paragraphs.find((match) =>
+        match[0].includes(`w:name="${name}"`),
+      );
+      if (!start || start.index == null) continue;
+      const id = start[0].match(/<w:bookmarkStart\b[^>]*\bw:id="(\d+)"/)?.[1];
+      const end = id
+        ? paragraphs.find(
+            (match) =>
+              match.index > start.index &&
+              new RegExp(`<w:bookmarkEnd\\b[^>]*\\bw:id="${id}"`).test(
+                match[0],
+              ),
+          )
+        : undefined;
+      if (!end || end.index == null)
+        throw new BadRequestException(
+          'Uma seção do modelo de proposta está incompleta. Restaure a base ou revise o arquivo no Studio.',
+        );
+      const contents = visible
+        ? xml.slice(start.index + start[0].length, end.index)
+        : '';
+      xml =
+        xml.slice(0, start.index) +
+        contents +
+        xml.slice(end.index + end[0].length);
+    }
+    return xml;
   }
 
   private renderLoops(

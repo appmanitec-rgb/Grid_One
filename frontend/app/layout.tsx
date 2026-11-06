@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./interface.css";
+import "./admin-ux.css";
 
 export const metadata: Metadata = {
   title: "Manitec GridOne",
@@ -13,9 +15,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
-      <body className="antialiased">
-        {children}
-      </body>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }

@@ -258,93 +258,98 @@ export default function PurchaseOrdersPage() {
           Cotações e comparativo
         </Link>
       </div>
-      <section className="rounded-xl border border-zinc-200 bg-white p-4 space-y-3">
-        <h2 className="text-lg font-bold text-zinc-800">
-          Novo Pedido (a partir da reposicao sugerida)
-        </h2>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-          <SelectField
-            searchable
-            aria-label="Fornecedor do pedido"
-            value={supplierId}
-            onChange={(event) => setSupplierId(event.target.value)}
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
-          >
-            <option value="">Fornecedor</option>
-            {suppliers.map((supplier) => (
-              <option key={supplier.id} value={supplier.id}>
-                {supplier.companyName}
-              </option>
-            ))}
-          </SelectField>
+      <details
+        className="dashboard-create-panel"
+        open={prefillApplied || undefined}
+      >
+        <summary>Novo pedido por reposição sugerida</summary>
+        <section className="rounded-xl border border-zinc-200 bg-white p-4 space-y-3">
+          <h2 className="text-lg font-bold text-zinc-800">
+            Novo Pedido (a partir da reposicao sugerida)
+          </h2>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+            <SelectField
+              searchable
+              aria-label="Fornecedor do pedido"
+              value={supplierId}
+              onChange={(event) => setSupplierId(event.target.value)}
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            >
+              <option value="">Fornecedor</option>
+              {suppliers.map((supplier) => (
+                <option key={supplier.id} value={supplier.id}>
+                  {supplier.companyName}
+                </option>
+              ))}
+            </SelectField>
 
-          <input
-            aria-label="Data prevista do pedido"
-            type="date"
-            value={expectedDate}
-            onChange={(event) => setExpectedDate(event.target.value)}
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
-          />
-          <input
-            aria-label="Condição de pagamento"
-            value={paymentTerm}
-            onChange={(event) => setPaymentTerm(event.target.value)}
-            placeholder="Prazo (30/60/90)"
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
-          />
-          <input
-            aria-label="Observações do pedido"
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-            placeholder="Observacoes"
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
-          />
-        </div>
-
-        <div className="rounded-lg border border-zinc-200 p-3">
-          <p className="mb-2 text-sm font-semibold text-zinc-700">
-            Itens sugeridos para compra
-          </p>
-          <div className="grid grid-cols-1 gap-1 md:grid-cols-2">
-            {draftsBySupplier.map((item) => {
-              const key = `${item.warehouseId}:${item.catalogItemId}`;
-              return (
-                <label
-                  key={key}
-                  className="flex items-center gap-2 text-sm text-zinc-700"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedDrafts.includes(key)}
-                    onChange={(event) => {
-                      if (event.target.checked)
-                        setSelectedDrafts((prev) => [...prev, key]);
-                      else
-                        setSelectedDrafts((prev) =>
-                          prev.filter((id) => id !== key),
-                        );
-                    }}
-                  />
-                  <span>
-                    {item.item} ({item.suggestedQty}) -{" "}
-                    {item.supplierSuggestion?.supplierName || "Sem sugestao"}
-                  </span>
-                </label>
-              );
-            })}
+            <input
+              aria-label="Data prevista do pedido"
+              type="date"
+              value={expectedDate}
+              onChange={(event) => setExpectedDate(event.target.value)}
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            />
+            <input
+              aria-label="Condição de pagamento"
+              value={paymentTerm}
+              onChange={(event) => setPaymentTerm(event.target.value)}
+              placeholder="Prazo (30/60/90)"
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            />
+            <input
+              aria-label="Observações do pedido"
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              placeholder="Observações"
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            />
           </div>
-        </div>
 
-        <button
-          type="button"
-          onClick={() => void createPurchaseOrder()}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
-        >
-          Criar pedido
-        </button>
-        {message ? <p className="text-sm text-zinc-600">{message}</p> : null}
-      </section>
+          <div className="rounded-lg border border-zinc-200 p-3">
+            <p className="mb-2 text-sm font-semibold text-zinc-700">
+              Itens sugeridos para compra
+            </p>
+            <div className="grid grid-cols-1 gap-1 md:grid-cols-2">
+              {draftsBySupplier.map((item) => {
+                const key = `${item.warehouseId}:${item.catalogItemId}`;
+                return (
+                  <label
+                    key={key}
+                    className="flex items-center gap-2 text-sm text-zinc-700"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedDrafts.includes(key)}
+                      onChange={(event) => {
+                        if (event.target.checked)
+                          setSelectedDrafts((prev) => [...prev, key]);
+                        else
+                          setSelectedDrafts((prev) =>
+                            prev.filter((id) => id !== key),
+                          );
+                      }}
+                    />
+                    <span>
+                      {item.item} ({item.suggestedQty}) -{" "}
+                      {item.supplierSuggestion?.supplierName || "Sem sugestao"}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
 
+          <button
+            type="button"
+            onClick={() => void createPurchaseOrder()}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
+          >
+            Criar pedido
+          </button>
+          {message ? <p className="text-sm text-zinc-600">{message}</p> : null}
+        </section>
+      </details>
       <section className="rounded-xl border border-zinc-200 bg-white p-4 space-y-3">
         <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
           <label

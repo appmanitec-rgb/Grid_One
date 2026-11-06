@@ -38,6 +38,19 @@ export class CatalogListPageDto extends ListPageDto {
   group = 'all';
 }
 
+export class SupplierListPageDto extends ListPageDto {
+  @IsString()
+  @MaxLength(2)
+  state = '';
+
+  @IsString()
+  @MaxLength(100)
+  city = '';
+
+  @IsIn(['ALL', 'YES', 'NO'])
+  contact = 'ALL';
+}
+
 export class ClientListPageDto extends ListPageDto {
   @IsIn(['ALL', 'YES', 'NO'])
   inss = 'ALL';

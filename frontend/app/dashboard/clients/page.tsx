@@ -1,4 +1,6 @@
 ﻿"use client";
+import { formatDocument } from "@/lib/formatters";
+import { InterfaceIcon } from "@/app/dashboard/components/InterfaceIcon";
 
 import { SelectField } from "@/app/dashboard/components/SelectField";
 import { PageHeader } from "../components/DashboardPageKit";
@@ -67,27 +69,46 @@ export default function ClientsPage() {
     setCanEditClients(getAccessFromToken().clients.update);
   }, []);
 
-  const { items: filteredClients, total, loading, error, refresh: loadClients, paginationProps, sort, direction, onSort } = usePagedList<ClientListItem>({
-    endpoint: "/clients/page", search: query,
-    filters: { inss: inssFilter, iss: retentionFilter, delinquent: delinquentFilter, blocked: proposalBlockFilter, contract: contractFilter },
+  const {
+    items: filteredClients,
+    total,
+    loading,
+    error,
+    refresh: loadClients,
+    paginationProps,
+    sort,
+    direction,
+    onSort,
+  } = usePagedList<ClientListItem>({
+    endpoint: "/clients/page",
+    search: query,
+    filters: {
+      inss: inssFilter,
+      iss: retentionFilter,
+      delinquent: delinquentFilter,
+      blocked: proposalBlockFilter,
+      contract: contractFilter,
+    },
   });
 
   return (
     <div className="dashboard-page space-y-5">
       <PageHeader
         eyebrow="Comercial"
-        title="Carteira de Clientes"
+        title="Clientes"
         description="Gerencie empresas, contatos e equipamentos associados."
-        actions={<>
-<div className="flex items-center gap-2">
-          <Link
-            href="/dashboard/clients/new"
-            className="ml-2 flex items-center rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white shadow-sm transition-colors hover:bg-blue-500"
-          >
-            <span className="mr-2">+</span> Novo Cliente
-          </Link>
-        </div>
-</>}
+        actions={
+          <>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/dashboard/clients/new"
+                className="app-button app-button-primary"
+              >
+                <InterfaceIcon name="plus" /> Novo cliente
+              </Link>
+            </div>
+          </>
+        }
       />
 
       {error ? (
@@ -126,7 +147,7 @@ export default function ClientsPage() {
           id="client-search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="CNPJ, nome, razao social, endereco, contato, e-mail, telefone..."
+          placeholder="CNPJ, nome, razão social, endereço, contato, e-mail, telefone..."
           className="w-full rounded-lg border border-zinc-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
         />
         {showFilters ? (
@@ -138,7 +159,7 @@ export default function ClientsPage() {
               options={[
                 { value: "ALL", label: "Todos" },
                 { value: "YES", label: "Sim" },
-                { value: "NO", label: "Nao" },
+                { value: "NO", label: "Não" },
               ]}
             />
             <SelectFilter
@@ -148,7 +169,7 @@ export default function ClientsPage() {
               options={[
                 { value: "ALL", label: "Todos" },
                 { value: "YES", label: "Sim" },
-                { value: "NO", label: "Nao" },
+                { value: "NO", label: "Não" },
               ]}
             />
             <SelectFilter
@@ -158,7 +179,7 @@ export default function ClientsPage() {
               options={[
                 { value: "ALL", label: "Todos" },
                 { value: "YES", label: "Sim" },
-                { value: "NO", label: "Nao" },
+                { value: "NO", label: "Não" },
               ]}
             />
             <SelectFilter
@@ -185,21 +206,102 @@ export default function ClientsPage() {
             />
           </div>
         ) : null}
-        <p className="mt-2 text-xs text-zinc-500">
-          {total} resultado(s)
-        </p>
+        <p className="mt-2 text-xs text-zinc-500">{total} resultado(s)</p>
       </div>
 
+      <div
+        className="flex flex-wrap items-center gap-2 md:hidden"
+        aria-label="Ordenação de clientes"
+      >
+        <span className="text-sm text-[var(--text-muted)]">Ordenar por</span>
+        <button
+          type="button"
+          className="app-button app-button-secondary"
+          onClick={() => onSort("name")}
+        >
+          Nome
+          {sort === "name" ? (direction === "asc" ? " · A–Z" : " · Z–A") : ""}
+        </button>
+        <button
+          type="button"
+          className="app-button app-button-secondary"
+          onClick={() => onSort("code")}
+        >
+          Código
+          {sort === "code"
+            ? direction === "asc"
+              ? " · crescente"
+              : " · decrescente"
+            : ""}
+        </button>
+        <button
+          type="button"
+          className="app-button app-button-secondary"
+          onClick={() => onSort("document")}
+        >
+          CPF/CNPJ
+          {sort === "document"
+            ? direction === "asc"
+              ? " · crescente"
+              : " · decrescente"
+            : ""}
+        </button>
+      </div>
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
-          <table data-pagination-skip="true" data-sort-skip="true" aria-busy={loading} className="w-full border-collapse text-left">
+        <div
+          className="overflow-x-auto"
+          tabIndex={0}
+          role="region"
+          aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas."
+        >
+          <table
+            data-pagination-skip="true"
+            data-sort-skip="true"
+            aria-busy={loading}
+            className="dashboard-responsive-table w-full border-collapse text-left"
+          >
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 text-sm text-zinc-500">
-                <ListSortHeader column="code" sort={sort} direction={direction} onSort={onSort}>Codigo</ListSortHeader>
-                <ListSortHeader column="name" sort={sort} direction={direction} onSort={onSort}>Empresa / Nome</ListSortHeader>
-                <ListSortHeader column="document" sort={sort} direction={direction} onSort={onSort}>CNPJ/CPF</ListSortHeader>
-                <ListSortHeader column="contact" sort={sort} direction={direction} onSort={onSort}>Contatos</ListSortHeader>
-                <ListSortHeader column="address" sort={sort} direction={direction} onSort={onSort}>Endereco</ListSortHeader>
+                <ListSortHeader
+                  column="code"
+                  sort={sort}
+                  direction={direction}
+                  onSort={onSort}
+                >
+                  Código
+                </ListSortHeader>
+                <ListSortHeader
+                  column="name"
+                  sort={sort}
+                  direction={direction}
+                  onSort={onSort}
+                >
+                  Empresa / Nome
+                </ListSortHeader>
+                <ListSortHeader
+                  column="document"
+                  sort={sort}
+                  direction={direction}
+                  onSort={onSort}
+                >
+                  CNPJ/CPF
+                </ListSortHeader>
+                <ListSortHeader
+                  column="contact"
+                  sort={sort}
+                  direction={direction}
+                  onSort={onSort}
+                >
+                  Contatos
+                </ListSortHeader>
+                <ListSortHeader
+                  column="address"
+                  sort={sort}
+                  direction={direction}
+                  onSort={onSort}
+                >
+                  Endereço
+                </ListSortHeader>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200">
@@ -209,11 +311,19 @@ export default function ClientsPage() {
                     key={client.id}
                     className="transition-colors hover:bg-zinc-50"
                   >
-                    <td className="p-4 tabular-nums text-sm font-bold text-zinc-700">
+                    <td
+                      data-label="Código"
+                      className="p-4 tabular-nums text-sm font-bold text-zinc-700"
+                    >
                       {client.code}
                     </td>
-                    <td className="p-4">
-                      <button type="button" onClick={() => setSelectedClientId(client.id)} className="dashboard-record-link text-left font-bold" title="Abrir resumo do cliente">
+                    <td className="record-identity p-4">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedClientId(client.id)}
+                        className="dashboard-record-link text-left font-bold"
+                        title="Abrir resumo do cliente"
+                      >
                         {client.companyName}
                       </button>
                       <p className="text-xs text-zinc-500">
@@ -231,18 +341,27 @@ export default function ClientsPage() {
                       ) : null}
                       {client.isProvisional ? (
                         <span className="mt-2 inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800">
-                          Vinculo de maquina pendente
+                          Vínculo de máquina pendente
                         </span>
                       ) : null}
                     </td>
-                    <td className="p-4 font-medium text-zinc-600">
-                      {client.cnpj || "Nao informado"}
+                    <td
+                      data-label="CPF/CNPJ"
+                      className="p-4 font-medium text-zinc-600"
+                    >
+                      {formatDocument(client.cnpj)}
                     </td>
-                    <td className="p-4 text-sm text-zinc-600">
+                    <td
+                      data-label="Contato"
+                      className="p-4 text-sm text-zinc-600"
+                    >
                       <p>{client.email || "Sem e-mail"}</p>
                       <p>{client.phone || "Sem telefone"}</p>
                     </td>
-                    <td className="max-w-xs truncate p-4 text-sm text-zinc-600">
+                    <td
+                      data-label="Endereço"
+                      className="max-w-xs p-4 text-sm text-zinc-600"
+                    >
                       {client.address
                         ? `${client.address} - ${client.city || ""}/${client.state || ""}`
                         : `${client.city || ""}/${client.state || ""}`}
@@ -269,7 +388,13 @@ export default function ClientsPage() {
       </div>
       <ListPagination {...paginationProps} />
       {selectedClientId ? (
-        <QuickRecordEditor kind="client" id={selectedClientId} canEdit={canEditClients} onClose={() => setSelectedClientId(null)} onSaved={loadClients} />
+        <QuickRecordEditor
+          kind="client"
+          id={selectedClientId}
+          canEdit={canEditClients}
+          onClose={() => setSelectedClientId(null)}
+          onSaved={loadClients}
+        />
       ) : null}
     </div>
   );

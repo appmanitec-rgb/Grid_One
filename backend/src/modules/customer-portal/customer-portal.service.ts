@@ -1,4 +1,11 @@
 import {
+  assertProposalConference,
+  phase1Enabled,
+} from '../proposals/proposal-conference';
+import { paymentSummary } from '../proposals/proposal-review.domain';
+import { phase1Type } from '../proposals/proposal-conference';
+import { renderScopeWithConditions } from '../technical-scopes/technical-scope-execution';
+import {
   BadRequestException,
   ForbiddenException,
   Injectable,
@@ -416,14 +423,43 @@ export class CustomerPortalService {
         id: proposalId,
         clientId: scope.clientId,
       },
-      select: this.customerProposalSelect(),
+      select: {
+        ...this.customerProposalSelect(),
+        technicalScopeSnapshot: true,
+        hasDownPayment: true,
+        downPaymentAmount: true,
+        installmentCount: true,
+        firstDueDate: true,
+        installmentIntervalDays: true,
+        origin: true,
+      },
     });
 
     if (!proposal) {
       throw new NotFoundException('Proposta nao encontrada.');
     }
 
-    return proposal;
+    const { technicalScopeSnapshot, ...publicProposal } = proposal;
+    const summary = phase1Type(proposal.type, proposal.origin)
+      ? paymentSummary(
+          proposal.totalValue,
+          proposal.hasDownPayment ? proposal.downPaymentAmount || 0 : 0,
+          proposal.installmentCount || 1,
+          proposal.firstDueDate?.toISOString(),
+          proposal.installmentIntervalDays,
+        )
+      : null;
+    return {
+      ...publicProposal,
+      scope: renderScopeWithConditions(proposal.scope, technicalScopeSnapshot),
+      paymentSummary: summary,
+      movements: proposal.movements.map((row) => ({
+        ...row,
+        note: /^(CUSTOMER_PORTAL_|SHARE_LINK_)/.test(row.action)
+          ? row.note
+          : null,
+      })),
+    };
   }
 
   async approveProposal(
@@ -654,6 +690,11 @@ export class CustomerPortalService {
   ) {
     const scope = await this.requireCustomerScope(userId);
     return this.prisma.$transaction(async (tx) => {
+      if (phase1Enabled())
+        await tx.$executeRawUnsafe(
+          'SELECT pg_advisory_xact_lock(hashtext($1))',
+          'proposal-write:' + proposalId,
+        );
       const proposal = await tx.proposal.findFirst({
         where: {
           id: proposalId,
@@ -682,6 +723,8 @@ export class CustomerPortalService {
       }
 
       const now = new Date();
+      if (nextStatus === ProposalStatus.WON)
+        await assertProposalConference(tx, proposal.id, scope.userId, 'accept');
       const updated = await tx.proposal.update({
         where: { id: proposal.id, status: ProposalStatus.CLIENT_REVIEW },
         data: {

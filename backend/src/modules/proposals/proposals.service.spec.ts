@@ -19,6 +19,23 @@ import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { FileStorageService } from '../file-storage/file-storage.service';
 import { ProposalsService } from './proposals.service';
 
+// Business-rule scenarios explicitly designate the administrator assigning another seller.
+const responsibleTeam = {
+  commercialManagement: {
+    generators: { responsible: true, team: true },
+    partsServices: { responsible: true, team: true },
+    contracts: { responsible: true, team: true },
+  },
+};
+function storedProposal<T extends Record<string, unknown>>(value: T) {
+  return {
+    updatedAt: new Date('2026-10-01T12:00:00Z'),
+    items: [],
+    userId: 'seller-1',
+    ...value,
+  };
+}
+
 describe('ProposalsService', () => {
   let service: ProposalsService;
   let auditLogsService: { record: jest.Mock };
@@ -29,6 +46,7 @@ describe('ProposalsService', () => {
     requestAdjustments: jest.Mock;
   };
   let db: {
+    systemAuditLog: { findMany: jest.Mock };
     proposal: {
       findMany: jest.Mock;
       findUnique: jest.Mock;
@@ -80,6 +98,7 @@ describe('ProposalsService', () => {
 
   beforeEach(async () => {
     db = {
+      systemAuditLog: { findMany: jest.fn().mockResolvedValue([]) },
       proposal: {
         findMany: jest.fn(),
         findUnique: jest.fn(),
@@ -207,23 +226,25 @@ describe('ProposalsService', () => {
       role: UserRole.SALES,
       linkedClientId: null,
     });
-    db.proposal.findUnique.mockResolvedValue({
-      id: 'proposal-00',
-      code: '20001/00',
-      baseSequence: 20001,
-      revision: 0,
-      status: ProposalStatus.DRAFT,
-      type: ProposalType.PARTS_AND_SERVICES,
-      totalValue: 1000,
-      validUntil: new Date('2026-10-01T00:00:00.000Z'),
-      clientId: 'client-1',
-      userId: 'seller-1',
-      origin: ProposalOrigin.MANITEC,
-      operationalExpensesTotal: 0,
-      allowOperationalExpenseDiscount: false,
-      items: [],
-      revisions: [],
-    });
+    db.proposal.findUnique.mockResolvedValue(
+      storedProposal({
+        id: 'proposal-00',
+        code: '20001/00',
+        baseSequence: 20001,
+        revision: 0,
+        status: ProposalStatus.DRAFT,
+        type: ProposalType.PARTS_AND_SERVICES,
+        totalValue: 1000,
+        validUntil: new Date('2026-10-01T00:00:00.000Z'),
+        clientId: 'client-1',
+        userId: 'seller-1',
+        origin: ProposalOrigin.MANITEC,
+        operationalExpensesTotal: 0,
+        allowOperationalExpenseDiscount: false,
+        items: [],
+        revisions: [],
+      }),
+    );
     db.proposal.findMany.mockResolvedValue([{ code: '20001/00' }]);
     db.proposal.create.mockResolvedValue({
       id: 'proposal-01',
@@ -279,6 +300,7 @@ describe('ProposalsService', () => {
     db.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       role: UserRole.ADMIN,
+      accessRules: responsibleTeam,
       linkedClientId: null,
     });
 
@@ -294,6 +316,7 @@ describe('ProposalsService', () => {
     db.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       role: UserRole.ADMIN,
+      accessRules: responsibleTeam,
       linkedClientId: null,
     });
     db.salesOpportunity.findUnique.mockResolvedValue(null);
@@ -317,6 +340,7 @@ describe('ProposalsService', () => {
     db.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       role: UserRole.ADMIN,
+      accessRules: responsibleTeam,
       linkedClientId: null,
     });
     db.salesOpportunity.findUnique.mockResolvedValue(null);
@@ -349,6 +373,7 @@ describe('ProposalsService', () => {
     db.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       role: UserRole.ADMIN,
+      accessRules: responsibleTeam,
       linkedClientId: null,
     });
     db.salesOpportunity.findUnique.mockResolvedValue(null);
@@ -356,7 +381,9 @@ describe('ProposalsService', () => {
     db.catalogItem.findMany.mockResolvedValue([]);
     db.proposal.findMany.mockResolvedValue([]);
     db.proposal.create.mockResolvedValue({ id: 'proposal-external' });
-    db.proposal.findUnique.mockResolvedValue({ id: 'proposal-external' });
+    db.proposal.findUnique.mockResolvedValue(
+      storedProposal({ id: 'proposal-external' }),
+    );
 
     await service.create(
       {
@@ -400,6 +427,7 @@ describe('ProposalsService', () => {
     db.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       role: UserRole.ADMIN,
+      accessRules: responsibleTeam,
       linkedClientId: null,
     });
     db.salesOpportunity.findUnique.mockResolvedValue(null);
@@ -421,7 +449,9 @@ describe('ProposalsService', () => {
     ]);
     db.proposal.findMany.mockResolvedValue([]);
     db.proposal.create.mockResolvedValue({ id: 'proposal-expenses' });
-    db.proposal.findUnique.mockResolvedValue({ id: 'proposal-expenses' });
+    db.proposal.findUnique.mockResolvedValue(
+      storedProposal({ id: 'proposal-expenses' }),
+    );
 
     await service.create(
       {
@@ -477,6 +507,7 @@ describe('ProposalsService', () => {
     db.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       role: UserRole.ADMIN,
+      accessRules: responsibleTeam,
       linkedClientId: null,
     });
     db.salesOpportunity.findUnique.mockResolvedValue(null);
@@ -525,20 +556,23 @@ describe('ProposalsService', () => {
     db.user.findUnique.mockResolvedValue({
       id: 'seller-1',
       role: UserRole.SALES,
+      accessRules: { commercial: { generators: true } },
       linkedClientId: null,
     });
-    db.proposal.findUnique.mockResolvedValue({
-      id: 'proposal-1',
-      code: 'PROP-0001',
-      clientId: 'client-1',
-      paymentTerm: null,
-      salesOpportunityId: null,
-      status: ProposalStatus.DRAFT,
-      type: ProposalType.GENERATOR_SALE,
-      origin: ProposalOrigin.MANITEC,
-      totalValue: 90000,
-      requestedDiscountPercent: null,
-    });
+    db.proposal.findUnique.mockResolvedValue(
+      storedProposal({
+        id: 'proposal-1',
+        code: 'PROP-0001',
+        clientId: 'client-1',
+        paymentTerm: null,
+        salesOpportunityId: null,
+        status: ProposalStatus.DRAFT,
+        type: ProposalType.GENERATOR_SALE,
+        origin: ProposalOrigin.MANITEC,
+        totalValue: 90000,
+        requestedDiscountPercent: null,
+      }),
+    );
     db.proposal.update.mockResolvedValue({
       id: 'proposal-1',
       status: ProposalStatus.BOARD_REVIEW,
@@ -560,26 +594,29 @@ describe('ProposalsService', () => {
     db.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       role: UserRole.ADMIN,
+      accessRules: responsibleTeam,
       linkedClientId: null,
     });
-    db.proposal.findUnique.mockResolvedValue({
-      id: 'proposal-1',
-      code: 'PROP-0001',
-      clientId: 'client-1',
-      userId: 'seller-1',
-      type: ProposalType.GENERATOR_SALE,
-      status: ProposalStatus.WON,
-      postSaleGenerator: null,
-      commercialGenerator: {
-        manufacturer: 'Generac',
-        model: 'G0071720',
-        standbyPowerKw: 10,
-        availableVoltages: ['220 V'],
-        powerFactor: 0.8,
-        frequencyHz: 60,
-        fuelType: 'NATURAL_GAS',
-      },
-    });
+    db.proposal.findUnique.mockResolvedValue(
+      storedProposal({
+        id: 'proposal-1',
+        code: 'PROP-0001',
+        clientId: 'client-1',
+        userId: 'seller-1',
+        type: ProposalType.GENERATOR_SALE,
+        status: ProposalStatus.WON,
+        postSaleGenerator: null,
+        commercialGenerator: {
+          manufacturer: 'Generac',
+          model: 'G0071720',
+          standbyPowerKw: 10,
+          availableVoltages: ['220 V'],
+          powerFactor: 0.8,
+          frequencyHz: 60,
+          fuelType: 'NATURAL_GAS',
+        },
+      }),
+    );
     db.generator.create.mockResolvedValue({
       id: 'installed-1',
       name: 'Gerador cliente 01',
@@ -613,6 +650,7 @@ describe('ProposalsService', () => {
     db.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       role: UserRole.ADMIN,
+      accessRules: responsibleTeam,
       linkedClientId: null,
     });
     db.salesOpportunity.findUnique.mockResolvedValue(null);
@@ -638,7 +676,7 @@ describe('ProposalsService', () => {
         'admin-1',
       ),
     ).rejects.toThrow(
-      'Vendedor da proposta deve ser um usuario comercial ativo.',
+      'O responsável pela proposta deve ser um usuário comercial ou gestor ativo.',
     );
 
     expect(db.proposal.create).not.toHaveBeenCalled();
@@ -648,6 +686,7 @@ describe('ProposalsService', () => {
     db.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       role: UserRole.ADMIN,
+      accessRules: responsibleTeam,
       linkedClientId: null,
     });
     db.salesOpportunity.findUnique.mockResolvedValue(null);
@@ -677,6 +716,7 @@ describe('ProposalsService', () => {
     db.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       role: UserRole.ADMIN,
+      accessRules: responsibleTeam,
       linkedClientId: null,
     });
     db.salesOpportunity.findUnique.mockResolvedValue(null);
@@ -707,6 +747,7 @@ describe('ProposalsService', () => {
     db.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       role: UserRole.ADMIN,
+      accessRules: responsibleTeam,
       linkedClientId: null,
     });
     db.salesOpportunity.findUnique.mockResolvedValue(null);
@@ -824,6 +865,7 @@ describe('ProposalsService', () => {
     db.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       role: UserRole.ADMIN,
+      accessRules: responsibleTeam,
       linkedClientId: null,
     });
     db.salesOpportunity.findUnique.mockResolvedValue(null);
@@ -838,7 +880,9 @@ describe('ProposalsService', () => {
     ]);
     db.proposal.findMany.mockResolvedValue([]);
     db.proposal.create.mockResolvedValue({ id: 'proposal-1' });
-    db.proposal.findUnique.mockResolvedValue({ id: 'proposal-1' });
+    db.proposal.findUnique.mockResolvedValue(
+      storedProposal({ id: 'proposal-1' }),
+    );
 
     await service.create(
       {
@@ -885,6 +929,7 @@ describe('ProposalsService', () => {
     db.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       role: UserRole.ADMIN,
+      accessRules: responsibleTeam,
       linkedClientId: null,
     });
     db.salesOpportunity.findUnique.mockResolvedValue(null);
@@ -899,7 +944,9 @@ describe('ProposalsService', () => {
     ]);
     db.proposal.findMany.mockResolvedValue([]);
     db.proposal.create.mockResolvedValue({ id: 'proposal-1' });
-    db.proposal.findUnique.mockResolvedValue({ id: 'proposal-1' });
+    db.proposal.findUnique.mockResolvedValue(
+      storedProposal({ id: 'proposal-1' }),
+    );
 
     await service.create(
       {
@@ -941,6 +988,7 @@ describe('ProposalsService', () => {
     db.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       role: UserRole.ADMIN,
+      accessRules: responsibleTeam,
       linkedClientId: null,
     });
     db.salesOpportunity.findUnique.mockResolvedValue(null);
@@ -955,33 +1003,34 @@ describe('ProposalsService', () => {
     ]);
     db.proposal.findMany.mockResolvedValue([]);
     db.proposal.create.mockResolvedValue({ id: 'proposal-1' });
-    db.proposal.findUnique.mockResolvedValue({ id: 'proposal-1' });
+    db.proposal.findUnique.mockResolvedValue(
+      storedProposal({ id: 'proposal-1' }),
+    );
+    const paymentProfile = {
+      id: 'payment-1',
+      name: 'PIX servicos',
+      purpose: ProposalPaymentPurpose.SERVICES,
+      method: ProposalPaymentMethod.PIX,
+      beneficiary: 'Manitec',
+      beneficiaryDocument: '12.345.678/0001-90',
+      issuerCompanyId: 'issuer-1',
+      issuerCompany: {
+        companyName: 'Manitec',
+        cnpj: '12345678000190',
+      },
+      bankName: 'Banco cadastrado',
+      agency: '0001',
+      accountNumber: '100-1',
+      pixKey: 'financeiro@manitec.com.br',
+      pixCopyPaste: '00020101021226840014BR.GOV.BCB.PIX',
+      boletoInstructions: null,
+    };
     db.proposalPaymentProfile.findMany.mockImplementation(
       ({ select }: { select?: { purpose?: boolean } }) =>
         Promise.resolve(
           select
             ? [{ purpose: ProposalPaymentPurpose.SERVICES }]
-            : [
-                {
-                  id: 'payment-1',
-                  name: 'PIX servicos',
-                  purpose: ProposalPaymentPurpose.SERVICES,
-                  method: ProposalPaymentMethod.PIX,
-                  beneficiary: 'Manitec',
-                  beneficiaryDocument: '12.345.678/0001-90',
-                  issuerCompanyId: 'issuer-1',
-                  issuerCompany: {
-                    companyName: 'Manitec',
-                    cnpj: '12345678000190',
-                  },
-                  bankName: null,
-                  agency: null,
-                  accountNumber: null,
-                  pixKey: 'financeiro@manitec.com.br',
-                  pixCopyPaste: '00020101021226840014BR.GOV.BCB.PIX',
-                  boletoInstructions: null,
-                },
-              ],
+            : [paymentProfile],
         ),
     );
     const input = {
@@ -1029,6 +1078,75 @@ describe('ProposalsService', () => {
     expect(
       db.proposal.create.mock.calls[0][0].data.paymentDetails,
     ).not.toContain('conta arbitraria');
+
+    const originalSnapshot = JSON.stringify(
+      db.proposal.create.mock.calls[0][0].data.paymentSelections,
+    );
+    Object.assign(paymentProfile, {
+      bankName: 'Banco atualizado no Studio',
+      agency: '0099',
+      accountNumber: '200-2',
+      pixKey: 'nova-chave@example.test',
+      pixCopyPaste: '',
+    });
+    await service.create(
+      { ...input, servicesPaymentProfileId: 'payment-1' },
+      'admin-1',
+    );
+    expect(db.proposal.create.mock.calls[1][0].data.paymentSelections).toEqual([
+      expect.objectContaining({
+        id: 'payment-1',
+        bankName: 'Banco atualizado no Studio',
+        agency: '0099',
+        accountNumber: '200-2',
+        pixKey: 'nova-chave@example.test',
+        qrCodeDataUrl: null,
+      }),
+    ]);
+    expect(db.proposal.create.mock.calls[1][0].data.paymentDetails).toContain(
+      'Conta: 200-2',
+    );
+    expect(
+      db.proposal.create.mock.calls[1][0].data.paymentDetails,
+    ).not.toContain('Conta: 100-1');
+
+    Object.assign(paymentProfile, {
+      id: 'payment-2',
+      issuerCompanyId: 'issuer-2',
+      issuerCompany: { companyName: 'Outro emitente', cnpj: '11222333000181' },
+      beneficiary: 'Outro emitente',
+      beneficiaryDocument: '11.222.333/0001-81',
+      bankName: 'Banco da outra conta',
+      agency: '0010',
+      accountNumber: '300-3',
+      pixKey: '11222333000181',
+    });
+    await service.create(
+      { ...input, servicesPaymentProfileId: 'payment-2' },
+      'admin-1',
+    );
+    expect(db.proposalPaymentProfile.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: { id: { in: ['payment-2'] }, isActive: true },
+      }),
+    );
+    expect(db.proposal.create.mock.calls[2][0].data.paymentSelections).toEqual([
+      expect.objectContaining({
+        id: 'payment-2',
+        issuerCompanyId: 'issuer-2',
+        issuerCompanyName: 'Outro emitente',
+        beneficiary: 'Outro emitente',
+        beneficiaryDocument: '11.222.333/0001-81',
+        bankName: 'Banco da outra conta',
+        accountNumber: '300-3',
+        pixKey: '11222333000181',
+      }),
+    ]);
+    expect(
+      JSON.stringify(
+        db.proposal.create.mock.calls[0][0].data.paymentSelections,
+      ),
+    ).toBe(originalSnapshot);
   });
 
   it('imports a long TXT scope without changing its line breaks', async () => {
@@ -1051,6 +1169,7 @@ describe('ProposalsService', () => {
     db.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       role: UserRole.ADMIN,
+      accessRules: responsibleTeam,
       linkedClientId: null,
     });
     db.salesOpportunity.findUnique.mockResolvedValue(null);
@@ -1060,7 +1179,9 @@ describe('ProposalsService', () => {
     ]);
     db.proposal.findMany.mockResolvedValue([]);
     db.proposal.create.mockResolvedValue({ id: 'proposal-1' });
-    db.proposal.findUnique.mockResolvedValue({ id: 'proposal-1' });
+    db.proposal.findUnique.mockResolvedValue(
+      storedProposal({ id: 'proposal-1' }),
+    );
 
     await service.create(
       {
@@ -1113,6 +1234,7 @@ describe('ProposalsService', () => {
     db.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       role: UserRole.ADMIN,
+      accessRules: responsibleTeam,
       linkedClientId: null,
     });
     db.client.findUnique.mockResolvedValue({ id: 'client-1' });
@@ -1145,10 +1267,12 @@ describe('ProposalsService', () => {
   });
 
   it('blocks invalid status transition for common user', async () => {
-    db.proposal.findUnique.mockResolvedValue({
-      id: 'p1',
-      status: ProposalStatus.DRAFT,
-    });
+    db.proposal.findUnique.mockResolvedValue(
+      storedProposal({
+        id: 'p1',
+        status: ProposalStatus.DRAFT,
+      }),
+    );
     db.user.findUnique.mockResolvedValue({ role: UserRole.NORMAL });
 
     await expect(
@@ -1157,10 +1281,12 @@ describe('ProposalsService', () => {
   });
 
   it('allows free status transition for admin user', async () => {
-    db.proposal.findUnique.mockResolvedValue({
-      id: 'p1',
-      status: ProposalStatus.DRAFT,
-    });
+    db.proposal.findUnique.mockResolvedValue(
+      storedProposal({
+        id: 'p1',
+        status: ProposalStatus.DRAFT,
+      }),
+    );
     db.user.findUnique.mockResolvedValue({ role: UserRole.ADMIN });
     db.proposal.update.mockResolvedValue({
       id: 'p1',
@@ -1178,11 +1304,17 @@ describe('ProposalsService', () => {
   });
 
   it('records manual status movement when status changes', async () => {
-    db.proposal.findUnique.mockResolvedValue({
-      id: 'p1',
-      status: ProposalStatus.DRAFT,
+    db.proposal.findUnique.mockResolvedValue(
+      storedProposal({
+        id: 'p1',
+        status: ProposalStatus.DRAFT,
+      }),
+    );
+    db.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      role: UserRole.NORMAL,
+      accessRules: { commercial: { partsServices: true } },
     });
-    db.user.findUnique.mockResolvedValue({ role: UserRole.NORMAL });
     db.proposal.update.mockResolvedValue({
       id: 'p1',
       status: ProposalStatus.BOARD_REVIEW,
@@ -1210,19 +1342,22 @@ describe('ProposalsService', () => {
     db.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       role: UserRole.ADMIN,
+      accessRules: responsibleTeam,
       linkedClientId: null,
     });
-    db.proposal.findUnique.mockResolvedValue({
-      id: 'proposal-1',
-      code: 'PROP-00001',
-      status: ProposalStatus.WON,
-      type: ProposalType.CONTRACT,
-      clientId: 'client-1',
-      userId: 'seller-1',
-      generatorId: 'generator-1',
-      totalValue: 1200,
-      generatedContract: null,
-    });
+    db.proposal.findUnique.mockResolvedValue(
+      storedProposal({
+        id: 'proposal-1',
+        code: 'PROP-00001',
+        status: ProposalStatus.WON,
+        type: ProposalType.CONTRACT,
+        clientId: 'client-1',
+        userId: 'seller-1',
+        generatorId: 'generator-1',
+        totalValue: 1200,
+        generatedContract: null,
+      }),
+    );
     db.serviceContract.findMany.mockResolvedValue([]);
     db.serviceContract.create.mockResolvedValue({
       id: 'contract-1',
@@ -1304,18 +1439,21 @@ describe('ProposalsService', () => {
     db.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       role: UserRole.ADMIN,
+      accessRules: responsibleTeam,
       linkedClientId: null,
     });
-    db.proposal.findUnique.mockResolvedValue({
-      id: 'proposal-1',
-      code: 'PROP-00001',
-      status: ProposalStatus.CLIENT_REVIEW,
-      type: ProposalType.CONTRACT,
-      clientId: 'client-1',
-      generatorId: 'generator-1',
-      salesOpportunityId: 'opportunity-1',
-      totalValue: 1200,
-    });
+    db.proposal.findUnique.mockResolvedValue(
+      storedProposal({
+        id: 'proposal-1',
+        code: 'PROP-00001',
+        status: ProposalStatus.CLIENT_REVIEW,
+        type: ProposalType.CONTRACT,
+        clientId: 'client-1',
+        generatorId: 'generator-1',
+        salesOpportunityId: 'opportunity-1',
+        totalValue: 1200,
+      }),
+    );
     db.proposal.update.mockResolvedValue({
       id: 'proposal-1',
       status: ProposalStatus.WON,
@@ -1340,16 +1478,19 @@ describe('ProposalsService', () => {
     db.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       role: UserRole.ADMIN,
+      accessRules: responsibleTeam,
       linkedClientId: null,
     });
-    db.proposal.findUnique.mockResolvedValue({
-      id: 'proposal-1',
-      status: ProposalStatus.BOARD_REVIEW,
-      type: ProposalType.CONTRACT,
-      clientId: 'client-1',
-      salesOpportunityId: 'opportunity-1',
-      paymentTerm: null,
-    });
+    db.proposal.findUnique.mockResolvedValue(
+      storedProposal({
+        id: 'proposal-1',
+        status: ProposalStatus.BOARD_REVIEW,
+        type: ProposalType.CONTRACT,
+        clientId: 'client-1',
+        salesOpportunityId: 'opportunity-1',
+        paymentTerm: null,
+      }),
+    );
     db.proposal.update.mockResolvedValue({
       id: 'proposal-1',
       status: ProposalStatus.CLIENT_REVIEW,
@@ -1367,14 +1508,17 @@ describe('ProposalsService', () => {
     db.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       role: UserRole.ADMIN,
+      accessRules: responsibleTeam,
       linkedClientId: null,
     });
-    db.proposal.findUnique.mockResolvedValue({
-      id: 'proposal-1',
-      status: ProposalStatus.WON,
-      type: ProposalType.SERVICES,
-      generatorId: 'generator-1',
-    });
+    db.proposal.findUnique.mockResolvedValue(
+      storedProposal({
+        id: 'proposal-1',
+        status: ProposalStatus.WON,
+        type: ProposalType.SERVICES,
+        generatorId: 'generator-1',
+      }),
+    );
 
     await expect(
       service.convertWonProposalToContract('proposal-1', 'admin-1'),
@@ -1389,19 +1533,22 @@ describe('ProposalsService', () => {
     db.user.findUnique.mockResolvedValue({
       id: 'admin-1',
       role: UserRole.ADMIN,
+      accessRules: responsibleTeam,
       linkedClientId: null,
     });
-    db.proposal.findUnique.mockResolvedValue({
-      id: 'proposal-1',
-      code: 'PROP-00001',
-      status: ProposalStatus.WON,
-      type: ProposalType.CONTRACT,
-      clientId: 'client-1',
-      userId: 'seller-1',
-      generatorId: 'generator-1',
-      totalValue: 1200,
-      generatedContract: null,
-    });
+    db.proposal.findUnique.mockResolvedValue(
+      storedProposal({
+        id: 'proposal-1',
+        code: 'PROP-00001',
+        status: ProposalStatus.WON,
+        type: ProposalType.CONTRACT,
+        clientId: 'client-1',
+        userId: 'seller-1',
+        generatorId: 'generator-1',
+        totalValue: 1200,
+        generatedContract: null,
+      }),
+    );
     db.serviceContract.findMany.mockResolvedValue([]);
     db.serviceContract.create.mockResolvedValue({
       id: 'contract-1',

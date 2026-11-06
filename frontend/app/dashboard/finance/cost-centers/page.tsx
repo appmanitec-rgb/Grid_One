@@ -107,10 +107,8 @@ type EntryDraft = {
   notes: string;
 };
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 
 const TYPE_LABELS: Record<CostCenterType, string> = {
   CLIENT: "Cliente",
@@ -472,7 +470,7 @@ export default function CostCentersPage() {
     event.preventDefault();
 
     if (!centerDraft.code.trim() || !centerDraft.name.trim()) {
-      setError("Informe codigo e nome do centro de custo.");
+      setError("Informe código e nome do centro de custo.");
       return;
     }
 
@@ -558,7 +556,7 @@ export default function CostCentersPage() {
       return;
     }
     if (!selectedCenter.isActive) {
-      setError("Centro inativo nao pode receber novos lancamentos.");
+      setError("Centro inativo não pode receber novos lancamentos.");
       return;
     }
 
@@ -627,7 +625,7 @@ export default function CostCentersPage() {
             tone: "blue",
           },
           {
-            label: "Receita do periodo",
+            label: "Receita do período",
             value: dre ? formatCurrency(dre.totals.revenue) : "-",
             helper: "Centro selecionado na janela filtrada.",
             tone: "emerald",
@@ -657,7 +655,7 @@ export default function CostCentersPage() {
           <div className="space-y-3">
             <FieldBox>
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                Radar do modulo
+                Radar do módulo
               </p>
               <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
                 <div>
@@ -697,7 +695,7 @@ export default function CostCentersPage() {
           <SectionCard
             eyebrow="Carteira de centros"
             title="Selecionar centro e ler o DRE"
-            description="Escolha o centro correto e acompanhe o resultado com filtro de periodo e historico de lancamentos."
+            description="Escolha o centro correto e acompanhe o resultado com filtro de período e histórico de lancamentos."
           >
             <div className="workspace-filter-grid grid gap-3 items-end">
               <FormField label="Centro selecionado">
@@ -722,7 +720,7 @@ export default function CostCentersPage() {
                 />
               </FormField>
 
-              <FormField label="Ate">
+              <FormField label="Até">
                 <TextInput
                   type="date"
                   value={toDate}
@@ -808,7 +806,7 @@ export default function CostCentersPage() {
                 <div className="md:col-span-3 xl:col-span-6">
                   <EmptyState
                     title="Nenhum centro selecionado"
-                    description="Escolha um centro para ler o DRE do periodo."
+                    description="Escolha um centro para ler o DRE do período."
                   />
                 </div>
               )}
@@ -816,7 +814,7 @@ export default function CostCentersPage() {
 
             {dre ? (
               <StatusBanner tone="blue">
-                Realizado por baixas no periodo: receitas{" "}
+                Realizado por baixas no período: receitas{" "}
                 {formatCurrency(Number(dre.totals.realizedRevenue || 0))},
                 despesas{" "}
                 {formatCurrency(Number(dre.totals.realizedExpenses || 0))} e
@@ -837,7 +835,7 @@ export default function CostCentersPage() {
               ) : centers.length === 0 ? (
                 <EmptyState
                   title="Nenhum centro de custo cadastrado"
-                  description="Crie o primeiro centro para começar a usar o DRE operacional."
+                  description="Cadastre um centro de custo para acompanhar receitas, despesas e resultado."
                 />
               ) : (
                 centers.map((center) => (
@@ -909,8 +907,8 @@ export default function CostCentersPage() {
           </SectionCard>
 
           <SectionCard
-            eyebrow="Historico contabil"
-            title="Lancamentos do periodo selecionado"
+            eyebrow="Histórico contabil"
+            title="Lancamentos do período selecionado"
             description="Toda entrada registrada aqui alimenta o DRE do centro escolhido e deixa claro se a origem foi manual, reclassificacao ou fechamento."
           >
             {!selectedCenter ? (
@@ -976,8 +974,8 @@ export default function CostCentersPage() {
               </div>
             ) : (
               <EmptyState
-                title="Sem lancamentos no periodo"
-                description="Registre receitas, custos e despesas para transformar o DRE em leitura operacional de margem."
+                title="Sem lancamentos no período"
+                description="Registre receitas, custos e despesas para acompanhar o resultado por centro de custo."
               />
             )}
           </SectionCard>
@@ -986,13 +984,13 @@ export default function CostCentersPage() {
         <div className="space-y-6">
           <EditOverlay open={Boolean(editingId)} title={centerDraft.name || "Centro de custo"} busy={savingCenter} onClose={closeCenterEditor}>
           <SectionCard
-            eyebrow="Cadastro e governanca"
+            eyebrow="Cadastro"
             title={
               editingId
                 ? "Editar centro de custo"
                 : "Criar novo centro de custo"
             }
-            description="O tipo do centro define a ancora do DRE. Contrato e gerador herdam o cliente automaticamente para evitar vinculos quebrados."
+            description="O tipo do centro define a ancora do DRE. Contrato e gerador herdam o cliente automaticamente para evitar vínculos quebrados."
             actions={
               editingId ? (
                 <button
@@ -1008,7 +1006,7 @@ export default function CostCentersPage() {
             {editingId && error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
             <form className="space-y-4" onSubmit={handleCenterSubmit}>
               <div className="grid gap-3 md:grid-cols-2">
-                <FormField label="Codigo">
+                <FormField label="Código">
                   <TextInput
                     value={centerDraft.code}
                     onChange={(event) =>
@@ -1124,7 +1122,7 @@ export default function CostCentersPage() {
                   >
                     <option value="active">Ativo para novos lancamentos</option>
                     <option value="inactive">
-                      Inativo somente para historico
+                      Inativo somente para histórico
                     </option>
                   </SelectInput>
                 </FormField>
@@ -1171,7 +1169,7 @@ export default function CostCentersPage() {
           <SectionCard
             eyebrow="Lancar no DRE"
             title="Entrada manual no centro selecionado"
-            description="Receitas, custos e despesas entram no DRE do centro ativo e respeitam o periodo filtrado para leitura da margem."
+            description="Receitas, custos e despesas entram no DRE do centro ativo e respeitam o período filtrado para leitura da margem."
           >
             {selectedCenter ? (
               <div className="space-y-4">
@@ -1278,7 +1276,7 @@ export default function CostCentersPage() {
                   </div>
 
                   <FormField
-                    label="Observacoes"
+                    label="Observações"
                     hint="Opcional, mas ajuda na leitura futura"
                   >
                     <TextAreaInput
@@ -1317,14 +1315,14 @@ export default function CostCentersPage() {
             ) : (
               <EmptyState
                 title="Selecione um centro primeiro"
-                description="O modulo precisa saber qual ancora do negocio recebera a receita, o custo ou a despesa."
+                description="O módulo precisa saber qual ancora do negocio recebera a receita, o custo ou a despesa."
               />
             )}
           </SectionCard>
 
           <SectionCard
             eyebrow="Fluxo validado"
-            title="O que esta protegido neste modulo"
+            title="O que esta protegido neste módulo"
             description="Confira as origens e os vínculos dos lançamentos deste centro de custo."
           >
             <div className="space-y-3">
@@ -1333,12 +1331,12 @@ export default function CostCentersPage() {
                 cada ancora aceita apenas um centro de custo vinculado.
               </FieldBox>
               <FieldBox>
-                Centros inativos continuam disponiveis para leitura historica,
+                Centros inativos continuam disponíveis para leitura historica,
                 mas ficam bloqueados para novos lancamentos.
               </FieldBox>
               <FieldBox>
                 Lancamentos manuais entram no DRE do centro selecionado e
-                reaparecem no historico com data de competencia, tipo e origem
+                reaparecem no histórico com data de competencia, tipo e origem
                 contabil.
               </FieldBox>
             </div>

@@ -12,6 +12,7 @@ import {
   TicketStatus,
 } from '@prisma/client';
 import { DatabaseService } from 'src/database/database.service';
+import { proposalScope } from '../auth/rules/commercial-access';
 import { CreateGeneratorDto } from './dto/create-generator.dto';
 import { UpdateGeneratorDto } from './dto/update-generator.dto';
 import {
@@ -326,7 +327,7 @@ export class GeneratorsService {
     };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, actorUserId?: string) {
     const gen = await this.database.generator.findUnique({
       where: { id },
       include: {
@@ -344,6 +345,7 @@ export class GeneratorsService {
           orderBy: { createdAt: 'asc' },
         },
         proposals: {
+          where: await proposalScope(this.database, actorUserId),
           include: { client: true },
           orderBy: { createdAt: 'desc' },
           take: 5,

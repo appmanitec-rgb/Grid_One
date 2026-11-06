@@ -145,9 +145,7 @@ export function NavigationIcon({
           stroke="currentColor"
           strokeWidth="1.7"
         >
-          <path d="M14.7 6.3a1 1 0 0 0-1.4-1.4l-8 8a1 1 0 0 0 1.4 1.4z" />
-          <path d="M18.4 2.6a3 3 0 1 1 3 3L14 13l-3-3z" />
-          <path d="M8 14l3 3-2 5-3-3z" />
+          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94z" />
         </svg>
       );
     case "assets":
@@ -161,8 +159,8 @@ export function NavigationIcon({
           stroke="currentColor"
           strokeWidth="1.7"
         >
-          <rect x="3" y="6" width="18" height="12" rx="2" />
-          <path d="M7 6V4h10v2M7 18v2h10v-2" />
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="M6 19v2m12-2v2M6 8h4v5H6zM14 9h4m-4 3h4m-4 3h4M6 16h4" />
         </svg>
       );
     case "stock":
@@ -176,8 +174,9 @@ export function NavigationIcon({
           stroke="currentColor"
           strokeWidth="1.7"
         >
-          <path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-          <path d="M3.3 7 12 12l8.7-5M12 22V12" />
+          <path d="M2 3h3l3 12h11l3-9H6M8 15l-1 3h12" />
+          <circle cx="9" cy="21" r="1" />
+          <circle cx="18" cy="21" r="1" />
         </svg>
       );
     case "finance":
@@ -221,12 +220,8 @@ export function NavigationIcon({
           stroke="currentColor"
           strokeWidth="1.7"
         >
-          <path d="M8 6h13" />
-          <path d="M8 12h13" />
-          <path d="M8 18h13" />
-          <path d="M3 6h.01" />
-          <path d="M3 12h.01" />
-          <path d="M3 18h.01" />
+          <circle cx="9" cy="7" r="3" />
+          <path d="M3 21v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6m3 11v-3a6 6 0 0 0-2-4" />
         </svg>
       );
     case "studio":

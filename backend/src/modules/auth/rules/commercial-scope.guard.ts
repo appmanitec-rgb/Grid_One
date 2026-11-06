@@ -6,11 +6,15 @@ import {
 } from '@nestjs/common';
 import { DatabaseService } from '../../../database/database.service';
 import {
+  managedActivityScope,
+  managedOpportunityScope,
+  managedProposalScope,
+} from './commercial-management';
+import {
   assertPortfolio,
   portfolioForPipeline,
   portfolioForProposal,
   RuleActor,
-  unrestricted,
 } from './access-rules';
 @Injectable()
 export class CommercialScopeGuard implements CanActivate {
@@ -32,7 +36,7 @@ export class CommercialScopeGuard implements CanActivate {
       throw new ForbiddenException(
         'A carteira interna não está disponível na central do cliente.',
       );
-    if (!actor || unrestricted(actor) || actor.role === 'CLIENT') return true;
+    if (!actor || actor.role === 'CLIENT') return true;
     const path = request.path || request.url || '';
     const id = request.params?.id;
     const body = request.body || {};
@@ -46,6 +50,16 @@ export class CommercialScopeGuard implements CanActivate {
         });
         if (proposal)
           assertPortfolio(actor, portfolioForProposal(proposal.type));
+        if (
+          proposal &&
+          !(await this.db.proposal.findFirst({
+            where: { id, AND: [managedProposalScope(actor)] },
+            select: { id: true },
+          }))
+        )
+          throw new ForbiddenException(
+            'Esta proposta está fora dos seus registros autorizados.',
+          );
       }
     }
     let opportunityId =
@@ -61,6 +75,16 @@ export class CommercialScopeGuard implements CanActivate {
         select: { opportunityId: true },
       });
       opportunityId = activity?.opportunityId || opportunityId;
+      if (
+        activity &&
+        !(await this.db.crmActivity.findFirst({
+          where: { id, AND: [managedActivityScope(actor)] },
+          select: { id: true },
+        }))
+      )
+        throw new ForbiddenException(
+          'Esta atividade pertence a outro responsável.',
+        );
     }
     if (path.includes('/crm/inspections') && id) {
       const inspection = await this.db.commercialInspection.findUnique({
@@ -76,6 +100,16 @@ export class CommercialScopeGuard implements CanActivate {
       });
       if (opportunity)
         assertPortfolio(actor, portfolioForPipeline(opportunity.pipeline));
+      if (
+        opportunity &&
+        !(await this.db.salesOpportunity.findFirst({
+          where: { id: opportunityId, AND: [managedOpportunityScope(actor)] },
+          select: { id: true },
+        }))
+      )
+        throw new ForbiddenException(
+          'Esta negociação está fora dos seus registros autorizados.',
+        );
     }
     const pipeline =
       typeof body.pipeline === 'string'

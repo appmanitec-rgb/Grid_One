@@ -9,12 +9,14 @@ import {
   Query,
   Req,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { RequireAccessPolicy } from '../auth/access-policy.decorator';
 import { AccessPolicyGuard } from '../auth/access-policy.guard';
 import { AuthGuard } from '../auth/auth.guard';
 import { CatalogActor, CatalogsService } from './catalogs.service';
+import { CommercialDataPrivacyInterceptor } from '../auth/rules/commercial-privacy.interceptor';
 import { SetPreferredOfferDto } from './dto/catalog-preferred-offer.dto';
 import { CreateCatalogDocumentDto } from './dto/create-catalog-document.dto';
 import { CreateCatalogIdentifierDto } from './dto/create-catalog-identifier.dto';
@@ -27,6 +29,7 @@ import { UpdateCatalogDto } from './dto/update-catalog.dto';
 import { CatalogListPageDto } from '../../common/list-page.dto';
 
 @Controller('catalogs')
+@UseInterceptors(CommercialDataPrivacyInterceptor)
 @UseGuards(AuthGuard, AccessPolicyGuard)
 @RequireAccessPolicy('catalog.view')
 export class CatalogsController {
@@ -58,8 +61,8 @@ export class CatalogsController {
 
   @RequireAccessPolicy('catalog.view')
   @Get('pricing-policies')
-  pricingPolicies() {
-    return this.catalogsService.pricingPolicies();
+  pricingPolicies(@Req() req: Request) {
+    return this.catalogsService.pricingPolicies(req['user'] as CatalogActor);
   }
 
   @RequireAccessPolicy('catalog.view')

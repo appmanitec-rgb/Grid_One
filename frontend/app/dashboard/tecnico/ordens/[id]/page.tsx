@@ -16,12 +16,9 @@ import {
 import { PageHeader, StatusBanner } from "../../../components/DashboardPageKit";
 import { OperationalBreadcrumb } from "../../../components/OperationalLinks";
 
-const PRIMARY_BUTTON =
-  "inline-flex min-h-12 items-center justify-center rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "inline-flex min-h-12 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
-const DANGER_BUTTON =
-  "inline-flex min-h-12 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
+const DANGER_BUTTON = "app-button app-button-danger";
 
 export default function TechnicianOrderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -106,7 +103,7 @@ export default function TechnicianOrderDetailPage() {
       <OperationalBreadcrumb
         items={[
           { label: "Dashboard", href: "/dashboard" },
-          { label: "Area tecnica", href: "/dashboard/tecnico" },
+          { label: "Área técnica", href: "/dashboard/tecnico" },
           { label: order.title },
         ]}
       />
@@ -134,7 +131,7 @@ export default function TechnicianOrderDetailPage() {
       <section className="grid gap-3 sm:grid-cols-2">
         <Info label="Cliente" value={order.generator?.client?.tradeName || order.generator?.client?.companyName} />
         <Info label="Equipamento" value={order.generator?.name} />
-        <Info label="Serie" value={order.generator?.serialNumber} />
+        <Info label="Série" value={order.generator?.serialNumber} />
         <Info label="Agendada" value={formatFieldDate(order.scheduledTo)} />
         <Info label="Local" value={order.site?.name || order.generator?.currentSite?.name} />
         <Info

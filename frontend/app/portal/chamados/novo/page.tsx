@@ -83,7 +83,7 @@ export default function NewPortalTicketPage() {
 
   return (
     <section className="dashboard-page mx-auto max-w-4xl">
-      <PageHeader eyebrow="Atendimento" title="Novo chamado" description="Descreva a solicitação e selecione o equipamento. Nossa equipe acompanhará o atendimento." actions={<Link href="/portal/chamados" className="rounded-lg border border-slate-200 bg-white text-slate-700">Voltar para chamados</Link>} />
+      <PageHeader eyebrow="Atendimento" title="Novo chamado" description="Descreva a solicitação e selecione o equipamento. Nossa equipe acompanhará o atendimento." actions={<Link href="/portal/chamados" className="app-button app-button-secondary">Voltar para chamados</Link>} />
 
       {error ? <State text={error} tone="error" /> : null}
       {loading ? <State text="Carregando equipamentos..." /> : null}
@@ -215,7 +215,7 @@ export default function NewPortalTicketPage() {
         <button
           type="submit"
           disabled={submitting}
-          className="rounded-md bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:opacity-60"
+          className="app-button app-button-primary"
         >
           {submitting ? "Abrindo..." : "Abrir chamado"}
         </button>

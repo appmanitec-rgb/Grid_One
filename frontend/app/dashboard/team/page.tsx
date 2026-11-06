@@ -3,9 +3,19 @@
 import { SelectField } from "@/app/dashboard/components/SelectField";
 import { PageHeader } from "../components/DashboardPageKit";
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useSearchParams } from "next/navigation";
-import { TEAM_ACTIVE_CHANNEL_EVENT, refreshTeamNotifications } from "@/lib/team-notifications";
+import {
+  TEAM_ACTIVE_CHANNEL_EVENT,
+  refreshTeamNotifications,
+} from "@/lib/team-notifications";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
 import { decodeJwtPayload, getStoredAccessToken } from "@/lib/auth-session";
 
@@ -140,10 +150,8 @@ function Avatar({
   );
 }
 
-const secondaryButton =
-  "rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
-const primaryButton =
-  "rounded-xl bg-[#d42d3b] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#b92230] disabled:cursor-not-allowed disabled:opacity-50";
+const secondaryButton = "app-button app-button-secondary";
+const primaryButton = "app-button app-button-primary";
 const feeds = [
   { id: "GENERAL", label: "Geral" },
   { id: "COMMERCIAL", label: "Comercial" },
@@ -152,12 +160,24 @@ const feeds = [
 ] as const;
 
 export default function TeamPage() {
-  return <Suspense fallback={<p role="status" className="p-6 text-sm text-slate-500">Carregando equipe...</p>}><TeamWorkspace /></Suspense>;
+  return (
+    <Suspense
+      fallback={
+        <p role="status" className="p-6 text-sm text-slate-500">
+          Carregando equipe...
+        </p>
+      }
+    >
+      <TeamWorkspace />
+    </Suspense>
+  );
 }
 
 function TeamWorkspace() {
   const requestedChannelId = useSearchParams().get("channel");
-  const [tab, setTab] = useState<"feed" | "chat">(requestedChannelId ? "chat" : "feed");
+  const [tab, setTab] = useState<"feed" | "chat">(
+    requestedChannelId ? "chat" : "feed",
+  );
   const [meId, setMeId] = useState("");
   const [posts, setPosts] = useState<Post[]>([]);
   const [feedCategory, setFeedCategory] = useState<string>("GENERAL");
@@ -175,7 +195,9 @@ function TeamWorkspace() {
   const [editingMessage, setEditingMessage] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [channels, setChannels] = useState<Channel[]>([]);
-  const [activeChannelId, setActiveChannelId] = useState<string | null>(requestedChannelId);
+  const [activeChannelId, setActiveChannelId] = useState<string | null>(
+    requestedChannelId,
+  );
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageCursor, setMessageCursor] = useState<string | null>(null);
   const [chatLoading, setChatLoading] = useState(false);
@@ -194,12 +216,23 @@ function TeamWorkspace() {
   const activeChannelRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (requestedChannelId) { setTab("chat"); setActiveChannelId(requestedChannelId); }
+    if (requestedChannelId) {
+      setTab("chat");
+      setActiveChannelId(requestedChannelId);
+    }
   }, [requestedChannelId]);
 
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent(TEAM_ACTIVE_CHANNEL_EVENT, { detail: tab === "chat" ? activeChannelId : null }));
-    return () => { window.dispatchEvent(new CustomEvent(TEAM_ACTIVE_CHANNEL_EVENT, { detail: null })); };
+    window.dispatchEvent(
+      new CustomEvent(TEAM_ACTIVE_CHANNEL_EVENT, {
+        detail: tab === "chat" ? activeChannelId : null,
+      }),
+    );
+    return () => {
+      window.dispatchEvent(
+        new CustomEvent(TEAM_ACTIVE_CHANNEL_EVENT, { detail: null }),
+      );
+    };
   }, [tab, activeChannelId]);
 
   const activeChannel = channels.find(
@@ -210,35 +243,38 @@ function TeamWorkspace() {
     [channels],
   );
 
-  const loadFeed = useCallback(async (cursor?: string) => {
-    if (!cursor) setFeedLoading(true);
-    try {
-      const page = await request<FeedPage>(
-        `/team/feed?category=${feedCategory}&limit=15${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
-      );
-      setPosts((current) =>
-        cursor
-          ? [
-              ...current,
-              ...page.items.filter(
-                (item) => !current.some((old) => old.id === item.id),
-              ),
-            ]
-          : page.items,
-      );
-      setFeedCursor(page.nextCursor);
-      setCanModerate(page.canModerate);
-      setError("");
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Não foi possível carregar o feed.",
-      );
-    } finally {
-      setFeedLoading(false);
-    }
-  }, [feedCategory]);
+  const loadFeed = useCallback(
+    async (cursor?: string) => {
+      if (!cursor) setFeedLoading(true);
+      try {
+        const page = await request<FeedPage>(
+          `/team/feed?category=${feedCategory}&limit=15${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+        );
+        setPosts((current) =>
+          cursor
+            ? [
+                ...current,
+                ...page.items.filter(
+                  (item) => !current.some((old) => old.id === item.id),
+                ),
+              ]
+            : page.items,
+        );
+        setFeedCursor(page.nextCursor);
+        setCanModerate(page.canModerate);
+        setError("");
+      } catch (cause) {
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Não foi possível carregar o feed.",
+        );
+      } finally {
+        setFeedLoading(false);
+      }
+    },
+    [feedCategory],
+  );
 
   const loadChannels = useCallback(async () => {
     try {
@@ -328,7 +364,9 @@ function TeamWorkspace() {
     setMeId(payload?.sub || "");
     void loadFeed();
     void loadChannels();
-    void request<Author[]>("/team/people").then(setPeople).catch(() => {});
+    void request<Author[]>("/team/people")
+      .then(setPeople)
+      .catch(() => {});
   }, [loadFeed, loadChannels]);
 
   useEffect(() => {
@@ -375,7 +413,10 @@ function TeamWorkspace() {
   async function submitPost() {
     if (!postDraft.trim()) return;
     await perform(async () => {
-      await request("/team/feed", "POST", { body: postDraft.trim(), category: feedCategory });
+      await request("/team/feed", "POST", {
+        body: postDraft.trim(),
+        category: feedCategory,
+      });
       setPostDraft("");
       await loadFeed();
     });
@@ -451,7 +492,9 @@ function TeamWorkspace() {
   async function startDirect() {
     if (!directPersonId) return;
     await perform(async () => {
-      const channel = await request<Channel>("/team/direct", "POST", { userId: directPersonId });
+      const channel = await request<Channel>("/team/direct", "POST", {
+        userId: directPersonId,
+      });
       await loadChannels();
       setActiveChannelId(channel.id);
       setTab("chat");
@@ -501,49 +544,58 @@ function TeamWorkspace() {
 
   return (
     <main className="dashboard-page team-page pb-10 space-y-5">
-      <PageHeader eyebrow="Comunicação interna" title="Equipe Manitec" description="Avisos, atualizações e conversas com a equipe." actions={<>
-<button
+      <PageHeader
+        eyebrow="Comunicação interna"
+        title="Equipe Manitec"
+        description="Avisos, atualizações e conversas com a equipe."
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                void loadFeed();
+                void loadChannels();
+                if (activeChannelId && tab === "chat")
+                  void loadMessages(activeChannelId);
+              }}
+              className={secondaryButton}
+            >
+              Atualizar
+            </button>
+          </>
+        }
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <div
+          role="tablist"
+          aria-label="Áreas da equipe"
+          className="inline-flex rounded-xl bg-slate-100 p-1"
+        >
+          <button
+            role="tab"
+            aria-selected={tab === "feed"}
             type="button"
-            onClick={() => {
-              void loadFeed();
-              void loadChannels();
-              if (activeChannelId && tab === "chat")
-                void loadMessages(activeChannelId);
-            }}
-            className={secondaryButton}
+            onClick={() => setTab("feed")}
+            className={`rounded-lg px-4 py-2 text-sm font-bold transition ${tab === "feed" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
           >
-            Atualizar
+            Feed
           </button>
-</>} />
-<div className="flex flex-wrap items-center gap-2"><div
-            role="tablist"
-            aria-label="Áreas da equipe"
-            className="inline-flex rounded-xl bg-slate-100 p-1"
+          <button
+            role="tab"
+            aria-selected={tab === "chat"}
+            type="button"
+            onClick={() => setTab("chat")}
+            className={`rounded-lg px-4 py-2 text-sm font-bold transition ${tab === "chat" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
           >
-            <button
-              role="tab"
-              aria-selected={tab === "feed"}
-              type="button"
-              onClick={() => setTab("feed")}
-              className={`rounded-lg px-4 py-2 text-sm font-bold transition ${tab === "feed" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
-            >
-              Feed
-            </button>
-            <button
-              role="tab"
-              aria-selected={tab === "chat"}
-              type="button"
-              onClick={() => setTab("chat")}
-              className={`rounded-lg px-4 py-2 text-sm font-bold transition ${tab === "chat" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
-            >
-              Canais{" "}
-              {totalUnread > 0 ? (
-                <span className="ml-1 rounded-full bg-rose-100 px-2 py-0.5 text-xs text-rose-800">
-                  {totalUnread}
-                </span>
-              ) : null}
-            </button>
-          </div></div>
+            Canais{" "}
+            {totalUnread > 0 ? (
+              <span className="ml-1 rounded-full bg-rose-100 px-2 py-0.5 text-xs text-rose-800">
+                {totalUnread}
+              </span>
+            ) : null}
+          </button>
+        </div>
+      </div>
 
       {error ? (
         <div
@@ -570,7 +622,11 @@ function TeamWorkspace() {
                 <button
                   key={feed.id}
                   type="button"
-                  onClick={() => { setPosts([]); setFeedCursor(null); setFeedCategory(feed.id); }}
+                  onClick={() => {
+                    setPosts([]);
+                    setFeedCursor(null);
+                    setFeedCategory(feed.id);
+                  }}
                   aria-current={feedCategory === feed.id ? "page" : undefined}
                   className={`rounded-xl px-4 py-2 text-sm font-semibold ${feedCategory === feed.id ? "bg-[#17324c] text-white" : "border border-slate-200 bg-white text-slate-700"}`}
                 >
@@ -592,10 +648,14 @@ function TeamWorkspace() {
                   </p>
                 </div>
                 <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800">
-                  Feed {feeds.find((feed) => feed.id === feedCategory)?.label.toLowerCase()}
+                  Feed{" "}
+                  {feeds
+                    .find((feed) => feed.id === feedCategory)
+                    ?.label.toLowerCase()}
                 </span>
               </div>
               <textarea
+                aria-label="Atualização para a equipe"
                 value={postDraft}
                 onChange={(event) => setPostDraft(event.target.value)}
                 maxLength={5000}
@@ -652,7 +712,11 @@ function TeamWorkspace() {
                       <p className="font-bold text-slate-950">
                         {post.author.name}
                       </p>
-                      {post.automated ? <span className="text-xs text-sky-700">Aviso automático</span> : null}
+                      {post.automated ? (
+                        <span className="text-xs text-sky-700">
+                          Aviso automático
+                        </span>
+                      ) : null}
                       <p className="text-xs text-slate-600">
                         {timeLabel(post.createdAt)}
                         {post.editedAt ? " · editado" : ""}
@@ -924,17 +988,32 @@ function TeamWorkspace() {
               </button>
             </div>
             <div className="space-y-2 border-y border-slate-200 bg-white p-3">
-              <label htmlFor="direct-person" className="block text-xs font-bold text-slate-700">Conversar com uma pessoa</label>
-              <SelectField searchable
+              <label
+                htmlFor="direct-person"
+                className="block text-xs font-bold text-slate-700"
+              >
+                Conversar com uma pessoa
+              </label>
+              <SelectField
+                searchable
                 id="direct-person"
                 value={directPersonId}
                 onChange={(event) => setDirectPersonId(event.target.value)}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
               >
                 <option value="">Escolha um colaborador</option>
-                {people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
+                {people.map((person) => (
+                  <option key={person.id} value={person.id}>
+                    {person.name}
+                  </option>
+                ))}
               </SelectField>
-              <button type="button" onClick={() => void startDirect()} disabled={busy || !directPersonId} className={`${secondaryButton} w-full`}>
+              <button
+                type="button"
+                onClick={() => void startDirect()}
+                disabled={busy || !directPersonId}
+                className={`${secondaryButton} w-full`}
+              >
                 Abrir conversa
               </button>
             </div>
@@ -960,23 +1039,41 @@ function TeamWorkspace() {
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 />
                 <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2">
-                  <p className="text-xs font-semibold text-slate-700">Participantes específicos (opcional)</p>
+                  <p className="text-xs font-semibold text-slate-700">
+                    Participantes específicos (opcional)
+                  </p>
                   {people.map((person) => (
-                    <label key={person.id} className="flex items-center gap-2 text-xs text-slate-700">
+                    <label
+                      key={person.id}
+                      className="flex items-center gap-2 text-xs text-slate-700"
+                    >
                       <input
                         type="checkbox"
                         checked={memberIds.includes(person.id)}
-                        onChange={(event) => setMemberIds((current) => event.target.checked ? [...current, person.id] : current.filter((id) => id !== person.id))}
+                        onChange={(event) =>
+                          setMemberIds((current) =>
+                            event.target.checked
+                              ? [...current, person.id]
+                              : current.filter((id) => id !== person.id),
+                          )
+                        }
                       />
                       {person.name}
                     </label>
                   ))}
                 </div>
-                <p className="text-xs text-slate-500">Ao selecionar participantes, somente eles e você terão acesso. {canModerate ? "" : "Escolha ao menos uma pessoa."}</p>
+                <p className="text-xs text-slate-500">
+                  Ao selecionar participantes, somente eles e você terão acesso.{" "}
+                  {canModerate ? "" : "Escolha ao menos uma pessoa."}
+                </p>
                 <button
                   type="button"
                   onClick={() => void createChannel()}
-                  disabled={busy || !channelName.trim() || (!canModerate && memberIds.length === 0)}
+                  disabled={
+                    busy ||
+                    !channelName.trim() ||
+                    (!canModerate && memberIds.length === 0)
+                  }
                   className={`${primaryButton} w-full`}
                 >
                   Criar canal
@@ -993,7 +1090,11 @@ function TeamWorkspace() {
                 >
                   <span className="flex items-center justify-between gap-2">
                     <strong className="truncate text-sm">
-                      {channel.directKey ? "@" : "#"} {channel.directKey ? channel.members?.find((member) => member.id !== meId)?.name || channel.name : channel.name}
+                      {channel.directKey ? "@" : "#"}{" "}
+                      {channel.directKey
+                        ? channel.members?.find((member) => member.id !== meId)
+                            ?.name || channel.name
+                        : channel.name}
                     </strong>
                     {channel.unreadCount > 0 ? (
                       <span
@@ -1028,7 +1129,10 @@ function TeamWorkspace() {
                     : "Selecione um canal"}
                 </h2>
                 <p className="truncate text-xs text-slate-600">
-                  {activeChannel?.isPrivate ? `Conversa privada · ${activeChannel.members?.map((member) => member.name).join(", ") || "participantes"}` : activeChannel?.description || "Conversa interna da equipe"}
+                  {activeChannel?.isPrivate
+                    ? `Conversa privada · ${activeChannel.members?.map((member) => member.name).join(", ") || "participantes"}`
+                    : activeChannel?.description ||
+                      "Conversa interna da equipe"}
                 </p>
               </div>
               <span className="hidden rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 sm:inline-flex">

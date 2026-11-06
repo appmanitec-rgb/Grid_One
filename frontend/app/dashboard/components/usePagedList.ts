@@ -22,20 +22,28 @@ export function usePagedList<T, S = undefined>({
   filters = {},
   search,
   initialSummary,
+  initialPage = 1,
+  initialPageSize = 20,
+  initialSort = "name",
+  initialDirection = "asc",
 }: {
   endpoint: string;
   filters?: Record<string, string>;
   search: string;
   initialSummary?: S;
+  initialPage?: number;
+  initialPageSize?: number;
+  initialSort?: string;
+  initialDirection?: "asc" | "desc";
 }) {
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [pagination, setPagination] = useState({
-    scope: "",
-    page: 1,
-    pageSize: 20,
+    scope: new URLSearchParams(filters).toString() + "|" + search.trim(),
+    page: initialPage,
+    pageSize: initialPageSize,
   });
-  const [sort, setSort] = useState("name");
-  const [direction, setDirection] = useState<"asc" | "desc">("asc");
+  const [sort, setSort] = useState(initialSort);
+  const [direction, setDirection] = useState<"asc" | "desc">(initialDirection);
   const [revision, setRevision] = useState(0);
   const [state, setState] = useState<QueryState<T, S>>({
     key: "",
@@ -118,6 +126,11 @@ export function usePagedList<T, S = undefined>({
     refresh: () => setRevision((current) => current + 1),
     sort,
     direction,
+    setOrder: (column: string, order: "asc" | "desc") => {
+      setSort(column);
+      setDirection(order);
+      setPagination((current) => ({ ...current, scope, page: 1 }));
+    },
     onSort: (column: string) => {
       setDirection(sort === column && direction === "asc" ? "desc" : "asc");
       setSort(column);

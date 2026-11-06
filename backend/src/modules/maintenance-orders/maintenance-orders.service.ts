@@ -32,6 +32,11 @@ import { assertProposalFinancialRelease } from '../proposals/proposal-financial-
 import { CreateMaintenanceOrderDto } from './dto/create-maintenance-order.dto';
 import { ListMaintenanceOrdersQueryDto } from './dto/list-maintenance-orders-query.dto';
 import { UpdateMaintenanceOrderDto } from './dto/update-maintenance-order.dto';
+import { TechnicalAuthorizationDto } from './dto/technical-authorization.dto';
+import {
+  preserveOrderTechnicalScope,
+  recordTechnicalScopeAuthorization,
+} from '../technical-scopes/technical-scope-execution';
 
 type AssignmentValidationResult = {
   warnings: string[];
@@ -102,7 +107,12 @@ export class MaintenanceOrdersService {
         status: dto.status ?? OrderStatus.OPEN,
         priority: dto.priority,
         customerReport: dto.customerReport,
-        checklistData: dto.checklistData as Prisma.InputJsonValue | undefined,
+        checklistData: dto.checklistData
+          ? (preserveOrderTechnicalScope(
+              undefined,
+              dto.checklistData,
+            ) as Prisma.InputJsonValue)
+          : undefined,
         customerSignatureUrl: dto.customerSignatureUrl,
         displacementStartedAt: dto.displacementStartedAt
           ? new Date(dto.displacementStartedAt)
@@ -255,6 +265,58 @@ export class MaintenanceOrdersService {
     return this.withCostVisibility(order, scope?.role);
   }
 
+  async recordTechnicalAuthorization(
+    id: string,
+    dto: TechnicalAuthorizationDto,
+    actorUserId: string,
+  ) {
+    if (!actorUserId) throw new ForbiddenException('Autenticação obrigatória.');
+    await this.assertInternalActor(actorUserId);
+    await this.findOne(id, actorUserId);
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(
+        'SELECT pg_advisory_xact_lock(hashtext($1))',
+        'technical-authorization:' + id,
+      );
+      const current = await tx.maintenanceOrder.findUnique({ where: { id } });
+      if (!current) throw new NotFoundException('OS não encontrada.');
+      if (
+        current.status === OrderStatus.CANCELED ||
+        current.status === OrderStatus.COMPLETED
+      )
+        throw new BadRequestException(
+          'Registre a autorização antes do encerramento da OS.',
+        );
+      const checklist = recordTechnicalScopeAuthorization(
+        current.checklistData,
+        {
+          ...dto,
+          recordedByUserId: actorUserId,
+          recordedAt: new Date().toISOString(),
+        },
+      );
+      await tx.maintenanceOrder.update({
+        where: { id },
+        data: { checklistData: checklist as Prisma.InputJsonValue },
+      });
+      await this.auditLogsService.record(
+        {
+          domain: AuditDomain.MAINTENANCE_ORDERS,
+          entityType: 'MAINTENANCE_ORDER_TECHNICAL_AUTHORIZATION',
+          entityId: id,
+          action: 'RECORD_AUTHORIZATION',
+          actorUserId,
+          ...(current.checklistData
+            ? { beforePayload: current.checklistData as Prisma.InputJsonValue }
+            : {}),
+          afterPayload: checklist as Prisma.InputJsonValue,
+        },
+        tx,
+      );
+      return { id, checklistData: checklist };
+    });
+  }
+
   async update(
     id: string,
     dto: UpdateMaintenanceOrderDto,
@@ -340,6 +402,10 @@ export class MaintenanceOrdersService {
         });
       }
 
+      await tx.$executeRawUnsafe(
+        'SELECT pg_advisory_xact_lock(hashtext($1))',
+        'technical-authorization:' + id,
+      );
       const before = await tx.maintenanceOrder.findUnique({
         where: { id },
         include: this.orderInclude(),
@@ -356,7 +422,13 @@ export class MaintenanceOrdersService {
           status: dto.status,
           priority: dto.priority,
           customerReport: dto.customerReport,
-          checklistData: dto.checklistData as Prisma.InputJsonValue | undefined,
+          checklistData:
+            dto.checklistData !== undefined
+              ? (preserveOrderTechnicalScope(
+                  before?.checklistData,
+                  dto.checklistData,
+                ) as Prisma.InputJsonValue)
+              : undefined,
           customerSignatureUrl: dto.customerSignatureUrl,
           displacementStartedAt: dto.displacementStartedAt
             ? new Date(dto.displacementStartedAt)

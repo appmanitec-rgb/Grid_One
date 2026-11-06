@@ -4,6 +4,8 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { apiFetch, apiUrl } from "@/lib/api";
 import { ClientAccessFrame } from "../_components/ClientAccessFrame";
+import styles from "../../login-experience.module.css";
+import { InterfaceIcon } from "../../dashboard/components/InterfaceIcon";
 
 export default function ActivateClientPage() {
   const [token, setToken] = useState("");
@@ -15,7 +17,8 @@ export default function ActivateClientPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const value = new URLSearchParams(window.location.hash.slice(1)).get("token") || "";
+    const value =
+      new URLSearchParams(window.location.hash.slice(1)).get("token") || "";
     setToken(value);
   }, []);
 
@@ -39,14 +42,22 @@ export default function ActivateClientPage() {
       });
       if (!response.ok) {
         const payload = await response.json();
-        throw new Error(typeof payload?.message === "string" ? payload.message : "O link não pôde ser utilizado.");
+        throw new Error(
+          typeof payload?.message === "string"
+            ? payload.message
+            : "O link não pôde ser utilizado.",
+        );
       }
       window.history.replaceState(null, "", window.location.pathname);
       setComplete(true);
       setPassword("");
       setConfirmPassword("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Não foi possível ativar o acesso.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Não foi possível ativar o acesso.",
+      );
     } finally {
       setLoading(false);
     }
@@ -54,18 +65,91 @@ export default function ActivateClientPage() {
 
   return (
     <ClientAccessFrame>
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Primeiro acesso</p>
-      <h2 className="login-display mt-3 text-[2rem] font-bold leading-tight tracking-[-0.04em] text-slate-950">{complete ? "Acesso pronto" : "Crie sua senha"}</h2>
-      <p className="mt-3 text-sm leading-6 text-slate-600">{complete ? "Sua conta está ativa. Agora você pode entrar no Portal do Cliente." : "Escolha uma senha pessoal para acompanhar os serviços da sua empresa com segurança."}</p>
-      {complete ? <Link href="/cliente/entrar" className="mt-8 flex h-[52px] items-center justify-center rounded-xl bg-[#1267c4] px-4 text-sm font-bold text-white hover:bg-[#0e55a6]">Entrar no meu portal</Link> : null}
-      {!complete && !token ? <p role="alert" className="mt-7 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Este link está incompleto. Peça um novo link de ativação à equipe Manitec.</p> : null}
-      {error ? <p role="alert" className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</p> : null}
+      <div className={styles.intro}>
+        <p className={styles.productLabel}>Primeiro acesso</p>
+        <h1>{complete ? "Acesso pronto" : "Crie sua senha"}</h1>
+        <p className={styles.description}>
+          {complete
+            ? "Sua conta está ativa. Agora você pode entrar no Portal do Cliente."
+            : "Escolha uma senha pessoal para acompanhar os serviços da sua empresa."}
+        </p>
+      </div>
+      {complete ? (
+        <Link href="/cliente/entrar" className={styles.primaryButton}>
+          Entrar no meu portal
+          <InterfaceIcon name="arrow-right" />
+        </Link>
+      ) : null}
+      {!complete && !token ? (
+        <div role="alert" className={styles.warning}>
+          <p className={styles.helpTitle}>Link de ativação incompleto</p>
+          <p>Peça um novo link à equipe Manitec para criar sua senha.</p>
+        </div>
+      ) : null}
+      {error ? (
+        <p role="alert" className={styles.error}>
+          {error}
+        </p>
+      ) : null}
       {!complete && token ? (
-        <form onSubmit={submit} className="mt-8 space-y-5">
-          <div><label htmlFor="new-client-password" className="mb-2 block text-sm font-semibold">Nova senha</label><div className="relative"><input id="new-client-password" type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" minLength={12} required className="h-[52px] w-full rounded-xl border border-slate-300 px-4 pr-24 text-sm outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" placeholder="Pelo menos 12 caracteres" /><button type="button" onClick={() => setShowPassword((current) => !current)} className="absolute inset-y-0 right-3 px-2 text-xs font-bold text-blue-700">{showPassword ? "Ocultar" : "Mostrar"}</button></div></div>
-          <div><label htmlFor="confirm-client-password" className="mb-2 block text-sm font-semibold">Confirme a senha</label><input id="confirm-client-password" type={showPassword ? "text" : "password"} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" minLength={12} required className="h-[52px] w-full rounded-xl border border-slate-300 px-4 text-sm outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" placeholder="Repita a senha" /></div>
-          <button type="submit" disabled={loading} className="flex h-[52px] w-full items-center justify-center rounded-xl bg-[#1267c4] px-4 text-sm font-bold text-white hover:bg-[#0e55a6] disabled:opacity-60">{loading ? "Ativando..." : "Ativar meu acesso"}</button>
-          <p className="text-xs leading-5 text-slate-500">O link é de uso único e expira após 48 horas.</p>
+        <form
+          onSubmit={submit}
+          className={styles.form}
+          aria-label="Ativar acesso do cliente"
+          aria-busy={loading}
+        >
+          <div className={styles.fieldGroup}>
+            <label htmlFor="new-client-password">Nova senha</label>
+            <div className={styles.passwordGroup}>
+              <input
+                id="new-client-password"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="new-password"
+                minLength={12}
+                required
+                className={[styles.field, styles.passwordField].join(" ")}
+                placeholder="Pelo menos 12 caracteres"
+                aria-describedby="client-password-help"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((current) => !current)}
+                className={styles.passwordToggle}
+                aria-label={showPassword ? "Ocultar senhas" : "Mostrar senhas"}
+                aria-pressed={showPassword}
+              >
+                {showPassword ? "Ocultar" : "Mostrar"}
+              </button>
+            </div>
+          </div>
+          <div className={styles.fieldGroup}>
+            <label htmlFor="confirm-client-password">Confirme a senha</label>
+            <input
+              id="confirm-client-password"
+              type={showPassword ? "text" : "password"}
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              autoComplete="new-password"
+              minLength={12}
+              required
+              className={styles.field}
+              placeholder="Repita a senha"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className={styles.primaryButton}
+          >
+            {loading ? "Ativando..." : "Ativar meu acesso"}
+            {!loading ? <InterfaceIcon name="arrow-right" /> : null}
+          </button>
+          <p id="client-password-help" className={styles.formHelp}>
+            Use pelo menos 12 caracteres. O link é de uso único e expira após 48
+            horas.
+          </p>
         </form>
       ) : null}
     </ClientAccessFrame>

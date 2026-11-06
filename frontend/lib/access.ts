@@ -793,6 +793,19 @@ export function getAccessFromToken(): AccessPolicy {
   if (!payload) return defaultAccessByRole("NORMAL");
   if (payload.isSystemMaster || payload.role === "ADMIN") {
     const access = defaultAccessByRole("ADMIN");
+    const management = (
+      payload.accessRules as
+        | {
+            commercialManagement?: Record<
+              string,
+              { responsible?: boolean; costs?: boolean }
+            >;
+          }
+        | undefined
+    )?.commercialManagement;
+    access.catalog.viewCosts =
+      management?.partsServices?.responsible === true &&
+      management.partsServices.costs === true;
     return { ...access, pages: detailedPages(access, undefined, true) };
   }
 
@@ -800,6 +813,22 @@ export function getAccessFromToken(): AccessPolicy {
   const custom =
     (payload.accessPolicy as AccessPolicyOverrides | undefined) || {};
   const access = mergeAccessPolicy(defaults, custom);
+  if (
+    ["SALES", "MANAGER", "ENGINEER_APPLICATION"].includes(payload.role || "")
+  ) {
+    const rules = payload.accessRules as
+      | {
+          commercial?: { partsServices?: boolean };
+          commercialManagement?: {
+            partsServices?: { responsible?: boolean; costs?: boolean };
+          };
+        }
+      | undefined;
+    access.catalog.viewCosts =
+      rules?.commercial?.partsServices === true &&
+      rules.commercialManagement?.partsServices?.responsible === true &&
+      rules.commercialManagement.partsServices.costs === true;
+  }
   const pages = detailedPages(
     access,
     payload.accessRules,

@@ -1,4 +1,5 @@
 "use client";
+import { formatPercent } from "@/lib/formatters";
 import { canScreenAction } from "@/lib/access-rules";
 
 import { SelectField } from "@/app/dashboard/components/SelectField";
@@ -14,6 +15,7 @@ import {
 } from "react";
 import { canAccessDashboardPath, getAccessFromToken } from "@/lib/access";
 import { apiFetch } from "@/lib/api";
+import { userRoleLabel } from "@/lib/user-departments";
 import {
   clearAuthSession,
   decodeJwtPayload,
@@ -28,6 +30,7 @@ import {
   StatusBanner,
 } from "../components/DashboardPageKit";
 import { DashboardKanban } from "../components/DashboardKanban";
+import { InterfaceIcon } from "../components/InterfaceIcon";
 
 type Proposal = {
   id: string;
@@ -80,9 +83,9 @@ type DashboardPanelsState = Record<DashboardPanelKey, boolean>;
 
 const PIPELINE_COLUMNS: StageColumn[] = [
   { key: "DRAFT", label: "Rascunho" },
-  { key: "BOARD_REVIEW", label: "Análise diretoria" },
+  { key: "BOARD_REVIEW", label: "Análise da diretoria" },
   { key: "REVISION_REQUIRED", label: "Ajustes solicitados" },
-  { key: "CLIENT_REVIEW", label: "Análise cliente" },
+  { key: "CLIENT_REVIEW", label: "Análise do cliente" },
   { key: "DISCOUNT_REVIEW", label: "Desconto" },
   { key: "WON", label: "Ganhas" },
   { key: "LOST", label: "Perdidas" },
@@ -98,127 +101,83 @@ const ACTIVE_PROPOSAL_STATUSES = new Set([
   "DISCOUNT_REVIEW",
 ]);
 
-const ACTION_TONES: Record<
-  Tone,
-  { shell: string; badge: string; accent: string; button: string }
-> = {
+const ACTION_TONES: Record<Tone, { badge: string; accent: string }> = {
   blue: {
-    shell:
-      "border-sky-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#eef7ff_100%)]",
     badge: "bg-sky-100 text-sky-800",
     accent: "bg-sky-500",
-    button:
-      "border-sky-200 bg-white text-sky-800 hover:border-sky-300 hover:bg-sky-50",
   },
   emerald: {
-    shell:
-      "border-emerald-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#eefbf4_100%)]",
     badge: "bg-emerald-100 text-emerald-800",
     accent: "bg-emerald-500",
-    button:
-      "border-emerald-200 bg-white text-emerald-800 hover:border-emerald-300 hover:bg-emerald-50",
   },
   amber: {
-    shell:
-      "border-amber-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.2),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff7ea_100%)]",
     badge: "bg-amber-100 text-amber-900",
     accent: "bg-amber-500",
-    button:
-      "border-amber-200 bg-white text-amber-900 hover:border-amber-300 hover:bg-amber-50",
   },
   rose: {
-    shell:
-      "border-rose-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(244,63,94,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff2f4_100%)]",
     badge: "bg-rose-100 text-rose-800",
     accent: "bg-rose-500",
-    button:
-      "border-rose-200 bg-white text-rose-800 hover:border-rose-300 hover:bg-rose-50",
   },
   slate: {
-    shell:
-      "border-slate-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(71,85,105,0.14),transparent_28%),linear-gradient(180deg,#ffffff_0%,#f5f7fa_100%)]",
     badge: "bg-slate-100 text-slate-700",
     accent: "bg-slate-500",
-    button:
-      "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50",
   },
 };
 
 const STAGE_STYLES: Record<
   string,
-  { shell: string; badge: string; hover: string; tone: Tone }
+  { badge: string; hover: string; tone: Tone }
 > = {
   DRAFT: {
-    shell:
-      "border-slate-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(71,85,105,0.14),transparent_28%),linear-gradient(180deg,#ffffff_0%,#f5f7f9_100%)]",
     badge: "bg-slate-900 text-white",
     hover: "hover:border-slate-300",
     tone: "slate",
   },
   BOARD_REVIEW: {
-    shell:
-      "border-amber-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff8eb_100%)]",
     badge: "bg-amber-500 text-amber-950",
     hover: "hover:border-amber-300",
     tone: "amber",
   },
   REVISION_REQUIRED: {
-    shell:
-      "border-rose-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(244,63,94,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff2f4_100%)]",
     badge: "bg-rose-500 text-white",
     hover: "hover:border-rose-300",
     tone: "rose",
   },
   REVISED: {
-    shell:
-      "border-sky-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#eef7ff_100%)]",
     badge: "bg-sky-500 text-white",
     hover: "hover:border-sky-300",
     tone: "blue",
   },
   REJECTED: {
-    shell:
-      "border-rose-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(244,63,94,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff2f4_100%)]",
     badge: "bg-rose-600 text-white",
     hover: "hover:border-rose-300",
     tone: "rose",
   },
   CLIENT_REVIEW: {
-    shell:
-      "border-sky-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#eef7ff_100%)]",
     badge: "bg-sky-500 text-white",
     hover: "hover:border-sky-300",
     tone: "blue",
   },
   DISCOUNT_REVIEW: {
-    shell:
-      "border-amber-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.2),transparent_28%),linear-gradient(180deg,#ffffff_0%,#fff3df_100%)]",
     badge: "bg-amber-500 text-amber-950",
     hover: "hover:border-amber-300",
     tone: "amber",
   },
   WON: {
-    shell:
-      "border-emerald-200 dashboard-tinted-surface bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.18),transparent_28%),linear-gradient(180deg,#ffffff_0%,#eefbf4_100%)]",
     badge: "bg-emerald-500 text-white",
     hover: "hover:border-emerald-300",
     tone: "emerald",
   },
   LOST: {
-    shell:
-      "border-zinc-200 dashboard-tinted-surface bg-[linear-gradient(180deg,#ffffff_0%,#f5f5f5_100%)]",
     badge: "bg-zinc-500 text-white",
     hover: "hover:border-zinc-300",
     tone: "slate",
   },
 };
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#f04b54_0%,#da2d3b_54%,#a91c27_100%)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_18px_34px_-18px_rgba(218,45,59,0.55)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_42px_-18px_rgba(218,45,59,0.6)]";
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white/96 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-[0_14px_28px_-24px_rgba(15,23,42,0.26)] transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0";
-const PANEL_TOGGLE_BUTTON =
-  "inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-[0_12px_24px_-22px_rgba(15,23,42,0.28)] transition hover:border-slate-300 hover:bg-slate-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
+const PANEL_TOGGLE_BUTTON = "app-panel-toggle";
 const DASHBOARD_PANELS_STORAGE_KEY = "manitec_dashboard_home_panels_v2";
 const DEFAULT_DASHBOARD_PANELS: DashboardPanelsState = {
   priorities: true,
@@ -389,8 +348,8 @@ export default function DashboardPage({
       canViewOrders
         ? {
             href: "/dashboard/orders",
-            title: "Ordens",
-            subtitle: "Ver execução e fila técnica.",
+            title: "Ordens de serviço",
+            subtitle: "Consultar os atendimentos e responsáveis.",
             tone: "emerald" as Tone,
           }
         : null,
@@ -420,7 +379,7 @@ export default function DashboardPage({
     if (canManageUsers) {
       items.unshift({
         href: "/dashboard/control",
-        title: "Acessos",
+        title: "Usuários e acessos",
         subtitle: "Usuários e permissões.",
         tone: "rose" as Tone,
       });
@@ -616,23 +575,19 @@ export default function DashboardPage({
 
         if (hasNetworkFailure || hasApiFailure) {
           setApiWarning(
-            "Não foi possível carregar todo o cockpit agora. Verifique a conexão com a API e tente novamente.",
+            "Não foi possível carregar todos os dados. Tente atualizar o painel.",
           );
         } else {
           setLastUpdatedAt(new Date());
         }
       } catch {
-        setApiWarning(
-          "Falha ao carregar o dashboard. Verifique a conexão com a API.",
-        );
+        setApiWarning("Não foi possível carregar o painel. Tente novamente.");
       } finally {
         setDashboardLoading(false);
       }
     })().catch(() => {
       setDashboardLoading(false);
-      setApiWarning(
-        "Falha ao carregar o dashboard. Verifique a conexão com a API.",
-      );
+      setApiWarning("Não foi possível carregar o painel. Tente novamente.");
     });
   }, [hydrated, isBoard, canManageUsers, canViewOrders, refreshKey, router]);
 
@@ -667,7 +622,7 @@ export default function DashboardPage({
       }
     } catch {
       setProposals(snapshot);
-      setApiWarning("Não foi possível mover a proposta no dashboard.");
+      setApiWarning("Não foi possível alterar a etapa da proposta.");
     } finally {
       setDraggingId(null);
       setDropTarget(null);
@@ -713,7 +668,7 @@ export default function DashboardPage({
       <PageHeader
         eyebrow={commercial ? "Comercial" : "Painel geral"}
         title={commercial ? "Painel comercial" : "Visão geral"}
-        description="Propostas, execução e decisões que precisam de atenção."
+        description="Acompanhe as propostas, os atendimentos e as pendências."
         actions={
           <>
             <div className="flex flex-wrap items-center gap-2">
@@ -732,6 +687,10 @@ export default function DashboardPage({
                 disabled={dashboardLoading}
                 className={SECONDARY_BUTTON}
               >
+                <InterfaceIcon
+                  name="refresh"
+                  className={`h-4 w-4 ${dashboardLoading ? "animate-spin motion-reduce:animate-none" : ""}`}
+                />
                 {dashboardLoading ? "Atualizando..." : "Atualizar dados"}
               </button>
               {canCreateProposal ? (
@@ -739,6 +698,7 @@ export default function DashboardPage({
                   href="/dashboard/proposals/new"
                   className={PRIMARY_BUTTON}
                 >
+                  <InterfaceIcon name="plus" className="h-4 w-4" />
                   Nova proposta
                 </Link>
               ) : null}
@@ -759,14 +719,14 @@ export default function DashboardPage({
           helper="propostas ativas"
         />
         <OverviewStat
-          label="Valor do pipeline"
+          label="Valor em negociação"
           value={dashboardLoading ? "—" : formatCurrency(totalPipelineValue)}
           helper="propostas em andamento"
         />
         <OverviewStat
           label="Conversão"
-          value={dashboardLoading ? "—" : `${stats.conversion}%`}
-          helper={`${stats.won} ganhas`}
+          value={dashboardLoading ? "—" : formatPercent(stats.conversion)}
+          helper={`${stats.won} ${stats.won === 1 ? "proposta ganha" : "propostas ganhas"}`}
         />
       </div>
 
@@ -780,7 +740,7 @@ export default function DashboardPage({
           description="O que precisa de acompanhamento agora."
           summary={
             priorityItems.length > 0
-              ? `${priorityItems.length} assuntos para acompanhar`
+              ? `${priorityItems.length} ${priorityItems.length === 1 ? "pendência para acompanhar" : "pendências para acompanhar"}`
               : "Nenhuma pendência no momento"
           }
         >
@@ -812,8 +772,8 @@ export default function DashboardPage({
           expanded={panelState.actions}
           onToggle={togglePanel}
           eyebrow="Atalhos"
-          title="Acoes rapidas"
-          description="Entradas principais."
+          title="Ações rápidas"
+          description="Crie um registro ou acesse uma área."
           summary={`${quickActions.length} atalhos`}
         >
           <div className="dashboard-home-actions grid gap-2">
@@ -829,9 +789,9 @@ export default function DashboardPage({
         expanded={panelState.processes}
         onToggle={togglePanel}
         eyebrow="Processos"
-        title="Caminhos de ponta a ponta"
-        description="Trilhas principais."
-        summary="Comercial -> operacao -> financeiro"
+        title="Etapas do trabalho"
+        description="Do primeiro atendimento ao recebimento."
+        summary="Vendas, atendimento, compras e financeiro"
       >
         <div className="dashboard-home-process-grid grid gap-3">
           <ProcessPathCard
@@ -851,24 +811,24 @@ export default function DashboardPage({
               "Proposta aprovada",
               "Contrato",
               "Preventivas",
-              "Faturas / recebiveis",
+              "Faturas a receber",
             ]}
             href="/dashboard/contracts"
             tone="blue"
           />
           <ProcessPathCard
-            title="Execucao tecnica"
+            title="Atendimento técnico"
             steps={[
               "O.S. aberta",
-              "Tecnico alocado",
-              "Relatorio",
+              "Técnico definido",
+              "Relatório",
               "O.S. faturada",
             ]}
             href="/dashboard/dispatch"
             tone="amber"
           />
           <ProcessPathCard
-            title="Reposicao"
+            title="Reposição"
             steps={[
               "Estoque baixo",
               "Pedido de compra",
@@ -886,25 +846,27 @@ export default function DashboardPage({
           panelKey="pipeline"
           expanded={panelState.pipeline}
           onToggle={togglePanel}
-          eyebrow="Pipeline"
+          eyebrow="Comercial"
           title="Propostas por etapa"
-          description="Lista e arraste."
-          summary={`${stats.total} propostas  |  ${topStages[0]?.label || "Sem fila"}`}
+          description="Acompanhe a negociação e atualize cada etapa."
+          summary={`${stats.total} ${stats.total === 1 ? "proposta" : "propostas"} na carteira${topStages[0] ? ` · ${topStages[0].label}` : ""}`}
           actions={
             panelState.pipeline && stats.total > 0 ? (
               <div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center xl:justify-end">
                 <input
+                  aria-label="Buscar propostas"
                   value={pipelineQuery}
                   onChange={(event) => setPipelineQuery(event.target.value)}
-                  placeholder="Pesquisar no kanban..."
-                  className="h-10 min-w-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-4 focus:ring-sky-100 xl:min-w-[280px]"
+                  placeholder="Buscar proposta, cliente ou responsável"
+                  className="h-10 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 xl:min-w-[280px]"
                 />
                 <SelectField
+                  aria-label="Filtrar por etapa da proposta"
                   value={pipelineStatusFilter}
                   onChange={(event) =>
                     setPipelineStatusFilter(event.target.value)
                   }
-                  className="h-10 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+                  className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 >
                   <option value="ALL">Todas as etapas</option>
                   {PIPELINE_COLUMNS.map((column) => (
@@ -934,13 +896,13 @@ export default function DashboardPage({
             <p className="text-sm text-slate-600">Carregando propostas...</p>
           ) : apiWarning && stats.total === 0 ? (
             <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950">
-              Alguns dados do painel não carregaram. Atualize a página antes de
-              concluir que o pipeline está vazio.
+              Não foi possível consultar as propostas. Atualize o painel para
+              tentar novamente.
             </p>
           ) : stats.total === 0 ? (
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-6">
               <p className="font-semibold text-slate-900">
-                Ainda não há propostas no pipeline
+                Nenhuma proposta cadastrada
               </p>
               <p className="mt-1 text-sm text-slate-600">
                 Quando uma proposta for criada, suas etapas aparecerão aqui.
@@ -958,8 +920,8 @@ export default function DashboardPage({
             <div className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm leading-6 text-slate-600">
-                  Arraste entre etapas, pesquise acima ou encoste nas laterais
-                  para rolar.
+                  Arraste uma proposta para alterar a etapa. Use a busca para
+                  encontrar um registro.
                 </p>
                 <DataPill
                   tone={
@@ -968,12 +930,16 @@ export default function DashboardPage({
                       : "emerald"
                   }
                 >
-                  {filteredPipelineProposals.length} resultado(s)
+                  {filteredPipelineProposals.length}{" "}
+                  {filteredPipelineProposals.length === 1
+                    ? "proposta"
+                    : "propostas"}
                 </DataPill>
                 <button
                   type="button"
                   onClick={() => setShowEmptyPipelineStages((value) => !value)}
-                  className="text-sm font-semibold text-blue-700 hover:underline"
+                  aria-pressed={showEmptyPipelineStages}
+                  className="app-button app-button-ghost"
                 >
                   {showEmptyPipelineStages
                     ? "Ocultar etapas vazias"
@@ -1109,12 +1075,10 @@ function QuickActionCard({
         <p className="text-sm font-bold text-slate-950">{title}</p>
         <p className="text-sm text-slate-600">{subtitle}</p>
       </div>
-      <span
-        aria-hidden="true"
-        className="text-lg text-slate-500 transition group-hover:translate-x-0.5 group-hover:text-blue-700"
-      >
-        →
-      </span>
+      <InterfaceIcon
+        name="arrow-right"
+        className="h-4 w-4 text-slate-400 transition-colors group-hover:text-blue-700"
+      />
     </Link>
   );
 }
@@ -1135,9 +1099,9 @@ function ProcessPathCard({
   return (
     <Link
       href={href}
-      className={`group relative flex min-h-[220px] flex-col overflow-hidden rounded-[24px] border px-4 py-4 shadow-[0_18px_40px_-34px_rgba(15,31,50,0.28)] transition hover:-translate-y-1 ${style.shell}`}
+      className="group relative flex min-h-[220px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-4 transition-colors hover:border-blue-300 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
     >
-      <div className={`absolute inset-x-0 top-0 h-1.5 ${style.accent}`} />
+      <div className={`absolute inset-x-0 top-0 h-0.5 ${style.accent}`} />
       <p className="text-sm font-bold text-slate-950">{title}</p>
       <div className="mt-4 space-y-2">
         {steps.map((step, index) => (
@@ -1151,10 +1115,9 @@ function ProcessPathCard({
           </div>
         ))}
       </div>
-      <span
-        className={`mt-auto inline-flex w-fit rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.16em] ${style.badge}`}
-      >
-        Abrir trilha
+      <span className="mt-4 inline-flex w-fit items-center gap-1.5 text-xs font-semibold text-slate-600 group-hover:text-blue-700">
+        Abrir área
+        <InterfaceIcon name="arrow-right" className="h-3.5 w-3.5" />
       </span>
     </Link>
   );
@@ -1194,19 +1157,17 @@ function PipelineColumnCard({
           event.dataTransfer.getData("text/proposal-id") || draggingId;
         if (proposalId) void onMove(proposalId, column.key);
       }}
-      className={`dashboard-kanban-column flex min-w-[292px] snap-start flex-col rounded-[24px] border p-4 transition ${
-        style.shell
-      } ${dropTarget === column.key ? "ring-2 ring-sky-300" : ""}`}
+      className={`dashboard-kanban-column flex min-w-[292px] snap-start flex-col rounded-xl border border-slate-200 bg-slate-50/80 p-4 transition-colors ${dropTarget === column.key ? "ring-2 ring-blue-300" : ""}`}
     >
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-bold text-slate-900">{column.label}</p>
-          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
-            {column.total} item(ns)
+          <p className="mt-0.5 text-xs text-slate-500">
+            {column.total} {column.total === 1 ? "proposta" : "propostas"}
           </p>
         </div>
         <span
-          className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.16em] ${style.badge}`}
+          className={`inline-flex h-6 min-w-6 items-center justify-center rounded-md px-1.5 text-xs font-semibold ${style.badge}`}
         >
           {column.total}
         </span>
@@ -1222,7 +1183,7 @@ function PipelineColumnCard({
               event.dataTransfer.setData("text/proposal-id", item.id);
               event.dataTransfer.effectAllowed = "move";
             }}
-            className={`rounded-2xl border border-white/80 bg-white/96 p-3.5 text-sm shadow-[0_14px_28px_-24px_rgba(15,23,42,0.22)] transition hover:-translate-y-0.5 ${style.hover}`}
+            className={`rounded-xl border border-slate-200 bg-white p-3.5 text-sm shadow-sm transition-colors ${style.hover}`}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -1233,16 +1194,11 @@ function PipelineColumnCard({
                   {item.client?.companyName || "Sem cliente vinculado"}
                 </p>
               </div>
-              <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
-                Drag
-              </span>
             </div>
 
             <div className="mt-4 flex items-end justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  Valor
-                </p>
+                <p className="text-xs font-medium text-slate-500">Valor</p>
                 <p className="mt-1 text-base font-bold text-slate-950">
                   {formatCurrency(item.totalValue || 0)}
                 </p>
@@ -1250,7 +1206,7 @@ function PipelineColumnCard({
               <Link
                 href={`/dashboard/proposals/${item.id}`}
                 draggable={false}
-                className="inline-flex rounded-full border border-slate-200 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                className="app-button app-button-ghost !min-h-8 !px-2.5 !text-xs"
               >
                 Abrir
               </Link>
@@ -1284,50 +1240,59 @@ function BoardPendingCard({
 }) {
   return (
     <SectionCard
-      eyebrow="Board"
-      title="Pendencias"
+      eyebrow="Diretoria"
+      title="Aprovações pendentes"
       description="Itens aguardando aprovação."
-      actions={<PanelToggleButton collapsed={collapsed} onClick={onToggle} />}
+      actions={
+        <PanelToggleButton
+          collapsed={collapsed}
+          onClick={onToggle}
+          controlsId="dashboard-panel-board"
+          label="aprovações pendentes"
+        />
+      }
     >
-      {collapsed ? (
-        <CollapsedSectionSummary summary={`${boardPending.length} em fila`} />
-      ) : (
-        <div className="space-y-3">
-          {boardPending.length === 0 ? (
-            <EmptyState
-              title="Fila limpa"
-              description="Nenhuma proposta aguardando diretoria."
-            />
-          ) : (
-            boardPending.slice(0, 6).map((proposal) => (
-              <Link
-                key={proposal.id}
-                href={`/dashboard/proposals/${proposal.id}`}
-                className="block rounded-2xl border border-stone-200 dashboard-tinted-surface bg-[linear-gradient(180deg,#fffdf9_0%,#ffffff_100%)] p-4 transition hover:-translate-y-0.5 hover:border-stone-300"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-slate-950">
-                      {proposal.code}
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-slate-600">
-                      {proposal.client?.companyName || "Sem cliente"} |{" "}
-                      {statusLabel(proposal.status)}
-                    </p>
+      <div id="dashboard-panel-board">
+        {collapsed ? (
+          <CollapsedSectionSummary summary={`${boardPending.length} em fila`} />
+        ) : (
+          <div className="space-y-3">
+            {boardPending.length === 0 ? (
+              <EmptyState
+                title="Nenhuma aprovação pendente"
+                description="Nenhuma proposta aguardando diretoria."
+              />
+            ) : (
+              boardPending.slice(0, 6).map((proposal) => (
+                <Link
+                  key={proposal.id}
+                  href={`/dashboard/proposals/${proposal.id}`}
+                  className="block rounded-xl border border-slate-200 bg-white p-4 transition-colors hover:border-blue-300 hover:bg-slate-50"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-slate-950">
+                        {proposal.code}
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-slate-600">
+                        {proposal.client?.companyName || "Sem cliente"} |{" "}
+                        {statusLabel(proposal.status)}
+                      </p>
+                    </div>
+                    <DataPill tone="amber">Em análise</DataPill>
                   </div>
-                  <DataPill tone="amber">Board</DataPill>
-                </div>
-                <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  Valor
-                </p>
-                <p className="mt-1 text-sm font-bold text-slate-900">
-                  {formatCurrency(proposal.totalValue || 0)}
-                </p>
-              </Link>
-            ))
-          )}
-        </div>
-      )}
+                  <p className="mt-3 text-xs font-medium text-slate-500">
+                    Valor
+                  </p>
+                  <p className="mt-1 text-sm font-bold text-slate-900">
+                    {formatCurrency(proposal.totalValue || 0)}
+                  </p>
+                </Link>
+              ))
+            )}
+          </div>
+        )}
+      </div>
     </SectionCard>
   );
 }
@@ -1343,55 +1308,64 @@ function UpdatesFeedCard({
 }) {
   return (
     <SectionCard
-      eyebrow="Feed"
-      title="Atualizacoes"
+      eyebrow="Histórico"
+      title="Últimas atualizações"
       description="Movimentos recentes."
-      actions={<PanelToggleButton collapsed={collapsed} onClick={onToggle} />}
-    >
-      {collapsed ? (
-        <CollapsedSectionSummary
-          summary={`${updates.length} atualização(ões)`}
+      actions={
+        <PanelToggleButton
+          collapsed={collapsed}
+          onClick={onToggle}
+          controlsId="dashboard-panel-updates"
+          label="últimas atualizações"
         />
-      ) : (
-        <div className="space-y-3">
-          {updates.length === 0 ? (
-            <EmptyState
-              title="Sem atualizacoes"
-              description="Nenhum movimento recente."
-            />
-          ) : (
-            updates.slice(0, 8).map((update) => (
-              <Link
-                key={update.id}
-                href={`/dashboard/proposals/${update.proposal.id}`}
-                className="block rounded-2xl border border-slate-200 dashboard-tinted-surface bg-[linear-gradient(180deg,#ffffff_0%,#f7f9fb_100%)] p-4 transition hover:-translate-y-0.5 hover:border-slate-300"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-slate-950">
-                      {update.proposal.code}
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-slate-600">
-                      {statusLabel(update.proposal.status)}
-                    </p>
+      }
+    >
+      <div id="dashboard-panel-updates">
+        {collapsed ? (
+          <CollapsedSectionSummary
+            summary={`${updates.length} ${updates.length === 1 ? "atualização recente" : "atualizações recentes"}`}
+          />
+        ) : (
+          <div className="space-y-3">
+            {updates.length === 0 ? (
+              <EmptyState
+                title="Nenhuma atualização recente"
+                description="Nenhum movimento recente."
+              />
+            ) : (
+              updates.slice(0, 8).map((update) => (
+                <Link
+                  key={update.id}
+                  href={`/dashboard/proposals/${update.proposal.id}`}
+                  className="block rounded-xl border border-slate-200 bg-white p-4 transition-colors hover:border-blue-300 hover:bg-slate-50"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-slate-950">
+                        {update.proposal.code}
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-slate-600">
+                        {statusLabel(update.proposal.status)}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
+                      {update.actorUser?.name || "Sistema"}
+                    </span>
                   </div>
-                  <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600">
-                    {update.actorUser?.name || "Sistema"}
-                  </span>
-                </div>
-                {update.note ? (
-                  <p className="mt-3 text-sm leading-6 text-slate-700">
-                    {update.note}
+                  {update.note ? (
+                    <p className="mt-3 text-sm leading-6 text-slate-700">
+                      {update.note}
+                    </p>
+                  ) : null}
+                  <p className="mt-3 text-xs text-slate-500">
+                    {new Date(update.createdAt).toLocaleString("pt-BR")}
                   </p>
-                ) : null}
-                <p className="mt-3 text-xs text-slate-500">
-                  {new Date(update.createdAt).toLocaleString("pt-BR")}
-                </p>
-              </Link>
-            ))
-          )}
-        </div>
-      )}
+                </Link>
+              ))
+            )}
+          </div>
+        )}
+      </div>
     </SectionCard>
   );
 }
@@ -1415,72 +1389,79 @@ function GovernanceSnapshotCard({
 }) {
   return (
     <SectionCard
-      eyebrow="Governanca"
-      title="Usuarios e acessos"
+      eyebrow="Administração"
+      title="Usuários e acessos"
       description="Resumo administrativo."
       actions={
         <div className="flex flex-wrap gap-2">
           <Link href="/dashboard/control" className={SECONDARY_BUTTON}>
             Abrir painel
           </Link>
-          <PanelToggleButton collapsed={collapsed} onClick={onToggle} />
+          <PanelToggleButton
+            collapsed={collapsed}
+            onClick={onToggle}
+            controlsId="dashboard-panel-governance"
+            label="usuários e acessos"
+          />
         </div>
       }
     >
-      {collapsed ? (
-        <CollapsedSectionSummary
-          summary={`Ativos ${adminStats.active}  |  Admins ${adminStats.admins}`}
-        />
-      ) : (
-        <>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <OverviewStat
-              label="Ativos"
-              value={String(adminStats.active)}
-              helper="usuários disponíveis"
-            />
-            <OverviewStat
-              label="Administradores"
-              value={String(adminStats.admins)}
-              helper="com acesso à gestão"
-            />
-          </div>
-
-          <div className="mt-4 space-y-3">
-            {adminUsers.length === 0 ? (
-              <EmptyState
-                title="Nenhum usuario"
-                description="Os perfis aparecem aqui quando a base carregar."
+      <div id="dashboard-panel-governance">
+        {collapsed ? (
+          <CollapsedSectionSummary
+            summary={`${adminStats.active} usuários ativos · ${adminStats.admins} administradores`}
+          />
+        ) : (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <OverviewStat
+                label="Ativos"
+                value={String(adminStats.active)}
+                helper="usuários disponíveis"
               />
-            ) : (
-              adminUsers.slice(0, 4).map((user) => (
-                <div
-                  key={user.id}
-                  className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-3"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-900">
-                      {user.name}
-                    </p>
-                    <p className="truncate text-xs text-slate-500">
-                      {user.email}
-                    </p>
-                  </div>
-                  <span
-                    className={`ml-3 rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                      user.isActive
-                        ? "bg-stone-100 text-stone-700"
-                        : "bg-zinc-200 text-zinc-600"
-                    }`}
+              <OverviewStat
+                label="Administradores"
+                value={String(adminStats.admins)}
+                helper="com acesso à gestão"
+              />
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {adminUsers.length === 0 ? (
+                <EmptyState
+                  title="Nenhum usuário encontrado"
+                  description="Os usuários cadastrados aparecem aqui."
+                />
+              ) : (
+                adminUsers.slice(0, 4).map((user) => (
+                  <div
+                    key={user.id}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-3"
                   >
-                    {user.isActive ? user.role : "INATIVO"}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-        </>
-      )}
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">
+                        {user.name}
+                      </p>
+                      <p className="truncate text-xs text-slate-500">
+                        {user.email}
+                      </p>
+                    </div>
+                    <span
+                      className={`ml-3 rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                        user.isActive
+                          ? "bg-stone-100 text-stone-700"
+                          : "bg-zinc-200 text-zinc-600"
+                      }`}
+                    >
+                      {user.isActive ? userRoleLabel(user.role) : "Inativo"}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </SectionCard>
   );
 }
@@ -1517,11 +1498,15 @@ function DashboardSection({
           <PanelToggleButton
             collapsed={!expanded}
             onClick={() => onToggle(panelKey)}
+            controlsId={`dashboard-panel-${panelKey}`}
+            label={title.toLocaleLowerCase("pt-BR")}
           />
         </div>
       }
     >
-      {expanded ? children : <CollapsedSectionSummary summary={summary} />}
+      <div id={`dashboard-panel-${panelKey}`}>
+        {expanded ? children : <CollapsedSectionSummary summary={summary} />}
+      </div>
     </SectionCard>
   );
 }
@@ -1529,25 +1514,35 @@ function DashboardSection({
 function PanelToggleButton({
   collapsed,
   onClick,
+  controlsId,
+  label,
 }: {
   collapsed: boolean;
   onClick: () => void;
+  controlsId: string;
+  label: string;
 }) {
   return (
-    <button type="button" onClick={onClick} className={PANEL_TOGGLE_BUTTON}>
-      <span>{collapsed ? "Expandir" : "Recolher"}</span>
-      <span
-        className={`transition-transform duration-200 ${collapsed ? "-rotate-90" : ""}`}
-      >
-        v
-      </span>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-expanded={!collapsed}
+      aria-controls={controlsId}
+      aria-label={`${collapsed ? "Mostrar" : "Recolher"} ${label}`}
+      className={PANEL_TOGGLE_BUTTON}
+    >
+      <span>{collapsed ? "Ver detalhes" : "Recolher"}</span>
+      <InterfaceIcon
+        name="chevron-down"
+        className={`h-4 w-4 transition-transform duration-150 motion-reduce:transition-none ${collapsed ? "" : "rotate-180"}`}
+      />
     </button>
   );
 }
 
 function CollapsedSectionSummary({ summary }: { summary: string }) {
   return (
-    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 px-4 py-3 text-sm text-slate-600">
+    <div className="rounded-lg bg-slate-50 px-3.5 py-3 text-sm text-slate-600">
       {summary}
     </div>
   );
@@ -1564,12 +1559,12 @@ function formatCurrency(value: number) {
 function statusLabel(status: string) {
   const map: Record<string, string> = {
     DRAFT: "Rascunho",
-    BOARD_REVIEW: "Análise diretoria",
+    BOARD_REVIEW: "Análise da diretoria",
     REVISION_REQUIRED: "Ajustes solicitados",
     REVISED: "Revisada",
     REJECTED: "Reprovada pela diretoria",
-    CLIENT_REVIEW: "Análise cliente",
-    DISCOUNT_REVIEW: "Análise desconto",
+    CLIENT_REVIEW: "Análise do cliente",
+    DISCOUNT_REVIEW: "Análise de desconto",
     WON: "Ganho",
     LOST: "Perdido",
   };

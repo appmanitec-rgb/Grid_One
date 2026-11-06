@@ -1,0 +1,230 @@
+{
+  "company": {
+    "name": "MANITEC Grupos Geradores",
+    "document": "00.000.000/0001-00",
+    "street": "Rua Institucional",
+    "addressNumber": "100",
+    "district": "Centro",
+    "city": "Indaiatuba",
+    "state": "SP",
+    "zipCode": "13300-000",
+    "address": "Rua Institucional, 100 - Centro - Indaiatuba - SP",
+    "phone": "(00) 0000-0000",
+    "email": "contato@manitec.local",
+    "legalName": "MANITEC Grupos Geradores"
+  },
+  "client": {
+    "id": "CLI-0001",
+    "name": "Cliente Exemplo",
+    "tradeName": "Cliente Exemplo",
+    "document": "11.111.111/0001-11",
+    "street": "Avenida Cliente",
+    "addressNumber": "200",
+    "district": "Industrial",
+    "city": "Sao Paulo",
+    "state": "SP",
+    "zipCode": "01000-000",
+    "contactName": "Contato Cliente",
+    "code": "2020CLI",
+    "companyName": "Cliente Exemplo"
+  },
+  "contact": {
+    "name": "Contato Cliente",
+    "role": "Compras",
+    "phone": "(11) 4000-0000",
+    "mobile": "(11) 99999-0000",
+    "email": "cliente@example.test"
+  },
+  "consultant": {
+    "name": "Consultor MANITEC",
+    "phone": "(19) 3894-5048",
+    "email": "consultor@manitec.local"
+  },
+  "proposal": {
+    "number": "PROP-0001",
+    "title": "Manutencao preventiva do GMG principal",
+    "date": "22/07/2026",
+    "validUntil": "22/08/2026",
+    "scope": "Manutencao preventiva com fornecimento de materiais.",
+    "summary": "manutencao preventiva do grupo gerador principal, incluindo fornecimento de filtros e atendimento tecnico especializado",
+    "paymentTerms": "30 dias",
+    "paymentMethod": "Boleto",
+    "deliveryTerm": "10 dia(s)",
+    "deliveryTerms": "10 dia(s)",
+    "deliveryLeadTimeDays": "10",
+    "executionLeadTimeDays": "10",
+    "freight": "FOB",
+    "taxes": "Inclusos conforme regime fiscal aplicavel.",
+    "total": "R$ 10.000,00",
+    "laborTotal": "R$ 8.000,00",
+    "materialsTotal": "R$ 2.000,00",
+    "expensesTotal": "R$ 0,00",
+    "discountTotal": "R$ 0,00",
+    "notes": "Sem observacoes adicionais.",
+    "expensesIncluded": "Sem despesas operacionais previstas",
+    "summaryMaterialsTotal": "R$ 2.000,00",
+    "summaryLaborTotal": "R$ 8.000,00",
+    "generalDiscountTotal": "R$ 0,00",
+    "billingSummary": "Peças e serviços · Emitente de exemplo · CNPJ conforme conta selecionada",
+    "contactSummary": "Contato Cliente · cliente@example.test",
+    "freightLabel": "Por conta do cliente (FOB)"
+  },
+  "equipment": {
+    "name": "GMG Principal",
+    "type": "Grupo gerador",
+    "manufacturer": "Cummins",
+    "engineManufacturer": "Cummins",
+    "engineSerialNumber": "MTR-001",
+    "serialNumber": "SN-001",
+    "power": "500 kVA",
+    "hourMeter": "100 h",
+    "generator": {
+      "model": "Cummins",
+      "power": "500 kVA"
+    }
+  },
+  "items": [
+    {
+      "kind": "PART_MATERIAL",
+      "description": "Kit de filtros para GMG",
+      "sku": "KIT-FLT-001",
+      "quantity": "1",
+      "unit": "UN",
+      "unitPrice": "R$ 2.000,00",
+      "total": "R$ 2.000,00",
+      "discountPercent": "0%"
+    },
+    {
+      "kind": "CATALOG_SERVICE",
+      "description": "Manutencao preventiva",
+      "sku": "SERV-MP-001",
+      "quantity": "1",
+      "unit": "SV",
+      "unitPrice": "R$ 8.000,00",
+      "total": "R$ 8.000,00",
+      "discountPercent": "0%"
+    }
+  ],
+  "parts": [
+    {
+      "description": "Kit de filtros para GMG",
+      "sku": "KIT-FLT-001",
+      "quantity": "1",
+      "unitPrice": "R$ 2.000,00",
+      "total": "R$ 2.000,00"
+    }
+  ],
+  "services": [
+    {
+      "description": "Manutencao preventiva",
+      "sku": "SERV-MP-001",
+      "quantity": "1",
+      "unitPrice": "R$ 8.000,00",
+      "total": "R$ 8.000,00"
+    }
+  ],
+  "technicalScope": {
+    "warranty": "Garantia conforme condicoes comerciais e fabricante.",
+    "exclusions": "Obras civis e itens nao descritos no escopo."
+  },
+  "terms": {
+    "standards": "Execucao conforme normas tecnicas aplicaveis, procedimentos internos MANITEC e requisitos de seguranca do cliente.",
+    "contractorObligations": "Executar o escopo aprovado com equipe capacitada, ferramental adequado e registro dos servicos realizados.",
+    "clientObligations": "Garantir acesso seguro ao equipamento, disponibilizar responsavel para acompanhamento e informar restricoes operacionais.",
+    "default": "Valores e condicoes validos durante o prazo desta proposta, sujeitos a disponibilidade de materiais e confirmacao de agenda."
+  },
+  "approval": {
+    "clientSignerName": "Contato Cliente",
+    "date": "22/07/2026"
+  },
+  "metadata": {
+    "templateKey": "proposal/manitec-default-v5",
+    "sourceId": "proposal-sample"
+  },
+  "clientProposal": {
+    "reviewLabel": "DADOS DEMONSTRATIVOS | PRÉVIA PARA REVISÃO",
+    "objective": "Atendimento conforme o escopo descrito",
+    "displacementTotal": "R$ 0,00",
+    "otherExpensesTotal": "R$ 0,00",
+    "payment": "Condição de pagamento a confirmar",
+    "paymentPending": "Vencimentos a confirmar",
+    "execution": "Previsão a confirmar com o planejamento",
+    "scheduling": "Agendamento sujeito à aprovação e ao acesso ao equipamento",
+    "availability": "Disponibilidade a confirmar",
+    "freight": "Frete dos materiais a confirmar",
+    "exclusions": "Não incluídos os itens não discriminados nesta proposta",
+    "activities": "Manutencao preventiva com fornecimento de materiais.",
+    "deliverables": "Entregas conforme o escopo contratado",
+    "installationNote": "",
+    "partsTiming": "Disponibilidade de peças e agendamento a confirmar. Não há promessa de substituição em prazo fixo.",
+    "paymentAllocation": "Confirmar o faturamento e os vencimentos antes da emissão",
+    "arithmeticNote": "",
+    "warranty": "Prazo e cobertura a confirmar",
+    "defaultTerms": "Modelo de referência prevê multa de 2%, juros de 1% ao mês e correção monetária; redação a confirmar",
+    "cancellationTerms": "Modelo de referência prevê multa de 10% sobre o serviço após cinco dias corridos; aplicação a confirmar",
+    "footerLabel": "Exemplo | Prévia para revisão",
+    "extendedLayout": false,
+    "activityParagraphs": [
+      {
+        "description": "Manutencao preventiva com fornecimento de materiais."
+      }
+    ]
+  },
+  "brandedProposal": {
+    "reviewLabel": "Prévia para revisão",
+    "demonstrationNote": "Dados demonstrativos",
+    "execution": "A definir.",
+    "payment": "A definir.",
+    "paymentPending": "",
+    "availability": "Disponibilidade a definir.",
+    "freight": "A definir.",
+    "receivingDetails": "Dados de recebimento a definir.",
+    "billingNote": "",
+    "contractorText": "Executar os serviços contratados.",
+    "clientText": "Garantir o acesso ao equipamento.",
+    "deliverables": "Relatório de execução dos serviços.",
+    "installationNote": "",
+    "customerNotes": "",
+    "partsTiming": "O prazo depende da disponibilidade de peças e do agendamento.",
+    "warranty": "",
+    "defaultHeading": "7.5 Atraso no pagamento",
+    "cancellationHeading": "7.6 Cancelamento",
+    "acceptanceHeading": "7.7 Aceite",
+    "defaultTerms": "Multa de 2%, juros de mora de 1% ao mês e correção monetária.",
+    "cancellationTerms": "Multa de 10% sobre o serviço após cinco dias corridos da contratação.",
+    "arithmeticWarning": "",
+    "warrantyConfirmed": false,
+    "contractorChain": [],
+    "contractorLast": [
+      {
+        "description": "Executar os serviços contratados."
+      }
+    ],
+    "clientChain": [],
+    "clientLast": [
+      {
+        "description": "Garantir o acesso ao equipamento."
+      }
+    ],
+    "partsBeforeLast": [],
+    "partsLast": [
+      {
+        "description": "Kit de filtros para GMG",
+        "sku": "KIT-FLT-001",
+        "quantity": "1",
+        "unitPrice": "R$ 2.000,00",
+        "total": "R$ 2.000,00"
+      }
+    ],
+    "servicesBeforeLast": [],
+    "servicesLast": [
+      {
+        "description": "Manutencao preventiva",
+        "sku": "SERV-MP-001",
+        "quantity": "1",
+        "unitPrice": "R$ 8.000,00",
+        "total": "R$ 8.000,00"
+      }
+    ]
+  }
+}

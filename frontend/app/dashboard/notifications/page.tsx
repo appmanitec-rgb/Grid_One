@@ -1,4 +1,5 @@
 "use client";
+import { FormField } from "@/app/dashboard/components/DashboardPageKit";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -33,10 +34,8 @@ import ListPagination, {
   useListPagination,
 } from "../components/ListPagination";
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800";
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 
 const EMPTY_SUMMARY = {
   total: 0,
@@ -57,7 +56,7 @@ const CATEGORY_OPTIONS: Array<{
   label: string;
 }> = [
   { value: "ALL", label: "Todas as categorias" },
-  { value: "approval", label: "Aprovacoes" },
+  { value: "approval", label: "Aprovações" },
   { value: "proposal", label: "Propostas" },
   { value: "contract", label: "Contratos" },
   { value: "order", label: "Ordens" },
@@ -223,7 +222,9 @@ export default function NotificationsPage() {
                   ? `${summary.highPriority} critic${summary.highPriority > 1 ? "os" : "o"}`
                   : "Tudo em dia"}
               </DataPill>
-              <DataPill tone="slate">{filteredItems.length} visivel(is)</DataPill>
+              <DataPill tone="slate">
+                {filteredItems.length} visivel(is)
+              </DataPill>
             </div>
             <p className="text-sm leading-6 text-slate-600">
               {viewerRole === "CLIENT"
@@ -238,7 +239,8 @@ export default function NotificationsPage() {
 
       {!error && !loading && summary.highPriority > 0 ? (
         <StatusBanner tone="amber">
-          {summary.highPriority} item(ns) de alta prioridade merecem resposta imediata.
+          {summary.highPriority} item(ns) de alta prioridade merecem resposta
+          imediata.
         </StatusBanner>
       ) : null}
 
@@ -249,42 +251,52 @@ export default function NotificationsPage() {
           description="Use busca e filtros para chegar no que pede resposta agora."
           actions={
             <div className="flex w-full flex-col gap-3 xl:w-auto xl:min-w-[720px] xl:flex-row xl:items-center xl:justify-end">
-              <TextInput
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Buscar por titulo, mensagem ou status..."
-                className="xl:min-w-[280px]"
-              />
-              <SelectInput
-                value={categoryFilter}
-                onChange={(event) =>
-                  setCategoryFilter(
-                    event.target.value as "ALL" | DashboardNotificationCategory,
-                  )
-                }
-                className="xl:w-[210px]"
-              >
-                {CATEGORY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </SelectInput>
-              <SelectInput
-                value={priorityFilter}
-                onChange={(event) =>
-                  setPriorityFilter(
-                    event.target.value as "ALL" | DashboardNotificationPriority,
-                  )
-                }
-                className="xl:w-[190px]"
-              >
-                {PRIORITY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </SelectInput>
+              <FormField label="Buscar notificação">
+                <TextInput
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Buscar por título, mensagem ou status..."
+                  className="xl:min-w-[280px]"
+                />
+              </FormField>
+              <FormField label="Categoria">
+                <SelectInput
+                  value={categoryFilter}
+                  onChange={(event) =>
+                    setCategoryFilter(
+                      event.target.value as
+                        | "ALL"
+                        | DashboardNotificationCategory,
+                    )
+                  }
+                  className="xl:w-[210px]"
+                >
+                  {CATEGORY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </SelectInput>
+              </FormField>
+              <FormField label="Prioridade">
+                <SelectInput
+                  value={priorityFilter}
+                  onChange={(event) =>
+                    setPriorityFilter(
+                      event.target.value as
+                        | "ALL"
+                        | DashboardNotificationPriority,
+                    )
+                  }
+                  className="xl:w-[190px]"
+                >
+                  {PRIORITY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </SelectInput>
+              </FormField>
             </div>
           }
         >
@@ -314,7 +326,7 @@ export default function NotificationsPage() {
         >
           <div className="space-y-3">
             <RadarLine
-              label="Aprovacoes"
+              label="Aprovações"
               value={summary.byCategory.approval}
               tone="amber"
             />
@@ -328,7 +340,11 @@ export default function NotificationsPage() {
               value={summary.byCategory.contract}
               tone="emerald"
             />
-            <RadarLine label="Ordens" value={summary.byCategory.order} tone="slate" />
+            <RadarLine
+              label="Ordens"
+              value={summary.byCategory.order}
+              tone="slate"
+            />
             <RadarLine
               label="Financeiro"
               value={summary.byCategory.finance}
@@ -364,8 +380,12 @@ function NotificationCard({ item }: { item: DashboardNotificationItem }) {
               <DataPill tone="slate">{item.statusLabel}</DataPill>
             ) : null}
           </div>
-          <h3 className="mt-3 text-lg font-bold text-slate-950">{item.title}</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">{item.message}</p>
+          <h3 className="mt-3 text-lg font-bold text-slate-950">
+            {item.title}
+          </h3>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            {item.message}
+          </p>
         </div>
 
         <div className="min-w-[110px] text-right">
@@ -412,7 +432,9 @@ function RadarLine({
   );
 }
 
-function priorityToTone(priority: DashboardNotificationPriority): DashboardNotificationTone {
+function priorityToTone(
+  priority: DashboardNotificationPriority,
+): DashboardNotificationTone {
   if (priority === "high") return "rose";
   if (priority === "medium") return "amber";
   return "slate";

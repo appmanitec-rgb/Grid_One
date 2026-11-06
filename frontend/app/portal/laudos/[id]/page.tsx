@@ -114,7 +114,7 @@ export default function PortalServiceReportDetailPage() {
               href={report.validationUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex min-h-11 items-center rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100"
+              className="app-button app-button-secondary"
             >
               Validar autenticidade
             </a>
@@ -122,7 +122,7 @@ export default function PortalServiceReportDetailPage() {
           {report.generatedDocument?.hasStoredFile ? (
             <button
               type="button"
-              className="min-h-11 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+              className="app-button app-button-secondary"
               disabled={busyKey === "download-pdf"}
               onClick={() => void downloadPdf()}
             >

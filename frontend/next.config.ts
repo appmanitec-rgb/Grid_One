@@ -1,13 +1,24 @@
 import type { NextConfig } from "next";
+import path from "node:path";
 
-const internalApiUrl = (process.env.INTERNAL_API_URL || "http://localhost:3000").replace(
-  /\/+$/,
-  "",
-);
+const internalApiUrl = (
+  process.env.INTERNAL_API_URL || "http://localhost:3000"
+).replace(/\/+$/, "");
 
 const nextConfig: NextConfig = {
-  distDir: process.env.E2E_DIST_DIR === "1" ? ".next-e2e" : ".next",
+  turbopack: { root: path.resolve(__dirname, "..") },
+  distDir: process.env.MANITEC_FRONTEND_DIST || (
+    process.env.UX_REVIEW === "1"
+      ? ".next-ux-review"
+      : process.env.COMMERCIAL_REVIEW === "1"
+        ? ".next-commercial"
+        : process.env.E2E_DIST_DIR === "1"
+          ? ".next-e2e"
+          : ".next"
+  ),
   poweredByHeader: false,
+  // Word conversion is bounded at 60 s; the proxy must allow it to complete.
+  experimental: { proxyTimeout: 90_000 },
   images: { qualities: [75, 90] },
   allowedDevOrigins: ["192.168.0.25"],
   async headers() {

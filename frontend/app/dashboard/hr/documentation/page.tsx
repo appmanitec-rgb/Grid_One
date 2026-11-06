@@ -1,4 +1,5 @@
 "use client";
+import { formatCalendarDate } from "@/lib/formatters";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { getAccessFromToken } from "@/lib/access";
@@ -101,9 +102,7 @@ export default function DocumentationPage() {
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [certifications, setCertifications] = useState<CertificationRow[]>([]);
-  const [form, setForm] = useState<CertificationForm>(
-    EMPTY_CERTIFICATION_FORM,
-  );
+  const [form, setForm] = useState<CertificationForm>(EMPTY_CERTIFICATION_FORM);
   const [query, setQuery] = useState("");
   const [scopeFilter, setScopeFilter] = useState<"ALL" | CertificationScope>(
     "ALL",
@@ -150,7 +149,7 @@ export default function DocumentationPage() {
         throw new Error(
           await readApiErrorMessage(
             res,
-            "Nao foi possivel carregar os colaboradores.",
+            "Não foi possivel carregar os colaboradores.",
           ),
         );
       }
@@ -174,47 +173,50 @@ export default function DocumentationPage() {
     }
   }
 
-  const loadCertifications = useCallback(async (userId: string) => {
-    if (!canManageCertifications) {
-      setCertifications([]);
-      return;
-    }
-
-    setCertificationsLoading(true);
-    setError("");
-    try {
-      const res = await apiFetch(`/users/${userId}/certifications`, {
-        cache: "no-store",
-      });
-
-      if (!res.ok) {
-        throw new Error(
-          await readApiErrorMessage(
-            res,
-            "Nao foi possivel carregar a documentacao do colaborador.",
-          ),
-        );
+  const loadCertifications = useCallback(
+    async (userId: string) => {
+      if (!canManageCertifications) {
+        setCertifications([]);
+        return;
       }
 
-      const rows = (await res.json()) as CertificationRow[];
-      setCertifications(
-        rows.sort(
-          (a, b) =>
-            new Date(a.validUntil).getTime() -
-            new Date(b.validUntil).getTime(),
-        ),
-      );
-    } catch (loadError: unknown) {
-      setCertifications([]);
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Nao foi possivel carregar documentacao.",
-      );
-    } finally {
-      setCertificationsLoading(false);
-    }
-  }, [canManageCertifications]);
+      setCertificationsLoading(true);
+      setError("");
+      try {
+        const res = await apiFetch(`/users/${userId}/certifications`, {
+          cache: "no-store",
+        });
+
+        if (!res.ok) {
+          throw new Error(
+            await readApiErrorMessage(
+              res,
+              "Não foi possivel carregar a documentação do colaborador.",
+            ),
+          );
+        }
+
+        const rows = (await res.json()) as CertificationRow[];
+        setCertifications(
+          rows.sort(
+            (a, b) =>
+              new Date(a.validUntil).getTime() -
+              new Date(b.validUntil).getTime(),
+          ),
+        );
+      } catch (loadError: unknown) {
+        setCertifications([]);
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Nao foi possivel carregar documentacao.",
+        );
+      } finally {
+        setCertificationsLoading(false);
+      }
+    },
+    [canManageCertifications],
+  );
 
   useEffect(() => {
     void loadCollaborators();
@@ -239,12 +241,12 @@ export default function DocumentationPage() {
     }
 
     if (!canManageCertifications) {
-      setError("Seu perfil nao possui permissao para editar certificacoes.");
+      setError("Seu perfil não possui permissão para editar certificações.");
       return;
     }
 
     if (!form.code.trim() || !form.validUntil) {
-      setError("Informe codigo e validade do documento.");
+      setError("Informe código e validade do documento.");
       return;
     }
 
@@ -276,7 +278,7 @@ export default function DocumentationPage() {
         throw new Error(
           await readApiErrorMessage(
             res,
-            "Nao foi possivel salvar a documentacao.",
+            "Não foi possivel salvar a documentação.",
           ),
         );
       }
@@ -317,7 +319,7 @@ export default function DocumentationPage() {
         throw new Error(
           await readApiErrorMessage(
             res,
-            "Nao foi possivel remover a documentacao.",
+            "Não foi possivel remover a documentação.",
           ),
         );
       }
@@ -361,7 +363,7 @@ export default function DocumentationPage() {
           {
             label: "Colaboradores",
             value: String(collaborators.length),
-            helper: "Contas internas disponiveis para documentacao.",
+            helper: "Contas internas disponíveis para documentação.",
             tone: "slate",
           },
           {
@@ -383,17 +385,17 @@ export default function DocumentationPage() {
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
       {!canManageCertifications ? (
         <StatusBanner tone="amber">
-          Seu usuario consegue acessar Pessoas, mas ainda nao possui a permissao
-          de Certificacoes. Um administrador deve liberar Usuarios &gt;
-          Certificacoes no perfil.
+          Seu usuário consegue acessar Pessoas, mas ainda não possui a permissão
+          de Certificações. Um administrador deve liberar Usuários &gt;
+          Certificações no perfil.
         </StatusBanner>
       ) : null}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(280px,0.72fr)_minmax(0,1.28fr)]">
         <SectionCard
           eyebrow="Colaboradores"
-          title="Base de pessoas"
-          description="Selecione o colaborador para consultar ou atualizar a documentacao."
+          title="Colaboradores"
+          description="Selecione um colaborador para consultar ou atualizar os documentos."
           actions={
             <button
               type="button"
@@ -420,7 +422,7 @@ export default function DocumentationPage() {
             ) : filteredCollaborators.length === 0 ? (
               <EmptyState
                 title="Nenhum colaborador encontrado"
-                description="Ajuste a busca ou revise permissao de pessoas."
+                description="Ajuste a busca para localizar o colaborador."
               />
             ) : (
               <div className="space-y-2">
@@ -451,7 +453,7 @@ export default function DocumentationPage() {
                           </p>
                         </div>
                         {user.technicianProfile ? (
-                          <DataPill tone="blue">Tecnico</DataPill>
+                          <DataPill tone="blue">Técnico</DataPill>
                         ) : null}
                       </div>
                     </button>
@@ -463,14 +465,14 @@ export default function DocumentationPage() {
         </SectionCard>
 
         <SectionCard
-          eyebrow="Documentacao"
+          eyebrow="Documentação"
           title={selectedUser ? selectedUser.name : "Selecione um colaborador"}
-          description="Cadastre NR-35, NR-10, SEP, treinamentos, liberacoes de ferramentas e outros documentos por validade."
+          description="Cadastre treinamentos, certificações, autorizações e suas validades."
         >
           {!selectedUser ? (
             <EmptyState
               title="Nenhum colaborador selecionado"
-              description="Escolha alguem na lista para abrir os registros."
+              description="Selecione um colaborador na lista para consultar os documentos."
             />
           ) : (
             <div className="space-y-5">
@@ -500,7 +502,7 @@ export default function DocumentationPage() {
                 className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 md:grid-cols-2"
                 onSubmit={(event) => void handleSubmit(event)}
               >
-                <FormField label="Codigo">
+                <FormField label="Código">
                   <TextInput
                     value={form.code}
                     onChange={(event) =>
@@ -557,7 +559,7 @@ export default function DocumentationPage() {
                     disabled={!canManageCertifications || saving}
                   />
                 </FormField>
-                <FormField label="Observacoes" className="md:col-span-2">
+                <FormField label="Observações" className="md:col-span-2">
                   <TextAreaInput
                     value={form.notes}
                     onChange={(event) =>
@@ -656,7 +658,8 @@ export default function DocumentationPage() {
                                 : ""}
                             </p>
                             <p className="mt-1 text-xs text-slate-500">
-                              Validade: {formatDate(certification.validUntil)}
+                              Validade:{" "}
+                              {formatCalendarDate(certification.validUntil)}
                             </p>
                             {notes ? (
                               <p className="mt-2 text-xs leading-5 text-slate-600">
@@ -698,15 +701,6 @@ export default function DocumentationPage() {
         </SectionCard>
       </div>
     </div>
-  );
-}
-
-function formatDate(value?: string | null) {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "-";
-  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(
-    parsed,
   );
 }
 

@@ -37,7 +37,13 @@
     "**/*.mts",
     ".next-e2e/types/**/*.ts",
     ".next-e2e/dev/types/**/*.ts",
-    ".next-e2e/dev/dev/types/**/*.ts"
+    ".next-e2e/dev/dev/types/**/*.ts",
+    ".next-commercial/types/**/*.ts",
+    ".next-commercial/dev/types/**/*.ts",
+    ".next-ux-review/types/**/*.ts",
+    ".next-ux-review/dev/types/**/*.ts",
+    ".next-release-20261106/types/**/*.ts",
+    ".next-release-20261106/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

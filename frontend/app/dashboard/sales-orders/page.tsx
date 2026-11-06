@@ -1,4 +1,5 @@
 "use client";
+import { InterfaceIcon } from "@/app/dashboard/components/InterfaceIcon";
 
 import { SelectField } from "@/app/dashboard/components/SelectField";
 import { PageHeader } from "../components/DashboardPageKit";
@@ -271,7 +272,7 @@ export default function SalesOrdersPage() {
             </div>
             {detail.closedReason ? <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">Motivo do encerramento: {detail.closedReason}</p> : null}
             {permissions.canCreateFinance && (detail.status === "DELIVERED" || detail.status === "CLOSED") && !hasActiveReceivable && detail.items.some((item) => item.deliveredQty > 0) ? <div className="mt-4 flex flex-wrap items-end gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3"><label className="text-xs font-semibold text-emerald-900">Vencimento do título<input type="date" value={billingDueDate} onChange={(event) => setBillingDueDate(event.target.value)} className="mt-1 block rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm" /></label><button type="button" disabled={busy || !billingDueDate} onClick={() => void run(`/finance/receivables/sync/sales-orders/${detail.id}`, { dueDate: `${billingDueDate}T12:00:00.000Z` })} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Gerar título do pedido</button><p className="w-full text-xs text-emerald-800">O valor é calculado pelas peças entregues; o vencimento é informado pelo financeiro.</p></div> : null}
-            {detail.receivables.length > 0 ? <Link href="/dashboard/finance/accounts-receivable" className="mt-3 inline-block text-sm font-semibold text-blue-700 hover:underline">Ver cobrança no financeiro →</Link> : null}
+            {detail.receivables.length > 0 ? <Link href="/dashboard/finance/accounts-receivable" className="mt-3 inline-block text-sm font-semibold text-blue-700 hover:underline">Ver cobrança no financeiro <InterfaceIcon name="arrow-right" className="ml-1 inline h-4 w-4" /></Link> : null}
           </section>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

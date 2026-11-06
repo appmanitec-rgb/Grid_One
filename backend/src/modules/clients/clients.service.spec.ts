@@ -352,7 +352,7 @@ describe('ClientsService', () => {
           },
         },
         orderBy: { companyName: 'asc' },
-        take: 20,
+        take: 10,
       }),
     );
   });

@@ -413,7 +413,7 @@ export default function EquipmentModelsPage() {
     setSuccess("");
     try {
       const res = await apiFetch(`/generators/models/${model.id}`);
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, "Nao foi possivel abrir o modelo."));
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, "Não foi possivel abrir o modelo."));
       const detail = (await res.json()) as ModelRow;
       if (requestId !== editRequestId.current) return;
       newModelDraft.current = form;
@@ -431,7 +431,7 @@ export default function EquipmentModelsPage() {
       );
     } catch {
       if (requestId === editRequestId.current) {
-        setError("Nao foi possivel carregar o cadastro completo deste modelo. Tente novamente.");
+        setError("Não foi possivel carregar o cadastro completo deste modelo. Tente novamente.");
       }
     } finally {
       if (requestId === editRequestId.current) setOpeningModelId(null);
@@ -450,7 +450,7 @@ export default function EquipmentModelsPage() {
   async function saveModel(e: React.FormEvent) {
     e.preventDefault();
     if (!canManageModels) {
-      setError("Seu perfil nao pode editar modelos de geradores.");
+      setError("Seu perfil não pode editar modelos de geradores.");
       return;
     }
     if (!form.name.trim()) {
@@ -585,7 +585,7 @@ export default function EquipmentModelsPage() {
                 {editingId ? "Editar modelo" : "Novo modelo"}
               </h2>
               <p className="text-sm text-slate-500">
-                O plano abaixo e uma recomendacao padrao; ele nao gera OS
+                O plano abaixo e uma recomendacao padrão; ele não gera OS
                 automaticamente neste ciclo.
               </p>
             </div>
@@ -596,7 +596,7 @@ export default function EquipmentModelsPage() {
                 disabled={saving}
                 className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
               >
-                Cancelar edicao
+                Cancelar edição
               </button>
             ) : null}
           </div>
@@ -662,11 +662,11 @@ export default function EquipmentModelsPage() {
               <Field label="Consumo" className="md:col-span-2">
                 <input value={form.defaultFuelConsumption} onChange={(e) => updateForm({ defaultFuelConsumption: e.target.value })} className={INPUT_CLASS} placeholder="Litros/h conforme carga" />
               </Field>
-              <Field label="Descricao" className="md:col-span-2">
-                <input value={form.description} onChange={(e) => updateForm({ description: e.target.value })} className={INPUT_CLASS} placeholder="Aplicacao recomendada e observacoes comerciais" />
+              <Field label="Descrição" className="md:col-span-2">
+                <input value={form.description} onChange={(e) => updateForm({ description: e.target.value })} className={INPUT_CLASS} placeholder="Aplicação recomendada e observações comerciais" />
               </Field>
-              <Field label="Observacoes" className="md:col-span-2 xl:col-span-4">
-                <textarea value={form.notes} onChange={(e) => updateForm({ notes: e.target.value })} className={`${INPUT_CLASS} min-h-20`} placeholder="Notas tecnicas do modelo" />
+              <Field label="Observações" className="md:col-span-2 xl:col-span-4">
+                <textarea value={form.notes} onChange={(e) => updateForm({ notes: e.target.value })} className={`${INPUT_CLASS} min-h-20`} placeholder="Notas técnicas do modelo" />
               </Field>
             </div>
           </section>
@@ -675,7 +675,7 @@ export default function EquipmentModelsPage() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-slate-500">
-                  Plano de Manutencao Recomendado
+                  Plano de Manutenção Recomendado
                 </h3>
                 <p className="text-sm text-slate-500">
                   Cadastre recomendacoes como oleo, filtros, bateria, testes e
@@ -708,14 +708,14 @@ export default function EquipmentModelsPage() {
                       ))}
                     </SelectField>
                     <input aria-label={`Intervalo por horimetro ${idx + 1}`} value={item.hourMeterInterval} onChange={(e) => updateMaintenanceItem(idx, { hourMeterInterval: e.target.value })} className={INPUT_CLASS} inputMode="numeric" placeholder="250 h" />
-                    <input aria-label={`Descricao do item de manutencao ${idx + 1}`} value={item.description || ""} onChange={(e) => updateMaintenanceItem(idx, { description: e.target.value })} className={`${INPUT_CLASS} md:col-span-2 xl:col-span-3`} placeholder="Descricao ou recomendacao tecnica" />
-                    <input aria-label={`Observacoes do item de manutencao ${idx + 1}`} value={item.notes || ""} onChange={(e) => updateMaintenanceItem(idx, { notes: e.target.value })} className={`${INPUT_CLASS} md:col-span-2`} placeholder="Observacoes" />
+                    <input aria-label={`Descricao do item de manutencao ${idx + 1}`} value={item.description || ""} onChange={(e) => updateMaintenanceItem(idx, { description: e.target.value })} className={`${INPUT_CLASS} md:col-span-2 xl:col-span-3`} placeholder="Descrição ou recomendacao técnica" />
+                    <input aria-label={`Observacoes do item de manutencao ${idx + 1}`} value={item.notes || ""} onChange={(e) => updateMaintenanceItem(idx, { notes: e.target.value })} className={`${INPUT_CLASS} md:col-span-2`} placeholder="Observações" />
                     <input aria-label={`Ordem do item de manutencao ${idx + 1}`} value={item.sortOrder} onChange={(e) => updateMaintenanceItem(idx, { sortOrder: e.target.value })} className={INPUT_CLASS} inputMode="numeric" placeholder="Ordem" />
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
                     <label className="inline-flex items-center gap-2 text-slate-600">
                       <input type="checkbox" checked={item.required} onChange={(e) => updateMaintenanceItem(idx, { required: e.target.checked })} />
-                      Obrigatorio
+                      Obrigatório
                     </label>
                     <span className={item.active ? "text-emerald-700" : "text-slate-500"}>
                       {item.active ? "Ativo" : "Inativo"}
@@ -728,7 +728,7 @@ export default function EquipmentModelsPage() {
               ))}
               {form.maintenanceTemplates.length === 0 ? (
                 <p className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-500">
-                  Nenhum item de manutencao recomendado neste modelo.
+                  Nenhum item de manutenção recomendado neste modelo.
                 </p>
               ) : null}
             </div>
@@ -738,10 +738,10 @@ export default function EquipmentModelsPage() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-slate-500">
-                  Itens base de pecas/servicos
+                  Itens base de peças/serviços
                 </h3>
                 <p className="text-sm text-slate-500">
-                  Mantem o vinculo ja existente entre modelo e catalogo.
+                  Mantem o vínculo já existente entre modelo e catalogo.
                 </p>
               </div>
               <button
@@ -801,8 +801,8 @@ export default function EquipmentModelsPage() {
         </ModelEditorPortal>
       ) : (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          Seu perfil permite consultar modelos, mas nao editar dados tecnicos ou
-          plano de manutencao.
+          Seu perfil permite consultar modelos, mas não editar dados técnicos ou
+          plano de manutenção.
         </div>
       )}
 
@@ -810,7 +810,7 @@ export default function EquipmentModelsPage() {
         <div className="mb-4 flex flex-col gap-1">
           <h2 className="text-lg font-bold text-slate-900">Modelos cadastrados</h2>
           <p className="text-sm text-slate-500">
-            Lista com resumo tecnico e quantidade de recomendacoes cadastradas.
+            Lista com resumo técnico e quantidade de recomendacoes cadastradas.
           </p>
         </div>
 

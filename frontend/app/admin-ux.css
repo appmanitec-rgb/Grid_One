@@ -1,0 +1,347 @@
+/* Administrative workspace density; document and print layouts retain their rules. */
+@media screen {
+  .proposal-portfolio .dashboard-section-header {
+    gap: 8px;
+    padding-bottom: 8px;
+  }
+  .proposal-portfolio .dashboard-section-body {
+    padding-top: 8px;
+  }
+  .proposal-portfolio .dashboard-section-actions > div {
+    gap: 8px;
+  }
+  .proposal-portfolio .dashboard-section-actions :is(input, select, button) {
+    height: 36px;
+    min-height: 36px;
+  }
+  .dashboard-indicators {
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+  }
+  .dashboard-indicators > summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 12px;
+    list-style: none;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--foreground);
+  }
+  .dashboard-indicators > summary::-webkit-details-marker {
+    display: none;
+  }
+  .dashboard-indicators[open] > summary svg {
+    transform: rotate(180deg);
+  }
+  .dashboard-indicators-body {
+    padding: 0 10px 10px;
+  }
+  .dashboard-skip-link {
+    position: fixed;
+    left: 12px;
+    top: 8px;
+    z-index: 200;
+    padding: 10px 14px;
+    border: 2px solid var(--brand);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--foreground);
+    transform: translateY(-200%);
+  }
+  .dashboard-skip-link:focus {
+    transform: translateY(0);
+  }
+  .dashboard-page
+    :is(div, section):not(.department-metric-slot):has(
+      > .dashboard-metric-card
+    ) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  @container (min-width: 560px) {
+    .dashboard-page
+      :is(div, section):not(.department-metric-slot):has(
+        > .dashboard-metric-card
+      ) {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    .dashboard-page
+      :is(div, section):not(.department-metric-slot):has(
+        > .dashboard-metric-card:nth-child(3):last-child
+      ) {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  @container (max-width: 290px) {
+    .dashboard-page
+      :is(div, section):not(.department-metric-slot):has(
+        > .dashboard-metric-card
+      ) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .dashboard-main:has(.proposal-flow-page) {
+    scroll-padding-bottom: 330px;
+  }
+  @media (max-width: 767px) {
+    .opportunity-board > div {
+      min-height: 0;
+    }
+  }
+  .dashboard-page {
+    container-type: inline-size;
+  }
+  .dashboard-main {
+    padding-top: 14px;
+  }
+  .dashboard-page-header {
+    gap: 10px 16px;
+    padding: 13px 16px;
+    border-radius: 12px;
+  }
+  .dashboard-page-header-copy {
+    flex: 1 1 210px;
+  }
+  .dashboard-page-title {
+    font-size: clamp(20px, 1.5vw, 24px);
+    line-height: 1.25;
+  }
+  .dashboard-page-eyebrow {
+    font-size: 12px;
+    margin-bottom: 3px;
+  }
+  .dashboard-page-description {
+    margin-top: 4px;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .dashboard-page-actions {
+    max-width: 100%;
+  }
+  .dashboard-page-actions :is(a, button) {
+    min-height: 36px;
+    padding: 7px 11px;
+    font-size: 13px;
+  }
+  .dashboard-page-intro {
+    gap: 10px;
+  }
+  .dashboard-page > :not(:last-child) {
+    margin-bottom: 0;
+  }
+  .dashboard-page.space-y-5 > :not(:last-child),
+  .dashboard-page.space-y-6 > :not(:last-child) {
+    margin-block-end: 14px;
+  }
+  .dashboard-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .dashboard-metric-card {
+    padding: 10px 12px;
+    min-width: 0;
+    border-radius: 10px;
+    background: var(--surface);
+  }
+  .dashboard-metric-card > p:first-child {
+    font-size: 12px;
+    line-height: 1.3;
+  }
+  .dashboard-metric-card > p:nth-child(2) {
+    margin-top: 5px;
+    font-size: 20px;
+    line-height: 1.2;
+  }
+  .dashboard-metric-card > p:nth-child(3) {
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+  .dashboard-kpi-help {
+    color: var(--text-muted);
+    font-size: 12px;
+    margin-top: 5px;
+  }
+  .dashboard-kpi-help summary {
+    width: fit-content;
+    cursor: pointer;
+    padding: 4px 0;
+  }
+  .dashboard-kpi-help dl {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .dashboard-kpi-help dt {
+    font-weight: 600;
+    color: var(--foreground);
+  }
+  .dashboard-section-card {
+    padding: 14px 16px;
+    border-radius: 12px;
+  }
+  .dashboard-section-header {
+    gap: 10px;
+    padding-bottom: 10px;
+  }
+  .dashboard-section-title {
+    margin-top: 0;
+    font-size: 16px;
+  }
+  .dashboard-section-description {
+    margin-top: 4px;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .dashboard-section-body {
+    padding-top: 12px;
+  }
+  .dashboard-main
+    :is(input, textarea, select, button, a, summary):focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 3px;
+  }
+  .dashboard-main :is(input, textarea, select) {
+    scroll-margin-block: 96px;
+  }
+  .dashboard-main :is(h1, h2, section[id]) {
+    scroll-margin-block: 20px;
+  }
+  .dashboard-mobile-shortcuts {
+    height: 60px;
+    padding: 6px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
+  }
+  .dashboard-mobile-shortcuts > button {
+    width: 58px;
+    border-radius: 8px;
+  }
+  .dashboard-responsive-table {
+    table-layout: auto;
+  }
+  .dashboard-responsive-table :is(td, th) {
+    padding: 12px;
+    vertical-align: top;
+  }
+  .dashboard-responsive-table .record-identity {
+    min-width: 180px;
+    max-width: 350px;
+    overflow-wrap: break-word;
+  }
+  .dashboard-record-link {
+    line-height: 1.45;
+  }
+  .dashboard-create-panel {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+  .dashboard-create-panel > summary {
+    padding: 12px 16px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .dashboard-create-panel[open] > summary {
+    border-bottom: 1px solid var(--border);
+  }
+  .dashboard-create-panel > section {
+    box-shadow: none;
+    border: 0;
+  }
+  .dashboard-section-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 0;
+  }
+  .dashboard-section-nav a {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--foreground);
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 13px;
+  }
+  .pdf-preview canvas {
+    max-width: 100%;
+  }
+  @container (min-width: 560px) {
+    .dashboard-metrics-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    .dashboard-metrics-grid:has(> :nth-child(3):last-child) {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  @container (max-width: 290px) {
+    .dashboard-metrics-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  @media (max-width: 767px) {
+    .dashboard-main {
+      padding: 12px 12px calc(94px + env(safe-area-inset-bottom));
+    }
+    .dashboard-page-header {
+      gap: 10px;
+    }
+    .dashboard-page-header-copy {
+      flex-basis: 180px;
+    }
+    .dashboard-page-actions {
+      justify-content: flex-start;
+    }
+    .dashboard-page-title {
+      font-size: 20px;
+    }
+    .proposal-finance-dock {
+      bottom: calc(84px + env(safe-area-inset-bottom));
+      max-height: min(210px, 38dvh);
+      overflow-y: auto;
+    }
+    .proposal-flow-page {
+      padding-bottom: 245px;
+    }
+    .dashboard-responsive-table thead {
+      display: none;
+    }
+    .dashboard-responsive-table,
+    .dashboard-responsive-table tbody,
+    .dashboard-responsive-table tr,
+    .dashboard-responsive-table td {
+      display: block;
+      width: 100%;
+    }
+    .dashboard-responsive-table tr {
+      padding: 10px 12px;
+    }
+    .dashboard-responsive-table td {
+      padding: 3px 0;
+      border: 0;
+    }
+    .dashboard-responsive-table td[data-label]::before {
+      content: attr(data-label) ": ";
+      color: var(--text-muted);
+      font-weight: 500;
+      font-size: 12px;
+    }
+    .dashboard-responsive-table .record-identity {
+      min-width: 0;
+      max-width: none;
+    }
+    .dashboard-responsive-table td p {
+      overflow-wrap: anywhere;
+    }
+    .dashboard-responsive-table td[colspan] {
+      padding: 12px;
+    }
+  }
+}

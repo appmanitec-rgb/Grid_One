@@ -39,7 +39,7 @@ export default function PortalDocumentsPage() {
 
   return (
     <div className="dashboard-page space-y-5">
-      <PageHeader eyebrow="Central do cliente" title={<>Documentos</>} description={<>Documentos enviados ou liberados para sua empresa. Downloads amplos dependem de liberação explícita.</>} />
+      <PageHeader eyebrow="Central do cliente" title={<>Documentos</>} description={<>Consulte os documentos enviados ou liberados para sua empresa.</>} />
 
       {loading ? <State text="Carregando documentos..." /> : null}
       {error ? <State text={error} tone="error" /> : null}

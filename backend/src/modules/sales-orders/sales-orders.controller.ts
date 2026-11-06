@@ -8,9 +8,11 @@ import {
   Query,
   Req,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
+import { CommercialDataPrivacyInterceptor } from '../auth/rules/commercial-privacy.interceptor';
 import {
   CloseSalesOrderDto,
   SalesDeliveryDto,
@@ -21,6 +23,7 @@ import {
 import { SalesOrdersService } from './sales-orders.service';
 
 @Controller('sales-orders')
+@UseInterceptors(CommercialDataPrivacyInterceptor)
 @UseGuards(AuthGuard)
 export class SalesOrdersController {
   constructor(private readonly service: SalesOrdersService) {}

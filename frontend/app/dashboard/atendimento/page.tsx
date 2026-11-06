@@ -1,4 +1,5 @@
 "use client";
+import { InterfaceIcon } from "@/app/dashboard/components/InterfaceIcon";
 
 import { SelectField } from "@/app/dashboard/components/SelectField";
 import Link from "next/link";
@@ -36,6 +37,7 @@ import {
   TicketSla,
 } from "./TicketShared";
 import styles from "./TicketWorkspace.module.css";
+import CompactIndicators from "../components/CompactIndicators";
 
 const INITIAL_FILTERS = {
   search: "",
@@ -72,7 +74,7 @@ export default function InternalTicketsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [initialClientId, setInitialClientId] = useState("");
-  const [initialGeneratorId,setInitialGeneratorId] = useState("");
+  const [initialGeneratorId, setInitialGeneratorId] = useState("");
   const [created, setCreated] = useState<ServiceTicket | null>(null);
   const [moreColumn, setMoreColumn] = useState<TicketColumnKey | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -386,7 +388,7 @@ export default function InternalTicketsPage() {
                   );
                 }}
               >
-                + Novo chamado
+                <InterfaceIcon name="plus" /> Novo chamado
               </button>
             ) : null}
           </>
@@ -439,27 +441,41 @@ export default function InternalTicketsPage() {
           />
         </div>
       ) : null}
-      <section aria-label="Visão geral dos chamados" className={styles.metrics}>
-        {METRICS.map((key) => (
-          <button
-            type="button"
-            key={key}
-            className={styles.metric}
-            aria-pressed={filters.bucket === key}
-            data-tone={
-              key === "OVERDUE" ? "rose" : key === "DUE_SOON" ? "amber" : "blue"
-            }
-            onClick={() => chooseBucket(key)}
-          >
-            <span>{TICKET_BUCKET_LABELS[key]}</span>
-            <strong>{!data ? "—" : (data.summary[key] ?? 0)}</strong>
-          </button>
-        ))}
-      </section>
+      <CompactIndicators
+        summary={
+          <span>
+            Em aberto <strong>{data?.summary.ACTIVE ?? "—"}</strong> · Prazo
+            vencido <strong>{data?.summary.OVERDUE ?? "—"}</strong>
+          </span>
+        }
+      >
+        <section
+          aria-label="Visão geral dos chamados"
+          className={styles.metrics}
+        >
+          {METRICS.map((key) => (
+            <button
+              type="button"
+              key={key}
+              className={styles.metric}
+              aria-pressed={filters.bucket === key}
+              data-tone={
+                key === "OVERDUE"
+                  ? "rose"
+                  : key === "DUE_SOON"
+                    ? "amber"
+                    : "blue"
+              }
+              onClick={() => chooseBucket(key)}
+            >
+              <span>{TICKET_BUCKET_LABELS[key]}</span>
+              <strong>{!data ? "—" : (data.summary[key] ?? 0)}</strong>
+            </button>
+          ))}
+        </section>
+      </CompactIndicators>
       <SectionCard
-        eyebrow="Fila de atendimento"
         title={TICKET_BUCKET_LABELS[filters.bucket]}
-        description="Use a busca e os filtros para encontrar o atendimento."
         actions={
           <div className="flex flex-wrap gap-2">
             <button
@@ -576,7 +592,8 @@ export default function InternalTicketsPage() {
             </label>
             <label className={styles.field}>
               Responsável
-              <SelectField searchable
+              <SelectField
+                searchable
                 value={filters.assignedToUserId}
                 onChange={(event) =>
                   filter("assignedToUserId", event.target.value)

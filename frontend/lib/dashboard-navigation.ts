@@ -92,6 +92,13 @@ export const MAIN_SECTIONS: NavSection[] = [
     description: "Da oportunidade ao pedido de venda",
     items: [
       {
+        key: "crm_agenda",
+        label: "Agenda comercial",
+        href: "/dashboard/proposals/workspace",
+        enabled: true,
+        group: "Dia a dia",
+      },
+      {
         key: "crm_funnel",
         label: "Oportunidades",
         href: "/dashboard/opportunities",
@@ -527,6 +534,13 @@ export const MAIN_SECTIONS: NavSection[] = [
         href: "/dashboard/developer/document-editor",
         enabled: true,
         group: "Ferramentas",
+      },
+      {
+        key: "studio_templates",
+        label: "Biblioteca de modelos",
+        href: "/dashboard/developer/templates",
+        enabled: true,
+        group: "Conteúdo",
       },
       {
         key: "studio_history",

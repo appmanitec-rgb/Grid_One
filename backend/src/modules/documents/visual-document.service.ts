@@ -48,6 +48,13 @@ const BUILTIN_FIELDS = [
     sourcePath: 'client.name',
   },
   {
+    key: 'client_legal_name',
+    label: 'Razão social do Cliente',
+    category: 'Cliente',
+    kinds: ALL_KINDS,
+    sourcePath: 'client.companyName',
+  },
+  {
     key: 'client_address',
     label: 'Endereço do Cliente',
     category: 'Cliente',
@@ -363,6 +370,13 @@ export class VisualDocumentService {
       });
     }
     const specialLabels: Record<string, string> = {
+      __proposal_parts_branded__: 'Tabela de peças com identidade Manitec',
+      __proposal_services_branded__:
+        'Tabela de serviços com identidade Manitec',
+      __proposal_parts_summary__: 'Tabela comercial de peças e materiais',
+      __proposal_services_summary__:
+        'Tabela comercial de serviços e mão de obra',
+      __proposal_items__: 'Itens e serviços da proposta',
       __proposal_parts__: 'Peças da Proposta',
       __proposal_services__: 'Serviços da Proposta',
       __contract_items__: 'Equipamentos do Contrato',
@@ -714,7 +728,11 @@ export class VisualDocumentService {
   private wordCategory(path: string) {
     return path.startsWith('client.') || path.startsWith('contact.')
       ? 'Cliente'
-      : path.startsWith('proposal.') || path.startsWith('__proposal')
+      : path.startsWith('proposal.') ||
+          path.startsWith('clientProposal.') ||
+          path.startsWith('brandedProposal.') ||
+          path.startsWith('proposalPayment.') ||
+          path.startsWith('__proposal')
         ? 'Proposta'
         : path.startsWith('contract.') || path.startsWith('__contract')
           ? 'Contrato'
@@ -1164,8 +1182,10 @@ export class VisualDocumentService {
   async renderPublished(
     kind: VisualDocumentKind,
     payload: Record<string, unknown>,
+    frozen?: Awaited<ReturnType<VisualDocumentService['getPublished']>>,
   ) {
-    const published = await this.getPublished(kind);
+    const published =
+      frozen === undefined ? await this.getPublished(kind) : frozen;
     if (!published || published.version.format === 'WORD') return null;
     const context = this.institutional.buildContext(
       this.institutionalKind(kind),
@@ -1225,8 +1245,10 @@ export class VisualDocumentService {
     kind: VisualDocumentKind,
     payload: Record<string, unknown>,
     validationUrl?: string | null,
+    frozen?: Awaited<ReturnType<VisualDocumentService['getPublished']>>,
   ) {
-    const published = await this.getPublished(kind);
+    const published =
+      frozen === undefined ? await this.getPublished(kind) : frozen;
     if (
       !published ||
       published.version.format !== 'WORD' ||

@@ -1,7 +1,12 @@
+import {
+  assertProposalConference,
+  phase1Enabled,
+} from '../proposals/proposal-conference';
 import { proposalScope, ruleActor } from '../auth/rules/commercial-access';
 import { allowedPortfolios } from '../auth/rules/access-rules';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -229,7 +234,22 @@ export class DeliveriesService {
     private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  async createDelivery(dto: CreateDocumentDeliveryDto, actorUserId: string) {
+  async createDelivery(
+    dto: CreateDocumentDeliveryDto,
+    actorUserId: string,
+  ): Promise<{
+    delivery: ReturnType<DeliveriesService['mapDelivery']>;
+    channel: DeliveryChannel;
+    shareUrl: string;
+    shareExpiresAt: string;
+    dispatched: boolean;
+    emailDispatched: boolean;
+    manualActionRequired: boolean;
+    manualShareRequired: boolean;
+    providerConfigured: boolean;
+    launchUrl: string | null;
+    note: string;
+  }> {
     const actor = await this.getActorScope(actorUserId);
     if (actor.role === UserRole.CLIENT) {
       throw new ForbiddenException(
@@ -242,6 +262,47 @@ export class DeliveriesService {
       dto.documentId,
       actor.id,
     );
+    if (
+      phase1Enabled() &&
+      dto.documentType === DeliveryDocumentType.PROPOSAL &&
+      dto.requestKey
+    ) {
+      const entityId = actor.id + ':' + dto.requestKey;
+      const content = { ...dto };
+      delete content.requestKey;
+      const signature = createHash('sha256')
+        .update(JSON.stringify(content))
+        .digest('hex');
+      await this.prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(
+          'SELECT pg_advisory_xact_lock(hashtext($1))',
+          'proposal-delivery:' + entityId,
+        );
+        const previous = await tx.systemAuditLog.findFirst({
+          where: { entityType: 'PROPOSAL_DELIVERY_REQUEST', entityId },
+        });
+        if (previous)
+          throw new ConflictException(
+            'Esta solicitação de envio já foi registrada. Consulte o histórico antes de reenviar.',
+          );
+        await tx.systemAuditLog.create({
+          data: {
+            domain: AuditDomain.PROPOSALS,
+            entityType: 'PROPOSAL_DELIVERY_REQUEST',
+            entityId,
+            action: 'DELIVERY_REQUEST_CLAIMED',
+            actorUserId: actor.id,
+            afterPayload: { documentId: dto.documentId, signature },
+          },
+        });
+      });
+      // The claim is durable before the external side effect. Retries cannot send twice,
+      // including an interrupted/uncertain response. No share token is stored in telemetry.
+      return this.createDelivery(
+        { ...content, requestKey: undefined },
+        actor.id,
+      );
+    }
     const descriptor = this.describeSnapshot(snapshot);
     const expiresAt = this.calculateExpiration(dto.expiresInDays);
     const token = randomBytes(24).toString('hex');
@@ -417,6 +478,7 @@ export class DeliveriesService {
     return this.createDelivery(
       {
         channel: DeliveryChannel.EMAIL,
+        requestKey: dto.requestKey,
         documentType: dto.documentType,
         documentId: dto.documentId,
         recipientTarget: dto.recipientEmail,
@@ -653,6 +715,11 @@ export class DeliveriesService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      if (phase1Enabled())
+        await tx.$executeRawUnsafe(
+          'SELECT pg_advisory_xact_lock(hashtext($1))',
+          'proposal-write:' + shareToken.documentId,
+        );
       const proposal = await tx.proposal.findFirst({
         where: {
           id: shareToken.documentId,
@@ -689,6 +756,7 @@ export class DeliveriesService {
       }
 
       const now = new Date();
+      await assertProposalConference(tx, proposal.id, undefined, 'accept');
       const approvalHash = this.buildSharedApprovalHash({
         proposalId: proposal.id,
         proposalCode: proposal.code,

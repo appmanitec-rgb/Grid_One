@@ -1,4 +1,5 @@
 "use client";
+import { formatCalendarDate } from "@/lib/formatters";
 import { commercialLabel } from "@/lib/commercial-labels";
 
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -63,7 +64,7 @@ export default function ContractDocumentPage() {
         throw new Error(
           await readApiErrorMessage(
             response,
-            "Nao foi possivel carregar os dados da renovacao.",
+            "Não foi possivel carregar os dados da renovação.",
           ),
         );
       }
@@ -154,10 +155,9 @@ export default function ContractDocumentPage() {
     }
   }
 
-  function updateGenerationOption<K extends keyof ContractDocumentGenerationOptions>(
-    key: K,
-    value: ContractDocumentGenerationOptions[K],
-  ) {
+  function updateGenerationOption<
+    K extends keyof ContractDocumentGenerationOptions,
+  >(key: K, value: ContractDocumentGenerationOptions[K]) {
     setGenerationOptions((current) =>
       current ? { ...current, [key]: value } : current,
     );
@@ -213,7 +213,10 @@ export default function ContractDocumentPage() {
               <TextInput
                 value={generationOptions.maintenanceWindow}
                 onChange={(event) =>
-                  updateGenerationOption("maintenanceWindow", event.target.value)
+                  updateGenerationOption(
+                    "maintenanceWindow",
+                    event.target.value,
+                  )
                 }
               />
             </FormField>
@@ -284,7 +287,10 @@ export default function ContractDocumentPage() {
                 <TextAreaInput
                   value={generationOptions.cancellationRule}
                   onChange={(event) =>
-                    updateGenerationOption("cancellationRule", event.target.value)
+                    updateGenerationOption(
+                      "cancellationRule",
+                      event.target.value,
+                    )
                   }
                 />
               </FormField>
@@ -292,7 +298,10 @@ export default function ContractDocumentPage() {
                 <TextAreaInput
                   value={generationOptions.extraCallPolicy}
                   onChange={(event) =>
-                    updateGenerationOption("extraCallPolicy", event.target.value)
+                    updateGenerationOption(
+                      "extraCallPolicy",
+                      event.target.value,
+                    )
                   }
                 />
               </FormField>
@@ -319,7 +328,10 @@ export default function ContractDocumentPage() {
                 <TextAreaInput
                   value={generationOptions.clientObligations}
                   onChange={(event) =>
-                    updateGenerationOption("clientObligations", event.target.value)
+                    updateGenerationOption(
+                      "clientObligations",
+                      event.target.value,
+                    )
                   }
                 />
               </FormField>
@@ -327,7 +339,10 @@ export default function ContractDocumentPage() {
                 <TextAreaInput
                   value={generationOptions.additionalClauses}
                   onChange={(event) =>
-                    updateGenerationOption("additionalClauses", event.target.value)
+                    updateGenerationOption(
+                      "additionalClauses",
+                      event.target.value,
+                    )
                   }
                 />
               </FormField>
@@ -354,7 +369,7 @@ export default function ContractDocumentPage() {
       <PrintDocumentShell
         company={data.company}
         title={`Contrato ${data.document.code}`}
-        subtitle="Versao consolidada para vigencia, SLA, escopo e faturamento recorrente."
+        subtitle="Versao consolidada para vigência, SLA, escopo e faturamento recorrente."
         code={data.document.code}
         sourceHref={data.sourceHref}
         sourceLabel={
@@ -378,7 +393,9 @@ export default function ContractDocumentPage() {
       >
         <div className="flex flex-wrap gap-2">
           <ToolbarPill>{data.document.statusLabel}</ToolbarPill>
-          <ToolbarPill>{formatCurrency(data.document.recurringAmount)}</ToolbarPill>
+          <ToolbarPill>
+            {formatCurrency(data.document.recurringAmount)}
+          </ToolbarPill>
           <ToolbarPill>{`${data.summary.equipments} equipamento(s)`}</ToolbarPill>
         </div>
 
@@ -388,13 +405,11 @@ export default function ContractDocumentPage() {
             value={data.client.tradeName || data.client.companyName}
           />
           <ValueCard
-            label="Vigencia"
-            value={`${formatDate(data.document.startDate)} ate ${formatDate(
-              data.document.endDate,
-            )}`}
+            label="Vigência"
+            value={`${formatCalendarDate(data.document.startDate)} ate ${formatCalendarDate(data.document.endDate)}`}
           />
           <ValueCard
-            label="Emissao"
+            label="Emissão"
             value={formatDateTime(data.document.issuedAt)}
             tone="accent"
           />
@@ -402,7 +417,7 @@ export default function ContractDocumentPage() {
 
         <PrintSection title="Regras do contrato" columns={3}>
           <ValueCard
-            label="Recorrencia preventiva"
+            label="Recorrência preventiva"
             value={commercialLabel(data.document.preventiveRecurrence)}
           />
           <ValueCard
@@ -418,18 +433,20 @@ export default function ContractDocumentPage() {
             value={data.document.correctiveVisitAllowance ?? "-"}
           />
           <ValueCard
-            label="Cobertura de pecas"
+            label="Cobertura de peças"
             value={commercialLabel(data.document.partsCoverage)}
           />
           <ValueCard label="Vencimento" value={`Dia ${data.document.dueDay}`} />
-          <ValueCard label="Indice" value={data.document.adjustmentIndex} />
+          <ValueCard label="Índice" value={data.document.adjustmentIndex} />
         </PrintSection>
 
         <PrintSection title="Escopo coberto">
           <PrintTable headers={["Equipamento", "Serie", "Site", "Cobertura"]}>
             {data.equipments.map((item) => (
               <tr key={item.id} className="border-t border-slate-200">
-                <td className="px-4 py-3 text-slate-800">{item.generator.name}</td>
+                <td className="px-4 py-3 text-slate-800">
+                  {item.generator.name}
+                </td>
                 <td className="px-4 py-3 text-slate-600">
                   {item.generator.serialNumber || "-"}
                 </td>
@@ -448,7 +465,13 @@ export default function ContractDocumentPage() {
 
         <PrintSection title="Faturas">
           <PrintTable
-            headers={["Competencia", "Vencimento", "Valor", "Status", "Pago em"]}
+            headers={[
+              "Competencia",
+              "Vencimento",
+              "Valor",
+              "Status",
+              "Pago em",
+            ]}
           >
             {data.invoices.map((invoice) => (
               <tr key={invoice.id} className="border-t border-slate-200">
@@ -456,7 +479,7 @@ export default function ContractDocumentPage() {
                   {formatDate(invoice.competenceDate)}
                 </td>
                 <td className="px-4 py-3 text-slate-600">
-                  {formatDate(invoice.dueDate)}
+                  {formatCalendarDate(invoice.dueDate)}
                 </td>
                 <td className="px-4 py-3 font-semibold text-slate-900">
                   {formatCurrency(invoice.amount)}
@@ -472,9 +495,9 @@ export default function ContractDocumentPage() {
           </PrintTable>
         </PrintSection>
 
-        <PrintSection title="Observacoes" columns={2}>
+        <PrintSection title="Observações" columns={2}>
           <ValueCard
-            label="Observacoes contratuais"
+            label="Observações contratuais"
             value={data.document.notes || "-"}
           />
           <ValueCard
@@ -551,8 +574,12 @@ function formatLatestDocument(
   if (!latestDocument) return "Nenhum documento institucional gerado.";
   return [
     latestDocument.templateKey,
-    latestDocument.templateVersion ? `v: ${latestDocument.templateVersion}` : null,
-    latestDocument.createdAt ? `gerado em ${formatDateTime(latestDocument.createdAt)}` : null,
+    latestDocument.templateVersion
+      ? `v: ${latestDocument.templateVersion}`
+      : null,
+    latestDocument.createdAt
+      ? `gerado em ${formatDateTime(latestDocument.createdAt)}`
+      : null,
     latestDocument.checksumSha256
       ? `hash ${latestDocument.checksumSha256.slice(0, 16)}`
       : null,

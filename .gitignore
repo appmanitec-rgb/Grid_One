@@ -6,5 +6,19 @@
 *.pid.lock
 
 /backend/runtime-prp/
+/backend/runtime-commercial/
+/backend/dist-commercial/
+/frontend/.next-commercial/
+/frontend/.next-ux-review/
+/frontend/.next-release-*/
+/backend/runtime-release-*/
+/backend/dist-release-*/
+
+# Local generated documents and visual evidence can contain customer data.
+/output/
+/docs/evidencias/
 
 /backend/dist-prp/
+
+# Generated from the pinned pdfjs-dist dependency before frontend build/start.
+/frontend/public/pdfjs/pdf.worker.min.mjs

@@ -7,7 +7,10 @@ $verified = @()
 foreach ($role in @("backend", "frontend")) {
   $pidValue = [int]$record.("${role}Pid")
   $entryValue = [string]$record.("${role}Entry")
-  $expected = if ($role -eq "backend") { Join-Path $ProjectRoot "backend\dist\src\main.js" } else { Join-Path $ProjectRoot "frontend\node_modules\next\dist\bin\next" }
+  $releaseBackend = Join-Path $ProjectRoot "scripts\start-backend-release.cjs"
+  $expected = if ($role -eq "backend") {
+    if ($entryValue -eq $releaseBackend) { $releaseBackend } else { Join-Path $ProjectRoot "backend\dist\src\main.js" }
+  } else { Join-Path $ProjectRoot "frontend\node_modules\next\dist\bin\next" }
   $serverProcess = Get-CimInstance Win32_Process -Filter "ProcessId=$pidValue"
   if (-not $serverProcess) { continue }
   if ($entryValue -ne $expected -or -not $serverProcess.CommandLine.Contains($expected) -or $serverProcess.Name -ne "node.exe") {

@@ -1,13 +1,17 @@
 "use client";
 
 import { SelectField } from "@/app/dashboard/components/SelectField";
-import { PageHeader } from "../../components/DashboardPageKit";
+import { PageHeader, KpiStrip } from "../../components/DashboardPageKit";
 
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
-import { ROLE_DEPARTMENTS, USER_ROLE_LABELS, userRoleLabel } from "@/lib/user-departments";
+import {
+  ROLE_DEPARTMENTS,
+  USER_ROLE_LABELS,
+  userRoleLabel,
+} from "@/lib/user-departments";
 import { canAccessDashboardPath, getAccessFromToken } from "@/lib/access";
 
 type InternalUser = {
@@ -30,7 +34,11 @@ type PortalUser = {
   email: string;
   role: string;
   isActive: boolean;
-  linkedClient?: { id: string; companyName: string; tradeName?: string | null } | null;
+  linkedClient?: {
+    id: string;
+    companyName: string;
+    tradeName?: string | null;
+  } | null;
 };
 
 type ClientAgent = {
@@ -79,9 +87,23 @@ export default function CollaboratorsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const access = useMemo(() => getAccessFromToken(), []);
-  const canManageAccounts = access.users.manage && canAccessDashboardPath("/dashboard/management/users/control", access.pages);
+  const canManageAccounts =
+    access.users.manage &&
+    canAccessDashboardPath("/dashboard/management/users/control", access.pages);
   const canManageSecurity = canManageAccounts && access.users.manageSecurity;
-  const departments = useMemo(() => [...new Set((payload?.internalUsers || []).map(user => user.department?.trim() || ROLE_DEPARTMENTS[user.role]).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR")), [payload?.internalUsers]);
+  const departments = useMemo(
+    () =>
+      [
+        ...new Set(
+          (payload?.internalUsers || [])
+            .map(
+              (user) => user.department?.trim() || ROLE_DEPARTMENTS[user.role],
+            )
+            .filter(Boolean),
+        ),
+      ].sort((a, b) => a.localeCompare(b, "pt-BR")),
+    [payload?.internalUsers],
+  );
   const canViewSensitivePeople =
     payload?.access?.canViewSensitivePeople === true &&
     access.people.viewSensitive === true;
@@ -93,11 +115,20 @@ export default function CollaboratorsPage() {
       try {
         const res = await apiFetch("/hr-admin/agents", { cache: "no-store" });
         if (!res.ok) {
-          throw new Error(await readApiErrorMessage(res, "Não foi possível carregar os colaboradores."));
+          throw new Error(
+            await readApiErrorMessage(
+              res,
+              "Não foi possível carregar os colaboradores.",
+            ),
+          );
         }
         setPayload((await res.json()) as AgentsPayload);
       } catch (issue) {
-        setError(issue instanceof Error ? issue.message : "Não foi possível carregar os colaboradores.");
+        setError(
+          issue instanceof Error
+            ? issue.message
+            : "Não foi possível carregar os colaboradores.",
+        );
       } finally {
         setLoading(false);
       }
@@ -110,16 +141,44 @@ export default function CollaboratorsPage() {
   const internalUsers = useMemo(
     () =>
       (payload?.internalUsers || []).filter((row) =>
-        matchesUserFilters(row, query, roleFilter, statusFilter, technicianFilter, departmentFilter),
+        matchesUserFilters(
+          row,
+          query,
+          roleFilter,
+          statusFilter,
+          technicianFilter,
+          departmentFilter,
+        ),
       ),
-    [payload?.internalUsers, query, roleFilter, statusFilter, technicianFilter, departmentFilter],
+    [
+      payload?.internalUsers,
+      query,
+      roleFilter,
+      statusFilter,
+      technicianFilter,
+      departmentFilter,
+    ],
   );
   const systemUsers = useMemo(
     () =>
       (payload?.systemUsers || []).filter((row) =>
-        matchesUserFilters(row, query, roleFilter, statusFilter, technicianFilter, departmentFilter),
+        matchesUserFilters(
+          row,
+          query,
+          roleFilter,
+          statusFilter,
+          technicianFilter,
+          departmentFilter,
+        ),
       ),
-    [payload?.systemUsers, query, roleFilter, statusFilter, technicianFilter, departmentFilter],
+    [
+      payload?.systemUsers,
+      query,
+      roleFilter,
+      statusFilter,
+      technicianFilter,
+      departmentFilter,
+    ],
   );
   const clients = useMemo(
     () =>
@@ -139,9 +198,23 @@ export default function CollaboratorsPage() {
   const auditors = useMemo(
     () =>
       (payload?.auditors || []).filter((row) =>
-        matchesUserFilters(row, query, roleFilter, statusFilter, technicianFilter, departmentFilter),
+        matchesUserFilters(
+          row,
+          query,
+          roleFilter,
+          statusFilter,
+          technicianFilter,
+          departmentFilter,
+        ),
       ),
-    [payload?.auditors, query, roleFilter, statusFilter, technicianFilter, departmentFilter],
+    [
+      payload?.auditors,
+      query,
+      roleFilter,
+      statusFilter,
+      technicianFilter,
+      departmentFilter,
+    ],
   );
 
   const currentResultCount =
@@ -165,18 +238,44 @@ export default function CollaboratorsPage() {
     <div className="dashboard-page space-y-5">
       <PageHeader
         eyebrow="Recursos Humanos"
-        title="Colaboradores e acessos"
-        description="Equipe organizada por departamento, com cadastro, documentação e acesso ao sistema."
-        actions={<div className="flex flex-wrap gap-2">
-          {canManageAccounts ? <Link href="/dashboard/management/users/new" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500">Cadastrar colaborador</Link> : null}
-          {canManageSecurity ? <Link href="/dashboard/management/users/permissions" className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Gerenciar permissões</Link> : null}
-          {access.users.manageCertifications ? <Link href="/dashboard/hr/documentation" className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Documentação</Link> : null}
-        </div>}
+        title="Colaboradores"
+        description="Equipe, departamentos e vínculos de trabalho."
+        actions={
+          <div className="flex flex-wrap gap-2">
+            {canManageAccounts ? (
+              <Link
+                href="/dashboard/management/users/new"
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
+              >
+                Novo colaborador
+              </Link>
+            ) : null}
+            {canManageSecurity ? (
+              <Link
+                href="/dashboard/management/users/permissions"
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Permissões
+              </Link>
+            ) : null}
+            {access.users.manageCertifications ? (
+              <Link
+                href="/dashboard/hr/documentation"
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Documentação
+              </Link>
+            ) : null}
+          </div>
+        }
       />
 
       <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center gap-2">
-          <label className="block flex-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          <label
+            htmlFor="collaborator-search"
+            className="block flex-1 text-xs font-semibold uppercase tracking-wide text-zinc-500"
+          >
             Buscar colaborador
           </label>
           <button
@@ -188,6 +287,7 @@ export default function CollaboratorsPage() {
           </button>
         </div>
         <input
+          id="collaborator-search"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Buscar colaborador, departamento, cliente ou e-mail"
@@ -195,12 +295,26 @@ export default function CollaboratorsPage() {
         />
         {showFilters ? (
           <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-5">
-            <SelectFilter label="Departamento" value={departmentFilter} onChange={setDepartmentFilter} options={[{ value: "ALL", label: "Todos os departamentos" }, ...departments.map(value => ({ value, label: value }))]} />
+            <SelectFilter
+              label="Departamento"
+              value={departmentFilter}
+              onChange={setDepartmentFilter}
+              options={[
+                { value: "ALL", label: "Todos os departamentos" },
+                ...departments.map((value) => ({ value, label: value })),
+              ]}
+            />
             <SelectFilter
               label="Perfil"
               value={roleFilter}
               onChange={setRoleFilter}
-              options={[{ value: "ALL", label: "Todos os perfis" }, ...Object.entries(USER_ROLE_LABELS).map(([value, label]) => ({ value, label }))]}
+              options={[
+                { value: "ALL", label: "Todos os perfis" },
+                ...Object.entries(USER_ROLE_LABELS).map(([value, label]) => ({
+                  value,
+                  label,
+                })),
+              ]}
             />
             <SelectFilter
               label="Status"
@@ -213,13 +327,13 @@ export default function CollaboratorsPage() {
               ]}
             />
             <SelectFilter
-              label="Tecnico"
+              label="Técnico"
               value={technicianFilter}
               onChange={(value) => setTechnicianFilter(value as FilterOption)}
               options={[
                 { value: "ALL", label: "Todos" },
-                { value: "YES", label: "Com perfil tecnico" },
-                { value: "NO", label: "Sem perfil tecnico" },
+                { value: "YES", label: "Com perfil técnico" },
+                { value: "NO", label: "Sem perfil técnico" },
               ]}
             />
             <SelectFilter
@@ -237,7 +351,9 @@ export default function CollaboratorsPage() {
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-zinc-500">
             {currentResultCount} resultado(s)
-            {activeFilterCount ? ` | ${activeFilterCount} filtro(s) ativo(s)` : ""}
+            {activeFilterCount
+              ? ` | ${activeFilterCount} filtro(s) ativo(s)`
+              : ""}
           </p>
           {activeFilterCount ? (
             <button
@@ -258,18 +374,47 @@ export default function CollaboratorsPage() {
         </div>
       </div>
 
-      <section className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <Metric title="Colaboradores" value={String(payload?.summary.internalUsers ?? 0)} />
-        <Metric title="Usuários" value={String(payload?.summary.systemUsers ?? 0)} />
-        <Metric title="Clientes" value={String(payload?.summary.clients ?? 0)} />
-        <Metric title="Auditores" value={String(payload?.summary.auditors ?? 0)} />
-      </section>
+      <KpiStrip
+        loading={loading}
+        stats={[
+          {
+            label: "Colaboradores",
+            value: String(payload?.summary.internalUsers ?? 0),
+          },
+          {
+            label: "Usuários",
+            value: String(payload?.summary.systemUsers ?? 0),
+          },
+          { label: "Clientes", value: String(payload?.summary.clients ?? 0) },
+          { label: "Auditores", value: String(payload?.summary.auditors ?? 0) },
+        ]}
+      />
 
       <div className="flex flex-wrap gap-2">
-        <TabButton active={activeTab === "internal"} onClick={() => setActiveTab("internal")}>Colaboradores</TabButton>
-        <TabButton active={activeTab === "users"} onClick={() => setActiveTab("users")}>Usuários do sistema</TabButton>
-        <TabButton active={activeTab === "clients"} onClick={() => setActiveTab("clients")}>Clientes</TabButton>
-        <TabButton active={activeTab === "auditors"} onClick={() => setActiveTab("auditors")}>Auditores</TabButton>
+        <TabButton
+          active={activeTab === "internal"}
+          onClick={() => setActiveTab("internal")}
+        >
+          Colaboradores
+        </TabButton>
+        <TabButton
+          active={activeTab === "users"}
+          onClick={() => setActiveTab("users")}
+        >
+          Usuários do sistema
+        </TabButton>
+        <TabButton
+          active={activeTab === "clients"}
+          onClick={() => setActiveTab("clients")}
+        >
+          Clientes
+        </TabButton>
+        <TabButton
+          active={activeTab === "auditors"}
+          onClick={() => setActiveTab("auditors")}
+        >
+          Auditores
+        </TabButton>
       </div>
 
       {loading ? (
@@ -286,23 +431,57 @@ export default function CollaboratorsPage() {
 
       {!loading && !error && !canViewSensitivePeople ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          Custos, alçadas e dados administrativos sensíveis ficam ocultos para esta permissão.
+          Custos, alçadas e dados administrativos sensíveis ficam ocultos para
+          esta permissão.
         </p>
       ) : null}
 
       {!loading && !error && activeTab === "internal" ? (
-        <InternalTable rows={internalUsers} showHourCost={canViewSensitivePeople} manageAccounts={canManageAccounts} manageSecurity={canManageSecurity} />
+        <InternalTable
+          rows={internalUsers}
+          showHourCost={canViewSensitivePeople}
+          manageAccounts={canManageAccounts}
+          manageSecurity={canManageSecurity}
+        />
       ) : null}
-      {!loading && !error && activeTab === "users" ? <SystemUsersTable rows={systemUsers} manageAccounts={canManageAccounts} manageSecurity={canManageSecurity} /> : null}
-      {!loading && !error && activeTab === "clients" ? <ClientsTable rows={clients} /> : null}
-      {!loading && !error && activeTab === "auditors" ? <InternalTable rows={auditors} manageAccounts={canManageAccounts} manageSecurity={canManageSecurity} /> : null}
+      {!loading && !error && activeTab === "users" ? (
+        <SystemUsersTable
+          rows={systemUsers}
+          manageAccounts={canManageAccounts}
+          manageSecurity={canManageSecurity}
+        />
+      ) : null}
+      {!loading && !error && activeTab === "clients" ? (
+        <ClientsTable rows={clients} />
+      ) : null}
+      {!loading && !error && activeTab === "auditors" ? (
+        <InternalTable
+          rows={auditors}
+          manageAccounts={canManageAccounts}
+          manageSecurity={canManageSecurity}
+        />
+      ) : null}
     </div>
   );
 }
 
-function InternalTable({ rows, showHourCost = false, manageAccounts = false, manageSecurity = false }: { rows: InternalUser[]; showHourCost?: boolean; manageAccounts?: boolean; manageSecurity?: boolean }) {
+function InternalTable({
+  rows,
+  showHourCost = false,
+  manageAccounts = false,
+  manageSecurity = false,
+}: {
+  rows: InternalUser[];
+  showHourCost?: boolean;
+  manageAccounts?: boolean;
+  manageSecurity?: boolean;
+}) {
   return (
-    <TableShell empty={rows.length === 0 ? "Nenhum colaborador interno encontrado." : undefined}>
+    <TableShell
+      empty={
+        rows.length === 0 ? "Nenhum colaborador interno encontrado." : undefined
+      }
+    >
       <thead>
         <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">
           <th className="px-3 py-3">Nome</th>
@@ -319,14 +498,30 @@ function InternalTable({ rows, showHourCost = false, manageAccounts = false, man
           <tr key={row.id} className="border-b border-zinc-100">
             <td className="px-3 py-3">
               <p className="font-semibold text-zinc-900">{row.name}</p>
-              <p className="text-xs text-zinc-500">{row.code} · {row.email}</p>
+              <p className="text-xs text-zinc-500">
+                {row.code} · {row.email}
+              </p>
             </td>
-            <td className="px-3 py-3 text-zinc-700">{userRoleLabel(row.role)}</td>
-            <td className="px-3 py-3 text-zinc-700">{row.department || ROLE_DEPARTMENTS[row.role] || "-"}</td>
+            <td className="px-3 py-3 text-zinc-700">
+              {userRoleLabel(row.role)}
+            </td>
+            <td className="px-3 py-3 text-zinc-700">
+              {row.department || ROLE_DEPARTMENTS[row.role] || "-"}
+            </td>
             <td className="px-3 py-3 text-zinc-700">{row.branch || "-"}</td>
-            {showHourCost ? <td className="px-3 py-3 text-zinc-700">R$ {Number(row.hourCost || 0).toFixed(2)}</td> : null}
-            <td className="px-3 py-3 text-zinc-700">{row.isActive ? "Ativo" : "Inativo"}</td>
-            {manageAccounts ? <td className="px-3 py-3"><AccountActions user={row} security={manageSecurity} /></td> : null}
+            {showHourCost ? (
+              <td className="px-3 py-3 text-zinc-700">
+                R$ {Number(row.hourCost || 0).toFixed(2)}
+              </td>
+            ) : null}
+            <td className="px-3 py-3 text-zinc-700">
+              {row.isActive ? "Ativo" : "Inativo"}
+            </td>
+            {manageAccounts ? (
+              <td className="px-3 py-3">
+                <AccountActions user={row} security={manageSecurity} />
+              </td>
+            ) : null}
           </tr>
         ))}
       </tbody>
@@ -334,9 +529,19 @@ function InternalTable({ rows, showHourCost = false, manageAccounts = false, man
   );
 }
 
-function SystemUsersTable({ rows, manageAccounts = false, manageSecurity = false }: { rows: Array<InternalUser | PortalUser>; manageAccounts?: boolean; manageSecurity?: boolean }) {
+function SystemUsersTable({
+  rows,
+  manageAccounts = false,
+  manageSecurity = false,
+}: {
+  rows: Array<InternalUser | PortalUser>;
+  manageAccounts?: boolean;
+  manageSecurity?: boolean;
+}) {
   return (
-    <TableShell empty={rows.length === 0 ? "Nenhum usuário encontrado." : undefined}>
+    <TableShell
+      empty={rows.length === 0 ? "Nenhum usuário encontrado." : undefined}
+    >
       <thead>
         <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">
           <th className="px-3 py-3">Usuário</th>
@@ -351,14 +556,28 @@ function SystemUsersTable({ rows, manageAccounts = false, manageSecurity = false
           <tr key={row.id} className="border-b border-zinc-100">
             <td className="px-3 py-3">
               <p className="font-semibold text-zinc-900">{row.name}</p>
-              <p className="text-xs text-zinc-500">{row.code} · {row.email}</p>
+              <p className="text-xs text-zinc-500">
+                {row.code} · {row.email}
+              </p>
             </td>
-            <td className="px-3 py-3 text-zinc-700">{userRoleLabel(row.role)}</td>
             <td className="px-3 py-3 text-zinc-700">
-              {row.role === "CLIENT" ? "Portal do cliente" : row.role === "AUDITOR" ? "Auditoria" : "Interno"}
+              {userRoleLabel(row.role)}
             </td>
-            <td className="px-3 py-3 text-zinc-700">{row.isActive ? "Ativo" : "Inativo"}</td>
-            {manageAccounts ? <td className="px-3 py-3"><AccountActions user={row} security={manageSecurity} /></td> : null}
+            <td className="px-3 py-3 text-zinc-700">
+              {row.role === "CLIENT"
+                ? "Portal do cliente"
+                : row.role === "AUDITOR"
+                  ? "Auditoria"
+                  : "Interno"}
+            </td>
+            <td className="px-3 py-3 text-zinc-700">
+              {row.isActive ? "Ativo" : "Inativo"}
+            </td>
+            {manageAccounts ? (
+              <td className="px-3 py-3">
+                <AccountActions user={row} security={manageSecurity} />
+              </td>
+            ) : null}
           </tr>
         ))}
       </tbody>
@@ -366,16 +585,44 @@ function SystemUsersTable({ rows, manageAccounts = false, manageSecurity = false
   );
 }
 
-function AccountActions({ user, security }: { user: InternalUser | PortalUser; security: boolean }) {
-  return <div className="flex flex-wrap gap-3">
-    <Link href={"/dashboard/management/users/control?user=" + encodeURIComponent(user.id)} className="text-sm font-semibold text-blue-700 hover:underline">Ver cadastro</Link>
-    {security && user.role !== "CLIENT" ? <Link href={"/dashboard/management/users/permissions?user=" + encodeURIComponent(user.id)} className="text-sm font-semibold text-slate-600 hover:underline">Permissões</Link> : null}
-  </div>;
+function AccountActions({
+  user,
+  security,
+}: {
+  user: InternalUser | PortalUser;
+  security: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap gap-3">
+      <Link
+        href={
+          "/dashboard/management/users/control?user=" +
+          encodeURIComponent(user.id)
+        }
+        className="text-sm font-semibold text-blue-700 hover:underline"
+      >
+        Ver cadastro
+      </Link>
+      {security && user.role !== "CLIENT" ? (
+        <Link
+          href={
+            "/dashboard/management/users/permissions?user=" +
+            encodeURIComponent(user.id)
+          }
+          className="text-sm font-semibold text-slate-600 hover:underline"
+        >
+          Permissões
+        </Link>
+      ) : null}
+    </div>
+  );
 }
 
 function ClientsTable({ rows }: { rows: ClientAgent[] }) {
   return (
-    <TableShell empty={rows.length === 0 ? "Nenhum cliente encontrado." : undefined}>
+    <TableShell
+      empty={rows.length === 0 ? "Nenhum cliente encontrado." : undefined}
+    >
       <thead>
         <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">
           <th className="px-3 py-3">Cliente</th>
@@ -387,15 +634,23 @@ function ClientsTable({ rows }: { rows: ClientAgent[] }) {
         {rows.map((row) => (
           <tr key={row.id} className="border-b border-zinc-100">
             <td className="px-3 py-3">
-              <Link href={`/dashboard/clients/${row.id}`} className="dashboard-record-link font-semibold" title="Abrir cadastro do cliente">
+              <Link
+                href={`/dashboard/clients/${row.id}`}
+                className="dashboard-record-link font-semibold"
+                title="Abrir cadastro do cliente"
+              >
                 {row.tradeName || row.companyName}
               </Link>
-              <p className="text-xs text-zinc-500">{row.code} · {row.cnpj || "-"}</p>
+              <p className="text-xs text-zinc-500">
+                {row.code} · {row.cnpj || "-"}
+              </p>
             </td>
             <td className="px-3 py-3 text-zinc-700">
               {row.contactName || row.email || row.phone || "-"}
             </td>
-            <td className="px-3 py-3 text-zinc-700">{row.portalUsers?.length || 0} usuário(s)</td>
+            <td className="px-3 py-3 text-zinc-700">
+              {row.portalUsers?.length || 0} usuário(s)
+            </td>
           </tr>
         ))}
       </tbody>
@@ -403,13 +658,26 @@ function ClientsTable({ rows }: { rows: ClientAgent[] }) {
   );
 }
 
-function TableShell({ children, empty }: { children: ReactNode; empty?: string }) {
+function TableShell({
+  children,
+  empty,
+}: {
+  children: ReactNode;
+  empty?: string;
+}) {
   return (
     <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-      <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
+      <div
+        className="overflow-x-auto"
+        tabIndex={0}
+        role="region"
+        aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas."
+      >
         <table className="min-w-full text-sm">{children}</table>
       </div>
-      {empty ? <p className="p-6 text-center text-sm text-zinc-500">{empty}</p> : null}
+      {empty ? (
+        <p className="p-6 text-center text-sm text-zinc-500">{empty}</p>
+      ) : null}
     </section>
   );
 }
@@ -452,8 +720,10 @@ function matchesUserFilters(
   technicianFilter: FilterOption,
   departmentFilter = "ALL",
 ) {
-  const department = ("department" in row ? row.department : null) || ROLE_DEPARTMENTS[row.role];
-  if (departmentFilter !== "ALL" && department !== departmentFilter) return false;
+  const department =
+    ("department" in row ? row.department : null) || ROLE_DEPARTMENTS[row.role];
+  if (departmentFilter !== "ALL" && department !== departmentFilter)
+    return false;
   if (roleFilter !== "ALL" && row.role !== roleFilter) return false;
   if (statusFilter !== "ALL") {
     const active = Boolean(row.isActive);
@@ -462,7 +732,8 @@ function matchesUserFilters(
   }
   if (technicianFilter !== "ALL") {
     const isTechnician =
-      row.role === "TECHNICIAN" || Boolean((row as InternalUser).technicianProfile);
+      row.role === "TECHNICIAN" ||
+      Boolean((row as InternalUser).technicianProfile);
     if (technicianFilter === "YES" && !isTechnician) return false;
     if (technicianFilter === "NO" && isTechnician) return false;
   }
@@ -471,7 +742,15 @@ function matchesUserFilters(
     .includes(query);
 }
 
-function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
   return (
     <button
       type="button"
@@ -484,14 +763,5 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
     >
       {children}
     </button>
-  );
-}
-
-function Metric({ title, value }: { title: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{title}</p>
-      <p className="mt-1 text-2xl font-bold text-zinc-900">{value}</p>
-    </div>
   );
 }

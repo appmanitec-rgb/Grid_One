@@ -32,8 +32,18 @@ describe('Word editável do Studio', () => {
       const inspection = renderer.inspectFriendlyWord(editable);
       expect(inspection.technicalMarkers).toBe(false);
       expect(inspection.labels.length).toBeGreaterThan(0);
-      expect(inspection.labels).toContain('Nome do Cliente');
+      expect(inspection.labels).toContain(
+        kind === VisualDocumentKind.PROPOSAL
+          ? 'Razão social do Cliente'
+          : 'Nome do Cliente',
+      );
       const fields = await editor.wordFields(kind);
+      if (kind === VisualDocumentKind.PROPOSAL)
+        expect(
+          fields.find(
+            (field) => field.sourcePath === 'clientProposal.objective',
+          )?.category,
+        ).toBe('Proposta');
       const filled = renderer.renderFriendlyWord(
         editable,
         original.sampleData,
@@ -47,6 +57,12 @@ describe('Word editável do Studio', () => {
         technicalMarkers: false,
       });
       if (kind === VisualDocumentKind.PROPOSAL) {
+        expect(inspection.labels).toContain(
+          'Tabela de peças com identidade Manitec',
+        );
+        expect(inspection.labels).toContain(
+          'Tabela de serviços com identidade Manitec',
+        );
         expect(filled.toString('utf8')).toContain('Kit de filtros para GMG');
         expect(filled.toString('utf8')).toContain('Manutencao preventiva');
       }

@@ -72,7 +72,7 @@ export default function CostsPage() {
         cache: "no-store",
       });
       if (!response.ok) {
-        throw new Error(await readApiErrorMessage(response, "Nao foi possivel consolidar os custos."));
+        throw new Error(await readApiErrorMessage(response, "Não foi possivel consolidar os custos."));
       }
       setData((await response.json()) as CostOverview);
     } catch (loadError: unknown) {
@@ -121,7 +121,7 @@ export default function CostsPage() {
       <section className="border border-slate-200 bg-white p-4 shadow-sm">
         <div className="workspace-filter-grid grid gap-3 items-end">
           <Field label="De"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={INPUT} /></Field>
-          <Field label="Ate"><input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={INPUT} /></Field>
+          <Field label="Até"><input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={INPUT} /></Field>
           <Field label="Status da O.S.">
             <SelectField value={status} onChange={(e) => setStatus(e.target.value)} className={INPUT}>
               {STATUS_OPTIONS.map(([value, label]) => <option key={value || "all"} value={value}>{label}</option>)}
@@ -141,7 +141,7 @@ export default function CostsPage() {
           <Breakdown label="Mao de obra" value={data.summary.laborCost} />
           <Breakdown label="Materiais consumidos" value={data.summary.materialCost} />
           <Breakdown label="Compras alocadas" value={data.summary.purchaseCost} />
-          <Breakdown label="Comissoes" value={data.summary.commissionCost} />
+          <Breakdown label="Comissões" value={data.summary.commissionCost} />
           <Breakdown label="Outros custos" value={data.summary.otherCost} />
         </section>
 
@@ -168,9 +168,9 @@ export default function CostsPage() {
 function OrdersTable({ rows }: { rows: OrderRow[] }) {
   return <table className="min-w-[1280px] w-full text-sm">
     <thead className="bg-slate-50 text-left text-[11px] uppercase text-slate-500"><tr>
-      <Th>O.S. / Cliente</Th><Th>Contrato</Th><Th>Tecnico</Th><Th right>Horas</Th>
+      <Th>O.S. / Cliente</Th><Th>Contrato</Th><Th>Técnico</Th><Th right>Horas</Th>
       <Th right>Receita</Th><Th right>Mao de obra</Th><Th right>Materiais</Th>
-      <Th right>Comissao</Th><Th right>Custo total</Th><Th right>Resultado</Th><Th right>Margem</Th>
+      <Th right>Comissão</Th><Th right>Custo total</Th><Th right>Resultado</Th><Th right>Margem</Th>
     </tr></thead>
     <tbody>{rows.map((row) => <tr key={row.id} className="border-t border-slate-100 align-top hover:bg-slate-50/70">
       <td className="px-4 py-3"><Link href={`/dashboard/orders/${row.id}`} className="font-semibold text-sky-700 hover:underline">{row.title}</Link><p className="mt-1 text-xs text-slate-500">{row.client.name} | {row.generator.name}</p></td>
@@ -189,7 +189,7 @@ function DimensionTable({ rows, view }: { rows: DimensionRow[]; view: ViewMode }
     <thead className="bg-slate-50 text-left text-[11px] uppercase text-slate-500"><tr>
       <Th>{VIEW_LABELS[view]}</Th><Th right>O.S.</Th><Th right>Horas</Th><Th right>Receita</Th>
       <Th right>Recebido</Th><Th right>Mao de obra</Th><Th right>Materiais</Th><Th right>Compras</Th>
-      <Th right>Outros + comissao</Th><Th right>Resultado</Th><Th right>Margem</Th>
+      <Th right>Outros + comissão</Th><Th right>Resultado</Th><Th right>Margem</Th>
     </tr></thead>
     <tbody>{rows.map((row) => <tr key={row.id} className="border-t border-slate-100 hover:bg-slate-50/70">
       <td className="px-4 py-3 font-semibold text-slate-900">{row.code ? `${row.code} | ` : ""}{row.name}</td>
@@ -215,7 +215,7 @@ function Td({ value, strong = false, tone }: { value: string; strong?: boolean; 
   return <td className={`whitespace-nowrap px-4 py-3 text-right ${strong ? "font-semibold text-slate-900" : "text-slate-600"} ${tone === "positive" ? "font-semibold text-emerald-700" : tone === "negative" ? "font-semibold text-red-700" : ""}`}>{value}</td>;
 }
 function EmptyRow({ columns }: { columns: number }) {
-  return <tr><td colSpan={columns} className="px-4 py-10 text-center text-sm text-slate-500">Nenhum resultado encontrado para o periodo.</td></tr>;
+  return <tr><td colSpan={columns} className="px-4 py-10 text-center text-sm text-slate-500">Nenhum resultado encontrado para o período.</td></tr>;
 }
 function money(value: number) { return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value || 0)); }
 function number(value: number) { return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 }).format(Number(value || 0)); }

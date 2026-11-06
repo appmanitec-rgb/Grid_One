@@ -84,7 +84,9 @@ export class DocumentTemplateService {
 
   loadInstitutional(
     kind: DocumentTemplateKind,
-    version = DEFAULT_TEMPLATE_VERSION,
+    version = kind === 'proposal'
+      ? 'manitec-default-v6'
+      : DEFAULT_TEMPLATE_VERSION,
   ): LoadedInstitutionalDocumentTemplate {
     const rootDir = this.resolveInstitutionalTemplateRoot(kind, version);
     const definition = this.readJsonRequired(

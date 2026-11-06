@@ -1,6 +1,10 @@
 "use client";
+import { formatCalendarDate } from "@/lib/formatters";
+import CommercialProposalInsights from "../CommercialProposalInsights";
+import { InterfaceIcon } from "@/app/dashboard/components/InterfaceIcon";
 
 import Link from "next/link";
+import TechnicalScopeRecord from "../TechnicalScopeRecord";
 import { commercialLabel } from "@/lib/commercial-labels";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
@@ -48,6 +52,10 @@ type Proposal = {
   postSaleGenerator?: { id: string; name: string } | null;
   postSaleConvertedAt?: string | null;
   commercialSnapshot?: { version?: number; capturedAt?: string } | null;
+  scope?: string | null;
+  technicalScopeSnapshot?: Parameters<
+    typeof TechnicalScopeRecord
+  >[0]["snapshot"];
   totalValue: number;
   operationalExpensesTotal?: number | null;
   allowOperationalExpenseDiscount?: boolean;
@@ -131,10 +139,8 @@ function getErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
-const PRIMARY_BUTTON =
-  "inline-flex min-h-10 items-center justify-center rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-sky-300 hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 type Tone = "blue" | "emerald" | "amber" | "rose" | "slate";
 
 const OPERATIONAL_PROPOSAL_TYPES = new Set(["SERVICES", "PARTS_AND_SERVICES"]);
@@ -153,7 +159,9 @@ export default function ProposalDetailPage() {
   const [showPostSaleForm, setShowPostSaleForm] = useState(false);
   const [postSaleName, setPostSaleName] = useState("");
   const [postSaleSerial, setPostSaleSerial] = useState("");
-  const [reasonedAction, setReasonedAction] = useState<ReasonedAction | null>(null);
+  const [reasonedAction, setReasonedAction] = useState<ReasonedAction | null>(
+    null,
+  );
   const [actionReason, setActionReason] = useState("");
   const [actionReasonError, setActionReasonError] = useState("");
   const [canCreateContract, setCanCreateContract] = useState(false);
@@ -297,7 +305,9 @@ export default function ProposalDetailPage() {
     if (!reasonedAction) return;
     const reason = actionReason.trim();
     if (reason.length < 5) {
-      setActionReasonError("Informe uma justificativa com pelo menos 5 caracteres.");
+      setActionReasonError(
+        "Informe uma justificativa com pelo menos 5 caracteres.",
+      );
       return;
     }
 
@@ -370,7 +380,11 @@ export default function ProposalDetailPage() {
   const proposalItems = proposal.items ?? [];
   const proposalCurrency = proposal.externalCurrency || "BRL";
   const downPayment = Number(proposal.downPaymentAmount || 0);
-  const financialPending = proposal.status === "WON" && Boolean(proposal.hasDownPayment) && downPayment > 0 && !proposal.downPaymentConfirmedAt;
+  const financialPending =
+    proposal.status === "WON" &&
+    Boolean(proposal.hasDownPayment) &&
+    downPayment > 0 &&
+    !proposal.downPaymentConfirmedAt;
   const installments = Math.max(1, Number(proposal.installmentCount || 1));
   const remaining = Math.max(0, Number(proposal.totalValue || 0) - downPayment);
   const installmentValue = remaining / installments;
@@ -387,13 +401,9 @@ export default function ProposalDetailPage() {
   const canCreateRevision =
     !isClient &&
     (!proposal.revisions || proposal.revisions.length === 0) &&
-    [
-      "REVISION_REQUIRED",
-      "CLIENT_REVIEW",
-      "LOST",
-      "REJECTED",
-      "SENT",
-    ].includes(proposal.status);
+    ["REVISION_REQUIRED", "CLIENT_REVIEW", "LOST", "REJECTED", "SENT"].includes(
+      proposal.status,
+    );
 
   const flowActions: Array<{
     label: string;
@@ -528,7 +538,7 @@ export default function ProposalDetailPage() {
           {
             label: "Validade",
             value: proposal.validUntil
-              ? formatDate(proposal.validUntil)
+              ? formatCalendarDate(proposal.validUntil)
               : "Sem data",
             helper: "Prazo comercial vigente.",
             tone: "slate",
@@ -536,7 +546,10 @@ export default function ProposalDetailPage() {
           {
             label: "Parcelamento",
             value: remaining > 0 ? `${installments}x` : "Antecipado",
-            helper: remaining > 0 ? `${formatCurrency(installmentValue, proposalCurrency)} por parcela.` : "Pagamento integral antes da operação.",
+            helper:
+              remaining > 0
+                ? `${formatCurrency(installmentValue, proposalCurrency)} por parcela.`
+                : "Pagamento integral antes da operação.",
             tone: "blue",
           },
           {
@@ -548,7 +561,16 @@ export default function ProposalDetailPage() {
         ]}
         actions={
           <>
-            {proposal.status === "WON" && !financialPending &&
+            {!isClient ? (
+              <TechnicalScopeRecord
+                proposalId={proposal.id}
+                scope={proposal.scope}
+                snapshot={proposal.technicalScopeSnapshot}
+              />
+            ) : null}
+
+            {proposal.status === "WON" &&
+            !financialPending &&
             proposal.type === "GENERATOR_SALE" &&
             !proposal.postSaleGeneratorId &&
             !isClient ? (
@@ -560,7 +582,8 @@ export default function ProposalDetailPage() {
               </ActionButton>
             ) : null}
             {proposal.status === "WON" &&
-            proposal.type === "CONTRACT" && !financialPending &&
+            proposal.type === "CONTRACT" &&
+            !financialPending &&
             !proposal.generatedContract &&
             canCreateContract ? (
               <ActionButton
@@ -588,8 +611,14 @@ export default function ProposalDetailPage() {
                 Abrir O.S. no despacho
               </PermissionAwareLink>
             ) : null}
-            {proposal.status === "WON" && !financialPending && proposal.type === "PARTS" && !isClient ? (
-              <Link href={`/dashboard/sales-orders?proposalId=${proposal.id}`} className={PRIMARY_BUTTON}>
+            {proposal.status === "WON" &&
+            !financialPending &&
+            proposal.type === "PARTS" &&
+            !isClient ? (
+              <Link
+                href={`/dashboard/sales-orders?proposalId=${proposal.id}`}
+                className={PRIMARY_BUTTON}
+              >
                 Acompanhar pedido de peças
               </Link>
             ) : null}
@@ -613,7 +642,9 @@ export default function ProposalDetailPage() {
                 <DataPill tone={statusTone(proposal.status)}>
                   {statusLabel(proposal.status)}
                 </DataPill>
-                <DataPill tone="slate">{proposalTypeLabel(proposal.type)}</DataPill>
+                <DataPill tone="slate">
+                  {proposalTypeLabel(proposal.type)}
+                </DataPill>
                 {proposal.generatedContract ? (
                   <DataPill tone="emerald">Contrato gerado</DataPill>
                 ) : null}
@@ -638,10 +669,33 @@ export default function ProposalDetailPage() {
         }
       />
       {notice ? <StatusBanner tone="emerald">{notice}</StatusBanner> : null}
-      {financialPending ? <StatusBanner tone="amber"><strong>Aguardando confirmação da entrada pelo financeiro.</strong><p className="mt-1">Entrada prevista: {formatCurrency(downPayment, proposalCurrency)}. A operação será liberada após o recebimento integral.</p>{!isClient ? <PermissionAwareLink permission="finance.view" href="/dashboard/finance/accounts-receivable" className="mt-2 inline-flex font-semibold text-blue-700">Acompanhar no financeiro →</PermissionAwareLink> : null}</StatusBanner> : proposal.status === "WON" && proposal.downPaymentConfirmedAt ? <StatusBanner tone="emerald">Entrada confirmada pelo financeiro. Operação liberada.</StatusBanner> : null}
+      {financialPending ? (
+        <StatusBanner tone="amber">
+          <strong>Aguardando confirmação da entrada pelo financeiro.</strong>
+          <p className="mt-1">
+            Entrada prevista: {formatCurrency(downPayment, proposalCurrency)}. A
+            operação será liberada após o recebimento integral.
+          </p>
+          {!isClient ? (
+            <PermissionAwareLink
+              permission="finance.view"
+              href="/dashboard/finance/accounts-receivable"
+              className="mt-2 inline-flex font-semibold text-blue-700"
+            >
+              Acompanhar no financeiro{" "}
+              <InterfaceIcon name="arrow-right" className="ml-1 h-4 w-4" />
+            </PermissionAwareLink>
+          ) : null}
+        </StatusBanner>
+      ) : proposal.status === "WON" && proposal.downPaymentConfirmedAt ? (
+        <StatusBanner tone="emerald">
+          Entrada confirmada pelo financeiro. Operação liberada.
+        </StatusBanner>
+      ) : null}
       {error ? <StatusBanner tone="rose">{error}</StatusBanner> : null}
 
-      {proposal.status === "WON" && !financialPending &&
+      {proposal.status === "WON" &&
+      !financialPending &&
       proposal.type === "CONTRACT" &&
       !proposal.generatedContract &&
       !isClient ? (
@@ -656,8 +710,12 @@ export default function ProposalDetailPage() {
         >
           <div className="flex flex-wrap gap-2">
             <DataPill tone="amber">Aguardando conversão</DataPill>
-            <DataPill tone="slate">{proposal.client?.companyName || "Cliente não vinculado"}</DataPill>
-            <DataPill tone="slate">{proposal.generator?.name || "Equipamento não vinculado"}</DataPill>
+            <DataPill tone="slate">
+              {proposal.client?.companyName || "Cliente não vinculado"}
+            </DataPill>
+            <DataPill tone="slate">
+              {proposal.generator?.name || "Equipamento não vinculado"}
+            </DataPill>
           </div>
         </SectionCard>
       ) : null}
@@ -666,7 +724,7 @@ export default function ProposalDetailPage() {
         <SectionCard
           eyebrow="Conversao pos-venda"
           title="Criar pre-cadastro do equipamento vendido"
-          description="O ativo nasce separado do catalogo comercial e permanece inativo ate a instalacao ou entrega tecnica."
+          description="O ativo nasce separado do catalogo comercial e permanece inativo até a instalacao ou entrega técnica."
         >
           <div className="grid gap-4 md:grid-cols-2">
             <FormField label="Nome do equipamento">
@@ -676,7 +734,7 @@ export default function ProposalDetailPage() {
                 placeholder={`Gerador ${proposal.commercialGenerator?.model || proposal.externalReference || proposal.code}`}
               />
             </FormField>
-            <FormField label="Numero de serie (opcional)">
+            <FormField label="Número de série (opcional)">
               <TextInput
                 value={postSaleSerial}
                 onChange={(event) => setPostSaleSerial(event.target.value)}
@@ -753,7 +811,10 @@ export default function ProposalDetailPage() {
               ? [
                   {
                     label: "Arquivos e envio",
-                    description: proposal.origin === "EXTERNAL" ? "Baixar o arquivo recebido e compartilhar com o cliente." : "Visualizar PDF, baixar arquivos e compartilhar com o cliente.",
+                    description:
+                      proposal.origin === "EXTERNAL"
+                        ? "Baixar o arquivo recebido e compartilhar com o cliente."
+                        : "Visualizar PDF, baixar arquivos e compartilhar com o cliente.",
                     href: `/dashboard/documents/proposals/${proposal.id}`,
                     badge: "Documento",
                     tone: "slate" as const,
@@ -794,15 +855,21 @@ export default function ProposalDetailPage() {
           }
         >
           <InlineMessage>
-            O modulo deixa claro quando a proposta nasceu do CRM para manter o
-            contexto da negociação conectado ao restante da trilha comercial.
+            Consulte a oportunidade que originou esta proposta e os documentos
+            vinculados.
           </InlineMessage>
         </SectionCard>
       ) : null}
 
+      {!isClient ? (
+        <CommercialProposalInsights
+          proposalId={proposal.id}
+          status={proposal.status}
+        />
+      ) : null}
       <SectionCard
-        eyebrow="Governanca do fluxo"
-        title="Ritmo comercial e aprovações"
+        eyebrow="Aprovações e andamento"
+        title="Andamento e aprovações"
         description={
           isClient
             ? "Acompanhe a etapa atual e responda quando a proposta estiver em analise do cliente."
@@ -810,7 +877,9 @@ export default function ProposalDetailPage() {
         }
         actions={
           proposal.status === "REVISION_REQUIRED" ? (
-            <DataPill tone="amber">Conteúdo bloqueado — gere uma revisão</DataPill>
+            <DataPill tone="amber">
+              Conteúdo bloqueado — gere uma revisão
+            </DataPill>
           ) : (
             <DataPill tone={statusTone(proposal.status)}>
               {statusLabel(proposal.status)}
@@ -843,8 +912,14 @@ export default function ProposalDetailPage() {
         </div>
 
         <div className="mt-5 flex flex-wrap gap-3">
-          {proposal.status === "DRAFT" && proposal.origin !== "EXTERNAL" && ["PARTS_AND_SERVICES", "CONTRACT"].includes(proposal.type) && !isClient ? (
-            <Link href={`/dashboard/proposals/new?editId=${proposal.id}`} className={PRIMARY_BUTTON}>
+          {proposal.status === "DRAFT" &&
+          proposal.origin !== "EXTERNAL" &&
+          ["PARTS_AND_SERVICES", "CONTRACT"].includes(proposal.type) &&
+          !isClient ? (
+            <Link
+              href={`/dashboard/proposals/new?editId=${proposal.id}`}
+              className={PRIMARY_BUTTON}
+            >
               Editar rascunho
             </Link>
           ) : null}
@@ -869,7 +944,7 @@ export default function ProposalDetailPage() {
             ))
           ) : (
             <InlineMessage>
-              Nenhuma mudanca de status disponivel para esta etapa.
+              Nenhuma mudanca de status disponível para esta etapa.
             </InlineMessage>
           )}
         </div>
@@ -934,7 +1009,6 @@ export default function ProposalDetailPage() {
             </p>
           </div>
         ) : null}
-
       </SectionCard>
 
       {proposal.requestedDiscountPercent ? (
@@ -996,7 +1070,11 @@ export default function ProposalDetailPage() {
         <div className="grid gap-3 md:grid-cols-3">
           <Info
             label="Validade"
-            value={proposal.validUntil ? formatDate(proposal.validUntil) : "-"}
+            value={
+              proposal.validUntil
+                ? formatCalendarDate(proposal.validUntil)
+                : "-"
+            }
           />
           <Info
             label="Condição de pagamento"
@@ -1013,20 +1091,34 @@ export default function ProposalDetailPage() {
           <Info
             label="Primeiro vencimento"
             value={
-              proposal.paymentPlan ? "Definido pelo financeiro" : proposal.firstDueDate ? formatDate(proposal.firstDueDate) : "-"
+              proposal.paymentPlan
+                ? "Definido pelo financeiro"
+                : proposal.firstDueDate
+                  ? formatCalendarDate(proposal.firstDueDate)
+                  : "-"
             }
           />
           <Info
-            label={proposal.paymentPlan ? "Vencimentos" : "Intervalo entre parcelas (dias)"}
+            label={
+              proposal.paymentPlan
+                ? "Vencimentos"
+                : "Intervalo entre parcelas (dias)"
+            }
             value={
-              proposal.paymentPlan ? "Definidos no financeiro" : proposal.installmentIntervalDays != null
-                ? String(proposal.installmentIntervalDays)
-                : "-"
+              proposal.paymentPlan
+                ? "Definidos no financeiro"
+                : proposal.installmentIntervalDays != null
+                  ? String(proposal.installmentIntervalDays)
+                  : "-"
             }
           />
           <Info
             label="Parcelamento"
-            value={remaining > 0 ? `${installments}x de ${formatCurrency(installmentValue, proposalCurrency)}` : "Sem saldo a parcelar"}
+            value={
+              remaining > 0
+                ? `${installments}x de ${formatCurrency(installmentValue, proposalCurrency)}`
+                : "Sem saldo a parcelar"
+            }
           />
           <Info
             label="Entrada"
@@ -1053,14 +1145,29 @@ export default function ProposalDetailPage() {
             <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">
               {proposal.paymentDetails}
             </p>
-            {proposal.paymentSelections?.some((entry) => entry.qrCodeDataUrl) ? (
+            {proposal.paymentSelections?.some(
+              (entry) => entry.qrCodeDataUrl,
+            ) ? (
               <div className="mt-4 flex flex-wrap gap-4">
-                {proposal.paymentSelections.filter((entry) => entry.qrCodeDataUrl).map((entry) => (
-                  <div key={entry.purpose} className="rounded-xl border border-slate-200 bg-white p-3 text-center">
-                    <p className="mb-2 text-xs font-semibold text-slate-700">PIX {entry.purpose === "PARTS" ? "Peças" : "Serviços"}</p>
-                    <Image src={entry.qrCodeDataUrl!} alt={`QR Code PIX ${entry.name}`} width={160} height={160} unoptimized />
-                  </div>
-                ))}
+                {proposal.paymentSelections
+                  .filter((entry) => entry.qrCodeDataUrl)
+                  .map((entry) => (
+                    <div
+                      key={entry.purpose}
+                      className="rounded-xl border border-slate-200 bg-white p-3 text-center"
+                    >
+                      <p className="mb-2 text-xs font-semibold text-slate-700">
+                        PIX {entry.purpose === "PARTS" ? "Peças" : "Serviços"}
+                      </p>
+                      <Image
+                        src={entry.qrCodeDataUrl!}
+                        alt={`QR Code PIX ${entry.name}`}
+                        width={160}
+                        height={160}
+                        unoptimized
+                      />
+                    </div>
+                  ))}
               </div>
             ) : null}
           </div>
@@ -1072,7 +1179,12 @@ export default function ProposalDetailPage() {
         title="Itens comerciais"
         description="Resumo dos itens, quantidades e valores unitários que compõem a proposta."
       >
-        <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
+        <div
+          className="overflow-x-auto"
+          tabIndex={0}
+          role="region"
+          aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas."
+        >
           <table className="w-full min-w-[560px] text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-left text-slate-500">
@@ -1141,7 +1253,12 @@ export default function ProposalDetailPage() {
               : "Despesas foram protegidas de desconto."
           } O cliente recebe apenas o total e os tipos marcados.`}
         >
-          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
+          <div
+            className="overflow-x-auto"
+            tabIndex={0}
+            role="region"
+            aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas."
+          >
             <table className="w-full min-w-[620px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-slate-500">
@@ -1161,7 +1278,8 @@ export default function ProposalDetailPage() {
                       {expense.label}
                     </td>
                     <td className="px-3 py-3 text-slate-600">
-                      {Number(expense.quantity).toLocaleString("pt-BR")} {expense.unitLabel}
+                      {Number(expense.quantity).toLocaleString("pt-BR")}{" "}
+                      {expense.unitLabel}
                     </td>
                     <td className="px-3 py-3 text-slate-600">
                       {formatCurrency(expense.unitPrice, proposalCurrency)}
@@ -1174,7 +1292,8 @@ export default function ProposalDetailPage() {
               </tbody>
             </table>
             <p className="mt-4 text-right font-bold text-slate-950">
-              Despesas operacionais: {formatCurrency(
+              Despesas operacionais:{" "}
+              {formatCurrency(
                 Number(proposal.operationalExpensesTotal || 0),
                 proposalCurrency,
               )}
@@ -1221,14 +1340,14 @@ export default function ProposalDetailPage() {
       </SectionCard>
 
       <SectionCard
-        eyebrow="Trilha operacional"
+        eyebrow="Histórico"
         title="Movimentações registradas"
         description="Linha do tempo das ações aplicadas nesta proposta."
       >
         {!proposal.movements || proposal.movements.length === 0 ? (
           <EmptyState
             title="Sem movimentações registradas"
-            description="A trilha operacional aparecerá aqui conforme o fluxo evoluir."
+            description="As alterações e ações da proposta aparecerão aqui."
           />
         ) : (
           <div className="space-y-3">
@@ -1307,7 +1426,8 @@ function ReasonedActionDialog({
       title: "Por que esta proposta precisa ser revisada?",
       description:
         "A versão atual será bloqueada como Revisada e uma nova versão será criada em Rascunho.",
-      placeholder: "Ex.: incluir item solicitado pelo cliente e atualizar o prazo de entrega.",
+      placeholder:
+        "Ex.: incluir item solicitado pelo cliente e atualizar o prazo de entrega.",
       confirm: "Criar nova revisão",
       button: "bg-slate-950 hover:bg-slate-800",
     },
@@ -1316,7 +1436,8 @@ function ReasonedActionDialog({
       title: "Quais ajustes o vendedor deve realizar?",
       description:
         "A versão atual ficará bloqueada em Ajustes solicitados. O vendedor deverá gerar uma nova revisão para editar.",
-      placeholder: "Descreva objetivamente os itens, valores ou condições que precisam ser corrigidos.",
+      placeholder:
+        "Descreva objetivamente os itens, valores ou condições que precisam ser corrigidos.",
       confirm: "Solicitar ajustes",
       button: "bg-amber-600 hover:bg-amber-500",
     },
@@ -1325,7 +1446,8 @@ function ReasonedActionDialog({
       title: "Por que esta proposta está sendo reprovada?",
       description:
         "A proposta ficará em Reprovada e não seguirá para o cliente. Uma revisão poderá ser criada posteriormente, se necessário.",
-      placeholder: "Ex.: fornecimento não autorizado para este cliente neste momento.",
+      placeholder:
+        "Ex.: fornecimento não autorizado para este cliente neste momento.",
       confirm: "Reprovar proposta",
       button: "bg-rose-600 hover:bg-rose-500",
     },
@@ -1342,10 +1464,15 @@ function ReasonedActionDialog({
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
           {content.eyebrow}
         </p>
-        <h2 id="proposal-action-title" className="mt-2 text-2xl font-bold text-slate-950">
+        <h2
+          id="proposal-action-title"
+          className="mt-2 text-2xl font-bold text-slate-950"
+        >
           {content.title}
         </h2>
-        <p className="mt-2 text-sm leading-6 text-slate-600">{content.description}</p>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          {content.description}
+        </p>
 
         <label className="mt-5 block text-sm font-semibold text-slate-800">
           Justificativa obrigatória
@@ -1359,14 +1486,23 @@ function ReasonedActionDialog({
           />
         </label>
         <div className="mt-2 flex items-center justify-between gap-3">
-          <p className={`text-xs ${error ? "font-semibold text-rose-600" : "text-slate-500"}`}>
-            {error || "O motivo será registrado na trilha operacional e na auditoria."}
+          <p
+            className={`text-xs ${error ? "font-semibold text-rose-600" : "text-slate-500"}`}
+          >
+            {error || "O motivo será registrado no histórico e na auditoria."}
           </p>
-          <p className="text-xs text-slate-400">{reason.trim().length} caracteres</p>
+          <p className="text-xs text-slate-400">
+            {reason.trim().length} caracteres
+          </p>
         </div>
 
         <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-          <button type="button" disabled={busy} onClick={onCancel} className={SECONDARY_BUTTON}>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onCancel}
+            className={SECONDARY_BUTTON}
+          >
             Cancelar
           </button>
           <button
@@ -1537,15 +1673,6 @@ function formatCurrency(value: number, currency = "BRL") {
     currency,
     maximumFractionDigits: 2,
   }).format(value);
-}
-
-function formatDate(value?: string | null) {
-  if (!value) return "Sem data";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "Sem data";
-  return new Intl.DateTimeFormat("pt-BR", {
-    dateStyle: "medium",
-  }).format(parsed);
 }
 
 function formatDateTime(value?: string | null) {

@@ -1,7 +1,11 @@
 "use client";
+import { InterfaceIcon } from "@/app/dashboard/components/InterfaceIcon";
 
 import { SelectField } from "@/app/dashboard/components/SelectField";
-import { MetricCard as SummaryMetric, PageHeader } from "../components/DashboardPageKit";
+import {
+  MetricCard as SummaryMetric,
+  PageHeader,
+} from "../components/DashboardPageKit";
 
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -36,10 +40,18 @@ type EquipmentListItem = {
   }>;
   contractSchedules?: Array<{
     scheduledDate?: string | null;
-    contract?: { id: string; code?: string | null; status?: string | null } | null;
+    contract?: {
+      id: string;
+      code?: string | null;
+      status?: string | null;
+    } | null;
   }>;
   contractLinks?: Array<{
-    contract?: { id: string; code?: string | null; status?: string | null } | null;
+    contract?: {
+      id: string;
+      code?: string | null;
+      status?: string | null;
+    } | null;
   }>;
   serviceTickets?: Array<{
     id: string;
@@ -69,13 +81,34 @@ export default function EquipmentsPage() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [ticketFilter, setTicketFilter] = useState("ALL");
   const [access, setAccess] = useState(() => getAccessFromToken());
-  const [selectedEquipmentId, setSelectedEquipmentId] = useState<string | null>(null);
+  const [selectedEquipmentId, setSelectedEquipmentId] = useState<string | null>(
+    null,
+  );
 
-  useEffect(() => { setAccess(getAccessFromToken()); }, []);
+  useEffect(() => {
+    setAccess(getAccessFromToken());
+  }, []);
 
-  const { items: paginatedItems, total, summary: totals, loading, error, refresh: loadEquipments, paginationProps } = usePagedList<EquipmentListItem, { total: number; critical: number; contracted: number; openTickets: number }>({
-    endpoint: "/generators/page", search: query,
-    filters: { contract: contractFilter, criticality: criticalityFilter, status: statusFilter, tickets: ticketFilter },
+  const {
+    items: paginatedItems,
+    total,
+    summary: totals,
+    loading,
+    error,
+    refresh: loadEquipments,
+    paginationProps,
+  } = usePagedList<
+    EquipmentListItem,
+    { total: number; critical: number; contracted: number; openTickets: number }
+  >({
+    endpoint: "/generators/page",
+    search: query,
+    filters: {
+      contract: contractFilter,
+      criticality: criticalityFilter,
+      status: statusFilter,
+      tickets: ticketFilter,
+    },
     initialSummary: { total: 0, critical: 0, contracted: 0, openTickets: 0 },
   });
   const activeFilterCount = [
@@ -91,32 +124,55 @@ export default function EquipmentsPage() {
         eyebrow="Ativos"
         title="Equipamentos"
         description="Consulte geradores, contratos, manutenções e o histórico técnico."
-        actions={<>
-<div className="flex items-center gap-2">
-          {access.equipments.manageModels ? (
-            <Link href="/dashboard/equipments/models" className={SECONDARY_BUTTON}>
-              Modelos
-            </Link>
-          ) : null}
-          {access.equipments.create ? (
-            <Link href="/dashboard/equipments/new" className={PRIMARY_BUTTON}>
-              <span className="mr-2">+</span> Novo equipamento
-            </Link>
-          ) : null}
-        </div>
-</>}
+        actions={
+          <>
+            <div className="flex items-center gap-2">
+              {access.equipments.manageModels ? (
+                <Link
+                  href="/dashboard/equipments/models"
+                  className={SECONDARY_BUTTON}
+                >
+                  Modelos
+                </Link>
+              ) : null}
+              {access.equipments.create ? (
+                <Link
+                  href="/dashboard/equipments/new"
+                  className={PRIMARY_BUTTON}
+                >
+                  <InterfaceIcon name="plus" /> Novo equipamento
+                </Link>
+              ) : null}
+            </div>
+          </>
+        }
       />
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Metric label="Equipamentos" value={String(totals.total)} />
-        <Metric label="Criticidade A" value={String(totals.critical)} tone="rose" />
-        <Metric label="Com contrato" value={String(totals.contracted)} tone="blue" />
-        <Metric label="Chamados abertos" value={String(totals.openTickets)} tone="amber" />
+        <Metric
+          label="Criticidade A"
+          value={String(totals.critical)}
+          tone="rose"
+        />
+        <Metric
+          label="Com contrato"
+          value={String(totals.contracted)}
+          tone="blue"
+        />
+        <Metric
+          label="Chamados abertos"
+          value={String(totals.openTickets)}
+          tone="amber"
+        />
       </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center gap-2">
-          <label className="block flex-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          <label
+            htmlFor="equipment-search"
+            className="block flex-1 text-xs font-semibold uppercase tracking-wide text-zinc-500"
+          >
             Buscar equipamento
           </label>
           <button
@@ -128,9 +184,10 @@ export default function EquipmentsPage() {
           </button>
         </div>
         <input
+          id="equipment-search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Nome, tag, serie, cliente, local ou modelo..."
+          placeholder="Nome, tag, série, cliente, local ou modelo..."
           className="w-full rounded-lg border border-zinc-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
         />
         {showFilters ? (
@@ -184,7 +241,9 @@ export default function EquipmentsPage() {
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-zinc-500">
             {total} resultado(s)
-            {activeFilterCount ? ` | ${activeFilterCount} filtro(s) ativo(s)` : ""}
+            {activeFilterCount
+              ? ` | ${activeFilterCount} filtro(s) ativo(s)`
+              : ""}
           </p>
           <div className="flex items-center gap-3">
             {activeFilterCount ? (
@@ -240,15 +299,24 @@ export default function EquipmentsPage() {
                     className="break-words text-lg font-bold leading-snug text-slate-950"
                     title={displayTitle}
                   >
-                    <button type="button" onClick={() => setSelectedEquipmentId(item.id)} className="dashboard-record-link text-left" title="Abrir resumo do equipamento">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedEquipmentId(item.id)}
+                      className="dashboard-record-link text-left"
+                      title="Abrir resumo do equipamento"
+                    >
                       {displayTitle}
                     </button>
                   </h2>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <Badge className={CRITICALITY_STYLES[item.criticality || ""]}>
+                    <Badge
+                      className={CRITICALITY_STYLES[item.criticality || ""]}
+                    >
                       Criticidade {item.criticality || "-"}
                     </Badge>
-                    <Badge className={STATUS_STYLES[item.operationalStatus || ""]}>
+                    <Badge
+                      className={STATUS_STYLES[item.operationalStatus || ""]}
+                    >
                       {statusLabel(item.operationalStatus)}
                     </Badge>
                   </div>
@@ -286,7 +354,10 @@ export default function EquipmentsPage() {
                   label="Modelo"
                   value={item.model?.name || item.brand || "-"}
                 />
-                <Info label="Potencia" value={item.power ? `${item.power} kVA` : "-"} />
+                <Info
+                  label="Potencia"
+                  value={item.power ? `${item.power} kVA` : "-"}
+                />
                 <Info
                   label="Horimetro"
                   value={item.hourMeter != null ? `${item.hourMeter} h` : "-"}
@@ -305,10 +376,14 @@ export default function EquipmentsPage() {
                         )}`
                       : "Sem OS recente"
                   }
-                  href={lastOrder?.id ? `/dashboard/orders/${lastOrder.id}` : undefined}
+                  href={
+                    lastOrder?.id
+                      ? `/dashboard/orders/${lastOrder.id}`
+                      : undefined
+                  }
                 />
                 <TimelineItem
-                  label="Proxima preventiva"
+                  label="Próxima preventiva"
                   value={formatDate(nextPreventive?.scheduledDate)}
                   helper={
                     nextPreventive?.contract?.code
@@ -324,12 +399,20 @@ export default function EquipmentsPage() {
                 <TimelineItem
                   label="Contrato"
                   value={contract?.code || "-"}
-                  helper={contract ? statusLabel(contract.status) : "Nao vinculado"}
-                  href={contract?.id ? `/dashboard/contracts/${contract.id}` : undefined}
+                  helper={
+                    contract ? statusLabel(contract.status) : "Nao vinculado"
+                  }
+                  href={
+                    contract?.id
+                      ? `/dashboard/contracts/${contract.id}`
+                      : undefined
+                  }
                 />
                 <TimelineItem
                   label="Chamados"
-                  value={openTickets ? `${openTickets} aberto(s)` : "Sem chamados"}
+                  value={
+                    openTickets ? `${openTickets} aberto(s)` : "Sem chamados"
+                  }
                   helper={firstOpenTicket?.title || "Nenhuma pendencia aberta"}
                   href={
                     firstOpenTicket?.id
@@ -347,16 +430,20 @@ export default function EquipmentsPage() {
         <ListPagination {...paginationProps} />
       ) : null}
       {selectedEquipmentId ? (
-        <QuickRecordEditor kind="equipment" id={selectedEquipmentId} canEdit={access.equipments.update} onClose={() => setSelectedEquipmentId(null)} onSaved={loadEquipments} />
+        <QuickRecordEditor
+          kind="equipment"
+          id={selectedEquipmentId}
+          canEdit={access.equipments.update}
+          onClose={() => setSelectedEquipmentId(null)}
+          onSaved={loadEquipments}
+        />
       ) : null}
     </div>
   );
 }
 
-const PRIMARY_BUTTON =
-  "inline-flex min-h-10 items-center justify-center rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800";
-const SECONDARY_BUTTON =
-  "inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 
 function Metric({
   label,
@@ -373,7 +460,9 @@ function Metric({
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-      <dt className="text-[11px] font-bold uppercase text-slate-400">{label}</dt>
+      <dt className="text-[11px] font-bold uppercase text-slate-400">
+        {label}
+      </dt>
       <dd className="mt-1 break-words text-sm font-semibold text-slate-800">
         {value}
       </dd>
@@ -424,7 +513,9 @@ function TimelineItem({
   const content = (
     <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 transition hover:border-sky-200 hover:bg-sky-50">
       <p className="text-[11px] font-bold uppercase text-slate-400">{label}</p>
-      <p className="mt-1 break-words text-sm font-bold text-slate-900">{value}</p>
+      <p className="mt-1 break-words text-sm font-bold text-slate-900">
+        {value}
+      </p>
       <p className="mt-1 line-clamp-2 text-xs text-slate-500">{helper}</p>
     </div>
   );
@@ -446,14 +537,16 @@ function equipmentTitle(item: EquipmentListItem) {
         }).format(item.power)} kVA`
       : null;
 
-  return [
-    power,
-    equipmentTitlePart(item.brand),
-    equipmentTitlePart(item.assetTag),
-    equipmentTitlePart(item.name),
-  ]
-    .filter((part): part is string => Boolean(part))
-    .join(" - ") || "Equipamento";
+  return (
+    [
+      power,
+      equipmentTitlePart(item.brand),
+      equipmentTitlePart(item.assetTag),
+      equipmentTitlePart(item.name),
+    ]
+      .filter((part): part is string => Boolean(part))
+      .join(" - ") || "Equipamento"
+  );
 }
 
 function equipmentTitlePart(value: string | null | undefined) {

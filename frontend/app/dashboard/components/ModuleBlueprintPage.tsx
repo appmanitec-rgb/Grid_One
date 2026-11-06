@@ -44,7 +44,7 @@ export default function ModuleBlueprintPage({
 
       <SectionCard
         eyebrow="Direcao"
-        title="Objetivo do modulo"
+        title="Objetivo do módulo"
         description="Antes de adicionar campos e tabelas, a tela precisa deixar claro o que resolve e o que deve ficar em evidência."
       >
         <p className="max-w-3xl text-sm leading-7 text-slate-700">{objective}</p>

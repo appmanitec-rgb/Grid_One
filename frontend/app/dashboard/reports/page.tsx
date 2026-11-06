@@ -156,7 +156,7 @@ export default function ReportsPage() {
 
       if (!response.ok) {
         setOverview(null);
-        setError(await readApiErrorMessage(response, "Nao foi possivel carregar os relatorios."));
+        setError(await readApiErrorMessage(response, "Não foi possivel carregar os relatorios."));
         setLoading(false);
         return;
       }
@@ -188,7 +188,7 @@ export default function ReportsPage() {
 
     return [
       {
-        title: "Propostas no periodo",
+        title: "Propostas no período",
         value: formatNumber(overview.highlights.proposalsInPeriod),
         tone: "blue" as const,
         helper: `${formatCurrency(overview.highlights.proposalValueInPeriod)} movimentados`,
@@ -274,7 +274,7 @@ export default function ReportsPage() {
               <div>
                 <h2 className="text-lg font-bold text-slate-900">Janela de analise</h2>
                 <p className="mt-1 text-sm text-slate-600">
-                  Ajuste o periodo do comercial e da producao para comparar desempenho e carga operacional.
+                  Ajuste o período do comercial e da producao para comparar desempenho e carga operacional.
                 </p>
               </div>
               <Link
@@ -364,7 +364,7 @@ export default function ReportsPage() {
             <div>
               <h2 className="text-lg font-bold text-slate-900">Alertas prioritarios</h2>
               <p className="mt-1 text-sm text-slate-600">
-                Leitura automatica dos pontos que mais pedem acao da gestao agora.
+                Leitura automática dos pontos que mais pedem acao da gestão agora.
               </p>
             </div>
 
@@ -379,7 +379,7 @@ export default function ReportsPage() {
         <section className="grid gap-4 2xl:grid-cols-2">
           <Panel
             title="Comercial"
-            subtitle="Pipeline de propostas, volume financeiro do periodo e concentracao por cliente."
+            subtitle="Propostas em andamento, valores do período e distribuição por cliente."
           >
             {overview ? (
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
@@ -415,7 +415,7 @@ export default function ReportsPage() {
                     <div>
                       <h3 className="text-sm font-semibold text-slate-900">Top clientes por valor</h3>
                       <p className="mt-1 text-xs text-slate-500">
-                        Ranking do periodo selecionado.
+                        Ranking do período selecionado.
                       </p>
                     </div>
 
@@ -455,7 +455,7 @@ export default function ReportsPage() {
           </Panel>
 
           <Panel
-            title="Operacao e Estoque"
+            title="Operação e Estoque"
             subtitle="Carga atual de ordens, preventivas pendentes e saude do estoque."
           >
             {overview ? (
@@ -466,11 +466,11 @@ export default function ReportsPage() {
                   <MetricGrid
                     items={[
                       {
-                        label: "OS abertas no periodo",
+                        label: "OS abertas no período",
                         value: formatNumber(overview.operations.ordersOpenedInPeriod),
                       },
                       {
-                        label: "OS concluidas no periodo",
+                        label: "OS concluidas no período",
                         value: formatNumber(overview.operations.ordersCompletedInPeriod),
                       },
                       {
@@ -478,7 +478,7 @@ export default function ReportsPage() {
                         value: formatNumber(overview.operations.preventiveBacklog),
                       },
                       {
-                        label: "Preventivas proximos 30d",
+                        label: "Preventivas próximos 30d",
                         value: formatNumber(overview.operations.preventivesNext30Days),
                       },
                     ]}
@@ -491,7 +491,7 @@ export default function ReportsPage() {
                       tone={overview.inventory.lowStockItems > 0 ? "amber" : "emerald"}
                     />
                     <MiniHealthCard
-                      title="Estoque fisico"
+                      title="Estoque físico"
                       value={formatNumber(overview.inventory.totalPhysicalQty)}
                       tone="slate"
                     />
@@ -503,7 +503,7 @@ export default function ReportsPage() {
                   </div>
 
                   <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4">
-                    <p className="text-sm font-semibold text-slate-900">Leitura rapida da operacao</p>
+                    <p className="text-sm font-semibold text-slate-900">Leitura rapida da operação</p>
                     <div className="mt-3 space-y-3 text-sm text-slate-600">
                       <MetricRow
                         label="OS em aberto agora"
@@ -533,7 +533,7 @@ export default function ReportsPage() {
 
           <Panel
             title="Contratos"
-            subtitle="Carteira viva, renovacoes e inadimplencia do portifolio contratado."
+            subtitle="Contratos, renovações e inadimplência."
           >
             {overview ? (
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -551,11 +551,11 @@ export default function ReportsPage() {
                         value: formatNumber(overview.contracts.activeCount),
                       },
                       {
-                        label: "Renovacoes",
+                        label: "Renovações",
                         value: formatNumber(overview.contracts.renewalCount),
                       },
                       {
-                        label: "Novos no periodo",
+                        label: "Novos no período",
                         value: formatNumber(overview.contracts.newContractsInPeriod),
                       },
                       {
@@ -619,12 +619,12 @@ export default function ReportsPage() {
 
                   <div className="grid gap-3 md:grid-cols-2">
                     <MiniHealthCard
-                      title="Titulos a receber"
+                      title="Títulos a receber"
                       value={formatNumber(overview.finance.receivablesOutstandingCount)}
                       tone="emerald"
                     />
                     <MiniHealthCard
-                      title="Titulos a pagar"
+                      title="Títulos a pagar"
                       value={formatNumber(overview.finance.payablesOutstandingCount)}
                       tone="rose"
                     />
@@ -653,7 +653,7 @@ export default function ReportsPage() {
                       amount={overview.finance.payablesOutstanding}
                       total={Math.max(overview.finance.receivablesOutstanding + overview.finance.payablesOutstanding, 1)}
                       tone="amber"
-                      helper="Compromissos ainda nao liquidados"
+                      helper="Compromissos ainda não liquidados"
                     />
                   </div>
                 </div>
@@ -756,7 +756,7 @@ function StatusDistribution({
       <div>
         <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
         <p className="mt-1 text-xs text-slate-500">
-          Distribuicao atual consolidada pelo backend.
+          Distribuição dos registros no período selecionado.
         </p>
       </div>
 

@@ -1,5 +1,8 @@
 import { SelectField } from "@/app/dashboard/components/SelectField";
 import { WorkspaceState } from "./WorkspaceState";
+import { InterfaceIcon } from "./InterfaceIcon";
+import CompactIndicators from "./CompactIndicators";
+import { cloneElement, isValidElement, useId, type ReactElement } from "react";
 import type {
   InputHTMLAttributes,
   ReactNode,
@@ -50,11 +53,11 @@ type FormFieldProps = {
 type FieldTone = "default" | "warning";
 
 const HERO_STAT_TONES: Record<Tone, string> = {
-  blue: "from-sky-500 via-cyan-400 to-cyan-300",
-  emerald: "from-emerald-500 via-teal-400 to-cyan-300",
-  amber: "from-amber-500 via-orange-400 to-amber-300",
-  rose: "from-rose-500 via-red-500 to-orange-400",
-  slate: "from-slate-700 via-slate-500 to-slate-400",
+  blue: "bg-sky-500",
+  emerald: "bg-emerald-500",
+  amber: "bg-amber-500",
+  rose: "bg-rose-500",
+  slate: "bg-slate-500",
 };
 
 function cx(...values: Array<string | false | null | undefined>) {
@@ -79,7 +82,9 @@ export function PageHeader({
       <div className="dashboard-page-header-copy">
         {eyebrow ? <p className="dashboard-page-eyebrow">{eyebrow}</p> : null}
         <h1 className="dashboard-page-title">{title}</h1>
-        {description ? <p className="dashboard-page-description">{description}</p> : null}
+        {description ? (
+          <p className="dashboard-page-description">{description}</p>
+        ) : null}
         {meta ? <div className="dashboard-page-meta">{meta}</div> : null}
       </div>
       {actions ? <div className="dashboard-page-actions">{actions}</div> : null}
@@ -94,39 +99,112 @@ export function PageHero({
   stats = [],
   actions,
   aside,
-  contextLabel = "Contexto e informações adicionais",
+  contextLabel = "Mais informações",
   contextExpanded = false,
   loading = false,
 }: PageHeroProps) {
   return (
     <div className="dashboard-page dashboard-page-intro space-y-4">
-      <PageHeader eyebrow={eyebrow} title={title} description={description} actions={actions} />
+      <PageHeader
+        eyebrow={eyebrow}
+        title={title}
+        description={description}
+        actions={actions}
+      />
       {stats.length > 0 ? (
-        <div className="dashboard-metrics-grid">
+        <KpiStrip
+          stats={stats}
+          loading={loading}
+          context={aside}
+          contextLabel={contextLabel}
+          contextExpanded={contextExpanded}
+        />
+      ) : null}
+      {aside && !stats.length ? (
+        <details
+          className="dashboard-page-context"
+          open={contextExpanded || undefined}
+        >
+          <summary>
+            <span>{contextLabel}</span>
+            <InterfaceIcon name="chevron-down" className="h-4 w-4 shrink-0" />
+          </summary>
+          <div className="dashboard-page-context-body">{aside}</div>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
+export function KpiStrip({
+  stats,
+  loading = false,
+  context,
+  contextLabel,
+  contextExpanded = false,
+}: {
+  stats: HeroStat[];
+  loading?: boolean;
+  context?: ReactNode;
+  contextLabel?: string;
+  contextExpanded?: boolean;
+}) {
+  return (
+    <CompactIndicators
+      initiallyOpen={contextExpanded}
+      summary={stats.slice(0, 2).map((stat, index) => (
+        <span
+          key={stat.label}
+          className={index ? "hidden text-xs sm:inline" : "text-xs"}
+        >
+          {stat.label}{" "}
+          <strong className="ml-1 text-sm tabular-nums">
+            {loading ? "…" : stat.value}
+          </strong>
+        </span>
+      ))}
+    >
+      <div className="dashboard-kpi-strip">
+        <div
+          className="dashboard-metrics-grid"
+          aria-label="Indicadores do módulo"
+        >
           {stats.map((stat) => (
             <MetricCard
               key={stat.label}
               loading={loading}
               label={stat.label}
               value={stat.value}
-              helper={stat.helper}
               tone={stat.tone}
             />
           ))}
         </div>
-      ) : null}
-      {aside ? (
-        <details className="dashboard-page-context" open={contextExpanded || undefined}>
-          <summary>
-            <span>{contextLabel}</span>
-            <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="h-4 w-4 shrink-0">
-              <path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </summary>
-          <div className="dashboard-page-context-body">{aside}</div>
-        </details>
-      ) : null}
-    </div>
+        {stats.some((stat) => stat.helper) ? (
+          <details className="dashboard-kpi-help">
+            <summary>Detalhes dos indicadores</summary>
+            <dl>
+              {stats
+                .filter((stat) => stat.helper)
+                .map((stat) => (
+                  <div key={stat.label}>
+                    <dt>{stat.label}</dt>
+                    <dd>{stat.helper}</dd>
+                  </div>
+                ))}
+            </dl>
+          </details>
+        ) : null}
+        {context ? (
+          <details
+            className="dashboard-page-context mt-2"
+            open={contextExpanded || undefined}
+          >
+            <summary>{contextLabel || "Mais informações"}</summary>
+            <div className="dashboard-page-context-body">{context}</div>
+          </details>
+        ) : null}
+      </div>
+    </CompactIndicators>
   );
 }
 
@@ -146,13 +224,30 @@ export function MetricCard({
   return (
     <article className="dashboard-metric-card" aria-busy={loading}>
       <p className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-        <span aria-hidden="true" className={cx("h-2 w-2 shrink-0 rounded-full bg-gradient-to-r", HERO_STAT_TONES[tone])} />
+        <span
+          aria-hidden="true"
+          className={cx(
+            "h-1.5 w-1.5 shrink-0 rounded-full",
+            HERO_STAT_TONES[tone],
+          )}
+        />
         {label}
       </p>
       <p className="mt-2 break-words text-[1.4rem] font-bold leading-tight tabular-nums text-slate-950">
-        {loading ? <span className="dashboard-metric-placeholder" aria-label="Carregando indicador">—</span> : value}
+        {loading ? (
+          <span
+            className="dashboard-metric-placeholder"
+            aria-label="Carregando indicador"
+          >
+            —
+          </span>
+        ) : (
+          value
+        )}
       </p>
-      {helper ? <p className="mt-1.5 text-xs leading-5 text-slate-500">{helper}</p> : null}
+      {helper ? (
+        <p className="mt-1.5 text-xs leading-5 text-slate-500">{helper}</p>
+      ) : null}
     </article>
   );
 }
@@ -173,23 +268,38 @@ export function SectionCard({
         className,
       )}
     >
-      <div className={cx("dashboard-section-header flex min-w-0 flex-col gap-3 border-b border-slate-100 pb-4", actionsLayout === "inline" && "xl:flex-row xl:items-start xl:justify-between")}>
+      <div
+        className={cx(
+          "dashboard-section-header flex min-w-0 flex-col gap-3 border-b border-slate-100 pb-4",
+          actionsLayout === "inline" &&
+            "xl:flex-row xl:items-start xl:justify-between",
+        )}
+      >
         <div className="min-w-0">
           {eyebrow ? (
-            <p className="text-xs font-semibold text-sky-700">
-              {eyebrow}
-            </p>
+            <p className="text-xs font-semibold text-sky-700">{eyebrow}</p>
           ) : null}
           <h2 className="dashboard-section-title mt-1 text-lg font-bold leading-snug text-slate-950">
             {title}
           </h2>
           {description ? (
-            <p className="dashboard-section-description mt-2 max-w-3xl text-sm leading-6 text-slate-600">{description}</p>
+            <p className="dashboard-section-description mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+              {description}
+            </p>
           ) : null}
         </div>
-        {actions ? <div className={cx("dashboard-section-actions flex min-w-0 max-w-full flex-wrap gap-2", actionsLayout === "below" ? "w-full" : "xl:justify-end")}>{actions}</div> : null}
+        {actions ? (
+          <div
+            className={cx(
+              "dashboard-section-actions flex min-w-0 max-w-full flex-wrap gap-2",
+              actionsLayout === "below" ? "w-full" : "xl:justify-end",
+            )}
+          >
+            {actions}
+          </div>
+        ) : null}
       </div>
-      <div className="min-w-0 pt-5">{children}</div>
+      <div className="dashboard-section-body min-w-0 pt-5">{children}</div>
     </section>
   );
 }
@@ -207,7 +317,12 @@ export function InlineMessage({
       : "border-slate-200 bg-white/85 text-slate-700";
 
   return (
-    <div className={cx("rounded-2xl border px-4 py-3 text-sm shadow-sm", toneClasses)}>
+    <div
+      className={cx(
+        "dashboard-inline-message rounded-xl border px-4 py-3 text-sm",
+        toneClasses,
+      )}
+    >
       {children}
     </div>
   );
@@ -221,17 +336,17 @@ export function StatusBanner({
   tone?: Tone;
 }) {
   const toneClasses: Record<Tone, string> = {
-    blue: "border-sky-200 dashboard-tinted-surface bg-[linear-gradient(135deg,#eef6ff_0%,#f8fbff_100%)] text-sky-900",
-    emerald: "border-emerald-200 dashboard-tinted-surface bg-[linear-gradient(135deg,#edfdf4_0%,#f8fffb_100%)] text-emerald-900",
-    amber: "border-amber-200 dashboard-tinted-surface bg-[linear-gradient(135deg,#fff5e7_0%,#fffaf3_100%)] text-amber-900",
-    rose: "border-rose-200 dashboard-tinted-surface bg-[linear-gradient(135deg,#fff0f1_0%,#fff8f8_100%)] text-rose-900",
+    blue: "border-sky-200 bg-sky-50 text-sky-900",
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    amber: "border-amber-200 bg-amber-50 text-amber-900",
+    rose: "border-rose-200 bg-rose-50 text-rose-900",
     slate: "border-slate-200 bg-slate-100 text-slate-700",
   };
 
   return (
     <div
       className={cx(
-        "rounded-2xl border px-4 py-3 text-sm shadow-[0_18px_40px_-32px_rgba(15,31,50,0.24)]",
+        "dashboard-status-banner rounded-xl border px-4 py-3 text-sm",
         toneClasses[tone],
       )}
     >
@@ -240,16 +355,47 @@ export function StatusBanner({
   );
 }
 
-export function FormField({ label, hint, className, children }: FormFieldProps) {
+export function FormField({
+  label,
+  hint,
+  className,
+  children,
+}: FormFieldProps) {
+  const generatedId = useId();
+  const field = isValidElement(children)
+    ? (children as ReactElement<{
+        id?: string;
+        "aria-describedby"?: string;
+        "aria-labelledby"?: string;
+      }>)
+    : null;
+  const id = field?.props.id || generatedId;
   return (
     <div className={cx("space-y-2", className)}>
       <div className="flex items-center justify-between gap-3">
-        <label className="text-sm font-semibold text-slate-700">
+        <label
+          id={id + "-label"}
+          htmlFor={id}
+          className="text-sm font-semibold text-slate-700"
+        >
           {label}
         </label>
-        {hint ? <span className="text-xs text-slate-400">{hint}</span> : null}
+        {hint ? (
+          <span id={id + "-hint"} className="text-xs text-[var(--text-muted)]">
+            {hint}
+          </span>
+        ) : null}
       </div>
-      {children}
+      {field
+        ? cloneElement(field, {
+            id,
+            "aria-labelledby": id + "-label",
+            "aria-describedby":
+              [field.props["aria-describedby"], hint ? id + "-hint" : ""]
+                .filter(Boolean)
+                .join(" ") || undefined,
+          })
+        : children}
     </div>
   );
 }
@@ -262,7 +408,7 @@ export function TextInput({
     <input
       {...props}
       className={cx(
-        "w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 transition placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-100",
+        "app-input w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900",
         className,
       )}
     />
@@ -277,7 +423,7 @@ export function SelectInput({
     <SelectField
       {...props}
       className={cx(
-        "w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100",
+        "app-input w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900",
         className,
       )}
     />
@@ -292,7 +438,7 @@ export function TextAreaInput({
     <textarea
       {...props}
       className={cx(
-        "min-h-28 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 transition placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-100",
+        "app-input min-h-28 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900",
         className,
       )}
     />
@@ -309,7 +455,7 @@ export function FieldBox({
   return (
     <div
       className={cx(
-        "rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700",
+        "app-field-box rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700",
         className,
       )}
     >
@@ -336,7 +482,7 @@ export function DataPill({
   return (
     <span
       className={cx(
-        "inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-[0.02em]",
+        "app-data-pill inline-flex rounded-md border px-2 py-0.5 text-xs font-medium",
         toneClasses[tone],
       )}
     >
@@ -345,6 +491,16 @@ export function DataPill({
   );
 }
 
-export function EmptyState({ title, description, actions }: { title: string; description?: string; actions?: ReactNode }) {
-  return <WorkspaceState title={title} description={description} actions={actions} />;
+export function EmptyState({
+  title,
+  description,
+  actions,
+}: {
+  title: string;
+  description?: string;
+  actions?: ReactNode;
+}) {
+  return (
+    <WorkspaceState title={title} description={description} actions={actions} />
+  );
 }

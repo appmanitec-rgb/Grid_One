@@ -15,6 +15,7 @@ export type ScreenRule = { view: boolean; actions: Record<string, boolean> };
 export type OnCallShift = { startsAt: string; endsAt: string };
 export type DetailedAccessRules = {
   version: 1;
+  commercialManagement?: import('./commercial-management').CommercialManagement;
   profileId?: string;
   screens: Record<string, ScreenRule>;
   commercial: Record<Portfolio, boolean>;

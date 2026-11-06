@@ -125,7 +125,7 @@
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: var(--ticket-muted, #6b7c93);
+  color: var(--ticket-muted, #52647c);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -161,7 +161,7 @@
   margin-top: 5px;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--ticket-muted, #71829a);
+  color: var(--ticket-muted, #52647c);
   overflow-wrap: anywhere;
 }
 .mobileList {
@@ -287,7 +287,7 @@
 .contextGrid dt {
   font-size: 11px;
   font-weight: 650;
-  color: var(--ticket-muted, #71829a);
+  color: var(--ticket-muted, #52647c);
   margin-bottom: 5px;
 }
 .contextGrid dd {
@@ -350,7 +350,7 @@
 }
 .messageHead time {
   font-size: 11px;
-  color: var(--ticket-muted, #71829a);
+  color: var(--ticket-muted, #52647c);
 }
 .message p {
   margin-top: 12px;

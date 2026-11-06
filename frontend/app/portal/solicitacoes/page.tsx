@@ -161,7 +161,7 @@ export default function PortalRequestsPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="rounded-md bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:opacity-60"
+            className="app-button app-button-primary"
           >
             {submitting ? "Enviando..." : "Enviar solicitação"}
           </button>

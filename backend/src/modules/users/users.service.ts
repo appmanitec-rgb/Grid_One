@@ -392,6 +392,7 @@ export class UsersService {
         role: true,
         isActive: true,
         accessPolicy: true,
+        accessRules: true,
         isSystemMaster: true,
         linkedClientId: true,
         portalPermissions: true,
@@ -534,32 +535,63 @@ export class UsersService {
     }
 
     const before = await this.findOne(id);
-    const update = (db: Pick<Prisma.TransactionClient, 'user'>) =>
-      db.user.update({
+    const update = async (db: Pick<Prisma.TransactionClient, 'user'>) => {
+      if (updateUserDto.accessRules !== undefined) {
+        const latest = await db.user.findUnique({
+          where: { id },
+          select: { accessRules: true },
+        });
+        const requested = { ...updateUserDto.accessRules };
+        delete requested.commercialManagement;
+        const previous = (
+          latest?.accessRules as {
+            commercialManagement?: import('../auth/rules/commercial-management').CommercialManagement;
+          } | null
+        )?.commercialManagement;
+        const commercialManagement = Object.fromEntries(
+          Object.entries(previous || {}).filter(
+            ([portfolio]) =>
+              targetRole !== 'CLIENT' &&
+              (targetRole === 'ADMIN' ||
+                requested.commercial?.[
+                  portfolio as keyof typeof requested.commercial
+                ] === true),
+          ),
+        );
+        dataToUpdate.accessRules = {
+          ...requested,
+          commercialManagement,
+        } as Prisma.InputJsonValue;
+      }
+      return db.user.update({
         where: { id },
         data: dataToUpdate,
         select: userPublicSelect,
       });
-    const updated = dataToUpdate.passwordHash
-      ? await this.prisma.$transaction(async (tx) => {
-          await tx.$queryRaw`SELECT id FROM users WHERE id = ${id} FOR UPDATE`;
-          const user = await update(tx);
-          await tx.authSession.updateMany({
-            where: { userId: id, revokedAt: null },
-            data: { revokedAt: new Date() },
-          });
-          await tx.systemAuditLog.create({
-            data: {
-              domain: AuditDomain.USERS,
-              entityType: 'USER',
-              entityId: id,
-              action: 'USER_PASSWORD_CHANGED',
-              actorUserId,
-            },
-          });
-          return user;
-        })
-      : await update(this.prisma);
+    };
+    const updated =
+      dataToUpdate.passwordHash || updateUserDto.accessRules !== undefined
+        ? await this.prisma.$transaction(async (tx) => {
+            await tx.$queryRaw`SELECT id FROM users WHERE id = ${id} FOR UPDATE`;
+            const user = await update(tx);
+            if (dataToUpdate.passwordHash) {
+              await tx.authSession.updateMany({
+                where: { userId: id, revokedAt: null },
+                data: { revokedAt: new Date() },
+              });
+              await tx.systemAuditLog.create({
+                data: {
+                  domain: AuditDomain.USERS,
+                  entityType: 'USER',
+                  entityId: id,
+                  action: 'USER_PASSWORD_CHANGED',
+                  actorUserId,
+                },
+              });
+            }
+            return user;
+          })
+        : await update(this.prisma);
 
     await this.auditLogsService.record({
       domain: AuditDomain.USERS,

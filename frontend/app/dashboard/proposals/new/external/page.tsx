@@ -1,4 +1,5 @@
 "use client";
+import { useId } from "react";
 import { canUsePortfolio } from "@/lib/access-rules";
 
 import { SelectField } from "@/app/dashboard/components/SelectField";
@@ -190,7 +191,7 @@ export default function ExternalProposalPage() {
         throw new Error(
           await readApiErrorMessage(
             upload,
-            "A proposta foi criada, mas o anexo nao foi enviado.",
+            "A proposta foi criada, mas o anexo não foi enviado.",
           ),
         );
       router.push(`/dashboard/proposals/${proposal.id}`);
@@ -236,7 +237,7 @@ export default function ExternalProposalPage() {
         <div className="space-y-5">
           <SectionCard
             title="Referência e tipo da proposta"
-            description="A proposta externa participa do mesmo funil, aprovacoes, alertas e historico das propostas Manitec."
+            description="A proposta externa participa do mesmo funil, aprovações, alertas e histórico das propostas Manitec."
           >
             <div className="grid gap-4 md:grid-cols-3">
               <Field label="Origem">
@@ -261,7 +262,7 @@ export default function ExternalProposalPage() {
                   ) : null}
                 </SelectField>
               </Field>
-              <Field label="Numero / referencia externa">
+              <Field label="Número / referencia externa">
                 <input
                   className={INPUT}
                   value={reference}
@@ -272,7 +273,7 @@ export default function ExternalProposalPage() {
             </div>
           </SectionCard>
           <SectionCard
-            title="Cliente e responsavel"
+            title="Cliente e responsável"
             description="Vincule o documento externo aos mesmos cadastros usados pelo fluxo comercial."
           >
             <div className="grid gap-4 md:grid-cols-2">
@@ -464,12 +465,19 @@ function Lookup({
   selected: boolean;
   children: ReactNode;
 }) {
+  const generatedFieldId = useId();
+  const accessibleFieldId = generatedFieldId;
+
   return (
     <div className="relative">
-      <label className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+      <label
+        htmlFor={accessibleFieldId}
+        className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500"
+      >
         {label}
       </label>
       <input
+        id={accessibleFieldId}
         className={INPUT}
         value={query}
         onChange={(event) => setQuery(event.target.value)}

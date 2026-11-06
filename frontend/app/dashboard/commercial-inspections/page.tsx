@@ -1,7 +1,7 @@
 "use client";
 
 import { SelectField } from "@/app/dashboard/components/SelectField";
-import { PageHeader } from "../components/DashboardPageKit";
+import { FormField, PageHeader } from "../components/DashboardPageKit";
 
 import { FormEvent, useEffect, useState } from "react";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
@@ -61,10 +61,13 @@ export default function CommercialInspectionsPage() {
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [opportunities, setOpportunities] = useState<OpportunityOption[]>([]);
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
-  const [mediaInputById, setMediaInputById] = useState<Record<string, string>>({});
+  const [mediaInputById, setMediaInputById] = useState<Record<string, string>>(
+    {},
+  );
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const [opportunityId, setOpportunityId] = useState("");
   const [inspectorUserId, setInspectorUserId] = useState("");
@@ -77,6 +80,7 @@ export default function CommercialInspectionsPage() {
   const [technicalNotes, setTechnicalNotes] = useState("");
 
   async function loadAll() {
+    setLoading(true);
     setError("");
     setMessage("");
 
@@ -107,6 +111,8 @@ export default function CommercialInspectionsPage() {
           ? loadError.message
           : "Falha ao carregar vistorias.",
       );
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -135,7 +141,9 @@ export default function CommercialInspectionsPage() {
           opportunityId,
           inspectorUserId: inspectorUserId || undefined,
           scheduledAt: toIso(scheduledAt),
-          requiredPowerKva: requiredPowerKva ? Number(requiredPowerKva) : undefined,
+          requiredPowerKva: requiredPowerKva
+            ? Number(requiredPowerKva)
+            : undefined,
           voltage: voltage || undefined,
           qtaDistanceMeters: qtaDistanceMeters
             ? Number(qtaDistanceMeters)
@@ -147,7 +155,9 @@ export default function CommercialInspectionsPage() {
       });
 
       if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, "Falha ao criar vistoria."));
+        throw new Error(
+          await readApiErrorMessage(res, "Falha ao criar vistoria."),
+        );
       }
 
       setOpportunityId("");
@@ -185,7 +195,9 @@ export default function CommercialInspectionsPage() {
       });
 
       if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, "Falha ao atualizar status."));
+        throw new Error(
+          await readApiErrorMessage(res, "Falha ao atualizar status."),
+        );
       }
 
       setMessage("Status da vistoria atualizado.");
@@ -216,7 +228,9 @@ export default function CommercialInspectionsPage() {
       });
 
       if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, "Falha ao anexar midia."));
+        throw new Error(
+          await readApiErrorMessage(res, "Falha ao anexar midia."),
+        );
       }
 
       setMediaInputById((prev) => ({ ...prev, [inspectionId]: "" }));
@@ -224,7 +238,9 @@ export default function CommercialInspectionsPage() {
       await loadAll();
     } catch (mediaError: unknown) {
       setError(
-        mediaError instanceof Error ? mediaError.message : "Falha ao anexar midia.",
+        mediaError instanceof Error
+          ? mediaError.message
+          : "Falha ao anexar midia.",
       );
     }
   }
@@ -254,73 +270,90 @@ export default function CommercialInspectionsPage() {
           onSubmit={(event) => void handleCreateInspection(event)}
           className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3"
         >
-          <SelectField
-            value={opportunityId}
-            onChange={(event) => setOpportunityId(event.target.value)}
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm md:col-span-2"
-            required
-          >
-            <option value="">Oportunidade</option>
-            {opportunities.map((opportunity) => (
-              <option key={opportunity.id} value={opportunity.id}>
-                {opportunity.title} - {opportunity.client.companyName}
-              </option>
-            ))}
-          </SelectField>
-          <SelectField searchable
-            value={inspectorUserId}
-            onChange={(event) => setInspectorUserId(event.target.value)}
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
-          >
-            <option value="">Responsavel pela vistoria</option>
-            {collaborators.map((user) => (
-              <option key={user.id} value={user.id}>
-                {user.name}
-              </option>
-            ))}
-          </SelectField>
-          <input
-            type="datetime-local"
-            value={scheduledAt}
-            onChange={(event) => setScheduledAt(event.target.value)}
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
-          />
-          <input
-            type="number"
-            min="0"
-            step="0.1"
-            placeholder="Potencia kVA"
-            value={requiredPowerKva}
-            onChange={(event) => setRequiredPowerKva(event.target.value)}
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
-          />
-          <input
-            placeholder="Tensao"
-            value={voltage}
-            onChange={(event) => setVoltage(event.target.value)}
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
-          />
-          <input
-            type="number"
-            min="0"
-            step="0.1"
-            placeholder="Distancia QTA (m)"
-            value={qtaDistanceMeters}
-            onChange={(event) => setQtaDistanceMeters(event.target.value)}
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
-          />
-          <input
-            placeholder="Observacoes de acesso"
-            value={accessNotes}
-            onChange={(event) => setAccessNotes(event.target.value)}
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm md:col-span-2"
-          />
-          <input
-            placeholder="Notas tecnicas"
-            value={technicalNotes}
-            onChange={(event) => setTechnicalNotes(event.target.value)}
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm md:col-span-2"
-          />
+          <FormField label="Oportunidade">
+            <SelectField
+              value={opportunityId}
+              onChange={(event) => setOpportunityId(event.target.value)}
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm md:col-span-2"
+              required
+            >
+              <option value="">Oportunidade</option>
+              {opportunities.map((opportunity) => (
+                <option key={opportunity.id} value={opportunity.id}>
+                  {opportunity.title} - {opportunity.client.companyName}
+                </option>
+              ))}
+            </SelectField>
+          </FormField>
+          <FormField label="Responsável pela vistoria">
+            <SelectField
+              searchable
+              value={inspectorUserId}
+              onChange={(event) => setInspectorUserId(event.target.value)}
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            >
+              <option value="">Responsável pela vistoria</option>
+              {collaborators.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name}
+                </option>
+              ))}
+            </SelectField>
+          </FormField>
+          <FormField label="Data e horário da vistoria">
+            <input
+              type="datetime-local"
+              value={scheduledAt}
+              onChange={(event) => setScheduledAt(event.target.value)}
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            />
+          </FormField>
+          <FormField label="Potência necessária (kVA)">
+            <input
+              type="number"
+              min="0"
+              step="0.1"
+              placeholder="Potencia kVA"
+              value={requiredPowerKva}
+              onChange={(event) => setRequiredPowerKva(event.target.value)}
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            />
+          </FormField>
+          <FormField label="Tensão">
+            <input
+              placeholder="Tensao"
+              value={voltage}
+              onChange={(event) => setVoltage(event.target.value)}
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            />
+          </FormField>
+          <FormField label="Distância do QTA (m)">
+            <input
+              type="number"
+              min="0"
+              step="0.1"
+              placeholder="Distancia QTA (m)"
+              value={qtaDistanceMeters}
+              onChange={(event) => setQtaDistanceMeters(event.target.value)}
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+            />
+          </FormField>
+          <FormField label="Observações de acesso">
+            <input
+              placeholder="Observações de acesso"
+              value={accessNotes}
+              onChange={(event) => setAccessNotes(event.target.value)}
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm md:col-span-2"
+            />
+          </FormField>
+          <FormField label="Notas técnicas">
+            <input
+              placeholder="Notas técnicas"
+              value={technicalNotes}
+              onChange={(event) => setTechnicalNotes(event.target.value)}
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm md:col-span-2"
+            />
+          </FormField>
           <label className="flex items-center gap-2 rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-700">
             <input
               type="checkbox"
@@ -340,27 +373,56 @@ export default function CommercialInspectionsPage() {
       </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-4">
-        <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas.">
+        <div
+          className="overflow-x-auto"
+          tabIndex={0}
+          role="region"
+          aria-label="Tabela de registros. Role horizontalmente para ver todas as colunas."
+        >
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">
-                <th className="px-2 py-2">Codigo</th>
+                <th className="px-2 py-2">Código</th>
                 <th className="px-2 py-2">Oportunidade / Cliente</th>
                 <th className="px-2 py-2">Agendamento</th>
-                <th className="px-2 py-2">Checklist tecnico</th>
+                <th className="px-2 py-2">Checklist técnico</th>
                 <th className="px-2 py-2">Status</th>
                 <th className="px-2 py-2">Midia</th>
               </tr>
             </thead>
             <tbody>
+              {!inspections.length && (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="px-4 py-10 text-center text-sm text-[var(--text-muted)]"
+                  >
+                    {loading
+                      ? "Carregando vistorias..."
+                      : error
+                        ? "Não foi possível consultar as vistorias. Tente atualizar os dados."
+                        : "Nenhuma vistoria cadastrada. Use o formulário acima para vincular a primeira vistoria a uma oportunidade."}
+                  </td>
+                </tr>
+              )}
               {inspections.map((inspection) => (
-                <tr key={inspection.id} className="border-b border-zinc-100 align-top">
-                  <td className="px-2 py-2 font-semibold text-zinc-800">{inspection.code}</td>
+                <tr
+                  key={inspection.id}
+                  className="border-b border-zinc-100 align-top"
+                >
+                  <td className="px-2 py-2 font-semibold text-zinc-800">
+                    {inspection.code}
+                  </td>
                   <td className="px-2 py-2 text-zinc-700">
-                    <p className="font-semibold text-zinc-800">{inspection.opportunity.title}</p>
-                    <p className="text-xs text-zinc-600">{inspection.client.companyName}</p>
+                    <p className="font-semibold text-zinc-800">
+                      {inspection.opportunity.title}
+                    </p>
+                    <p className="text-xs text-zinc-600">
+                      {inspection.client.companyName}
+                    </p>
                     <p className="text-xs text-zinc-500">
-                      Inspetor: {inspection.inspectorUser?.name || "Nao definido"}
+                      Inspetor:{" "}
+                      {inspection.inspectorUser?.name || "Nao definido"}
                     </p>
                   </td>
                   <td className="px-2 py-2 text-zinc-700">

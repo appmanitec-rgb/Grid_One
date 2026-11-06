@@ -309,7 +309,7 @@ export default function CashFlowPage() {
               ? formatCurrency(longProjection.projectedBalance)
               : "-",
             helper: longProjection
-              ? "Leitura de folego para contrato, compras e caixa."
+              ? "Saldo previsto para planejar recebimentos e pagamentos."
               : "Sem dados de horizonte carregados.",
             tone: longProjection ? projectionTone(longProjection) : "slate",
           },
@@ -338,7 +338,7 @@ export default function CashFlowPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500">Saidas em aberto</p>
+                  <p className="text-xs text-slate-500">Saídas em aberto</p>
                   <p className="mt-1 text-lg font-bold text-slate-950">
                     {formatCurrency(stats.payableExposure)}
                   </p>
@@ -359,9 +359,9 @@ export default function CashFlowPage() {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.75fr)_360px]">
         <div className="space-y-6">
           <SectionCard
-            eyebrow="Horizonte financeiro"
-            title="Pulso da projeção"
-            description="Compare as janelas de 30, 60 e 90 dias e veja onde o caixa estica ou perde folego."
+            eyebrow="Projeção"
+            title="Projeção de saldo"
+            description="Compare o saldo previsto para os próximos 30, 60 e 90 dias."
           >
             <div className="workspace-projection-grid grid gap-3">
               {loading ? (
@@ -378,7 +378,7 @@ export default function CashFlowPage() {
                 <div className="col-span-full">
                   <EmptyState
                     title="Sem projeções carregadas"
-                    description="O endpoint de projeção nao retornou horizontes para analise."
+                    description="Não há dados de projeção para o período selecionado."
                   />
                 </div>
               ) : (
@@ -410,7 +410,7 @@ export default function CashFlowPage() {
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-3">
-                        <span>Saidas previstas</span>
+                        <span>Saídas previstas</span>
                         <span className="font-semibold text-rose-700">
                           {formatCurrency(item.expectedOut)}
                         </span>
@@ -422,7 +422,7 @@ export default function CashFlowPage() {
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-3">
-                        <span>Saidas realizadas</span>
+                        <span>Saídas realizadas</span>
                         <span className="font-semibold text-rose-700">
                           {formatCurrency(Number(item.realizedOut || 0))}
                         </span>
@@ -436,7 +436,7 @@ export default function CashFlowPage() {
 
           <SectionCard
             eyebrow="Agenda financeira"
-            title="Entradas e saidas mais proximas"
+            title="Entradas e saídas mais próximas"
             description="Consulte os vencimentos que compõem a projeção do caixa."
           >
             <div className="grid gap-4 xl:grid-cols-2">
@@ -451,7 +451,7 @@ export default function CashFlowPage() {
                     </p>
                   </div>
                   <DataPill tone="blue">
-                    {soonReceivables.length} titulo(s)
+                    {soonReceivables.length} título(s)
                   </DataPill>
                 </div>
 
@@ -463,7 +463,7 @@ export default function CashFlowPage() {
                 ) : soonReceivables.length === 0 ? (
                   <EmptyState
                     title="Sem recebimentos urgentes"
-                    description="Nenhum titulo ativo apareceu na janela prioritaria."
+                    description="Nenhum título ativo apareceu na janela prioritaria."
                   />
                 ) : (
                   soonReceivables.map((item) => {
@@ -523,11 +523,11 @@ export default function CashFlowPage() {
                       Pagamentos prioritarios
                     </p>
                     <p className="text-sm text-slate-500">
-                      Despesas ativas que pressionam o caixa nos proximos dias.
+                      Despesas ativas que pressionam o caixa nos próximos dias.
                     </p>
                   </div>
                   <DataPill tone="amber">
-                    {soonPayables.length} titulo(s)
+                    {soonPayables.length} título(s)
                   </DataPill>
                 </div>
 
@@ -592,9 +592,9 @@ export default function CashFlowPage() {
 
         <div className="space-y-6">
           <SectionCard
-            eyebrow="Leituras de risco"
-            title="Pontos de atencao"
-            description="O que mais influencia a saude do caixa agora."
+            eyebrow="Atenção"
+            title="Pontos de atenção"
+            description="Acompanhe os fatores que afetam o saldo disponível."
           >
             <div className="space-y-3">
               <FieldBox>
@@ -602,7 +602,7 @@ export default function CashFlowPage() {
                   Recebiveis vencidos
                 </p>
                 <p className="mt-2 text-sm text-slate-600">
-                  {stats.overdueReceivables} titulo(s) atrasados, pressionando a
+                  {stats.overdueReceivables} título(s) atrasados, pressionando a
                   entrada prevista.
                 </p>
               </FieldBox>
@@ -612,8 +612,8 @@ export default function CashFlowPage() {
                   Pagaveis vencidos
                 </p>
                 <p className="mt-2 text-sm text-slate-600">
-                  {stats.overduePayables} titulo(s) em atraso, elevando a
-                  pressao de saida.
+                  {stats.overduePayables} título(s) em atraso, elevando a
+                  pressao de saída.
                 </p>
               </FieldBox>
 

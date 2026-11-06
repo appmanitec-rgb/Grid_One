@@ -18,14 +18,10 @@ import {
 import { createPortal } from "react-dom";
 import styles from "./SearchableFields.module.css";
 
+import { normalizeSearch, matchesSearch } from "@/lib/search";
 export const SELECT_RESULT_LIMIT = 10;
-export function normalizeSearch(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase("pt-BR")
-    .trim();
-}
+export { normalizeSearch } from "@/lib/search";
+
 type Choice = {
   value: string;
   label: string;
@@ -128,7 +124,7 @@ function Picker({
   const selected = choices.find((choice) => choice.value === value);
   const term = normalizeSearch(freeText ? value : editing ? query : "");
   const matches = choices.filter(
-    (choice) => !term || choice.search.includes(term),
+    (choice) => !term || matchesSearch(choice.search, term),
   );
   const results = loading || error ? [] : matches.slice(0, SELECT_RESULT_LIMIT);
   const activeIndex = Math.min(active, results.length - 1);

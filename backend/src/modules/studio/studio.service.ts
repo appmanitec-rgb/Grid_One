@@ -123,6 +123,12 @@ const CONTROL_OPTION_TYPES = {
     domain: AuditDomain.FINANCE,
     permission: 'finance.update',
   },
+  proposalExpenseReviewRules: {
+    group: 'commercial',
+    type: 'PROPOSAL_EXPENSE_REVIEW_RULE',
+    domain: AuditDomain.PROPOSALS,
+    permission: 'proposals.update',
+  },
   proposalAccessoryRules: {
     group: 'commercial',
     type: 'PROPOSAL_ACCESSORY_RULE',
@@ -153,6 +159,18 @@ function controlOptionDefinition(
       isBlockedForNewClients: 'boolean',
     },
     validate: (data, creating) => {
+      if (config.type === 'PROPOSAL_EXPENSE_REVIEW_RULE') {
+        if (
+          (creating || 'sortOrder' in data) &&
+          (!Number.isInteger(data.sortOrder) ||
+            Number(data.sortOrder) < 1 ||
+            Number(data.sortOrder) > 1000000)
+        )
+          throw new BadRequestException(
+            'Informe um limite de conferencia inteiro entre 1 e 1000000.',
+          );
+        return;
+      }
       if (config.type !== 'PROPOSAL_ACCESSORY_RULE') return;
       if (
         (creating || 'description' in data) &&

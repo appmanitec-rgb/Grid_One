@@ -75,10 +75,13 @@ export type PortalContract = {
   preventiveRecurrence: string;
   responseTimeHours?: number | null;
   partsCoverage: string;
-  equipments: Array<{ generator: { id: string; name: string; serialNumber?: string | null } }>;
+  equipments: Array<{
+    generator: { id: string; name: string; serialNumber?: string | null };
+  }>;
 };
 
 export type PortalProposal = {
+  paymentSummary?: string | null;
   id: string;
   code: string;
   status: string;

@@ -1,6 +1,14 @@
 // Shared permission catalogue; mirrored in frontend and backend.
 export const ACCESS_SCREENS = [
   {
+    key: 'studioTemplates',
+    label: 'Biblioteca de modelos',
+    department: 'Manitec Studio',
+    path: '/dashboard/developer/templates',
+    parent: 'studio',
+    section: 'studio',
+  },
+  {
     key: 'hrCollaborators',
     label: 'Colaboradores',
     department: 'RH',

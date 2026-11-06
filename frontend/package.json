@@ -7,6 +7,9 @@
     "npm": ">=10"
   },
   "scripts": {
+    "predev": "node scripts/prepare-pdf-worker.mjs",
+    "prebuild": "node scripts/prepare-pdf-worker.mjs",
+    "prestart": "node scripts/prepare-pdf-worker.mjs",
     "dev": "next dev -H 0.0.0.0 -p 3001",
     "build": "next build",
     "start": "next start -H 0.0.0.0 -p 3001",
@@ -22,6 +25,7 @@
   },
   "dependencies": {
     "next": "16.3.8",
+    "pdfjs-dist": "6.4.299",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "read-excel-file": "^9.3.4"

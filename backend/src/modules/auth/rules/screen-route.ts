@@ -9,6 +9,8 @@ export function screenForApi(path: string): string | undefined {
     return undefined;
   if (/^\/purchasing\/status$/.test(p)) return undefined;
   const rules: Array<[RegExp, string]> = [
+    [/^\/commercial\/library\//, 'studioTemplates'],
+    [/^\/commercial\//, 'proposals'],
     [/^\/dashboard(?:\/|$)/, 'dashboard'],
     [/^\/purchasing\/requests|^\/purchasing\/options/, 'purchaseRequests'],
     [/^\/purchasing\/quotes/, 'purchaseQuotations'],

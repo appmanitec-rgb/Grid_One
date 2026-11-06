@@ -1,5 +1,8 @@
 "use client";
+import { formatCalendarDate } from "@/lib/formatters";
+import CommercialResponsibilities from "./CommercialResponsibilities";
 import DetailedPermissionsEditor from "./DetailedPermissionsEditor";
+import { InterfaceIcon } from "../../components/InterfaceIcon";
 import AccessProfileSelector from "./AccessProfileSelector";
 import {
   accessProfileChanges,
@@ -35,6 +38,7 @@ import {
   FormField,
   InlineMessage,
   PageHero,
+  PageHeader,
   SectionCard,
   SelectInput,
   StatusBanner,
@@ -806,7 +810,7 @@ const PERMISSION_AREAS: readonly PermissionArea[] = [
     title: "Colaboradores e RH",
     department: "Recursos Humanos",
     screens: [
-      "Colaboradores e acessos",
+      "Colaboradores",
       "Documentação",
       "EPIs e ferramentas",
       "Banco de horas",
@@ -852,10 +856,8 @@ const PERMISSION_AREAS: readonly PermissionArea[] = [
   },
 ];
 
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON =
-  "inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+const PRIMARY_BUTTON = "app-button app-button-primary";
+const SECONDARY_BUTTON = "app-button app-button-secondary";
 
 export type UserManagementArea =
   | "overview"
@@ -872,15 +874,15 @@ const USER_MANAGEMENT_AREAS: Array<{
 }> = [
   {
     key: "overview",
-    label: "Visao geral",
+    label: "Visão geral",
     href: "/dashboard/management/users",
     description: "Resumo executivo da base, riscos e atalhos.",
   },
   {
     key: "new",
-    label: "Criacao",
+    label: "Criação",
     href: "/dashboard/management/users/new",
-    description: "Entrada de novos usuarios e clientes vinculados.",
+    description: "Entrada de novos usuários e clientes vinculados.",
   },
   {
     key: "control",
@@ -892,13 +894,13 @@ const USER_MANAGEMENT_AREAS: Array<{
     key: "documents",
     label: "Documentos",
     href: "/dashboard/management/users/documents",
-    description: "Certificados, NRs e liberacoes proximas do vencimento.",
+    description: "Certificados, NRs e liberacoes próximas do vencimento.",
   },
   {
     key: "permissions",
-    label: "Permissoes",
+    label: "Permissões",
     href: "/dashboard/management/users/permissions",
-    description: "Matriz de acesso por area e regras sensiveis.",
+    description: "Matriz de acesso por área e regras sensiveis.",
   },
 ];
 
@@ -1238,7 +1240,7 @@ export function UserManagementWorkspace({
       !newUser.email.trim() ||
       (newUser.role !== "CLIENT" && !newUser.password.trim())
     ) {
-      setError("Preencha nome, email e senha para provisionar o usuario.");
+      setError("Preencha nome, email e senha para provisionar o usuário.");
       return;
     }
 
@@ -1255,11 +1257,11 @@ export function UserManagementWorkspace({
     if (newUser.role === "TECHNICIAN") {
       const cpf = newUser.technicianCpf.replace(/\D/g, "");
       if (cpf.length !== 11) {
-        setError("Informe um CPF valido com 11 digitos para o tecnico.");
+        setError("Informe um CPF valido com 11 digitos para o técnico.");
         return;
       }
       if (!newUser.technicianPhone.trim()) {
-        setError("Informe o telefone do tecnico.");
+        setError("Informe o telefone do técnico.");
         return;
       }
     }
@@ -1393,13 +1395,13 @@ export function UserManagementWorkspace({
 
   async function saveSelectedUser() {
     if (!selectedUser) {
-      setError("Selecione um usuario para editar.");
+      setError("Selecione um usuário para editar.");
       return;
     }
 
     if (selectedUser.isSystemMaster) {
       setError(
-        "O usuario master e protegido e nao pode ser alterado por esta tela.",
+        "O usuário master e protegido e não pode ser alterado por esta tela.",
       );
       return;
     }
@@ -1421,7 +1423,7 @@ export function UserManagementWorkspace({
       }
 
       if (
-        selectedUser.accessRules?.onCallShifts.some(
+        selectedUser.accessRules?.onCallShifts?.some(
           (s) =>
             !s.startsAt ||
             !s.endsAt ||
@@ -1510,7 +1512,7 @@ export function UserManagementWorkspace({
     buildPayload: (user: UserRow) => Record<string, unknown>,
   ) {
     if (selectedIds.length === 0) {
-      setError("Selecione ao menos um usuario para acao em lote.");
+      setError("Selecione ao menos um usuário para acao em lote.");
       return;
     }
 
@@ -1519,7 +1521,7 @@ export function UserManagementWorkspace({
     );
 
     if (targets.length === 0) {
-      setError("A selecao atual nao contem usuarios editaveis.");
+      setError("A selecao atual não contem usuários editaveis.");
       return;
     }
 
@@ -1685,17 +1687,17 @@ export function UserManagementWorkspace({
 
   async function saveCertification() {
     if (!selectedUser) {
-      setError("Selecione um usuario para editar certificacoes.");
+      setError("Selecione um usuário para editar certificações.");
       return;
     }
 
     if (selectedUser.isSystemMaster) {
-      setError("O usuario master nao pode ser alterado por esta tela.");
+      setError("O usuário master não pode ser alterado por esta tela.");
       return;
     }
 
     if (!certificationForm.code.trim() || !certificationForm.validUntil) {
-      setError("Informe o codigo e a validade do certificado.");
+      setError("Informe o código e a validade do certificado.");
       return;
     }
 
@@ -1757,7 +1759,7 @@ export function UserManagementWorkspace({
 
   async function deleteCertification(certId: string) {
     if (!selectedUser) {
-      setError("Selecione um usuario para remover certificacoes.");
+      setError("Selecione um usuário para remover certificações.");
       return;
     }
     if (!confirmDeletion("este certificado")) return;
@@ -1892,13 +1894,36 @@ export function UserManagementWorkspace({
 
   return (
     <div className="space-y-6 pb-4">
-      <AccessHero
-        stats={stats}
-        viewerAccess={viewerAccess}
-        isLoading={isLoading}
-        saving={saving}
-        onRefresh={() => void loadUsers()}
-      />
+      {area === "overview" ? (
+        <AccessHero
+          stats={stats}
+          viewerAccess={viewerAccess}
+          isLoading={isLoading}
+          saving={saving}
+          onRefresh={() => void loadUsers()}
+        />
+      ) : (
+        <PageHeader
+          eyebrow="Recursos Humanos · Colaboradores"
+          title={
+            USER_MANAGEMENT_AREAS.find((item) => item.key === area)?.label ||
+            "Colaboradores"
+          }
+          description={
+            USER_MANAGEMENT_AREAS.find((item) => item.key === area)?.description
+          }
+          actions={
+            <button
+              type="button"
+              className="app-button app-button-secondary"
+              disabled={isLoading || saving}
+              onClick={() => void loadUsers()}
+            >
+              Atualizar dados
+            </button>
+          }
+        />
+      )}
 
       <UserManagementNav activeArea={area} stats={stats} />
 
@@ -1940,8 +1965,8 @@ export function UserManagementWorkspace({
           <ManagementSection
             {...managementSectionProps}
             eyebrow="Controle"
-            title="Controle de usuarios"
-            description="Triagem operacional de contas, status, senha, vinculos e edicoes em lote."
+            title="Controle de usuários"
+            description="Triagem operacional de contas, status, senha, vínculos e edicoes em lote."
           />
           {selectedUser?.role === "CLIENT" ? (
             <SectionCard
@@ -2019,9 +2044,9 @@ export function UserManagementWorkspace({
         <ManagementSection
           {...managementSectionProps}
           permissionsOnly
-          eyebrow="Permissoes"
-          title="Permissoes por usuario"
-          description="Selecione uma conta e ajuste a matriz de acesso com contexto de cargo, hierarquia e areas sensiveis."
+          eyebrow="Permissões"
+          title="Permissões por usuário"
+          description="Selecione uma conta e ajuste a matriz de acesso com contexto de cargo, hierarquia e áreas sensiveis."
         />
       ) : null}
     </div>
@@ -2051,7 +2076,7 @@ function AccessHero({
   return (
     <PageHero
       eyebrow="Gestão"
-      title="Usuários e acessos"
+      title="Usuários e permissões"
       description="Gerencie cadastros, permissões e documentos da equipe."
       stats={[
         {
@@ -2063,19 +2088,19 @@ function AccessHero({
         {
           label: "Rastreamento",
           value: String(stats.live),
-          helper: "Usuarios com localizacao viva disponivel agora.",
+          helper: "Usuários com localização viva disponível agora.",
           tone: "blue",
         },
         {
-          label: "Aprovacoes",
+          label: "Aprovações",
           value: String(stats.approvals),
-          helper: "Solicitacoes aguardando decisao neste momento.",
+          helper: "Solicitações aguardando decisão neste momento.",
           tone: "amber",
         },
         {
           label: "Certificados",
           value: String(stats.expiring),
-          helper: "Vencimentos previstos para os proximos 30 dias.",
+          helper: "Vencimentos previstos para os próximos 30 dias.",
           tone: "rose",
         },
       ]}
@@ -2100,7 +2125,7 @@ function AccessHero({
             <MiniInfo
               label="Base ativa"
               value={`${stats.active}/${stats.total}`}
-              helper="Volume de contas habilitadas para operacao."
+              helper="Volume de contas habilitadas para operação."
               tone="emerald"
             />
             <MiniInfo
@@ -2134,11 +2159,34 @@ function UserManagementNav({
     expiring: number;
   };
 }) {
+  if (activeArea !== "overview")
+    return (
+      <nav
+        aria-label="Áreas de colaboradores"
+        className="flex flex-wrap gap-2 border-b border-[var(--border)] pb-3"
+      >
+        {USER_MANAGEMENT_AREAS.map((item) => (
+          <Link
+            key={item.key}
+            href={item.href}
+            aria-current={item.key === activeArea ? "page" : undefined}
+            className={
+              "app-button " +
+              (item.key === activeArea
+                ? "app-button-primary"
+                : "app-button-secondary")
+            }
+          >
+            {item.label}
+          </Link>
+        ))}
+      </nav>
+    );
   return (
     <SectionCard
-      eyebrow="Gestao de usuarios"
-      title="Divisoes da area"
-      description="Cada rotina fica em uma pagina propria, mas todas continuam usando a mesma base de usuarios, permissoes e certificados."
+      eyebrow="Gestão de usuários"
+      title="Divisões da área"
+      description="Cada rotina fica em uma pagina propria, mas todas continuam usando a mesma base de usuários, permissões e certificados."
       actions={<DataPill tone="slate">{stats.active} contas ativas</DataPill>}
     >
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -2204,12 +2252,12 @@ function UserManagementOverview({
       <SectionCard
         eyebrow="Mapa operacional"
         title="Fluxos separados por responsabilidade"
-        description="Use a visao geral para decidir o caminho; as alteracoes ficam nas paginas de rotina."
+        description="Use a visão geral para decidir o caminho; as alteracoes ficam nas paginas de rotina."
       >
         <div className="grid gap-3 md:grid-cols-2">
           <WorkflowCard
             href="/dashboard/management/users/new"
-            title="Criacao de usuarios"
+            title="Criação de usuários"
             description="Cadastrar colaborador, cliente vinculado, cargo e senha inicial."
             metric={`${stats.total} contas`}
             tone="blue"
@@ -2217,21 +2265,21 @@ function UserManagementOverview({
           <WorkflowCard
             href="/dashboard/management/users/control"
             title="Controle de contas"
-            description="Ativar, pausar, filtrar por area, editar dados e resetar senha."
+            description="Ativar, pausar, filtrar por área, editar dados e resetar senha."
             metric={`${stats.active} ativas`}
             tone="emerald"
           />
           <WorkflowCard
             href="/dashboard/management/users/documents"
             title="Documentos a vencer"
-            description="Acompanhar NRs, certificados tecnicos e liberacoes proximas da validade."
+            description="Acompanhar NRs, certificados técnicos e liberacoes próximas da validade."
             metric={`${stats.expiring} alertas`}
             tone="rose"
           />
           <WorkflowCard
             href="/dashboard/management/users/permissions"
-            title="Permissoes"
-            description="Revisar matriz por area, perfil, auditoria e acesso a dados sensiveis."
+            title="Permissões"
+            description="Revisar matriz por área, perfil, auditoria e acesso a dados sensiveis."
             metric={`${stats.admins} admins`}
             tone="amber"
           />
@@ -2285,9 +2333,9 @@ function WorkflowCard({
 function UserCreationGuide() {
   return (
     <SectionCard
-      eyebrow="Padrao de entrada"
+      eyebrow="Padrão de entrada"
       title="Como cadastrar sem retrabalho"
-      description="O usuario nasce com permissoes do cargo e depois pode ser refinado em Controle ou Permissoes."
+      description="O usuário nasce com permissões do cargo e depois pode ser refinado em Controle ou Permissões."
     >
       <div className="space-y-3">
         <FieldBox>
@@ -2295,13 +2343,13 @@ function UserCreationGuide() {
             1. Cargo define a matriz inicial
           </p>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            Tecnico, financeiro, RH, comercial e cliente recebem um conjunto
-            base de permissoes compativel com a funcao.
+            Técnico, financeiro, RH, comercial e cliente recebem um conjunto
+            base de permissões compativel com a função.
           </p>
         </FieldBox>
         <FieldBox>
           <p className="text-sm font-semibold text-slate-950">
-            2. Cliente precisa de vinculo
+            2. Cliente precisa de vínculo
           </p>
           <p className="mt-1 text-sm leading-6 text-slate-600">
             Contas do tipo cliente devem apontar para o cadastro de cliente
@@ -2313,7 +2361,7 @@ function UserCreationGuide() {
             3. Documentos vivem na base operacional
           </p>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            NR-35, treinamentos e liberacoes tecnicas devem ser atualizados em
+            NR-35, treinamentos e liberacoes técnicas devem ser atualizados em
             Documentos, de onde o dashboard passa a consumir os alertas.
           </p>
         </FieldBox>
@@ -2348,7 +2396,7 @@ function UserDocumentsSection({
       <SectionCard
         eyebrow="Documentos"
         title="Documentos a vencer"
-        description="Fila de certificados, NRs e liberacoes que exigem atualizacao operacional."
+        description="Fila de certificados, NRs e liberacoes que exigem atualização operacional."
         actions={
           <div className="flex flex-wrap gap-2">
             <button
@@ -2360,7 +2408,7 @@ function UserDocumentsSection({
               Atualizar
             </button>
             <Link href="/dashboard/hr/documentation" className={PRIMARY_BUTTON}>
-              Abrir documentacao
+              Abrir documentação
             </Link>
           </div>
         }
@@ -2369,8 +2417,8 @@ function UserDocumentsSection({
           <InlineMessage>Carregando documentos...</InlineMessage>
         ) : sortedRows.length === 0 ? (
           <EmptyState
-            title="Nenhum vencimento nos proximos 30 dias"
-            description="Quando uma NR, certificado tecnico ou liberacao se aproximar da validade, ela aparece aqui."
+            title="Nenhum vencimento nos próximos 30 dias"
+            description="Quando uma NR, certificado técnico ou liberacao se aproximar da validade, ela aparece aqui."
           />
         ) : (
           <div className="space-y-3">
@@ -2390,7 +2438,7 @@ function UserDocumentsSection({
                         {row.user?.name || "Usuario nao localizado"}
                       </p>
                       <p className="mt-1 text-xs text-slate-500">
-                        Validade: {formatDate(row.validUntil)}
+                        Validade: {formatCalendarDate(row.validUntil)}
                       </p>
                     </div>
                     <DataPill tone={remainingDays <= 7 ? "rose" : "amber"}>
@@ -2411,11 +2459,11 @@ function UserDocumentsSection({
       >
         <div className="space-y-3">
           <MiniInfo
-            label="Usuarios internos"
+            label="Usuários internos"
             value={String(
               users.filter((user) => user.role !== "CLIENT").length,
             )}
-            helper="Contas internas que podem ter documentacao tecnica."
+            helper="Contas internas que podem ter documentação técnica."
             tone="slate"
           />
           <MiniInfo
@@ -2429,7 +2477,7 @@ function UserDocumentsSection({
               Fonte dos dados
             </p>
             <p className="mt-1 text-sm leading-6 text-slate-600">
-              Esta lista vem da mesma base usada em Documentacao de
+              Esta lista vem da mesma base usada em Documentação de
               colaboradores. O dashboard deve apenas resumir estes registros.
             </p>
           </FieldBox>
@@ -2459,8 +2507,8 @@ function ProvisioningCard({
   return (
     <SectionCard
       eyebrow="Provisionamento"
-      title="Criar novo usuario"
-      description="Entradas novas nascem com a matriz padrao do cargo e podem ser refinadas depois no editor lateral."
+      title="Criar novo usuário"
+      description="Entradas novas nascem com a matriz padrão do cargo e podem ser refinadas depois no editor lateral."
     >
       <form className="space-y-5" onSubmit={onSubmit}>
         {!canManageSecurity ? (
@@ -2627,7 +2675,7 @@ function ProvisioningCard({
                   required
                 />
               </FormField>
-              <FormField label="Nivel tecnico">
+              <FormField label="Nivel técnico">
                 <SelectInput
                   value={newUser.skillLevel}
                   onChange={(event) =>
@@ -2667,7 +2715,7 @@ function ProvisioningCard({
                   department: event.target.value,
                 }))
               }
-              placeholder="Operacoes, Comercial..."
+              placeholder="Operações, Comercial..."
             />
           </FormField>
           <FormField label="Filial">
@@ -2735,7 +2783,7 @@ function ProvisioningCard({
                 }))
               }
             />
-            Conta ja nasce ativa para uso imediato
+            Conta já nasce ativa para uso imediato
           </label>
         )}
 
@@ -2787,7 +2835,7 @@ function GovernanceRadar({
     <SectionCard
       eyebrow="Governanca"
       title="Radar operacional"
-      description="Pendencias mais sensiveis ficam lado a lado para que a decisao aconteca com contexto."
+      description="Pendencias mais sensiveis ficam lado a lado para que a decisão aconteca com contexto."
     >
       <div className="grid gap-4 xl:grid-cols-2">
         <FieldBox className="space-y-4">
@@ -2840,7 +2888,7 @@ function GovernanceRadar({
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-slate-900">
-                Aprovacoes pendentes
+                Aprovações pendentes
               </p>
               <p className="text-xs text-slate-500">
                 Decida sem sair do contexto de governanca.
@@ -2851,7 +2899,7 @@ function GovernanceRadar({
           {pendingApprovals.length === 0 ? (
             <EmptyState
               title="Fila limpa"
-              description="Nao ha aprovacoes pendentes neste momento."
+              description="Não ha aprovações pendentes neste momento."
             />
           ) : (
             <div className="space-y-3">
@@ -2933,17 +2981,17 @@ function GovernanceRadar({
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-slate-900">
-                Certificacoes em risco
+                Certificações em risco
               </p>
               <p className="text-xs text-slate-500">
                 Janela de 30 dias para agir antes do vencimento.
               </p>
             </div>
-            <DataPill tone="rose">{expiringCerts.length} proximas</DataPill>
+            <DataPill tone="rose">{expiringCerts.length} próximas</DataPill>
           </div>
           {expiringCerts.length === 0 ? (
             <EmptyState
-              title="Nenhum vencimento proximo"
+              title="Nenhum vencimento próximo"
               description="A base esta regular para este horizonte."
             />
           ) : (
@@ -2960,7 +3008,7 @@ function GovernanceRadar({
                       </p>
                       <p className="text-xs text-slate-500">
                         {row.user?.name || "Usuario nao identificado"} • vence
-                        em {formatDate(row.validUntil)}
+                        em {formatCalendarDate(row.validUntil)}
                       </p>
                     </div>
                     <DataPill tone="rose">
@@ -2984,24 +3032,28 @@ function GovernanceRadar({
               </p>
             </div>
             <div className="w-40">
-              <SelectInput
-                value={auditDomainFilter}
-                onChange={(event) =>
-                  onChangeAuditDomain(event.target.value as "ALL" | AuditDomain)
-                }
-              >
-                <option value="ALL">Todos os dominios</option>
-                {Object.entries(AUDIT_LABELS).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </SelectInput>
+              <FormField label="Área da auditoria">
+                <SelectInput
+                  value={auditDomainFilter}
+                  onChange={(event) =>
+                    onChangeAuditDomain(
+                      event.target.value as "ALL" | AuditDomain,
+                    )
+                  }
+                >
+                  <option value="ALL">Todos os dominios</option>
+                  {Object.entries(AUDIT_LABELS).map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </SelectInput>
+              </FormField>
             </div>
           </div>
           {!viewerAccess.audit.read ? (
             <InlineMessage tone="warning">
-              Seu perfil atual nao possui a permissao de leitura da auditoria.
+              Seu perfil atual não possui a permissão de leitura da auditoria.
             </InlineMessage>
           ) : filteredAuditRows.length === 0 ? (
             <EmptyState
@@ -3184,7 +3236,7 @@ function ManagementSection({
       description={description}
       actions={
         <DataPill tone="slate">
-          {filteredUsers.length} usuarios em foco
+          {filteredUsers.length} usuários em foco
         </DataPill>
       }
     >
@@ -3278,7 +3330,7 @@ function ManagementSection({
               checked={expiringOnly}
               onChange={(event) => onExpiringOnlyChange(event.target.checked)}
             />
-            Mostrar apenas usuarios com certificacao vencendo
+            Mostrar apenas usuários com certificação vencendo
           </label>
           <div className="flex flex-wrap gap-2">
             <button
@@ -3332,7 +3384,7 @@ function ManagementSection({
                 saving || selectedIds.length === 0 || !canManageSecurity
               }
             >
-              Resetar permissoes
+              Resetar permissões
             </button>
           </div>
         </div>
@@ -3642,8 +3694,16 @@ function UserPermissionsPanel({
             />
             {selectedUser.role === "ADMIN" ? (
               <p className="mt-2 text-xs text-slate-500">
-                Administradores mantêm acesso total.
+                Os acessos sensíveis do Comercial dependem da designação por
+                carteira.
               </p>
+            ) : null}
+            {selectedUser.role !== "CLIENT" ? (
+              <CommercialResponsibilities
+                key={`commercial-responsibilities:${selectedUser.id}`}
+                userId={selectedUser.id}
+                disabled={isLoading || !canManageSecurity || saving}
+              />
             ) : null}
             <DetailedPermissionsEditor
               key={selectedUser.id}
@@ -4005,13 +4065,13 @@ function UserListPanel({
   onToggleSelectOne: (id: string, checked: boolean) => void;
 }) {
   if (isLoading) {
-    return <FieldBox>Carregando base de usuarios...</FieldBox>;
+    return <FieldBox>Carregando base de usuários...</FieldBox>;
   }
 
   if (filteredUsers.length === 0) {
     return (
       <EmptyState
-        title="Nenhum usuario encontrado"
+        title="Nenhum usuário encontrado"
         description="Revise os filtros aplicados ou cadastre um novo colaborador."
       />
     );
@@ -4035,6 +4095,7 @@ function UserListPanel({
           >
             <div className="flex items-start gap-3">
               <input
+                aria-label={"Selecionar " + user.name}
                 type="checkbox"
                 className="mt-1 h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-200"
                 checked={isChecked}
@@ -4086,7 +4147,7 @@ function UserListPanel({
                         <DataPill tone="slate">MFA hibernado</DataPill>
                       ) : null}
                       {usersWithExpiringSet.has(user.id) ? (
-                        <DataPill tone="rose">Certificacao critica</DataPill>
+                        <DataPill tone="rose">Certificação critica</DataPill>
                       ) : null}
                     </div>
                   </div>
@@ -4158,7 +4219,7 @@ function UserEditorCard({
   if (!selectedUser) {
     return (
       <EmptyState
-        title="Selecione um usuario"
+        title="Selecione um usuário"
         description="Escolha um cadastro na lista para abrir o editor detalhado."
       />
     );
@@ -4234,7 +4295,7 @@ function UserEditorCard({
         {isSelectedMaster ? (
           <div className="mt-5">
             <InlineMessage tone="warning">
-              O usuario master esta bloqueado para edicao nesta tela.
+              O usuário master esta bloqueado para edição nesta tela.
             </InlineMessage>
           </div>
         ) : null}
@@ -4422,7 +4483,7 @@ function UserEditorCard({
               }
               disabled={isSelectedMaster}
             >
-              <option value="">Nao definido</option>
+              <option value="">Não definido</option>
               {AVAILABILITY_OPTIONS.map((status) => (
                 <option key={status} value={status}>
                   {AVAILABILITY_LABELS[status]}
@@ -4430,7 +4491,7 @@ function UserEditorCard({
               ))}
             </SelectInput>
           </FormField>
-          <FormField label="Senioridade tecnica">
+          <FormField label="Senioridade técnica">
             <SelectInput
               value={selectedUser.skillLevel || ""}
               onChange={(event) =>
@@ -4440,7 +4501,7 @@ function UserEditorCard({
               }
               disabled={isSelectedMaster}
             >
-              <option value="">Nao definida</option>
+              <option value="">Não definida</option>
               {SKILL_OPTIONS.map((skill) => (
                 <option key={skill} value={skill}>
                   {SKILL_LABELS[skill]}
@@ -4578,10 +4639,10 @@ function UserEditorCard({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-slate-900">
-                  Certificacoes do usuario
+                  Certificações do usuário
                 </p>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
-                  Controle NR, treinamentos tecnicos, ferramentas e vencimentos.
+                  Controle NR, treinamentos técnicos, ferramentas e vencimentos.
                 </p>
               </div>
               <DataPill tone="blue">
@@ -4590,7 +4651,7 @@ function UserEditorCard({
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
-              <FormField label="Codigo">
+              <FormField label="Código">
                 <TextInput
                   value={certificationForm.code}
                   onChange={(event) =>
@@ -4649,7 +4710,7 @@ function UserEditorCard({
                   disabled={isSelectedMaster}
                 />
               </FormField>
-              <FormField label="Observacoes" className="md:col-span-2">
+              <FormField label="Observações" className="md:col-span-2">
                 <TextAreaInput
                   value={certificationForm.notes}
                   onChange={(event) =>
@@ -4658,7 +4719,7 @@ function UserEditorCard({
                       notes: event.target.value,
                     }))
                   }
-                  placeholder="Ex.: certificado anexado no RH, ferramenta liberada ate nova inspeção."
+                  placeholder="Ex.: certificado anexado no RH, ferramenta liberada até nova inspeção."
                   disabled={isSelectedMaster}
                 />
               </FormField>
@@ -4686,10 +4747,10 @@ function UserEditorCard({
             </div>
 
             {certificationsLoading ? (
-              <InlineMessage>Carregando certificacoes...</InlineMessage>
+              <InlineMessage>Carregando certificações...</InlineMessage>
             ) : certifications.length === 0 ? (
               <EmptyState
-                title="Sem certificacoes cadastradas"
+                title="Sem certificações cadastradas"
                 description="Registre aqui os certificados de NR, treinamentos e liberacoes de ferramenta."
               />
             ) : (
@@ -4720,7 +4781,8 @@ function UserEditorCard({
                               : ""}
                           </p>
                           <p className="mt-1 text-xs text-slate-500">
-                            Validade: {formatDate(certification.validUntil)}
+                            Validade:{" "}
+                            {formatCalendarDate(certification.validUntil)}
                           </p>
                           {notes ? (
                             <p className="mt-2 text-xs leading-5 text-slate-600">
@@ -4776,17 +4838,17 @@ function UserEditorCard({
 
       <div className="rounded-[24px] border border-sky-200 bg-sky-50/70 px-5 py-4">
         <p className="text-sm font-semibold text-slate-950">
-          Permissões em uma área própria
+          Permissões do colaborador
         </p>
         <p className="mt-1 text-sm text-slate-600">
-          Revise a matriz de acesso em largura total, com busca por ação e
-          filtros por módulo.
+          Defina as telas e ações que este colaborador pode acessar.
         </p>
         <Link
           href={`/dashboard/management/users/permissions?user=${encodeURIComponent(selectedUser.id)}`}
-          className="mt-3 inline-flex text-sm font-bold text-sky-700 hover:underline"
+          className="app-button app-button-secondary mt-3"
         >
-          Abrir permissões →
+          Abrir permissões
+          <InterfaceIcon name="arrow-right" className="h-4 w-4" />
         </Link>
       </div>
       <div className="flex flex-wrap gap-3">

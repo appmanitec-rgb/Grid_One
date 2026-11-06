@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { NavigationIcon as SidebarIcon } from "./NavigationIcon";
+import { InterfaceIcon } from "./InterfaceIcon";
 import {
   MAIN_SECTIONS,
   navigationContext,
@@ -12,7 +13,15 @@ import {
 } from "@/lib/dashboard-navigation";
 export { MAIN_SECTIONS } from "@/lib/dashboard-navigation";
 import Link from "next/link";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { canAccessDashboardPath } from "@/lib/access";
 import { apiFetch } from "@/lib/api";
 import { decodeJwtPayload, getStoredAccessToken } from "@/lib/auth-session";
@@ -103,14 +112,16 @@ export default function SidebarNavigation({
   access,
   onLogout,
 }: SidebarNavigationProps) {
-  const [isHovered, setIsHovered] = useState(false);
-  const [hasKeyboardFocus, setHasKeyboardFocus] = useState(false);
-  const [isTouchNavigation, setIsTouchNavigation] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const [isPinned, setIsPinned] = useState(false);
+  const sidebar = useRef<HTMLElement>(null);
+  const openButton = useRef<HTMLButtonElement>(null);
+  const preferenceKey = useRef<string | null>(null);
   const [sectionChoice, setSectionChoice] = useState<{
     pathname: string;
     id: string | null;
   } | null>(null);
-  const collapsed = !(isHovered || hasKeyboardFocus || isTouchNavigation);
+  const collapsed = !(isOpen || isPinned);
   const [favoriteKeys, setFavoriteKeys] = useState<string[]>([]);
   const [userRole, setUserRole] = useState("NORMAL");
   const [counters, setCounters] = useState<SidebarCounters>({
@@ -143,20 +154,46 @@ export default function SidebarNavigation({
     [filteredSections, access],
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const token = getStoredAccessToken();
     if (!token) return;
-    const payload = decodeJwtPayload<{ role?: string }>(token);
+    const payload = decodeJwtPayload<{ sub?: string; role?: string }>(token);
     setUserRole(payload?.role || "NORMAL");
+    if (payload?.sub) {
+      preferenceKey.current = "manitec_sidebar_mode:" + payload.sub;
+      try {
+        setIsPinned(localStorage.getItem(preferenceKey.current) === "pinned");
+      } catch {
+        /* Navigation remains usable without local storage. */
+      }
+    }
   }, []);
 
-  useEffect(() => {
-    const query = window.matchMedia("(hover: none), (pointer: coarse)");
-    const update = () => setIsTouchNavigation(query.matches);
-    update();
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
+  const savePinned = useCallback((pinned: boolean) => {
+    if (!preferenceKey.current) return;
+    try {
+      localStorage.setItem(
+        preferenceKey.current,
+        pinned ? "pinned" : "collapsed",
+      );
+    } catch {
+      /* Keep the preference for this session. */
+    }
   }, []);
+
+  const closeMenu = useCallback(() => {
+    setIsOpen(false);
+    setIsPinned(false);
+    savePinned(false);
+    requestAnimationFrame(() => openButton.current?.focus());
+  }, [savePinned]);
+
+  const togglePinned = useCallback(() => {
+    const next = !isPinned;
+    setIsPinned(next);
+    setIsOpen(!next);
+    savePinned(next);
+  }, [isPinned, savePinned]);
 
   useEffect(() => {
     const saved = localStorage.getItem("manitec_sidebar_favorites");
@@ -293,8 +330,13 @@ export default function SidebarNavigation({
 
   const selectRailSection = useCallback(
     (sectionId: string) => {
-      setIsHovered(true);
+      setIsOpen(true);
       setSectionChoice({ pathname, id: sectionId });
+      requestAnimationFrame(() =>
+        sidebar.current
+          ?.querySelector<HTMLInputElement>('input[type="search"]')
+          ?.focus(),
+      );
     },
     [pathname],
   );
@@ -308,20 +350,24 @@ export default function SidebarNavigation({
 
   return (
     <aside
+      ref={sidebar}
       aria-label="Navegação principal"
       data-expanded={!collapsed}
-      data-touch={isTouchNavigation}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onFocusCapture={(event) => {
-        if (event.target.matches(":focus-visible")) setHasKeyboardFocus(true);
+      data-pinned={isPinned}
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && !isPinned && !collapsed) {
+          event.preventDefault();
+          closeMenu();
+        }
       }}
-      onBlurCapture={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget))
-          setHasKeyboardFocus(false);
-      }}
-      onPointerDownCapture={(event) => {
-        if (event.pointerType === "mouse") setHasKeyboardFocus(false);
+      onClickCapture={(event) => {
+        if (
+          !isPinned &&
+          !event.ctrlKey &&
+          !event.metaKey &&
+          (event.target as Element).closest("a[href]")
+        )
+          setIsOpen(false);
       }}
       className="dashboard-sidebar relative z-30 hidden shrink-0 flex-col border-r border-white/10 md:flex"
     >
@@ -329,23 +375,70 @@ export default function SidebarNavigation({
         <Link
           href="/dashboard"
           aria-label="Manitec — página inicial"
-          className="flex h-11 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white px-2 shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+          className="dashboard-brand-link flex h-11 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white px-2 shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
         >
           <Image
-            src="/brand/manitec-logo-transparent.png"
-            alt="Manitec"
-            width={160}
-            height={44}
+            src="/brand/manitec-logo.png.png"
+            alt="Manitec Grupos Geradores"
+            width={4112}
+            height={1000}
+            sizes="(min-width: 768px) 160px, 48px"
             loading="eager"
-            className="h-auto w-10 object-contain"
+            className="dashboard-brand-image"
           />
         </Link>
+        {!collapsed ? (
+          <div className="dashboard-sidebar-controls">
+            <button
+              type="button"
+              onClick={togglePinned}
+              aria-pressed={isPinned}
+              aria-label={
+                isPinned ? "Desfixar menu lateral" : "Fixar menu lateral"
+              }
+              title={isPinned ? "Desfixar menu lateral" : "Fixar menu lateral"}
+              className="dashboard-sidebar-control"
+            >
+              <InterfaceIcon name="pin" />
+            </button>
+            <button
+              type="button"
+              onClick={closeMenu}
+              aria-label="Recolher menu lateral"
+              title="Recolher menu lateral"
+              aria-controls="desktop-navigation-panel"
+              aria-expanded={true}
+              className="dashboard-sidebar-control"
+            >
+              <InterfaceIcon name="arrow-left" />
+            </button>
+          </div>
+        ) : null}
       </div>
       <div
         aria-hidden={!collapsed}
         inert={!collapsed}
         className="dashboard-sidebar-rail flex min-h-0 flex-1 flex-col"
       >
+        <button
+          ref={openButton}
+          type="button"
+          onClick={() => {
+            setIsOpen(true);
+            requestAnimationFrame(() =>
+              sidebar.current
+                ?.querySelector<HTMLInputElement>('input[type="search"]')
+                ?.focus(),
+            );
+          }}
+          aria-label="Abrir menu lateral"
+          aria-controls="desktop-navigation-panel"
+          aria-expanded={false}
+          className="dashboard-sidebar-open"
+        >
+          <InterfaceIcon name="panel-left" />
+          <span>Menu</span>
+        </button>
         <SidebarRail
           sections={filteredSections}
           pathname={pathname}
@@ -356,6 +449,7 @@ export default function SidebarNavigation({
         />
       </div>
       <div
+        id="desktop-navigation-panel"
         className="dashboard-sidebar-drawer"
         aria-hidden={collapsed}
         inert={collapsed}
@@ -409,7 +503,12 @@ const SidebarRail = memo(function SidebarRail({
               type="button"
               aria-label={section.title}
               aria-expanded={false}
-              title={section.title}
+              title={
+                section.title +
+                (count > 0
+                  ? " · " + getSectionBadgeDescription(section, counters)
+                  : "")
+              }
               onClick={() => onSelect(section.id)}
               className="dashboard-nav-section dashboard-sidebar-toggle relative mx-auto flex h-11 w-12 items-center justify-center rounded-xl border border-white/10 text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
             >
@@ -426,6 +525,7 @@ const SidebarRail = memo(function SidebarRail({
               {count > 0 ? (
                 <span
                   aria-hidden="true"
+                  title={getSectionBadgeDescription(section, counters)}
                   className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-white px-1 text-[9px] font-bold text-slate-900"
                 >
                   {count > 9 ? "9+" : count}
@@ -520,8 +620,9 @@ const SidebarPanel = memo(function SidebarPanel({
             value={query}
             onChange={(e) => setSearch({ pathname, value: e.target.value })}
             onKeyDown={(e) => {
-              if (e.key === "Escape") {
+              if (e.key === "Escape" && query.trim()) {
                 e.preventDefault();
+                e.stopPropagation();
                 setSearch({ pathname, value: "" });
               }
             }}
@@ -605,6 +706,7 @@ const SidebarPanel = memo(function SidebarPanel({
               isItemActive(pathname, item.href),
             );
             const open = openSectionId === section.id;
+            const count = getSectionBadgeValue(section, counters);
             return (
               <div
                 key={section.id}
@@ -616,7 +718,12 @@ const SidebarPanel = memo(function SidebarPanel({
                   type="button"
                   onClick={() => onToggleSection(section.id)}
                   aria-label={section.title}
-                  title={section.description}
+                  title={
+                    (section.description || section.title) +
+                    (count > 0
+                      ? " · " + getSectionBadgeDescription(section, counters)
+                      : "")
+                  }
                   aria-expanded={open}
                   aria-controls={"sidebar-section-" + section.id}
                   className="dashboard-nav-heading flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-300"
@@ -637,12 +744,17 @@ const SidebarPanel = memo(function SidebarPanel({
                     </span>
                   </span>
                   <span className="flex shrink-0 items-center gap-2">
-                    <span
-                      title={section.items.length + " rotinas disponíveis"}
-                      className="text-[10px] font-medium tabular-nums text-slate-400"
-                    >
-                      {section.items.length}
-                    </span>
+                    {count > 0 ? (
+                      <span
+                        title={getSectionBadgeDescription(section, counters)}
+                        className="dashboard-nav-badge text-[10px] font-semibold tabular-nums"
+                      >
+                        <span aria-hidden="true">{count}</span>
+                        <span className="sr-only">
+                          {getSectionBadgeDescription(section, counters)}
+                        </span>
+                      </span>
+                    ) : null}
                     <svg
                       aria-hidden="true"
                       viewBox="0 0 24 24"
@@ -672,12 +784,12 @@ const SidebarPanel = memo(function SidebarPanel({
                           key={item.key}
                           className="group flex flex-wrap items-center gap-1"
                         >
-                          {new Set(section.items.map((i) => i.group)).size >
-                            1 &&
+                          {section.items.length > 6 &&
+                          new Set(section.items.map((i) => i.group)).size > 1 &&
                           item.group &&
                           (index === 0 ||
                             section.items[index - 1].group !== item.group) ? (
-                            <p className="dashboard-nav-eyebrow w-full px-2 pb-1 pt-3">
+                            <p className="dashboard-nav-eyebrow w-full px-2 pb-1 pt-2">
                               {item.group}
                             </p>
                           ) : null}
@@ -695,8 +807,14 @@ const SidebarPanel = memo(function SidebarPanel({
                               {item.label}
                             </span>
                             {count > 0 && !item.soon ? (
-                              <span className="dashboard-nav-badge ml-2 shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold">
-                                {count}
+                              <span
+                                title={badgeDescription(item.badgeKey!, count)}
+                                className="dashboard-nav-badge ml-2 shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold"
+                              >
+                                <span aria-hidden="true">{count}</span>
+                                <span className="sr-only">
+                                  {badgeDescription(item.badgeKey!, count)}
+                                </span>
                               </span>
                             ) : null}
                             {item.soon ? (
@@ -760,9 +878,6 @@ const SidebarPanel = memo(function SidebarPanel({
                 <span className="block text-[13px] font-semibold">
                   {item.label}
                 </span>
-                <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
-                  Conta e preferências
-                </span>
               </span>
             </Link>
           ),
@@ -790,6 +905,42 @@ function getSectionBadgeValue(section: NavSection, counters: SidebarCounters) {
       section.items.flatMap((item) => (item.badgeKey ? [item.badgeKey] : [])),
     ),
   ].reduce((sum, key) => sum + counters[key], 0);
+}
+
+function badgeDescription(
+  key: NonNullable<NavItem["badgeKey"]>,
+  count: number,
+) {
+  const labels = {
+    proposalsQueue:
+      count === 1
+        ? "proposta aguardando aprovação"
+        : "propostas aguardando aprovação",
+    ordersOpen:
+      count === 1
+        ? "ordem de serviço em aberto"
+        : "ordens de serviço em aberto",
+    contractsAttention:
+      count === 1
+        ? "contrato que exige atenção"
+        : "contratos que exigem atenção",
+    teamUnread: count === 1 ? "mensagem não lida" : "mensagens não lidas",
+  };
+  return count + " " + labels[key];
+}
+
+function getSectionBadgeDescription(
+  section: NavSection,
+  counters: SidebarCounters,
+) {
+  return [
+    ...new Set(
+      section.items.flatMap((item) => (item.badgeKey ? [item.badgeKey] : [])),
+    ),
+  ]
+    .filter((key) => counters[key] > 0)
+    .map((key) => badgeDescription(key, counters[key]))
+    .join("; ");
 }
 
 function isItemAllowed(href: string | undefined, access: SidebarAccess) {

@@ -46,7 +46,7 @@ export default function PortalEquipmentDetailPage() {
 
   return (
     <div className="dashboard-page space-y-5">
-      <PageHeader eyebrow="Equipamento" title={equipment.name} description={<>{equipment.brand} {equipment.serialNumber ? `· Série ${equipment.serialNumber}` : ""}</>} meta={<span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">{statusLabel(equipment.operationalStatus)}</span>} actions={<Link href="/portal/equipamentos" className="rounded-lg border border-slate-200 bg-white text-slate-700">Voltar para equipamentos</Link>} />
+      <PageHeader eyebrow="Equipamento" title={equipment.name} description={<>{equipment.brand} {equipment.serialNumber ? `· Série ${equipment.serialNumber}` : ""}</>} meta={<span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">{statusLabel(equipment.operationalStatus)}</span>} actions={<Link href="/portal/equipamentos" className="app-button app-button-secondary">Voltar para equipamentos</Link>} />
 
       <section className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
         <Info label="Potência" value={`${equipment.power} kVA`} />

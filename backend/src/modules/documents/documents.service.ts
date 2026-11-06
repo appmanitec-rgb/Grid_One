@@ -1,3 +1,11 @@
+import { renderScopeWithConditions } from '../technical-scopes/technical-scope-execution';
+import {
+  assertProposalConference,
+  conferenceActor,
+  phase1Enabled,
+  phase1Type,
+} from '../proposals/proposal-conference';
+import { paymentSummary } from '../proposals/proposal-review.domain';
 import { ruleActor } from '../auth/rules/commercial-access';
 import { assertPortfolio, allowedPortfolios } from '../auth/rules/access-rules';
 import {
@@ -156,16 +164,78 @@ export class DocumentsService {
     };
   }
 
-  async getProposalDocument(id: string, userId: string) {
+  async getProposalDocument(
+    id: string,
+    userId: string,
+    options?: { internalDraftPreview?: boolean },
+  ) {
     const actor = await this.getActorScope(userId);
     const company = await this.getCompanyProfile();
 
-    const proposal = await this.prisma.proposal.findUnique({
+    const proposal = await this.findPublicProposal(id);
+
+    if (!proposal) {
+      throw new NotFoundException('Documento de proposta nao encontrado.');
+    }
+
+    await checkProposalType(this.prisma, userId, proposal.type);
+    this.assertProposalAccess(actor, proposal.clientId);
+    const internalPreview = Boolean(options?.internalDraftPreview);
+    if (internalPreview) {
+      if (
+        !phase1Type(proposal.type, proposal.origin) ||
+        actor.role === UserRole.CLIENT
+      )
+        throw new ForbiddenException('Prévia interna indisponível.');
+      await conferenceActor(this.prisma, userId);
+    }
+    if (
+      !internalPreview &&
+      !DOCUMENT_READY_PROPOSAL_STATUSES.includes(proposal.status)
+    ) {
+      throw new ForbiddenException(
+        'A proposta precisa ser aprovada pela diretoria antes de entrar em Documentos.',
+      );
+    }
+    if (!internalPreview)
+      await assertProposalConference(this.prisma, id, userId, 'document');
+    if (!internalPreview && phase1Type(proposal.type, proposal.origin)) {
+      const frozen = await this.prisma.proposalDocumentSnapshot.findUnique({
+        where: { proposalId: id },
+        select: { publicData: true },
+      });
+      if (frozen) {
+        const saved = frozen.publicData as unknown as Awaited<
+          ReturnType<DocumentsService['liveProposalPayload']>
+        >;
+        return {
+          ...saved,
+          hasApprovedSnapshot: true,
+          viewerRole: actor.role,
+          document: {
+            ...saved.document,
+            status: proposal.status,
+            statusLabel: this.labelProposalStatus(proposal.status),
+          },
+        };
+      }
+    }
+    const latestDocument = await this.getLatestInstitutionalDelivery(
+      DeliveryDocumentType.PROPOSAL,
+      proposal.id,
+    );
+
+    return this.liveProposalPayload(proposal, company, actor, latestDocument);
+  }
+
+  private findPublicProposal(id: string) {
+    return this.prisma.proposal.findUnique({
       where: { id },
       include: {
         client: {
           select: {
             id: true,
+            code: true,
             companyName: true,
             tradeName: true,
             cnpj: true,
@@ -297,23 +367,18 @@ export class DocumentsService {
         },
       },
     });
+  }
 
-    if (!proposal) {
-      throw new NotFoundException('Documento de proposta nao encontrado.');
-    }
-
-    await checkProposalType(this.prisma, userId, proposal.type);
-    this.assertProposalAccess(actor, proposal.clientId);
-    if (!DOCUMENT_READY_PROPOSAL_STATUSES.includes(proposal.status)) {
-      throw new ForbiddenException(
-        'A proposta precisa ser aprovada pela diretoria antes de entrar em Documentos.',
-      );
-    }
-    const latestDocument = await this.getLatestInstitutionalDelivery(
-      DeliveryDocumentType.PROPOSAL,
-      proposal.id,
-    );
-
+  private liveProposalPayload(
+    proposal: NonNullable<
+      Awaited<ReturnType<DocumentsService['findPublicProposal']>>
+    >,
+    company: Awaited<ReturnType<DocumentsService['getCompanyProfile']>>,
+    actor: ActorScope,
+    latestDocument: Awaited<
+      ReturnType<DocumentsService['getLatestInstitutionalDelivery']>
+    >,
+  ) {
     return {
       kind: 'proposal' as const,
       company,
@@ -332,11 +397,26 @@ export class DocumentsService {
         validUntil: proposal.validUntil?.toISOString() || null,
         revision: proposal.revision ?? 0,
         issuedAt: proposal.updatedAt.toISOString(),
-        scope: proposal.scope,
+        scope: renderScopeWithConditions(
+          proposal.scope,
+          proposal.technicalScopeSnapshot,
+        ),
         freight: proposal.freight,
         paymentTerm: proposal.paymentTerm,
+        paymentSummary: phase1Type(proposal.type, proposal.origin)
+          ? paymentSummary(
+              proposal.totalValue,
+              proposal.hasDownPayment ? proposal.downPaymentAmount || 0 : 0,
+              proposal.installmentCount || 1,
+              proposal.firstDueDate?.toISOString(),
+              proposal.installmentIntervalDays,
+            )
+          : null,
         deliveryLeadTimeDays: proposal.deliveryLeadTimeDays,
         paymentDetails: proposal.paymentDetails,
+        paymentSelections: this.publicProposalPaymentSelections(
+          proposal.paymentSelections,
+        ),
         hasDownPayment: proposal.hasDownPayment,
         downPaymentAmount: proposal.downPaymentAmount,
         installmentCount: proposal.installmentCount,
@@ -376,10 +456,147 @@ export class DocumentsService {
     };
   }
 
+  private publicProposalPaymentSelections(value: unknown) {
+    if (!Array.isArray(value)) return [];
+    const fields = [
+      'purpose',
+      'method',
+      'issuerCompanyName',
+      'beneficiary',
+      'beneficiaryDocument',
+      'bankName',
+      'agency',
+      'accountNumber',
+      'pixKey',
+      'boletoInstructions',
+    ];
+    return value
+      .filter(
+        (item): item is Record<string, unknown> =>
+          Boolean(item) && typeof item === 'object' && !Array.isArray(item),
+      )
+      .map((item) =>
+        Object.fromEntries(
+          fields
+            .filter((key) => typeof item[key] === 'string')
+            .map((key) => [key, item[key]]),
+        ),
+      );
+  }
+
   async downloadProposalPdf(id: string, userId: string) {
     return this.generateAndStoreProposalPdf(id, userId, {
       channel: DocumentAccessChannel.INTERNAL,
     });
+  }
+
+  /** Read-only preview: uses customer renderers and never stores/delivers a file. */
+  async previewDraft(id: string, userId: string) {
+    const payload = await this.getProposalDocument(id, userId, {
+      internalDraftPreview: true,
+    });
+    if (DOCUMENT_READY_PROPOSAL_STATUSES.includes(payload.document.status)) {
+      const frozen = await this.frozenFile(id, userId);
+      if (frozen) return { ...frozen, html: '', templateSchema: {} };
+    }
+    return (await this.renderCustomerFiles(payload, false)).pdf;
+  }
+
+  private async renderCustomerFiles(
+    payload: Awaited<ReturnType<DocumentsService['getProposalDocument']>>,
+    includeDocx: boolean,
+  ) {
+    // Resolve the published version once for both formats, even if another editor publishes concurrently.
+    const published =
+      (await this.visualDocuments?.getPublished(VisualDocumentKind.PROPOSAL)) ||
+      null;
+    const docx = await this.documentGenerationService.generateDocx(
+      'proposal',
+      payload as unknown as Record<string, unknown>,
+      published,
+    );
+    // Includes the institutional Word template when there is no published Studio model.
+    // Convert exactly these bytes, which are also frozen at approval.
+    const converted =
+      await this.documentGenerationService.convertRenderedDocxToPdf(docx);
+    const pdf: GeneratedProposalPdf = {
+      ...converted,
+      html: '',
+      templateSchema: {},
+    };
+    return { pdf, docx: includeDocx ? docx : null };
+  }
+
+  /** Called inside the approval transaction; not an endpoint or a delivery action. */
+  async freezeApprovedProposal(
+    id: string,
+    userId: string,
+    tx: Prisma.TransactionClient,
+  ) {
+    const payload = await this.getProposalDocument(id, userId, {
+      internalDraftPreview: true,
+    });
+    const approved = {
+      ...payload,
+      viewerRole: UserRole.CLIENT,
+      latestDocument: null,
+      document: {
+        ...payload.document,
+        status: ProposalStatus.CLIENT_REVIEW,
+        statusLabel: this.labelProposalStatus(ProposalStatus.CLIENT_REVIEW),
+      },
+    };
+    const { pdf, docx } = await this.renderCustomerFiles(approved, true);
+    if (!docx)
+      throw new ServiceUnavailableException(
+        'Não foi possível congelar o documento aprovado.',
+      );
+    if (
+      pdf.buffer.length > 20 * 1024 * 1024 ||
+      docx.buffer.length > 20 * 1024 * 1024
+    )
+      throw new ServiceUnavailableException(
+        'O documento ultrapassou o limite de 20 MB. Revise o modelo antes de aprovar.',
+      );
+    await tx.proposalDocumentSnapshot.create({
+      data: {
+        proposalId: id,
+        publicData: JSON.parse(
+          JSON.stringify(approved),
+        ) as Prisma.InputJsonValue,
+        pdfBytes: pdf.buffer,
+        docxBytes: docx.buffer,
+        html: pdf.html || null,
+        templateKey: pdf.templateKey,
+        templateVersion: pdf.templateVersion,
+        approvedBy: userId,
+      },
+    });
+  }
+
+  private async frozenFile(id: string, userId: string, docx = false) {
+    if (!phase1Enabled()) return null;
+    // Access and status checks always run before loading immutable bytes.
+    await this.getProposalDocument(id, userId);
+    const file = await this.prisma.proposalDocumentSnapshot.findUnique({
+      where: { proposalId: id },
+    });
+    if (!file) return null;
+    const buffer = Buffer.from(docx ? file.docxBytes : file.pdfBytes);
+    const extension = docx ? 'docx' : 'pdf';
+    const { createHash } = await import('node:crypto');
+    return {
+      buffer,
+      fileName: `proposta-${id}.${extension}`,
+      mimeType: docx ? DOCX_MIME : 'application/pdf',
+      sizeBytes: buffer.length,
+      checksumSha256: createHash('sha256').update(buffer).digest('hex'),
+      templateKey: file.templateKey,
+      templateVersion: file.templateVersion,
+      sourceDocxChecksumSha256: createHash('sha256')
+        .update(file.docxBytes)
+        .digest('hex'),
+    };
   }
 
   async downloadCustomerProposalPdf(
@@ -394,22 +611,16 @@ export class DocumentsService {
   }
 
   async downloadProposalInstitutionalPdf(id: string, userId: string) {
-    try {
-      return await this.generateAndStoreInstitutionalPdf(
-        'proposal',
-        id,
-        userId,
-        {
-          channel: DocumentAccessChannel.INTERNAL,
-        },
-      );
-    } catch (error) {
-      if (!(error instanceof ServiceUnavailableException)) throw error;
-      return this.generateAndStoreProposalPdf(id, userId, {
-        channel: DocumentAccessChannel.INTERNAL,
-        skipWordConversion: true,
-      });
-    }
+    return this.generateAndStoreInstitutionalPdf('proposal', id, userId, {
+      channel: DocumentAccessChannel.INTERNAL,
+    });
+  }
+
+  async downloadProposalApprovedWordPdfCopy(id: string, userId: string) {
+    return this.generateAndStoreInstitutionalPdf('proposal', id, userId, {
+      channel: DocumentAccessChannel.INTERNAL,
+      convertApprovedWord: true,
+    });
   }
 
   async downloadCustomerProposalInstitutionalPdf(
@@ -417,24 +628,10 @@ export class DocumentsService {
     userId: string,
     metadata?: RequestMetadata,
   ) {
-    try {
-      return await this.generateAndStoreInstitutionalPdf(
-        'proposal',
-        id,
-        userId,
-        {
-          channel: DocumentAccessChannel.CUSTOMER_PORTAL,
-          metadata,
-        },
-      );
-    } catch (error) {
-      if (!(error instanceof ServiceUnavailableException)) throw error;
-      return this.generateAndStoreProposalPdf(id, userId, {
-        channel: DocumentAccessChannel.CUSTOMER_PORTAL,
-        metadata,
-        skipWordConversion: true,
-      });
-    }
+    return this.generateAndStoreInstitutionalPdf('proposal', id, userId, {
+      channel: DocumentAccessChannel.CUSTOMER_PORTAL,
+      metadata,
+    });
   }
 
   async generateProposalDocument(id: string, userId: string) {
@@ -466,6 +663,22 @@ export class DocumentsService {
 
   async previewProposalPdfHtml(id: string, userId: string) {
     const payload = await this.getProposalDocument(id, userId);
+    if (phase1Enabled()) {
+      const frozen = await this.prisma.proposalDocumentSnapshot.findUnique({
+        where: { proposalId: id },
+      });
+      if (frozen) {
+        if (!frozen.html)
+          throw new ServiceUnavailableException(
+            'Use a prévia PDF para este modelo Word aprovado.',
+          );
+        return {
+          html: frozen.html,
+          templateKey: frozen.templateKey,
+          templateVersion: frozen.templateVersion,
+        };
+      }
+    }
     const visual = await this.visualDocuments?.renderPublished(
       VisualDocumentKind.PROPOSAL,
       payload as unknown as Record<string, unknown>,
@@ -1172,10 +1385,12 @@ export class DocumentsService {
             generationOptions: options.generationOptions,
           }
         : payload;
-    const generated = await this.documentGenerationService.generateDocx(
-      kind,
-      generationPayload as Record<string, unknown>,
-    );
+    const generated =
+      (kind === 'proposal' ? await this.frozenFile(id, userId, true) : null) ||
+      (await this.documentGenerationService.generateDocx(
+        kind,
+        generationPayload as Record<string, unknown>,
+      ));
     const stored = await this.fileStorage.saveDocumentFile(
       this.documentStorageFolder(kind),
       generated.fileName,
@@ -1227,6 +1442,7 @@ export class DocumentsService {
     options: {
       channel: DocumentAccessChannel;
       metadata?: RequestMetadata;
+      convertApprovedWord?: boolean;
     },
   ): Promise<
     LoadedFile & {
@@ -1237,10 +1453,24 @@ export class DocumentsService {
   > {
     const actor = await this.getActorScope(userId);
     const payload = await this.loadInstitutionalPayload(kind, id, userId);
-    const generated = await this.documentGenerationService.generatePdfFromDocx(
-      kind,
-      payload as Record<string, unknown>,
-    );
+    const approvedWord = options.convertApprovedWord
+      ? await this.frozenFile(id, userId, true)
+      : null;
+    if (options.convertApprovedWord && !approvedWord) {
+      throw new ServiceUnavailableException(
+        'Não há Word aprovado congelado para gerar esta cópia. Os documentos originais foram preservados.',
+      );
+    }
+    const generated = approvedWord
+      ? await this.documentGenerationService.convertRenderedDocxToPdf({
+          ...approvedWord,
+          fileName: `proposta-${this.payloadDocumentCode(payload, kind)?.replace(/[^a-zA-Z0-9._-]/g, '-')}-copia-word.docx`,
+        })
+      : (kind === 'proposal' ? await this.frozenFile(id, userId) : null) ||
+        (await this.documentGenerationService.generatePdfFromDocx(
+          kind,
+          payload as Record<string, unknown>,
+        ));
     const stored = await this.fileStorage.saveDocumentPdf(
       this.documentPdfStorageFolder(kind),
       generated.fileName,
@@ -1297,7 +1527,10 @@ export class DocumentsService {
   private buildInstitutionalDeliveryData(
     kind: InstitutionalKind,
     payload: Awaited<ReturnType<DocumentsService['loadInstitutionalPayload']>>,
-    generated: GeneratedInstitutionalDocument,
+    generated: Pick<
+      GeneratedInstitutionalDocument,
+      'templateKey' | 'templateVersion'
+    >,
     stored: StoredFile,
     actorUserId: string,
     now: Date,
@@ -1366,7 +1599,10 @@ export class DocumentsService {
   private buildInstitutionalPdfDeliveryData(
     kind: InstitutionalKind,
     payload: Awaited<ReturnType<DocumentsService['loadInstitutionalPayload']>>,
-    generated: GeneratedInstitutionalPdf,
+    generated: Pick<
+      GeneratedInstitutionalPdf,
+      'templateKey' | 'templateVersion' | 'sourceDocxChecksumSha256'
+    >,
     stored: StoredFile,
     actorUserId: string,
     now: Date,
@@ -1577,51 +1813,14 @@ export class DocumentsService {
     options: {
       channel: DocumentAccessChannel;
       metadata?: RequestMetadata;
-      skipWordConversion?: boolean;
     },
   ): Promise<LoadedFile & { documentDeliveryId: string; templateKey: string }> {
     const actor = await this.getActorScope(userId);
     const payload = await this.getProposalDocument(id, userId);
-    const published = await this.visualDocuments?.getPublished(
-      VisualDocumentKind.PROPOSAL,
-    );
-    const visual =
-      published?.version.format === 'WORD'
-        ? null
-        : await this.visualDocuments?.renderPublished(
-            VisualDocumentKind.PROPOSAL,
-            payload as unknown as Record<string, unknown>,
-          );
-    let wordPdf: GeneratedInstitutionalPdf | null = null;
-    if (published?.version.format === 'WORD' && !options.skipWordConversion) {
-      try {
-        wordPdf = await this.documentGenerationService.generatePdfFromDocx(
-          'proposal',
-          payload as unknown as Record<string, unknown>,
-        );
-      } catch (error) {
-        if (!(error instanceof ServiceUnavailableException)) throw error;
-      }
-    }
-    const generated: GeneratedProposalPdf = wordPdf
-      ? {
-          buffer: wordPdf.buffer,
-          html: '',
-          templateKey: wordPdf.templateKey,
-          templateVersion: wordPdf.templateVersion,
-          templateSchema: {},
-          fileName: wordPdf.fileName,
-        }
-      : visual && this.visualDocuments
-        ? {
-            buffer: this.visualDocuments.pdf(visual.name, visual.blocks),
-            html: visual.html,
-            templateKey: visual.templateKey,
-            templateVersion: visual.templateVersion,
-            templateSchema: {},
-            fileName: `proposta-${payload.document.code.replace(/[^a-zA-Z0-9._-]/g, '-')}.pdf`,
-          }
-        : this.proposalPdfService.generate(payload);
+    const frozen = await this.frozenFile(id, userId);
+    const generated: GeneratedProposalPdf = frozen
+      ? { ...frozen, html: '', templateSchema: {} }
+      : (await this.renderCustomerFiles(payload, false)).pdf;
     const stored = await this.fileStorage.saveDocumentPdf(
       'proposal-pdfs',
       generated.fileName,

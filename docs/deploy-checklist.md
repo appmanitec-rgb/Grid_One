@@ -113,6 +113,31 @@ npm run dev
 
 Producao deve usar process manager ou plataforma gerenciada, HTTPS e variaveis configuradas fora do repositorio.
 
+### Acesso local consolidado
+
+O acesso dos usuarios e `http://localhost:3001`. O frontend encaminha `/api` para
+`http://127.0.0.1:3000`; a API escuta somente em loopback. A porta 3000 e um
+servico interno necessario, nao uma segunda versao do sistema. Nao manter
+interfaces de homologacao abertas apos a ativacao.
+
+`scripts/start-server.ps1 -Production` consulta `runtime-logs/active-release.json`
+quando esse manifesto existe. Ele pode indicar `frontendDist` (`.next-release-ID`),
+`backendDist` (`dist-release-ID`) e `prismaClient` (`runtime-release-ID/client`).
+Os builds e o cliente Prisma dessa release devem estar prontos antes da troca;
+o manifesto e os artefatos sao locais e nao entram no Git. O backend da release
+usa `scripts/start-backend-release.cjs`, preservando o cliente e os builds anteriores.
+
+Para gerar o frontend em um diretorio separado, definir `MANITEC_FRONTEND_DIST`
+no build e na inicializacao, alem de `INTERNAL_API_URL=http://127.0.0.1:3000` e
+`NEXT_PUBLIC_API_URL=/api`. A inicializacao pelo script fixa esse proxy e limpa
+os seletores de homologacao. Se `node` nao estiver no PATH, informar `-NodePath`.
+
+`scripts/stop-server.ps1` confere a identidade dos processos registrados antes
+de encerra-los. `start-server.ps1 -Production -DefaultArtifacts` inicia os builds
+padrao anteriores (`backend/dist` e `frontend/.next`), ignorando o manifesto;
+essa opcao nao restaura nem altera o banco. Nao usar rollback de codigo se as
+migracoes aplicadas forem incompativeis com a versao anterior.
+
 ## Checklist antes de producao/piloto
 
 - [ ] `git status --short` sem mudancas inesperadas.

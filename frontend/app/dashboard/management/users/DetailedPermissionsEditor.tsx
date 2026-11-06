@@ -2,7 +2,10 @@
 import { useState } from "react";
 import type { AccessPolicy } from "@/lib/access";
 import { ACCESS_SCREENS, ACCESS_ACTION_LABELS } from "@/lib/access-screens";
-import { DetailedAccessRules, emptyRules } from "@/lib/access-rules";
+import {
+  DetailedAccessRules,
+  completeDetailedAccessRules,
+} from "@/lib/access-rules";
 
 const portfolioLabels = {
   generators: "Geradores",
@@ -47,7 +50,7 @@ export default function DetailedPermissionsEditor({
   const [department, setDepartment] = useState("Todos");
   const [search, setSearch] = useState("");
   const [active, setActive] = useState("proposals");
-  const rules = value || emptyRules();
+  const rules = completeDetailedAccessRules(value);
   const departments = [
     "Todos",
     ...new Set(ACCESS_SCREENS.map((s) => s.department)),
@@ -162,8 +165,8 @@ export default function DetailedPermissionsEditor({
     <div className="space-y-5">
       {role === "ADMIN" ? (
         <p className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-          Administradores possuem acesso total. As restrições abaixo se aplicam
-          aos demais perfis.
+          O ADMIN mantém as ações administrativas existentes. Os dados sensíveis
+          do Comercial dependem das liberações por carteira acima.
         </p>
       ) : null}
       <fieldset

@@ -93,7 +93,7 @@ export default function PortalTicketDetailPage() {
 
   return (
     <div className="dashboard-page space-y-5">
-      <><PageHeader eyebrow="Atendimento" title={ticket.title} description={ticket.generator?.name || "Sem equipamento vinculado"} meta={<><Badge tone={ticketTone(ticket)}>{ticket.code}</Badge><Badge tone={ticketTone(ticket)}>{TICKET_PRIORITY_LABELS[ticket.priority]}</Badge><Badge>{TICKET_STATUS_LABELS[ticket.status]}</Badge></>} actions={<Link href="/portal/chamados" className="rounded-lg border border-slate-200 bg-white text-slate-700">Voltar para chamados</Link>} /><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="mt-5 grid gap-3 sm:grid-cols-3">
+      <><PageHeader eyebrow="Atendimento" title={ticket.title} description={ticket.generator?.name || "Sem equipamento vinculado"} meta={<><Badge tone={ticketTone(ticket)}>{ticket.code}</Badge><Badge tone={ticketTone(ticket)}>{TICKET_PRIORITY_LABELS[ticket.priority]}</Badge><Badge>{TICKET_STATUS_LABELS[ticket.status]}</Badge></>} actions={<Link href="/portal/chamados" className="app-button app-button-secondary">Voltar para chamados</Link>} /><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="mt-5 grid gap-3 sm:grid-cols-3">
           <Info
             label="Resposta SLA"
             value={formatTicketDate(ticket.slaResponseDueAt)}
@@ -168,7 +168,7 @@ export default function PortalTicketDetailPage() {
             <button
               type="submit"
               disabled={saving}
-              className="rounded-md bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:opacity-60"
+              className="app-button app-button-primary"
             >
               Enviar comentário
             </button>

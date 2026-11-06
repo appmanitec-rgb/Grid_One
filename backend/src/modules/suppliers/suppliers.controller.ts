@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { RequireAccessPolicy } from '../auth/access-policy.decorator';
@@ -14,6 +15,7 @@ import { AuthGuard } from '../auth/auth.guard';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
 import { SuppliersService } from './suppliers.service';
+import { SupplierListPageDto } from '../../common/list-page.dto';
 
 @Controller('suppliers')
 @UseGuards(AuthGuard, AccessPolicyGuard)
@@ -31,6 +33,12 @@ export class SuppliersController {
   @Get()
   findAll() {
     return this.suppliersService.findAll();
+  }
+
+  @RequireAccessPolicy('purchaseOrders.view')
+  @Get('page')
+  listPage(@Query() query: SupplierListPageDto) {
+    return this.suppliersService.listPage(query);
   }
 
   @RequireAccessPolicy('purchaseOrders.view')

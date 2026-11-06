@@ -1,16 +1,24 @@
 "use client";
 
-import { SelectField, SuggestionInput } from "@/app/dashboard/components/SelectField";
+import { formatCalendarDate } from "@/lib/formatters";
+import {
+  SelectField,
+  SuggestionInput,
+} from "@/app/dashboard/components/SelectField";
 
 import { PageHeader } from "../../components/DashboardPageKit";
 import { commercialLabel } from "@/lib/commercial-labels";
 
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useId } from "react";
 import { getAccessFromToken } from "@/lib/access";
 import { apiFetch, readApiErrorMessage } from "@/lib/api";
-import { loadControlOptions, optionLabel, type ControlOption } from "@/lib/control-options";
+import {
+  loadControlOptions,
+  optionLabel,
+  type ControlOption,
+} from "@/lib/control-options";
 
 type ItemType = "PART" | "SERVICE";
 
@@ -23,16 +31,35 @@ const PRICING_PERCENT_ROWS = [
   { label: "IRPJ", name: "irpj", policyKey: "irpjPercent" },
   { label: "CSLL", name: "csll", policyKey: "csllPercent" },
   { label: "CPP", name: "cpp", policyKey: "cppPercent" },
-  { label: "Comissao", name: "commissionPercent", policyKey: "commissionPercent" },
-  { label: "Margem de lucro", name: "profitMargin", policyKey: "profitMarginPercent" },
-  { label: "Custo operacional", name: "operationalCostPercent", policyKey: "operationalCostPercent" },
+  {
+    label: "Comissão",
+    name: "commissionPercent",
+    policyKey: "commissionPercent",
+  },
+  {
+    label: "Margem de lucro",
+    name: "profitMargin",
+    policyKey: "profitMarginPercent",
+  },
+  {
+    label: "Custo operacional",
+    name: "operationalCostPercent",
+    policyKey: "operationalCostPercent",
+  },
 ] as const;
 type ProductOrigin =
   | "NACIONAL"
   | "ESTRANGEIRA_IMPORTACAO_DIRETA"
   | "ESTRANGEIRA_MERCADO_INTERNO";
 
-type SectionTab = "overview" | "identifiers" | "technical" | "suppliers" | "inventory" | "fiscal" | "documents";
+type SectionTab =
+  | "overview"
+  | "identifiers"
+  | "technical"
+  | "suppliers"
+  | "inventory"
+  | "fiscal"
+  | "documents";
 type IdentifierType =
   | "INTERNAL_SKU"
   | "MANUFACTURER_PART_NUMBER"
@@ -198,7 +225,9 @@ export default function CatalogFormPage() {
   const [identifiers, setIdentifiers] = useState<CatalogIdentifier[]>([]);
   const [offers, setOffers] = useState<CatalogOffer[]>([]);
   const [documents, setDocuments] = useState<CatalogDocument[]>([]);
-  const [pricingPolicies, setPricingPolicies] = useState<CatalogPricingPolicy[]>([]);
+  const [pricingPolicies, setPricingPolicies] = useState<
+    CatalogPricingPolicy[]
+  >([]);
   const [controlOptions, setControlOptions] = useState({
     units: [] as ControlOption[],
     brands: [] as ControlOption[],
@@ -337,35 +366,32 @@ export default function CatalogFormPage() {
       : parseFloat(formData.salesTaxPercent) || 0;
   }, [formData]);
 
-  const purchaseTotal = useMemo(
-    () => {
-      const invoice = parseFloat(formData.purchaseInvoiceValue) || 0;
-      const purchaseTax =
-        formData.purchaseTaxMode === "PERCENT"
-          ? invoice * ((parseFloat(formData.purchaseTaxPercent) || 0) / 100)
-          : parseFloat(formData.purchaseTaxAmount) || 0;
-      return (
-        invoice +
-        purchaseTax +
-        (parseFloat(formData.freightAmount) || 0) +
-        (parseFloat(formData.insuranceAmount) || 0) +
-        (parseFloat(formData.otherPurchaseCosts) || 0) -
-        (parseFloat(formData.discountAmount) || 0) -
-        (parseFloat(formData.recoverableCreditAmount) || 0)
-      );
-    },
-    [
-      formData.discountAmount,
-      formData.freightAmount,
-      formData.insuranceAmount,
-      formData.otherPurchaseCosts,
-      formData.purchaseInvoiceValue,
-      formData.purchaseTaxAmount,
-      formData.purchaseTaxMode,
-      formData.purchaseTaxPercent,
-      formData.recoverableCreditAmount,
-    ],
-  );
+  const purchaseTotal = useMemo(() => {
+    const invoice = parseFloat(formData.purchaseInvoiceValue) || 0;
+    const purchaseTax =
+      formData.purchaseTaxMode === "PERCENT"
+        ? invoice * ((parseFloat(formData.purchaseTaxPercent) || 0) / 100)
+        : parseFloat(formData.purchaseTaxAmount) || 0;
+    return (
+      invoice +
+      purchaseTax +
+      (parseFloat(formData.freightAmount) || 0) +
+      (parseFloat(formData.insuranceAmount) || 0) +
+      (parseFloat(formData.otherPurchaseCosts) || 0) -
+      (parseFloat(formData.discountAmount) || 0) -
+      (parseFloat(formData.recoverableCreditAmount) || 0)
+    );
+  }, [
+    formData.discountAmount,
+    formData.freightAmount,
+    formData.insuranceAmount,
+    formData.otherPurchaseCosts,
+    formData.purchaseInvoiceValue,
+    formData.purchaseTaxAmount,
+    formData.purchaseTaxMode,
+    formData.purchaseTaxPercent,
+    formData.recoverableCreditAmount,
+  ]);
 
   const pricingMarkupPercentage = useMemo(
     () =>
@@ -373,11 +399,17 @@ export default function CatalogFormPage() {
       (parseFloat(formData.commissionPercent) || 0) +
       (parseFloat(formData.profitMargin) || 0) +
       (parseFloat(formData.operationalCostPercent) || 0),
-    [formData.commissionPercent, formData.operationalCostPercent, formData.profitMargin, totalTaxPercentage],
+    [
+      formData.commissionPercent,
+      formData.operationalCostPercent,
+      formData.profitMargin,
+      totalTaxPercentage,
+    ],
   );
 
   const calculatedSalePrice = useMemo(
-    () => Number((purchaseTotal * (1 + pricingMarkupPercentage / 100)).toFixed(2)),
+    () =>
+      Number((purchaseTotal * (1 + pricingMarkupPercentage / 100)).toFixed(2)),
     [pricingMarkupPercentage, purchaseTotal],
   );
 
@@ -393,27 +425,54 @@ export default function CatalogFormPage() {
       .slice(0, 8);
   }, [supplierSearch, suppliers]);
 
-  const selectedSupplier = suppliers.find((supplier) => supplier.id === formData.pricingSupplierId);
-  const activePricingPolicy = pricingPolicies.find((policy) => policy.itemType === formData.type && policy.isDefault) || pricingPolicies.find((policy) => policy.itemType === formData.type);
-  const selectedSkuArea = skuTaxonomy.areas.find((area) => area.id === formData.skuAreaId);
+  const selectedSupplier = suppliers.find(
+    (supplier) => supplier.id === formData.pricingSupplierId,
+  );
+  const activePricingPolicy =
+    pricingPolicies.find(
+      (policy) => policy.itemType === formData.type && policy.isDefault,
+    ) || pricingPolicies.find((policy) => policy.itemType === formData.type);
+  const selectedSkuArea = skuTaxonomy.areas.find(
+    (area) => area.id === formData.skuAreaId,
+  );
   const availableSkuFamilies = selectedSkuArea?.families || [];
-  const selectedSkuFamily = availableSkuFamilies.find((family) => family.id === formData.skuFamilyId);
+  const selectedSkuFamily = availableSkuFamilies.find(
+    (family) => family.id === formData.skuFamilyId,
+  );
   const availableSkuApplications = useMemo(
     () =>
       skuTaxonomy.rules
-        .filter((rule) => rule.areaId === formData.skuAreaId && rule.familyId === formData.skuFamilyId)
+        .filter(
+          (rule) =>
+            rule.areaId === formData.skuAreaId &&
+            rule.familyId === formData.skuFamilyId,
+        )
         .map((rule) => rule.application)
-        .filter((application, index, list) => list.findIndex((item) => item.id === application.id) === index),
+        .filter(
+          (application, index, list) =>
+            list.findIndex((item) => item.id === application.id) === index,
+        ),
     [formData.skuAreaId, formData.skuFamilyId, skuTaxonomy.rules],
   );
-  const selectedSkuApplication = availableSkuApplications.find((application) => application.id === formData.skuApplicationId);
+  const selectedSkuApplication = availableSkuApplications.find(
+    (application) => application.id === formData.skuApplicationId,
+  );
   const skuSuffixPreview = `${selectedSkuArea?.code || "_"}${selectedSkuFamily?.code || "_"}${selectedSkuApplication?.code || "_"}`;
-  const skuBaseNumber = formData.sku && /^\d+[A-Z]{3}$/.test(formData.sku)
-    ? formData.sku.slice(0, -3)
-    : String(skuTaxonomy.previewNumber);
+  const skuBaseNumber =
+    formData.sku && /^\d+[A-Z]{3}$/.test(formData.sku)
+      ? formData.sku.slice(0, -3)
+      : String(skuTaxonomy.previewNumber);
   const generatedSkuPreview = `${skuBaseNumber}${skuSuffixPreview}`;
-  const skuClassificationComplete = Boolean(selectedSkuArea && selectedSkuFamily && selectedSkuApplication);
-  const skuReadablePath = [selectedSkuArea?.name, selectedSkuFamily?.name, selectedSkuApplication?.name].filter(Boolean).join(" • ");
+  const skuClassificationComplete = Boolean(
+    selectedSkuArea && selectedSkuFamily && selectedSkuApplication,
+  );
+  const skuReadablePath = [
+    selectedSkuArea?.name,
+    selectedSkuFamily?.name,
+    selectedSkuApplication?.name,
+  ]
+    .filter(Boolean)
+    .join(" • ");
 
   useEffect(() => {
     const access = getAccessFromToken();
@@ -440,7 +499,9 @@ export default function CatalogFormPage() {
       cpp: String(activePricingPolicy.cppPercent || ""),
       commissionPercent: String(activePricingPolicy.commissionPercent || ""),
       profitMargin: String(activePricingPolicy.profitMarginPercent || ""),
-      operationalCostPercent: String(activePricingPolicy.operationalCostPercent || ""),
+      operationalCostPercent: String(
+        activePricingPolicy.operationalCostPercent || "",
+      ),
     }));
   }, [activePricingPolicy, isEditing]);
 
@@ -462,8 +523,12 @@ export default function CatalogFormPage() {
   }, [activeTab, canViewCosts, formData.costPrice, pricingMarkupPercentage]);
 
   useEffect(() => {
-    if (!canViewCosts || activeTab !== "suppliers" || purchaseTotal <= 0) return;
-    setFormData((prev) => ({ ...prev, basePrice: calculatedSalePrice.toFixed(2) }));
+    if (!canViewCosts || activeTab !== "suppliers" || purchaseTotal <= 0)
+      return;
+    setFormData((prev) => ({
+      ...prev,
+      basePrice: calculatedSalePrice.toFixed(2),
+    }));
   }, [activeTab, calculatedSalePrice, canViewCosts, purchaseTotal]);
 
   useEffect(() => {
@@ -479,18 +544,30 @@ export default function CatalogFormPage() {
           throw new Error(
             await readApiErrorMessage(
               res,
-              "Nao foi possivel carregar item para edicao.",
+              "Não foi possivel carregar item para edição.",
             ),
           );
         }
 
         const item = await res.json();
-        const taxProfile = (item.taxProfile && typeof item.taxProfile === "object") ? item.taxProfile : {};
-        const technicalSpecs = (item.technicalSpecs && typeof item.technicalSpecs === "object") ? item.technicalSpecs : {};
+        const taxProfile =
+          item.taxProfile && typeof item.taxProfile === "object"
+            ? item.taxProfile
+            : {};
+        const technicalSpecs =
+          item.technicalSpecs && typeof item.technicalSpecs === "object"
+            ? item.technicalSpecs
+            : {};
         const reorderPoint =
           item.operationalSummary?.reorderPoint ??
-          item.inventoryBalances?.find((balance: { reorderPoint?: number | null }) => balance.reorderPoint != null)?.reorderPoint;
-        const primarySupplier = item.supplierItems?.find((entry: { isPrimary?: boolean }) => entry.isPrimary) || item.supplierItems?.[0];
+          item.inventoryBalances?.find(
+            (balance: { reorderPoint?: number | null }) =>
+              balance.reorderPoint != null,
+          )?.reorderPoint;
+        const primarySupplier =
+          item.supplierItems?.find(
+            (entry: { isPrimary?: boolean }) => entry.isPrimary,
+          ) || item.supplierItems?.[0];
         setItemSuppliers(item.supplierItems || []);
         setIdentifiers(item.identifiers || []);
         setOffers(item.supplierOffers || []);
@@ -503,10 +580,13 @@ export default function CatalogFormPage() {
           radarCode: item.radarCode || "",
           skuAreaId: item.skuAreaId || item.skuArea?.id || "",
           skuFamilyId: item.skuFamilyId || item.skuFamily?.id || "",
-          skuApplicationId: item.skuApplicationId || item.skuApplication?.id || "",
+          skuApplicationId:
+            item.skuApplicationId || item.skuApplication?.id || "",
           name: item.name || "",
           type: item.type || "PART",
-          itemClassification: item.itemClassification || (item.type === "SERVICE" ? "Servico" : "Acabado"),
+          itemClassification:
+            item.itemClassification ||
+            (item.type === "SERVICE" ? "Servico" : "Acabado"),
           description: item.description || "",
           commercialDescription: item.commercialDescription || "",
           category: item.category || "",
@@ -525,17 +605,29 @@ export default function CatalogFormPage() {
           costPrice: item.costPrice != null ? String(item.costPrice) : "",
           averageCost: item.averageCost != null ? String(item.averageCost) : "",
           lastCost: item.lastCost != null ? String(item.lastCost) : "",
-          profitMargin: item.profitMargin != null ? String(item.profitMargin) : "",
+          profitMargin:
+            item.profitMargin != null ? String(item.profitMargin) : "",
           basePrice: item.basePrice != null ? String(item.basePrice) : "",
           pricingSupplierId: primarySupplier?.supplier?.id || "",
           supplierSku: primarySupplier?.supplierSku || "",
-          leadTimeDays: primarySupplier?.leadTimeDays != null ? String(primarySupplier.leadTimeDays) : "",
-          purchasePaymentTerm: primarySupplier?.purchasePaymentTerm || primarySupplier?.supplier?.paymentTerm || "",
+          leadTimeDays:
+            primarySupplier?.leadTimeDays != null
+              ? String(primarySupplier.leadTimeDays)
+              : "",
+          purchasePaymentTerm:
+            primarySupplier?.purchasePaymentTerm ||
+            primarySupplier?.supplier?.paymentTerm ||
+            "",
           quoteNumber: "",
           contactName: "",
           offeredPartNumber: "",
           offeredDescription: "",
-          purchaseInvoiceValue: primarySupplier?.supplierPrice != null ? String(primarySupplier.supplierPrice) : item.costPrice != null ? String(item.costPrice) : "",
+          purchaseInvoiceValue:
+            primarySupplier?.supplierPrice != null
+              ? String(primarySupplier.supplierPrice)
+              : item.costPrice != null
+                ? String(item.costPrice)
+                : "",
           priceQuantity: "1",
           minPurchaseQty: "",
           purchaseMultiple: "",
@@ -543,21 +635,48 @@ export default function CatalogFormPage() {
           conversionFactor: "1",
           availability: "",
           purchaseTaxMode: primarySupplier?.purchaseTaxMode || "AMOUNT",
-          purchaseTaxPercent: primarySupplier?.purchaseTaxPercent != null ? String(primarySupplier.purchaseTaxPercent) : "",
-          purchaseTaxAmount: primarySupplier?.purchaseTaxAmount != null ? String(primarySupplier.purchaseTaxAmount) : "",
-          freightAmount: primarySupplier?.freightAmount != null ? String(primarySupplier.freightAmount) : "",
+          purchaseTaxPercent:
+            primarySupplier?.purchaseTaxPercent != null
+              ? String(primarySupplier.purchaseTaxPercent)
+              : "",
+          purchaseTaxAmount:
+            primarySupplier?.purchaseTaxAmount != null
+              ? String(primarySupplier.purchaseTaxAmount)
+              : "",
+          freightAmount:
+            primarySupplier?.freightAmount != null
+              ? String(primarySupplier.freightAmount)
+              : "",
           insuranceAmount: "",
           discountAmount: "",
-          otherPurchaseCosts: primarySupplier?.otherPurchaseCosts != null ? String(primarySupplier.otherPurchaseCosts) : "",
+          otherPurchaseCosts:
+            primarySupplier?.otherPurchaseCosts != null
+              ? String(primarySupplier.otherPurchaseCosts)
+              : "",
           recoverableCreditAmount: "",
           salesTaxPercent: "",
-          commissionPercent: item.commissionPercent != null ? String(item.commissionPercent) : taxProfile.commissionPercent != null ? String(taxProfile.commissionPercent) : "",
-          operationalCostPercent: item.operationalCostPercent != null ? String(item.operationalCostPercent) : taxProfile.operationalCostPercent != null ? String(taxProfile.operationalCostPercent) : "",
-          priceValidFrom: taxProfile.priceValidFrom ? String(taxProfile.priceValidFrom).slice(0, 10) : "",
-          priceValidUntil: taxProfile.priceValidUntil ? String(taxProfile.priceValidUntil).slice(0, 10) : "",
+          commissionPercent:
+            item.commissionPercent != null
+              ? String(item.commissionPercent)
+              : taxProfile.commissionPercent != null
+                ? String(taxProfile.commissionPercent)
+                : "",
+          operationalCostPercent:
+            item.operationalCostPercent != null
+              ? String(item.operationalCostPercent)
+              : taxProfile.operationalCostPercent != null
+                ? String(taxProfile.operationalCostPercent)
+                : "",
+          priceValidFrom: taxProfile.priceValidFrom
+            ? String(taxProfile.priceValidFrom).slice(0, 10)
+            : "",
+          priceValidUntil: taxProfile.priceValidUntil
+            ? String(taxProfile.priceValidUntil).slice(0, 10)
+            : "",
           pricingNotes: "",
 
-          stockCurrent: item.stockCurrent != null ? String(item.stockCurrent) : "",
+          stockCurrent:
+            item.stockCurrent != null ? String(item.stockCurrent) : "",
           stockMin: item.stockMin != null ? String(item.stockMin) : "",
           stockMax: item.stockMax != null ? String(item.stockMax) : "",
           reorderPoint: reorderPoint != null ? String(reorderPoint) : "",
@@ -570,18 +689,60 @@ export default function CatalogFormPage() {
           grossWeight: item.grossWeight != null ? String(item.grossWeight) : "",
           netWeight: item.netWeight != null ? String(item.netWeight) : "",
 
-          icms: item.icmsPercent != null ? String(item.icmsPercent) : taxProfile.icmsPercent != null ? String(taxProfile.icmsPercent) : "",
-          iss: item.issPercent != null ? String(item.issPercent) : taxProfile.issPercent != null ? String(taxProfile.issPercent) : "",
-          pis: item.pisPercent != null ? String(item.pisPercent) : taxProfile.pisPercent != null ? String(taxProfile.pisPercent) : "",
-          cofins: item.cofinsPercent != null ? String(item.cofinsPercent) : taxProfile.cofinsPercent != null ? String(taxProfile.cofinsPercent) : "",
-          ipi: item.ipiPercent != null ? String(item.ipiPercent) : taxProfile.ipiPercent != null ? String(taxProfile.ipiPercent) : "",
-          irpj: item.irpjPercent != null ? String(item.irpjPercent) : taxProfile.irpjPercent != null ? String(taxProfile.irpjPercent) : "",
-          csll: item.csllPercent != null ? String(item.csllPercent) : taxProfile.csllPercent != null ? String(taxProfile.csllPercent) : "",
-          cpp: item.cppPercent != null ? String(item.cppPercent) : taxProfile.cppPercent != null ? String(taxProfile.cppPercent) : "",
+          icms:
+            item.icmsPercent != null
+              ? String(item.icmsPercent)
+              : taxProfile.icmsPercent != null
+                ? String(taxProfile.icmsPercent)
+                : "",
+          iss:
+            item.issPercent != null
+              ? String(item.issPercent)
+              : taxProfile.issPercent != null
+                ? String(taxProfile.issPercent)
+                : "",
+          pis:
+            item.pisPercent != null
+              ? String(item.pisPercent)
+              : taxProfile.pisPercent != null
+                ? String(taxProfile.pisPercent)
+                : "",
+          cofins:
+            item.cofinsPercent != null
+              ? String(item.cofinsPercent)
+              : taxProfile.cofinsPercent != null
+                ? String(taxProfile.cofinsPercent)
+                : "",
+          ipi:
+            item.ipiPercent != null
+              ? String(item.ipiPercent)
+              : taxProfile.ipiPercent != null
+                ? String(taxProfile.ipiPercent)
+                : "",
+          irpj:
+            item.irpjPercent != null
+              ? String(item.irpjPercent)
+              : taxProfile.irpjPercent != null
+                ? String(taxProfile.irpjPercent)
+                : "",
+          csll:
+            item.csllPercent != null
+              ? String(item.csllPercent)
+              : taxProfile.csllPercent != null
+                ? String(taxProfile.csllPercent)
+                : "",
+          cpp:
+            item.cppPercent != null
+              ? String(item.cppPercent)
+              : taxProfile.cppPercent != null
+                ? String(taxProfile.cppPercent)
+                : "",
         });
       } catch (loadError: unknown) {
         setError(
-          loadError instanceof Error ? loadError.message : "Erro ao carregar item.",
+          loadError instanceof Error
+            ? loadError.message
+            : "Erro ao carregar item.",
         );
       } finally {
         setIsLoadingItem(false);
@@ -589,7 +750,11 @@ export default function CatalogFormPage() {
     })();
   }, [editItemId, isEditing]);
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
+  function handleChange(
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >,
+  ) {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   }
@@ -616,7 +781,9 @@ export default function CatalogFormPage() {
   }
 
   function selectSupplier(supplier: SupplierOption) {
-    const linked = itemSuppliers.find((entry) => entry.supplierId === supplier.id);
+    const linked = itemSuppliers.find(
+      (entry) => entry.supplierId === supplier.id,
+    );
     if (linked) {
       selectSupplierCondition(linked);
       return;
@@ -652,7 +819,9 @@ export default function CatalogFormPage() {
       pricingNotes: "",
     }));
     setSupplierSearch(supplier.companyName);
-    setPricingMessage("Fornecedor selecionado. Preencha as condicoes e salve para vincular a esta peca.");
+    setPricingMessage(
+      "Fornecedor selecionado. Preencha as condicoes e salve para vincular a esta peca.",
+    );
   }
 
   function selectSupplierCondition(entry: SupplierItem) {
@@ -661,13 +830,16 @@ export default function CatalogFormPage() {
       pricingSupplierId: entry.supplierId,
       supplier: entry.supplier.companyName,
       supplierSku: entry.supplierSku || "",
-      leadTimeDays: entry.leadTimeDays != null ? String(entry.leadTimeDays) : "",
-      purchasePaymentTerm: entry.purchasePaymentTerm || entry.supplier.paymentTerm || "",
+      leadTimeDays:
+        entry.leadTimeDays != null ? String(entry.leadTimeDays) : "",
+      purchasePaymentTerm:
+        entry.purchasePaymentTerm || entry.supplier.paymentTerm || "",
       quoteNumber: "",
       contactName: "",
       offeredPartNumber: "",
       offeredDescription: "",
-      purchaseInvoiceValue: entry.supplierPrice != null ? String(entry.supplierPrice) : "",
+      purchaseInvoiceValue:
+        entry.supplierPrice != null ? String(entry.supplierPrice) : "",
       priceQuantity: "1",
       minPurchaseQty: "",
       purchaseMultiple: "",
@@ -675,15 +847,27 @@ export default function CatalogFormPage() {
       conversionFactor: "1",
       availability: "",
       purchaseTaxMode: entry.purchaseTaxMode || "AMOUNT",
-      purchaseTaxPercent: entry.purchaseTaxPercent != null ? String(entry.purchaseTaxPercent) : "",
-      purchaseTaxAmount: entry.purchaseTaxAmount != null ? String(entry.purchaseTaxAmount) : "",
-      freightAmount: entry.freightAmount != null ? String(entry.freightAmount) : "",
+      purchaseTaxPercent:
+        entry.purchaseTaxPercent != null
+          ? String(entry.purchaseTaxPercent)
+          : "",
+      purchaseTaxAmount:
+        entry.purchaseTaxAmount != null ? String(entry.purchaseTaxAmount) : "",
+      freightAmount:
+        entry.freightAmount != null ? String(entry.freightAmount) : "",
       insuranceAmount: "",
       discountAmount: "",
-      otherPurchaseCosts: entry.otherPurchaseCosts != null ? String(entry.otherPurchaseCosts) : "",
+      otherPurchaseCosts:
+        entry.otherPurchaseCosts != null
+          ? String(entry.otherPurchaseCosts)
+          : "",
       recoverableCreditAmount: "",
-      priceValidFrom: entry.priceValidFrom ? String(entry.priceValidFrom).slice(0, 10) : "",
-      priceValidUntil: entry.priceValidUntil ? String(entry.priceValidUntil).slice(0, 10) : "",
+      priceValidFrom: entry.priceValidFrom
+        ? String(entry.priceValidFrom).slice(0, 10)
+        : "",
+      priceValidUntil: entry.priceValidUntil
+        ? String(entry.priceValidUntil).slice(0, 10)
+        : "",
       pricingNotes: entry.priceNotes || "",
     }));
     setSupplierSearch(entry.supplier.companyName);
@@ -700,16 +884,25 @@ export default function CatalogFormPage() {
 
   async function loadSkuTaxonomy() {
     try {
-      const res = await apiFetch("/catalogs/sku-taxonomy", { cache: "no-store" });
+      const res = await apiFetch("/catalogs/sku-taxonomy", {
+        cache: "no-store",
+      });
       if (res.ok) setSkuTaxonomy(await res.json());
     } catch {
-      setSkuTaxonomy({ previewNumber: 0, areas: [], applications: [], rules: [] });
+      setSkuTaxonomy({
+        previewNumber: 0,
+        areas: [],
+        applications: [],
+        rules: [],
+      });
     }
   }
 
   async function loadPricingPolicies() {
     try {
-      const res = await apiFetch("/catalogs/pricing-policies", { cache: "no-store" });
+      const res = await apiFetch("/catalogs/pricing-policies", {
+        cache: "no-store",
+      });
       if (res.ok) setPricingPolicies(await res.json());
     } catch {
       setPricingPolicies([]);
@@ -745,12 +938,13 @@ export default function CatalogFormPage() {
 
   async function refreshMasterData() {
     if (!editItemId) return;
-    const [itemRes, offersRes, identifiersRes, documentsRes] = await Promise.all([
-      apiFetch(`/catalogs/${editItemId}`, { cache: "no-store" }),
-      apiFetch(`/catalogs/${editItemId}/offers`, { cache: "no-store" }),
-      apiFetch(`/catalogs/${editItemId}/identifiers`, { cache: "no-store" }),
-      apiFetch(`/catalogs/${editItemId}/documents`, { cache: "no-store" }),
-    ]);
+    const [itemRes, offersRes, identifiersRes, documentsRes] =
+      await Promise.all([
+        apiFetch(`/catalogs/${editItemId}`, { cache: "no-store" }),
+        apiFetch(`/catalogs/${editItemId}/offers`, { cache: "no-store" }),
+        apiFetch(`/catalogs/${editItemId}/identifiers`, { cache: "no-store" }),
+        apiFetch(`/catalogs/${editItemId}/documents`, { cache: "no-store" }),
+      ]);
     if (itemRes.ok) {
       const item = await itemRes.json();
       setItemSuppliers(item.supplierItems || []);
@@ -759,9 +953,11 @@ export default function CatalogFormPage() {
       setFormData((prev) => ({
         ...prev,
         supplier: item.supplier || prev.supplier,
-        costPrice: item.costPrice != null ? String(item.costPrice) : prev.costPrice,
+        costPrice:
+          item.costPrice != null ? String(item.costPrice) : prev.costPrice,
         lastCost: item.lastCost != null ? String(item.lastCost) : prev.lastCost,
-        basePrice: item.basePrice != null ? String(item.basePrice) : prev.basePrice,
+        basePrice:
+          item.basePrice != null ? String(item.basePrice) : prev.basePrice,
       }));
     }
     if (offersRes.ok) setOffers(await offersRes.json());
@@ -794,7 +990,9 @@ export default function CatalogFormPage() {
         }),
       });
       if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, "Erro ao cadastrar fornecedor."));
+        throw new Error(
+          await readApiErrorMessage(res, "Erro ao cadastrar fornecedor."),
+        );
       }
       const created = await res.json();
       const supplier = {
@@ -806,11 +1004,24 @@ export default function CatalogFormPage() {
       };
       setSuppliers((prev) => [supplier, ...prev]);
       selectSupplier(supplier);
-      setNewSupplier({ companyName: "", tradeName: "", cnpj: "", email: "", phone: "", paymentTerm: "" });
+      setNewSupplier({
+        companyName: "",
+        tradeName: "",
+        cnpj: "",
+        email: "",
+        phone: "",
+        paymentTerm: "",
+      });
       setIsSupplierFormOpen(false);
-      setPricingMessage("Fornecedor cadastrado. Preencha as condicoes de compra da peca.");
+      setPricingMessage(
+        "Fornecedor cadastrado. Preencha as condicoes de compra da peca.",
+      );
     } catch (createError: unknown) {
-      setError(createError instanceof Error ? createError.message : "Erro ao cadastrar fornecedor.");
+      setError(
+        createError instanceof Error
+          ? createError.message
+          : "Erro ao cadastrar fornecedor.",
+      );
     } finally {
       setIsCreatingSupplier(false);
     }
@@ -818,7 +1029,9 @@ export default function CatalogFormPage() {
 
   async function handleApplyPricing(makePreferred = false) {
     if (!isEditing) {
-      setPricingMessage("Salve o item primeiro para registrar uma cotacao vinculada.");
+      setPricingMessage(
+        "Salve o item primeiro para registrar uma cotacao vinculada.",
+      );
       return;
     }
     setPricingMessage("");
@@ -851,18 +1064,27 @@ export default function CatalogFormPage() {
           freightAmount: toNumberOrUndefined(formData.freightAmount),
           insuranceAmount: toNumberOrUndefined(formData.insuranceAmount),
           discountAmount: toNumberOrUndefined(formData.discountAmount),
-          additionalCostsAmount: toNumberOrUndefined(formData.otherPurchaseCosts),
-          recoverableCreditAmount: toNumberOrUndefined(formData.recoverableCreditAmount),
+          additionalCostsAmount: toNumberOrUndefined(
+            formData.otherPurchaseCosts,
+          ),
+          recoverableCreditAmount: toNumberOrUndefined(
+            formData.recoverableCreditAmount,
+          ),
           validFrom: formData.priceValidFrom || undefined,
           validUntil: formData.priceValidUntil || undefined,
           notes: formData.pricingNotes || undefined,
           isPreferred: makePreferred,
-          preferenceReason: makePreferred ? formData.pricingNotes || "Fornecedor preferencial definido no cadastro mestre." : undefined,
+          preferenceReason: makePreferred
+            ? formData.pricingNotes ||
+              "Fornecedor preferencial definido no cadastro mestre."
+            : undefined,
         }),
       });
 
       if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, "Erro ao registrar cotacao."));
+        throw new Error(
+          await readApiErrorMessage(res, "Erro ao registrar cotação."),
+        );
       }
 
       await refreshMasterData();
@@ -872,7 +1094,11 @@ export default function CatalogFormPage() {
           : "Cotacao registrada no historico do fornecedor.",
       );
     } catch (pricingError: unknown) {
-      setError(pricingError instanceof Error ? pricingError.message : "Erro ao registrar cotacao.");
+      setError(
+        pricingError instanceof Error
+          ? pricingError.message
+          : "Erro ao registrar cotacao.",
+      );
     } finally {
       setIsSavingPricing(false);
     }
@@ -880,36 +1106,43 @@ export default function CatalogFormPage() {
 
   async function handleRequestPricingParameterChange() {
     if (!isEditing) {
-      setPricingMessage("Salve o produto primeiro. Depois, qualquer alteracao dos parametros podera ser enviada ao Financeiro.");
+      setPricingMessage(
+        "Salve o produto primeiro. Depois, qualquer alteracao dos parametros podera ser enviada ao Financeiro.",
+      );
       return;
     }
     setError("");
     setPricingMessage("");
     setIsSavingPricing(true);
     try {
-      const response = await apiFetch(`/catalogs/${editItemId}/pricing-parameters`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          icmsPercent: Number(formData.icms || 0),
-          pisPercent: Number(formData.pis || 0),
-          cofinsPercent: Number(formData.cofins || 0),
-          ipiPercent: Number(formData.ipi || 0),
-          issPercent: Number(formData.iss || 0),
-          irpjPercent: Number(formData.irpj || 0),
-          csllPercent: Number(formData.csll || 0),
-          cppPercent: Number(formData.cpp || 0),
-          commissionPercent: Number(formData.commissionPercent || 0),
-          profitMarginPercent: Number(formData.profitMargin || 0),
-          operationalCostPercent: Number(formData.operationalCostPercent || 0),
-          notes: formData.pricingNotes || undefined,
-        }),
-      });
+      const response = await apiFetch(
+        `/catalogs/${editItemId}/pricing-parameters`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            icmsPercent: Number(formData.icms || 0),
+            pisPercent: Number(formData.pis || 0),
+            cofinsPercent: Number(formData.cofins || 0),
+            ipiPercent: Number(formData.ipi || 0),
+            issPercent: Number(formData.iss || 0),
+            irpjPercent: Number(formData.irpj || 0),
+            csllPercent: Number(formData.csll || 0),
+            cppPercent: Number(formData.cpp || 0),
+            commissionPercent: Number(formData.commissionPercent || 0),
+            profitMarginPercent: Number(formData.profitMargin || 0),
+            operationalCostPercent: Number(
+              formData.operationalCostPercent || 0,
+            ),
+            notes: formData.pricingNotes || undefined,
+          }),
+        },
+      );
       if (!response.ok) {
         throw new Error(
           await readApiErrorMessage(
             response,
-            "Nao foi possivel enviar a alteracao ao Financeiro.",
+            "Não foi possivel enviar a alteracao ao Financeiro.",
           ),
         );
       }
@@ -929,11 +1162,11 @@ export default function CatalogFormPage() {
 
   async function handleCreateIdentifier() {
     if (!isEditing) {
-      setError("Salve o item primeiro para adicionar codigos relacionados.");
+      setError("Salve o item primeiro para adicionar códigos relacionados.");
       return;
     }
     if (!identifierDraft.code.trim()) {
-      setError("Informe o codigo que identifica este item.");
+      setError("Informe o código que identifica este item.");
       return;
     }
     setError("");
@@ -949,14 +1182,26 @@ export default function CatalogFormPage() {
       }),
     });
     if (!res.ok) {
-      setError(await readApiErrorMessage(res, "Erro ao adicionar codigo."));
+      setError(await readApiErrorMessage(res, "Erro ao adicionar código."));
       return;
     }
     const result = await res.json();
     await refreshMasterData();
-    setIdentifierDraft({ type: "SUPPLIER_CODE", code: "", source: "", description: "", isPrimary: false });
-    const conflicts = Array.isArray(result.possibleDuplicates) ? result.possibleDuplicates.length : 0;
-    setPricingMessage(conflicts > 0 ? `Codigo salvo. Encontramos ${conflicts} possivel(is) duplicidade(s) para revisar.` : "Codigo salvo e pesquisavel no catalogo.");
+    setIdentifierDraft({
+      type: "SUPPLIER_CODE",
+      code: "",
+      source: "",
+      description: "",
+      isPrimary: false,
+    });
+    const conflicts = Array.isArray(result.possibleDuplicates)
+      ? result.possibleDuplicates.length
+      : 0;
+    setPricingMessage(
+      conflicts > 0
+        ? `Codigo salvo. Encontramos ${conflicts} possivel(is) duplicidade(s) para revisar.`
+        : "Codigo salvo e pesquisavel no catalogo.",
+    );
   }
 
   async function handleCreateDocument() {
@@ -965,7 +1210,7 @@ export default function CatalogFormPage() {
       return;
     }
     if (!documentDraft.title.trim()) {
-      setError("Informe o titulo do documento.");
+      setError("Informe o título do documento.");
       return;
     }
     setError("");
@@ -985,7 +1230,13 @@ export default function CatalogFormPage() {
       return;
     }
     await refreshMasterData();
-    setDocumentDraft({ category: "ORCAMENTO", title: "", version: "", externalUrl: "", notes: "" });
+    setDocumentDraft({
+      category: "ORCAMENTO",
+      title: "",
+      version: "",
+      externalUrl: "",
+      notes: "",
+    });
     setPricingMessage("Documento vinculado ao cadastro mestre.");
   }
 
@@ -1004,7 +1255,8 @@ export default function CatalogFormPage() {
     const payload = {
       sku: skuClassificationComplete ? undefined : formData.sku || undefined,
       legacyCode: formData.legacyCode.trim() || (isEditing ? null : undefined),
-      legacySequence: formData.legacySequence.trim() || (isEditing ? null : undefined),
+      legacySequence:
+        formData.legacySequence.trim() || (isEditing ? null : undefined),
       radarCode: formData.radarCode.trim() || (isEditing ? null : undefined),
       skuAreaId: formData.skuAreaId || undefined,
       skuFamilyId: formData.skuFamilyId || undefined,
@@ -1014,8 +1266,12 @@ export default function CatalogFormPage() {
       itemClassification: formData.itemClassification || undefined,
       description: formData.description || undefined,
       commercialDescription: formData.commercialDescription || undefined,
-      category: skuClassificationComplete ? undefined : formData.category || undefined,
-      subcategory: skuClassificationComplete ? undefined : formData.subcategory || undefined,
+      category: skuClassificationComplete
+        ? undefined
+        : formData.category || undefined,
+      subcategory: skuClassificationComplete
+        ? undefined
+        : formData.subcategory || undefined,
       unit: formData.unit || undefined,
       acquisitionOrigin: formData.acquisitionOrigin || undefined,
       brand: formData.brand || undefined,
@@ -1074,20 +1330,63 @@ export default function CatalogFormPage() {
       <PageHeader
         eyebrow="Suprimentos"
         title={isEditing ? "Editar Item de Catalogo" : "Novo Item de Catalogo"}
-        description="Cadastro completo com base tecnica, fiscal, estoque e precificacao."
+        description="Cadastro completo com base técnica, fiscal, estoque e precificacao."
       />
 
-      {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">{error}</div>}
-      {isLoadingItem && <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-blue-700">Carregando item...</div>}
+      {error && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
+          {error}
+        </div>
+      )}
+      {isLoadingItem && (
+        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-blue-700">
+          Carregando item...
+        </div>
+      )}
 
       <div className="mb-4 flex flex-wrap gap-2">
-        <TabButton label="Visao geral" value="overview" active={activeTab} onClick={setActiveTab} />
-        <TabButton label="Identificacao e codigos" value="identifiers" active={activeTab} onClick={setActiveTab} />
-        <TabButton label="Tecnico e compatibilidade" value="technical" active={activeTab} onClick={setActiveTab} />
-        <TabButton label="Fornecedores e cotacoes" value="suppliers" active={activeTab} onClick={setActiveTab} />
-        <TabButton label="Estoque" value="inventory" active={activeTab} onClick={setActiveTab} />
-        <TabButton label="Fiscal e comercial" value="fiscal" active={activeTab} onClick={setActiveTab} />
-        <TabButton label="Documentos e historico" value="documents" active={activeTab} onClick={setActiveTab} />
+        <TabButton
+          label="Visão geral"
+          value="overview"
+          active={activeTab}
+          onClick={setActiveTab}
+        />
+        <TabButton
+          label="Identificação e códigos"
+          value="identifiers"
+          active={activeTab}
+          onClick={setActiveTab}
+        />
+        <TabButton
+          label="Técnico e compatibilidade"
+          value="technical"
+          active={activeTab}
+          onClick={setActiveTab}
+        />
+        <TabButton
+          label="Fornecedores e cotações"
+          value="suppliers"
+          active={activeTab}
+          onClick={setActiveTab}
+        />
+        <TabButton
+          label="Estoque"
+          value="inventory"
+          active={activeTab}
+          onClick={setActiveTab}
+        />
+        <TabButton
+          label="Fiscal e comercial"
+          value="fiscal"
+          active={activeTab}
+          onClick={setActiveTab}
+        />
+        <TabButton
+          label="Documentos e histórico"
+          value="documents"
+          active={activeTab}
+          onClick={setActiveTab}
+        />
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -1095,15 +1394,29 @@ export default function CatalogFormPage() {
           <section className="rounded-xl border border-zinc-200 bg-white p-6">
             <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h2 className="text-lg font-bold text-zinc-800">Visao geral do item</h2>
-                <p className="mt-1 text-sm text-zinc-500">Identidade principal, status e resumo vivo das areas conectadas.</p>
+                <h2 className="text-lg font-bold text-zinc-800">
+                  Visão geral do item
+                </h2>
+                <p className="mt-1 text-sm text-zinc-500">
+                  Identidade principal, status e resumo vivo das áreas
+                  conectadas.
+                </p>
               </div>
               {isEditing ? (
                 <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-                  <SummaryTile label="Codigos" value={String(identifiers.length)} />
-                  <SummaryTile label="Fornecedores" value={String(itemSuppliers.length)} />
-                  <SummaryTile label="Cotacoes" value={String(offers.length)} />
-                  <SummaryTile label="Documentos" value={String(documents.length)} />
+                  <SummaryTile
+                    label="Códigos"
+                    value={String(identifiers.length)}
+                  />
+                  <SummaryTile
+                    label="Fornecedores"
+                    value={String(itemSuppliers.length)}
+                  />
+                  <SummaryTile label="Cotações" value={String(offers.length)} />
+                  <SummaryTile
+                    label="Documentos"
+                    value={String(documents.length)}
+                  />
                 </div>
               ) : null}
             </div>
@@ -1111,50 +1424,118 @@ export default function CatalogFormPage() {
               <div className="md:col-span-4 rounded-xl border border-blue-100 bg-blue-50 p-4">
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                   <div>
-                    <label className="mb-1 block text-sm font-bold text-zinc-700">Area do SKU {formData.type === "PART" ? <RequiredMark /> : null}</label>
-                    <SelectField searchable value={formData.skuAreaId} onChange={(event) => handleSkuAreaChange(event.target.value)} className="w-full rounded-lg border border-zinc-300 bg-white p-3">
-                      <option value="">Selecione a area</option>
+                    <label className="mb-1 block text-sm font-bold text-zinc-700">
+                      Área do SKU{" "}
+                      {formData.type === "PART" ? <RequiredMark /> : null}
+                    </label>
+                    <SelectField
+                      aria-label="Área do SKU"
+                      searchable
+                      value={formData.skuAreaId}
+                      onChange={(event) =>
+                        handleSkuAreaChange(event.target.value)
+                      }
+                      className="w-full rounded-lg border border-zinc-300 bg-white p-3"
+                    >
+                      <option value="">Selecione a área</option>
                       {skuTaxonomy.areas.map((area) => (
-                        <option key={area.id} value={area.id}>{area.code} - {area.name}</option>
+                        <option key={area.id} value={area.id}>
+                          {area.code} - {area.name}
+                        </option>
                       ))}
                     </SelectField>
                   </div>
                   <div>
-                    <label className="mb-1 block text-sm font-bold text-zinc-700">Familia {formData.type === "PART" ? <RequiredMark /> : null}</label>
-                    <SelectField searchable value={formData.skuFamilyId} onChange={(event) => handleSkuFamilyChange(event.target.value)} disabled={!formData.skuAreaId} className="w-full rounded-lg border border-zinc-300 bg-white p-3 disabled:bg-zinc-100">
-                      <option value="">{formData.skuAreaId ? "Selecione a familia" : "Escolha uma area primeiro"}</option>
+                    <label className="mb-1 block text-sm font-bold text-zinc-700">
+                      Família{" "}
+                      {formData.type === "PART" ? <RequiredMark /> : null}
+                    </label>
+                    <SelectField
+                      aria-label="Família do SKU"
+                      searchable
+                      value={formData.skuFamilyId}
+                      onChange={(event) =>
+                        handleSkuFamilyChange(event.target.value)
+                      }
+                      disabled={!formData.skuAreaId}
+                      className="w-full rounded-lg border border-zinc-300 bg-white p-3 disabled:bg-zinc-100"
+                    >
+                      <option value="">
+                        {formData.skuAreaId
+                          ? "Selecione a familia"
+                          : "Escolha uma area primeiro"}
+                      </option>
                       {availableSkuFamilies.map((family) => (
-                        <option key={family.id} value={family.id}>{family.code} - {family.name}</option>
+                        <option key={family.id} value={family.id}>
+                          {family.code} - {family.name}
+                        </option>
                       ))}
                     </SelectField>
                   </div>
                   <div>
-                    <label className="mb-1 block text-sm font-bold text-zinc-700">Aplicacao {formData.type === "PART" ? <RequiredMark /> : null}</label>
-                    <SelectField searchable value={formData.skuApplicationId} onChange={(event) => handleSkuApplicationChange(event.target.value)} disabled={!formData.skuFamilyId} className="w-full rounded-lg border border-zinc-300 bg-white p-3 disabled:bg-zinc-100">
-                      <option value="">{formData.skuFamilyId ? "Selecione a aplicacao" : "Escolha uma familia primeiro"}</option>
+                    <label className="mb-1 block text-sm font-bold text-zinc-700">
+                      Aplicação{" "}
+                      {formData.type === "PART" ? <RequiredMark /> : null}
+                    </label>
+                    <SelectField
+                      aria-label="Aplicação do SKU"
+                      searchable
+                      value={formData.skuApplicationId}
+                      onChange={(event) =>
+                        handleSkuApplicationChange(event.target.value)
+                      }
+                      disabled={!formData.skuFamilyId}
+                      className="w-full rounded-lg border border-zinc-300 bg-white p-3 disabled:bg-zinc-100"
+                    >
+                      <option value="">
+                        {formData.skuFamilyId
+                          ? "Selecione a aplicacao"
+                          : "Escolha uma familia primeiro"}
+                      </option>
                       {availableSkuApplications.map((application) => (
-                        <option key={application.id} value={application.id}>{application.code} - {application.name}</option>
+                        <option key={application.id} value={application.id}>
+                          {application.code} - {application.name}
+                        </option>
                       ))}
                     </SelectField>
                   </div>
                 </div>
                 <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <SummaryTile label="Numero" value={skuBaseNumber} />
+                  <SummaryTile label="Número" value={skuBaseNumber} />
                   <SummaryTile label="Sigla" value={skuSuffixPreview} />
-                  <SummaryTile label="Codigo gerado" value={skuClassificationComplete ? generatedSkuPreview : formData.sku || generatedSkuPreview} />
+                  <SummaryTile
+                    label="Código gerado"
+                    value={
+                      skuClassificationComplete
+                        ? generatedSkuPreview
+                        : formData.sku || generatedSkuPreview
+                    }
+                  />
                 </div>
                 <p className="mt-3 text-sm font-semibold text-blue-800">
-                  {skuReadablePath || "Selecione area, familia e aplicacao para gerar o codigo automaticamente."}
+                  {skuReadablePath ||
+                    "Selecione area, familia e aplicacao para gerar o codigo automaticamente."}
                 </p>
                 {formData.sku && !skuClassificationComplete ? (
-                  <p className="mt-1 text-xs text-blue-700">SKU atual preservado ate a classificacao ser definida: {formData.sku}</p>
+                  <p className="mt-1 text-xs text-blue-700">
+                    SKU atual preservado até a classificacao ser definida:{" "}
+                    {formData.sku}
+                  </p>
                 ) : null}
               </div>
               <div>
-                <label className="mb-1 block text-sm font-bold text-zinc-700">Tipo <RequiredMark /></label>
-                <SelectField name="type" value={formData.type} onChange={handleChange} className="w-full rounded-lg border border-zinc-300 p-3">
-                  <option value="PART">Peca / Produto</option>
-                  <option value="SERVICE">Servico / Mao de Obra</option>
+                <label className="mb-1 block text-sm font-bold text-zinc-700">
+                  Tipo <RequiredMark />
+                </label>
+                <SelectField
+                  aria-label="Tipo do item"
+                  name="type"
+                  value={formData.type}
+                  onChange={handleChange}
+                  className="w-full rounded-lg border border-zinc-300 p-3"
+                >
+                  <option value="PART">Peça / Produto</option>
+                  <option value="SERVICE">Serviço / Mao de Obra</option>
                 </SelectField>
               </div>
               <Input
@@ -1172,29 +1553,64 @@ export default function CatalogFormPage() {
                 placeholder="Ex.: Comprado, Fabricado"
               />
               <div>
-                <label className="mb-1 block text-sm font-bold text-zinc-700">Status</label>
-                <SelectField name="isActive" value={formData.isActive} onChange={handleChange} className="w-full rounded-lg border border-zinc-300 p-3">
+                <label className="mb-1 block text-sm font-bold text-zinc-700">
+                  Status
+                </label>
+                <SelectField
+                  aria-label="Status"
+                  name="isActive"
+                  value={formData.isActive}
+                  onChange={handleChange}
+                  className="w-full rounded-lg border border-zinc-300 p-3"
+                >
                   <option value="true">Ativo</option>
                   <option value="false">Inativo</option>
                 </SelectField>
               </div>
-              <Input label="Nome do Item" name="name" value={formData.name} onChange={handleChange} className="md:col-span-2" requiredMark required />
+              <Input
+                label="Nome do Item"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                className="md:col-span-2"
+                requiredMark
+                required
+              />
               <div className="md:col-span-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
                 <p className="text-xs font-black uppercase tracking-wide text-amber-800">
                   Identificadores do sistema anterior
                 </p>
                 <p className="mt-1 text-xs text-amber-700">
-                  Estes codigos servem para rastreabilidade e nao fazem parte dos dados tecnicos.
+                  Estes códigos servem para rastreabilidade e não fazem parte
+                  dos dados técnicos.
                 </p>
                 <div className="mt-3 grid gap-3 md:grid-cols-3">
-                  <Input label="Codigo PX (legado)" name="legacyCode" value={formData.legacyCode} onChange={handleChange} placeholder="Coluna CODIGO PX" />
-                  <Input label="Seq. PX (legado)" name="legacySequence" value={formData.legacySequence} onChange={handleChange} placeholder="Coluna SEQ PX" />
-                  <Input label="Codigo Radar (legado)" name="radarCode" value={formData.radarCode} onChange={handleChange} placeholder="Coluna CODIGO RADAR" />
+                  <Input
+                    label="Código PX (legado)"
+                    name="legacyCode"
+                    value={formData.legacyCode}
+                    onChange={handleChange}
+                    placeholder="Coluna CÓDIGO PX"
+                  />
+                  <Input
+                    label="Seq. PX (legado)"
+                    name="legacySequence"
+                    value={formData.legacySequence}
+                    onChange={handleChange}
+                    placeholder="Coluna SEQ PX"
+                  />
+                  <Input
+                    label="Código Radar (legado)"
+                    name="radarCode"
+                    value={formData.radarCode}
+                    onChange={handleChange}
+                    placeholder="Coluna CÓDIGO RADAR"
+                  />
                 </div>
               </div>
               {!isEditing && canViewCosts ? (
                 <Input
-                  label="Preco de compra inicial"
+                  label="Preço de compra inicial"
                   type="number"
                   min="0"
                   step="0.01"
@@ -1203,15 +1619,29 @@ export default function CatalogFormPage() {
                   onChange={handleChange}
                 />
               ) : null}
-              <Input label="Descricao Comercial" name="commercialDescription" value={formData.commercialDescription} onChange={handleChange} className="md:col-span-2" />
-              <TextArea label="Descricao interna" name="description" value={formData.description} onChange={handleChange} className="md:col-span-4" />
+              <Input
+                label="Descrição Comercial"
+                name="commercialDescription"
+                value={formData.commercialDescription}
+                onChange={handleChange}
+                className="md:col-span-2"
+              />
+              <TextArea
+                label="Descrição interna"
+                name="description"
+                value={formData.description}
+                onChange={handleChange}
+                className="md:col-span-4"
+              />
               <ControlOptionInput
                 label="Unidade"
                 value={formData.unit}
                 options={controlOptions.units}
                 valueMode="code"
                 listId="catalog-unit-options"
-                onValueChange={(value) => setFormData((prev) => ({ ...prev, unit: value }))}
+                onValueChange={(value) =>
+                  setFormData((prev) => ({ ...prev, unit: value }))
+                }
               />
               <ControlOptionInput
                 label="Marca"
@@ -1219,10 +1649,23 @@ export default function CatalogFormPage() {
                 options={controlOptions.brands}
                 valueMode="name"
                 listId="catalog-brand-options"
-                onValueChange={(value) => setFormData((prev) => ({ ...prev, brand: value }))}
+                onValueChange={(value) =>
+                  setFormData((prev) => ({ ...prev, brand: value }))
+                }
               />
-              <Input label="Part Number" name="manufacturerPartNumber" value={formData.manufacturerPartNumber} onChange={handleChange} />
-              <Input label="Fornecedor preferencial" name="supplier" value={formData.supplier} onChange={handleChange} readOnly />
+              <Input
+                label="Part Number"
+                name="manufacturerPartNumber"
+                value={formData.manufacturerPartNumber}
+                onChange={handleChange}
+              />
+              <Input
+                label="Fornecedor preferencial"
+                name="supplier"
+                value={formData.supplier}
+                onChange={handleChange}
+                readOnly
+              />
             </div>
           </section>
         )}
@@ -1230,61 +1673,144 @@ export default function CatalogFormPage() {
         {activeTab === "identifiers" && (
           <section className="space-y-5 rounded-xl border border-zinc-200 bg-white p-6">
             <div>
-              <h2 className="text-lg font-bold text-zinc-800">Identificacao e codigos</h2>
-              <p className="mt-1 text-sm text-zinc-500">Codigos alternativos, legados, de fornecedor e de manual apontando para o mesmo item mestre.</p>
+              <h2 className="text-lg font-bold text-zinc-800">
+                Identificação e códigos
+              </h2>
+              <p className="mt-1 text-sm text-zinc-500">
+                Códigos alternativos, legados, de fornecedor e de manual
+                apontando para o mesmo item mestre.
+              </p>
             </div>
             <div className="overflow-hidden rounded-xl border border-zinc-200">
               <table className="min-w-full divide-y divide-zinc-200 text-sm">
                 <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
                   <tr>
                     <th className="px-4 py-3">Tipo</th>
-                    <th className="px-4 py-3">Codigo</th>
+                    <th className="px-4 py-3">Código</th>
                     <th className="px-4 py-3">Origem</th>
-                    <th className="px-4 py-3">Descricao</th>
+                    <th className="px-4 py-3">Descrição</th>
                     <th className="px-4 py-3">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100 bg-white">
                   {identifiers.map((identifier) => (
                     <tr key={identifier.id}>
-                      <td className="px-4 py-3 font-semibold text-zinc-800">{identifierTypeLabel(identifier.type)}</td>
-                      <td className="px-4 py-3 text-zinc-700">{identifier.code}</td>
-                      <td className="px-4 py-3 text-zinc-500">{identifier.supplier?.companyName || identifier.manufacturer?.name || identifier.source || "-"}</td>
-                      <td className="px-4 py-3 text-zinc-500">{identifier.description || "-"}</td>
+                      <td className="px-4 py-3 font-semibold text-zinc-800">
+                        {identifierTypeLabel(identifier.type)}
+                      </td>
+                      <td className="px-4 py-3 text-zinc-700">
+                        {identifier.code}
+                      </td>
+                      <td className="px-4 py-3 text-zinc-500">
+                        {identifier.supplier?.companyName ||
+                          identifier.manufacturer?.name ||
+                          identifier.source ||
+                          "-"}
+                      </td>
+                      <td className="px-4 py-3 text-zinc-500">
+                        {identifier.description || "-"}
+                      </td>
                       <td className="px-4 py-3">
                         <span className="rounded-full border border-zinc-200 px-2 py-1 text-xs font-semibold text-zinc-600">
-                          {identifier.isPrimary ? "Principal" : identifier.isActive === false ? "Inativo" : "Ativo"}
+                          {identifier.isPrimary
+                            ? "Principal"
+                            : identifier.isActive === false
+                              ? "Inativo"
+                              : "Ativo"}
                         </span>
                       </td>
                     </tr>
                   ))}
                   {identifiers.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-sm text-zinc-500">Nenhum codigo adicional salvo para este item.</td>
+                      <td
+                        colSpan={5}
+                        className="px-4 py-8 text-center text-sm text-zinc-500"
+                      >
+                        Nenhum código adicional salvo para este item.
+                      </td>
                     </tr>
                   ) : null}
                 </tbody>
               </table>
             </div>
             <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-              <p className="text-sm font-bold text-zinc-800">Adicionar codigo pesquisavel</p>
+              <p className="text-sm font-bold text-zinc-800">
+                Adicionar código pesquisavel
+              </p>
               <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-5">
                 <div>
-                  <label className="mb-1 block text-sm font-bold text-zinc-700">Tipo</label>
-                  <SelectField value={identifierDraft.type} onChange={(event) => setIdentifierDraft((prev) => ({ ...prev, type: event.target.value as IdentifierType }))} className="w-full rounded-lg border border-zinc-300 p-3">
-                    {IDENTIFIER_TYPES.map((type) => <option key={type} value={type}>{identifierTypeLabel(type)}</option>)}
+                  <label className="mb-1 block text-sm font-bold text-zinc-700">
+                    Tipo
+                  </label>
+                  <SelectField
+                    aria-label="Tipo"
+                    value={identifierDraft.type}
+                    onChange={(event) =>
+                      setIdentifierDraft((prev) => ({
+                        ...prev,
+                        type: event.target.value as IdentifierType,
+                      }))
+                    }
+                    className="w-full rounded-lg border border-zinc-300 p-3"
+                  >
+                    {IDENTIFIER_TYPES.map((type) => (
+                      <option key={type} value={type}>
+                        {identifierTypeLabel(type)}
+                      </option>
+                    ))}
                   </SelectField>
                 </div>
-                <Input label="Codigo" value={identifierDraft.code} onChange={(event) => setIdentifierDraft((prev) => ({ ...prev, code: event.target.value }))} />
-                <Input label="Origem" value={identifierDraft.source} onChange={(event) => setIdentifierDraft((prev) => ({ ...prev, source: event.target.value }))} />
-                <Input label="Descricao" value={identifierDraft.description} onChange={(event) => setIdentifierDraft((prev) => ({ ...prev, description: event.target.value }))} />
+                <Input
+                  label="Código"
+                  value={identifierDraft.code}
+                  onChange={(event) =>
+                    setIdentifierDraft((prev) => ({
+                      ...prev,
+                      code: event.target.value,
+                    }))
+                  }
+                />
+                <Input
+                  label="Origem"
+                  value={identifierDraft.source}
+                  onChange={(event) =>
+                    setIdentifierDraft((prev) => ({
+                      ...prev,
+                      source: event.target.value,
+                    }))
+                  }
+                />
+                <Input
+                  label="Descrição"
+                  value={identifierDraft.description}
+                  onChange={(event) =>
+                    setIdentifierDraft((prev) => ({
+                      ...prev,
+                      description: event.target.value,
+                    }))
+                  }
+                />
                 <label className="flex items-end gap-2 pb-3 text-sm font-semibold text-zinc-700">
-                  <input type="checkbox" checked={identifierDraft.isPrimary} onChange={(event) => setIdentifierDraft((prev) => ({ ...prev, isPrimary: event.target.checked }))} />
+                  <input
+                    type="checkbox"
+                    checked={identifierDraft.isPrimary}
+                    onChange={(event) =>
+                      setIdentifierDraft((prev) => ({
+                        ...prev,
+                        isPrimary: event.target.checked,
+                      }))
+                    }
+                  />
                   Principal
                 </label>
               </div>
-              <button type="button" onClick={handleCreateIdentifier} className="mt-3 rounded-lg bg-zinc-950 px-4 py-2 text-sm font-bold text-white">
-                Salvar codigo
+              <button
+                type="button"
+                onClick={handleCreateIdentifier}
+                className="mt-3 rounded-lg bg-zinc-950 px-4 py-2 text-sm font-bold text-white"
+              >
+                Salvar código
               </button>
             </div>
           </section>
@@ -1292,13 +1818,40 @@ export default function CatalogFormPage() {
 
         {activeTab === "technical" && (
           <section className="rounded-xl border border-zinc-200 bg-white p-6">
-            <h2 className="mb-4 text-lg font-bold text-zinc-800">Dados Tecnicos</h2>
+            <h2 className="mb-4 text-lg font-bold text-zinc-800">
+              Dados Técnicos
+            </h2>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <Input label="Tensao" name="technicalVoltage" value={formData.technicalVoltage} onChange={handleChange} />
-              <Input label="Corrente" name="technicalCurrent" value={formData.technicalCurrent} onChange={handleChange} />
-              <Input label="Material" name="technicalMaterial" value={formData.technicalMaterial} onChange={handleChange} />
-              <Input label="Dimensoes" name="technicalDimensions" value={formData.technicalDimensions} onChange={handleChange} />
-              <TextArea label="Aplicacao e compatibilidade" name="applicationNotes" value={formData.applicationNotes} onChange={handleChange} />
+              <Input
+                label="Tensao"
+                name="technicalVoltage"
+                value={formData.technicalVoltage}
+                onChange={handleChange}
+              />
+              <Input
+                label="Corrente"
+                name="technicalCurrent"
+                value={formData.technicalCurrent}
+                onChange={handleChange}
+              />
+              <Input
+                label="Material"
+                name="technicalMaterial"
+                value={formData.technicalMaterial}
+                onChange={handleChange}
+              />
+              <Input
+                label="Dimensoes"
+                name="technicalDimensions"
+                value={formData.technicalDimensions}
+                onChange={handleChange}
+              />
+              <TextArea
+                label="Aplicação e compatibilidade"
+                name="applicationNotes"
+                value={formData.applicationNotes}
+                onChange={handleChange}
+              />
             </div>
           </section>
         )}
@@ -1307,9 +1860,12 @@ export default function CatalogFormPage() {
           <section className="space-y-5 rounded-xl border border-zinc-200 bg-white p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h2 className="text-lg font-bold text-zinc-800">Fornecedores e cotacoes</h2>
+                <h2 className="text-lg font-bold text-zinc-800">
+                  Fornecedores e cotações
+                </h2>
                 <p className="mt-1 text-sm text-zinc-500">
-                  Registre ofertas por fornecedor, compare custo efetivo e escolha preferencia com rastreabilidade.
+                  Registre ofertas por fornecedor, compare custo efetivo e
+                  escolha preferencia com rastreabilidade.
                 </p>
               </div>
               {pricingMessage ? (
@@ -1321,9 +1877,12 @@ export default function CatalogFormPage() {
 
             {!canViewCosts ? (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-                <p className="text-sm font-bold text-amber-800">Custos restritos</p>
+                <p className="text-sm font-bold text-amber-800">
+                  Custos restritos
+                </p>
                 <p className="mt-1 text-sm text-amber-700">
-                  Seu perfil pode alterar cadastro operacional, mas nao visualiza nem atualiza custo, margem ou impostos.
+                  Seu perfil pode alterar cadastro operacional, mas não
+                  visualiza nem atualiza custo, margem ou impostos.
                 </p>
               </div>
             ) : (
@@ -1333,7 +1892,7 @@ export default function CatalogFormPage() {
                     <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
                       <tr>
                         <th className="px-4 py-3">Fornecedor</th>
-                        <th className="px-4 py-3">Cotacao</th>
+                        <th className="px-4 py-3">Cotação</th>
                         <th className="px-4 py-3">Custo efetivo</th>
                         <th className="px-4 py-3">Prazo</th>
                         <th className="px-4 py-3">Validade</th>
@@ -1344,26 +1903,59 @@ export default function CatalogFormPage() {
                       {offers.map((offer) => (
                         <tr key={offer.id}>
                           <td className="px-4 py-3">
-                            <p className="font-semibold text-zinc-800">{offer.supplier.companyName}</p>
-                            <p className="text-xs text-zinc-500">{offer.supplierSku || offer.offeredPartNumber || "Sem codigo do fornecedor"}</p>
+                            <p className="font-semibold text-zinc-800">
+                              {offer.supplier.companyName}
+                            </p>
+                            <p className="text-xs text-zinc-500">
+                              {offer.supplierSku ||
+                                offer.offeredPartNumber ||
+                                "Sem codigo do fornecedor"}
+                            </p>
                           </td>
-                          <td className="px-4 py-3 text-zinc-600">{offer.quoteNumber || `v${offer.version}`}</td>
-                          <td className="px-4 py-3 font-semibold text-zinc-800">{formatCurrencyNumber(Number(offer.effectiveUnitCost || 0))}</td>
-                          <td className="px-4 py-3 text-zinc-600">{offer.leadTimeDays != null ? `${offer.leadTimeDays} dia(s)` : "-"}</td>
-                          <td className="px-4 py-3 text-zinc-600">{offer.validUntil ? formatDate(offer.validUntil) : "-"}</td>
+                          <td className="px-4 py-3 text-zinc-600">
+                            {offer.quoteNumber || `v${offer.version}`}
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-zinc-800">
+                            {formatCurrencyNumber(
+                              Number(offer.effectiveUnitCost || 0),
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-zinc-600">
+                            {offer.leadTimeDays != null
+                              ? `${offer.leadTimeDays} dia(s)`
+                              : "-"}
+                          </td>
+                          <td className="px-4 py-3 text-zinc-600">
+                            {offer.validUntil
+                              ? formatCalendarDate(offer.validUntil)
+                              : "-"}
+                          </td>
                           <td className="px-4 py-3">
                             <div className="flex flex-wrap gap-1">
-                              {offer.isPreferred ? <Badge>Preferencial</Badge> : null}
-                              {offer.ranking?.lowestEffectiveCost ? <Badge>Menor custo</Badge> : null}
-                              {offer.ranking?.fastestLeadTime ? <Badge>Menor prazo</Badge> : null}
-                              {offer.ranking?.incompleteComparison ? <Badge tone="amber">Incompleta</Badge> : null}
+                              {offer.isPreferred ? (
+                                <Badge>Preferencial</Badge>
+                              ) : null}
+                              {offer.ranking?.lowestEffectiveCost ? (
+                                <Badge>Menor custo</Badge>
+                              ) : null}
+                              {offer.ranking?.fastestLeadTime ? (
+                                <Badge>Menor prazo</Badge>
+                              ) : null}
+                              {offer.ranking?.incompleteComparison ? (
+                                <Badge tone="amber">Incompleta</Badge>
+                              ) : null}
                             </div>
                           </td>
                         </tr>
                       ))}
                       {offers.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="px-4 py-8 text-center text-sm text-zinc-500">Nenhuma cotacao registrada para este item.</td>
+                          <td
+                            colSpan={6}
+                            className="px-4 py-8 text-center text-sm text-zinc-500"
+                          >
+                            Nenhuma cotação registrada para este item.
+                          </td>
                         </tr>
                       ) : null}
                     </tbody>
@@ -1373,13 +1965,17 @@ export default function CatalogFormPage() {
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.15fr_0.85fr]">
                   <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Fornecedores desta peca</p>
+                      <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">
+                        Fornecedores desta peça
+                      </p>
                       <button
                         type="button"
                         onClick={() => setIsSupplierFormOpen((value) => !value)}
                         className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs font-bold text-zinc-700 hover:bg-zinc-100"
                       >
-                        {isSupplierFormOpen ? "Fechar cadastro" : "Novo fornecedor"}
+                        {isSupplierFormOpen
+                          ? "Fechar cadastro"
+                          : "Novo fornecedor"}
                       </button>
                     </div>
 
@@ -1401,14 +1997,22 @@ export default function CatalogFormPage() {
                             </span>
                             <span className="mt-0.5 block text-xs text-zinc-500">
                               {entry.isPrimary ? "Principal | " : ""}
-                              {formatCurrencyNumber(Number(entry.supplierPrice || 0))} | {commercialLabel(entry.purchasePaymentTerm || entry.supplier.paymentTerm,"Pagamento não definido")}
+                              {formatCurrencyNumber(
+                                Number(entry.supplierPrice || 0),
+                              )}{" "}
+                              |{" "}
+                              {commercialLabel(
+                                entry.purchasePaymentTerm ||
+                                  entry.supplier.paymentTerm,
+                                "Pagamento não definido",
+                              )}
                             </span>
                           </button>
                         ))}
                       </div>
                     ) : (
                       <p className="mt-3 rounded-lg border border-dashed border-zinc-300 bg-white px-3 py-4 text-sm text-zinc-500">
-                        Nenhum fornecedor salvo para esta peca ainda.
+                        Nenhum fornecedor salvo para esta peça ainda.
                       </p>
                     )}
 
@@ -1416,46 +2020,57 @@ export default function CatalogFormPage() {
                       <Input
                         label="Pesquisar fornecedor para adicionar"
                         value={supplierSearch}
-                        onChange={(event) => setSupplierSearch(event.target.value)}
+                        onChange={(event) =>
+                          setSupplierSearch(event.target.value)
+                        }
                         placeholder="Digite nome, fantasia ou CNPJ"
                       />
                     </div>
                     <div className="mt-3 max-h-56 space-y-2 overflow-y-auto pr-1">
-                      {supplierSearch.trim().length > 0 && supplierSearch.trim().length < 2 ? (
+                      {supplierSearch.trim().length > 0 &&
+                      supplierSearch.trim().length < 2 ? (
                         <p className="rounded-lg border border-zinc-200 bg-white px-3 py-3 text-sm text-zinc-500">
                           Digite pelo menos 2 caracteres para pesquisar.
                         </p>
                       ) : null}
-                      {filteredSuppliers.map((supplier) => (
+                      {filteredSuppliers.map((supplier) =>
                         (() => {
-                          const linked = itemSuppliers.find((entry) => entry.supplierId === supplier.id);
-                          return (
-                        <button
-                          key={supplier.id}
-                          type="button"
-                          onClick={() => selectSupplier(supplier)}
-                          className={`w-full rounded-lg border px-3 py-2 text-left transition ${
-                            formData.pricingSupplierId === supplier.id
-                              ? "border-blue-500 bg-blue-50"
-                              : "border-zinc-200 bg-white hover:border-blue-300"
-                          }`}
-                        >
-                          <span className="flex items-center justify-between gap-2 text-sm font-bold text-zinc-800">
-                            <span>{supplier.companyName}</span>
-                            {linked ? (
-                              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700">
-                                Ja vinculado
-                              </span>
-                            ) : null}
-                          </span>
-                          <span className="mt-0.5 block text-xs text-zinc-500">
-                            {supplier.tradeName || "Sem fantasia"} | {supplier.cnpj || "Sem CNPJ"} | {commercialLabel(supplier.paymentTerm,"Pagamento não definido")}
-                          </span>
-                        </button>
+                          const linked = itemSuppliers.find(
+                            (entry) => entry.supplierId === supplier.id,
                           );
-                        })()
-                      ))}
-                      {supplierSearch.trim().length >= 2 && filteredSuppliers.length === 0 ? (
+                          return (
+                            <button
+                              key={supplier.id}
+                              type="button"
+                              onClick={() => selectSupplier(supplier)}
+                              className={`w-full rounded-lg border px-3 py-2 text-left transition ${
+                                formData.pricingSupplierId === supplier.id
+                                  ? "border-blue-500 bg-blue-50"
+                                  : "border-zinc-200 bg-white hover:border-blue-300"
+                              }`}
+                            >
+                              <span className="flex items-center justify-between gap-2 text-sm font-bold text-zinc-800">
+                                <span>{supplier.companyName}</span>
+                                {linked ? (
+                                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700">
+                                    Já vinculado
+                                  </span>
+                                ) : null}
+                              </span>
+                              <span className="mt-0.5 block text-xs text-zinc-500">
+                                {supplier.tradeName || "Sem fantasia"} |{" "}
+                                {supplier.cnpj || "Sem CNPJ"} |{" "}
+                                {commercialLabel(
+                                  supplier.paymentTerm,
+                                  "Pagamento não definido",
+                                )}
+                              </span>
+                            </button>
+                          );
+                        })(),
+                      )}
+                      {supplierSearch.trim().length >= 2 &&
+                      filteredSuppliers.length === 0 ? (
                         <p className="rounded-lg border border-zinc-200 bg-white px-3 py-4 text-sm text-zinc-500">
                           Nenhum fornecedor encontrado para a busca.
                         </p>
@@ -1464,124 +2079,348 @@ export default function CatalogFormPage() {
 
                     {isSupplierFormOpen ? (
                       <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-4">
-                        <p className="text-sm font-bold text-zinc-800">Cadastrar fornecedor</p>
+                        <p className="text-sm font-bold text-zinc-800">
+                          Cadastrar fornecedor
+                        </p>
                         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                          <Input label="Razao social *" value={newSupplier.companyName} onChange={(event) => setNewSupplier((prev) => ({ ...prev, companyName: event.target.value }))} />
-                          <Input label="Fantasia" value={newSupplier.tradeName} onChange={(event) => setNewSupplier((prev) => ({ ...prev, tradeName: event.target.value }))} />
-                          <Input label="CNPJ" value={newSupplier.cnpj} onChange={(event) => setNewSupplier((prev) => ({ ...prev, cnpj: event.target.value }))} />
-                      <ControlOptionInput
-                        label="Condicao de pagamento"
-                        value={newSupplier.paymentTerm}
-                        options={controlOptions.paymentTerms}
-                        valueMode="name"
-                        listId="new-supplier-payment-term-options"
-                        onValueChange={(value) => setNewSupplier((prev) => ({ ...prev, paymentTerm: value }))}
-                      />
-                          <Input label="E-mail" type="email" value={newSupplier.email} onChange={(event) => setNewSupplier((prev) => ({ ...prev, email: event.target.value }))} />
-                          <Input label="Telefone" value={newSupplier.phone} onChange={(event) => setNewSupplier((prev) => ({ ...prev, phone: event.target.value }))} />
+                          <Input
+                            label="Razão social *"
+                            value={newSupplier.companyName}
+                            onChange={(event) =>
+                              setNewSupplier((prev) => ({
+                                ...prev,
+                                companyName: event.target.value,
+                              }))
+                            }
+                          />
+                          <Input
+                            label="Fantasia"
+                            value={newSupplier.tradeName}
+                            onChange={(event) =>
+                              setNewSupplier((prev) => ({
+                                ...prev,
+                                tradeName: event.target.value,
+                              }))
+                            }
+                          />
+                          <Input
+                            label="CNPJ"
+                            value={newSupplier.cnpj}
+                            onChange={(event) =>
+                              setNewSupplier((prev) => ({
+                                ...prev,
+                                cnpj: event.target.value,
+                              }))
+                            }
+                          />
+                          <ControlOptionInput
+                            label="Condição de pagamento"
+                            value={newSupplier.paymentTerm}
+                            options={controlOptions.paymentTerms}
+                            valueMode="name"
+                            listId="new-supplier-payment-term-options"
+                            onValueChange={(value) =>
+                              setNewSupplier((prev) => ({
+                                ...prev,
+                                paymentTerm: value,
+                              }))
+                            }
+                          />
+                          <Input
+                            label="E-mail"
+                            type="email"
+                            value={newSupplier.email}
+                            onChange={(event) =>
+                              setNewSupplier((prev) => ({
+                                ...prev,
+                                email: event.target.value,
+                              }))
+                            }
+                          />
+                          <Input
+                            label="Telefone"
+                            value={newSupplier.phone}
+                            onChange={(event) =>
+                              setNewSupplier((prev) => ({
+                                ...prev,
+                                phone: event.target.value,
+                              }))
+                            }
+                          />
                         </div>
                         <button
                           type="button"
                           onClick={handleCreateSupplier}
-                          disabled={isCreatingSupplier || !newSupplier.companyName.trim()}
+                          disabled={
+                            isCreatingSupplier ||
+                            !newSupplier.companyName.trim()
+                          }
                           className="mt-3 rounded-lg bg-zinc-950 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
                         >
-                          {isCreatingSupplier ? "Cadastrando..." : "Cadastrar e selecionar"}
+                          {isCreatingSupplier
+                            ? "Cadastrando..."
+                            : "Cadastrar e selecionar"}
                         </button>
                       </div>
                     ) : null}
                   </div>
 
                   <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
-                    <p className="text-xs font-bold uppercase tracking-wide text-blue-700">Resumo vigente</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-blue-700">
+                      Resumo vigente
+                    </p>
                     <div className="mt-3 grid grid-cols-2 gap-3">
-                      <SummaryTile label="Custo atual" value={formatCurrencyNumber(parseFloat(formData.costPrice) || 0)} />
-                      <SummaryTile label="Venda sugerida" value={formatCurrencyNumber(parseFloat(formData.basePrice) || 0)} />
-                      <SummaryTile label="Impostos venda" value={`${totalTaxPercentage.toFixed(2)}%`} />
-                      <SummaryTile label="Fornecedor" value={selectedSupplier?.companyName || formData.supplier || "-"} />
+                      <SummaryTile
+                        label="Custo atual"
+                        value={formatCurrencyNumber(
+                          parseFloat(formData.costPrice) || 0,
+                        )}
+                      />
+                      <SummaryTile
+                        label="Venda sugerida"
+                        value={formatCurrencyNumber(
+                          parseFloat(formData.basePrice) || 0,
+                        )}
+                      />
+                      <SummaryTile
+                        label="Impostos venda"
+                        value={`${totalTaxPercentage.toFixed(2)}%`}
+                      />
+                      <SummaryTile
+                        label="Fornecedor"
+                        value={
+                          selectedSupplier?.companyName ||
+                          formData.supplier ||
+                          "-"
+                        }
+                      />
                     </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                   <section className="rounded-xl border border-zinc-200 p-4">
-                    <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Condicoes de compra do fornecedor selecionado</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">
+                      Condições de compra do fornecedor selecionado
+                    </p>
                     <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-                      <Input label="SKU no fornecedor" name="supplierSku" value={formData.supplierSku} onChange={handleChange} />
-                      <Input label="Numero da cotacao" name="quoteNumber" value={formData.quoteNumber} onChange={handleChange} />
-                      <Input label="Contato do fornecedor" name="contactName" value={formData.contactName} onChange={handleChange} />
-                      <Input label="Part number ofertado" name="offeredPartNumber" value={formData.offeredPartNumber} onChange={handleChange} />
-                      <Input label="Descricao do fornecedor" name="offeredDescription" value={formData.offeredDescription} onChange={handleChange} />
-                      <Input label="Prazo fornecedor (dias)" type="number" name="leadTimeDays" value={formData.leadTimeDays} onChange={handleChange} />
+                      <Input
+                        label="SKU no fornecedor"
+                        name="supplierSku"
+                        value={formData.supplierSku}
+                        onChange={handleChange}
+                      />
+                      <Input
+                        label="Número da cotação"
+                        name="quoteNumber"
+                        value={formData.quoteNumber}
+                        onChange={handleChange}
+                      />
+                      <Input
+                        label="Contato do fornecedor"
+                        name="contactName"
+                        value={formData.contactName}
+                        onChange={handleChange}
+                      />
+                      <Input
+                        label="Part number ofertado"
+                        name="offeredPartNumber"
+                        value={formData.offeredPartNumber}
+                        onChange={handleChange}
+                      />
+                      <Input
+                        label="Descrição do fornecedor"
+                        name="offeredDescription"
+                        value={formData.offeredDescription}
+                        onChange={handleChange}
+                      />
+                      <Input
+                        label="Prazo fornecedor (dias)"
+                        type="number"
+                        name="leadTimeDays"
+                        value={formData.leadTimeDays}
+                        onChange={handleChange}
+                      />
                       <ControlOptionInput
-                        label="Condicao de pagamento"
+                        label="Condição de pagamento"
                         value={formData.purchasePaymentTerm}
                         options={controlOptions.paymentTerms}
                         valueMode="name"
                         listId="purchase-payment-term-options"
                         placeholder="Ex.: 28/35 ddl, boleto, pix"
-                        onValueChange={(value) => setFormData((prev) => ({ ...prev, purchasePaymentTerm: value }))}
+                        onValueChange={(value) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            purchasePaymentTerm: value,
+                          }))
+                        }
                       />
-                      <Input label="Valor na nota/cotacao (R$)" type="number" step="0.01" name="purchaseInvoiceValue" value={formData.purchaseInvoiceValue} onChange={handleChange} />
-                      <Input label="Qtd. referente ao preco" type="number" step="0.01" name="priceQuantity" value={formData.priceQuantity} onChange={handleChange} />
-                      <Input label="Qtd. minima" type="number" step="0.01" name="minPurchaseQty" value={formData.minPurchaseQty} onChange={handleChange} />
-                      <Input label="Multiplo de compra" type="number" step="0.01" name="purchaseMultiple" value={formData.purchaseMultiple} onChange={handleChange} />
+                      <Input
+                        label="Valor na nota/cotação (R$)"
+                        type="number"
+                        step="0.01"
+                        name="purchaseInvoiceValue"
+                        value={formData.purchaseInvoiceValue}
+                        onChange={handleChange}
+                      />
+                      <Input
+                        label="Qtd. referente ao preço"
+                        type="number"
+                        step="0.01"
+                        name="priceQuantity"
+                        value={formData.priceQuantity}
+                        onChange={handleChange}
+                      />
+                      <Input
+                        label="Qtd. minima"
+                        type="number"
+                        step="0.01"
+                        name="minPurchaseQty"
+                        value={formData.minPurchaseQty}
+                        onChange={handleChange}
+                      />
+                      <Input
+                        label="Multiplo de compra"
+                        type="number"
+                        step="0.01"
+                        name="purchaseMultiple"
+                        value={formData.purchaseMultiple}
+                        onChange={handleChange}
+                      />
                       <ControlOptionInput
                         label="Unidade de compra"
                         value={formData.purchaseUnit}
                         options={controlOptions.units}
                         valueMode="code"
                         listId="purchase-unit-options"
-                        onValueChange={(value) => setFormData((prev) => ({ ...prev, purchaseUnit: value }))}
+                        onValueChange={(value) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            purchaseUnit: value,
+                          }))
+                        }
                       />
-                      <Input label="Fator de conversao" type="number" step="0.01" name="conversionFactor" value={formData.conversionFactor} onChange={handleChange} />
-                      <Input label="Disponibilidade" name="availability" value={formData.availability} onChange={handleChange} />
+                      <Input
+                        label="Fator de conversao"
+                        type="number"
+                        step="0.01"
+                        name="conversionFactor"
+                        value={formData.conversionFactor}
+                        onChange={handleChange}
+                      />
+                      <Input
+                        label="Disponibilidade"
+                        name="availability"
+                        value={formData.availability}
+                        onChange={handleChange}
+                      />
                       <div>
-                        <label className="mb-1 block text-sm font-bold text-zinc-700">Imposto de compra</label>
+                        <label className="mb-1 block text-sm font-bold text-zinc-700">
+                          Imposto de compra
+                        </label>
                         <div className="grid grid-cols-[110px_1fr] gap-2">
-                          <SelectField name="purchaseTaxMode" value={formData.purchaseTaxMode} onChange={handleChange} className="w-full rounded-lg border border-zinc-300 p-3">
+                          <SelectField
+                            name="purchaseTaxMode"
+                            value={formData.purchaseTaxMode}
+                            onChange={handleChange}
+                            className="w-full rounded-lg border border-zinc-300 p-3"
+                          >
                             <option value="AMOUNT">R$</option>
                             <option value="PERCENT">%</option>
                           </SelectField>
                           <input
-                            name={formData.purchaseTaxMode === "PERCENT" ? "purchaseTaxPercent" : "purchaseTaxAmount"}
+                            name={
+                              formData.purchaseTaxMode === "PERCENT"
+                                ? "purchaseTaxPercent"
+                                : "purchaseTaxAmount"
+                            }
                             type="number"
                             step="0.01"
-                            value={formData.purchaseTaxMode === "PERCENT" ? formData.purchaseTaxPercent : formData.purchaseTaxAmount}
+                            value={
+                              formData.purchaseTaxMode === "PERCENT"
+                                ? formData.purchaseTaxPercent
+                                : formData.purchaseTaxAmount
+                            }
                             onChange={handleChange}
                             className="w-full rounded-lg border border-zinc-300 p-3"
                           />
                         </div>
                       </div>
-                      <Input label="Frete (R$)" type="number" step="0.01" name="freightAmount" value={formData.freightAmount} onChange={handleChange} />
-                      <Input label="Seguro (R$)" type="number" step="0.01" name="insuranceAmount" value={formData.insuranceAmount} onChange={handleChange} />
-                      <Input label="Desconto (R$)" type="number" step="0.01" name="discountAmount" value={formData.discountAmount} onChange={handleChange} />
-                      <Input label="Outros custos (R$)" type="number" step="0.01" name="otherPurchaseCosts" value={formData.otherPurchaseCosts} onChange={handleChange} />
-                      <Input label="Creditos recuperaveis (R$)" type="number" step="0.01" name="recoverableCreditAmount" value={formData.recoverableCreditAmount} onChange={handleChange} />
+                      <Input
+                        label="Frete (R$)"
+                        type="number"
+                        step="0.01"
+                        name="freightAmount"
+                        value={formData.freightAmount}
+                        onChange={handleChange}
+                      />
+                      <Input
+                        label="Seguro (R$)"
+                        type="number"
+                        step="0.01"
+                        name="insuranceAmount"
+                        value={formData.insuranceAmount}
+                        onChange={handleChange}
+                      />
+                      <Input
+                        label="Desconto (R$)"
+                        type="number"
+                        step="0.01"
+                        name="discountAmount"
+                        value={formData.discountAmount}
+                        onChange={handleChange}
+                      />
+                      <Input
+                        label="Outros custos (R$)"
+                        type="number"
+                        step="0.01"
+                        name="otherPurchaseCosts"
+                        value={formData.otherPurchaseCosts}
+                        onChange={handleChange}
+                      />
+                      <Input
+                        label="Creditos recuperaveis (R$)"
+                        type="number"
+                        step="0.01"
+                        name="recoverableCreditAmount"
+                        value={formData.recoverableCreditAmount}
+                        onChange={handleChange}
+                      />
                     </div>
                     <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-                      <p className="text-xs font-bold uppercase text-zinc-500">Preco minimo (custo total)</p>
-                      <p className="mt-1 text-2xl font-bold text-zinc-900">{formatCurrencyNumber(purchaseTotal)}</p>
+                      <p className="text-xs font-bold uppercase text-zinc-500">
+                        Preço minimo (custo total)
+                      </p>
+                      <p className="mt-1 text-2xl font-bold text-zinc-900">
+                        {formatCurrencyNumber(purchaseTotal)}
+                      </p>
                     </div>
                   </section>
 
                   <section className="rounded-xl border border-zinc-200 p-4">
-                    <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Formacao do preco de venda</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">
+                      Formacao do preço de venda
+                    </p>
                     <div className="mt-4 overflow-hidden rounded-lg border border-zinc-200">
                       <table className="min-w-full divide-y divide-zinc-200 text-sm">
                         <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
                           <tr>
                             <th className="px-3 py-2">Componente</th>
-                            <th className="px-3 py-2">Padrao Studio</th>
+                            <th className="px-3 py-2">Padrão Studio</th>
                             <th className="px-3 py-2">Valor do produto</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-100 bg-white">
                           {PRICING_PERCENT_ROWS.map((row) => (
                             <tr key={row.name}>
-                              <td className="px-3 py-2 font-semibold text-zinc-700">{row.label}</td>
+                              <td className="px-3 py-2 font-semibold text-zinc-700">
+                                {row.label}
+                              </td>
                               <td className="px-3 py-2 text-zinc-500">
-                                {formatNumber(activePricingPolicy?.[row.policyKey] || 0)}%
+                                {formatNumber(
+                                  activePricingPolicy?.[row.policyKey] || 0,
+                                )}
+                                %
                               </td>
                               <td className="px-3 py-2">
                                 <div className="flex items-center gap-2">
@@ -1604,18 +2443,37 @@ export default function CatalogFormPage() {
                         <tfoot className="border-t border-zinc-200 bg-blue-50 font-bold text-blue-800">
                           <tr>
                             <td className="px-3 py-2">Total da formacao</td>
-                            <td className="px-3 py-2">{activePricingPolicy?.name || "Sem politica padrao"}</td>
-                            <td className="px-3 py-2">{pricingMarkupPercentage.toFixed(2)}%</td>
+                            <td className="px-3 py-2">
+                              {activePricingPolicy?.name ||
+                                "Sem politica padrao"}
+                            </td>
+                            <td className="px-3 py-2">
+                              {pricingMarkupPercentage.toFixed(2)}%
+                            </td>
                           </tr>
                         </tfoot>
                       </table>
                     </div>
                     <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-                      <Input label="Inicio validade" type="date" name="priceValidFrom" value={formData.priceValidFrom} onChange={handleChange} />
-                      <Input label="Fim validade" type="date" name="priceValidUntil" value={formData.priceValidUntil} onChange={handleChange} />
+                      <Input
+                        label="Inicio validade"
+                        type="date"
+                        name="priceValidFrom"
+                        value={formData.priceValidFrom}
+                        onChange={handleChange}
+                      />
+                      <Input
+                        label="Fim validade"
+                        type="date"
+                        name="priceValidUntil"
+                        value={formData.priceValidUntil}
+                        onChange={handleChange}
+                      />
                     </div>
                     <div className="mt-4 rounded-lg border-2 border-blue-500 bg-blue-50 p-3">
-                      <p className="text-xs font-bold uppercase text-blue-700">Venda sugerida</p>
+                      <p className="text-xs font-bold uppercase text-blue-700">
+                        Venda sugerida
+                      </p>
                       <input
                         name="basePrice"
                         type="number"
@@ -1625,14 +2483,22 @@ export default function CatalogFormPage() {
                         className="mt-2 w-full rounded-lg border border-blue-200 bg-white p-2 text-2xl font-bold text-blue-700"
                       />
                       <p className="mt-1 text-xs text-blue-700">
-                        Recomendacao calculada com markup de {pricingMarkupPercentage.toFixed(2)}%. O valor nunca pode ser menor que o preco minimo de {formatCurrencyNumber(purchaseTotal)}.
+                        Recomendacao calculada com markup de{" "}
+                        {pricingMarkupPercentage.toFixed(2)}%. O valor nunca
+                        pode ser menor que o preço minimo de{" "}
+                        {formatCurrencyNumber(purchaseTotal)}.
                       </p>
                     </div>
                     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
                       <div>
-                        <p className="text-sm font-bold text-amber-950">Parametros comerciais protegidos</p>
+                        <p className="text-sm font-bold text-amber-950">
+                          Parâmetros comerciais protegidos
+                        </p>
                         <p className="mt-1 text-xs text-amber-800">
-                          No cadastro novo, os valores vem da politica padrao. Depois de salvo, qualquer mudanca em impostos, comissao ou margem gera somente uma solicitacao ao Financeiro.
+                          No cadastro novo, os valores vem da politica padrão.
+                          Depois de salvo, qualquer mudanca em impostos,
+                          comissão ou margem gera somente uma solicitação ao
+                          Financeiro.
                         </p>
                       </div>
                       <button
@@ -1641,14 +2507,16 @@ export default function CatalogFormPage() {
                         disabled={isSavingPricing || !isEditing}
                         className="rounded-lg bg-amber-700 px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
                       >
-                        {isSavingPricing ? "Enviando..." : "Solicitar alteracao ao Financeiro"}
+                        {isSavingPricing
+                          ? "Enviando..."
+                          : "Solicitar alteracao ao Financeiro"}
                       </button>
                     </div>
                   </section>
                 </div>
 
                 <TextArea
-                  label="Observacoes da revisao"
+                  label="Observações da revisão"
                   name="pricingNotes"
                   value={formData.pricingNotes}
                   onChange={handleChange}
@@ -1657,15 +2525,23 @@ export default function CatalogFormPage() {
 
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
                   <div>
-                    <p className="text-sm font-bold text-zinc-800">Cotacoes de compra</p>
+                    <p className="text-sm font-bold text-zinc-800">
+                      Cotações de compra
+                    </p>
                     <p className="mt-1 text-sm text-zinc-500">
-                      Cotacoes nao passam pelo Financeiro. Ao marcar uma como preferencial, o custo de compra e a venda sugerida sao recalculados automaticamente.
+                      Cotações não passam pelo Financeiro. Ao marcar uma como
+                      preferencial, o custo de compra e a venda sugerida sao
+                      recalculados automaticamente.
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={() => handleApplyPricing(false)}
-                    disabled={isSavingPricing || !formData.pricingSupplierId || purchaseTotal <= 0}
+                    disabled={
+                      isSavingPricing ||
+                      !formData.pricingSupplierId ||
+                      purchaseTotal <= 0
+                    }
                     className="rounded-lg border border-zinc-300 bg-white px-5 py-3 text-sm font-bold text-zinc-700 disabled:opacity-50"
                   >
                     {isSavingPricing ? "Salvando..." : "Registrar cotacao"}
@@ -1673,7 +2549,11 @@ export default function CatalogFormPage() {
                   <button
                     type="button"
                     onClick={() => handleApplyPricing(true)}
-                    disabled={isSavingPricing || !formData.pricingSupplierId || purchaseTotal <= 0}
+                    disabled={
+                      isSavingPricing ||
+                      !formData.pricingSupplierId ||
+                      purchaseTotal <= 0
+                    }
                     className="rounded-lg bg-zinc-950 px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
                   >
                     {isSavingPricing ? "Salvando..." : "Registrar e preferir"}
@@ -1686,46 +2566,118 @@ export default function CatalogFormPage() {
 
         {activeTab === "inventory" && (
           <section className="rounded-xl border border-zinc-200 bg-white p-6">
-            <h2 className="mb-4 text-lg font-bold text-zinc-800">Estoque e Logistica</h2>
+            <h2 className="mb-4 text-lg font-bold text-zinc-800">
+              Estoque e Logistica
+            </h2>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
               <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-                <p className="text-xs font-bold uppercase text-zinc-500">Saldo atual</p>
-                <p className="mt-1 text-xl font-bold text-zinc-800">{formData.stockCurrent || "0"}</p>
-                <p className="mt-1 text-xs text-zinc-500">Alterado apenas por movimento, compra, consumo, reserva ou ajuste auditado.</p>
+                <p className="text-xs font-bold uppercase text-zinc-500">
+                  Saldo atual
+                </p>
+                <p className="mt-1 text-xl font-bold text-zinc-800">
+                  {formData.stockCurrent || "0"}
+                </p>
+                <p className="mt-1 text-xs text-zinc-500">
+                  Alterado apenas por movimento, compra, consumo, reserva ou
+                  ajuste auditado.
+                </p>
               </div>
-              <Input label="Estoque minimo" type="number" step="0.01" name="stockMin" value={formData.stockMin} onChange={handleChange} />
-              <Input label="Estoque maximo" type="number" step="0.01" name="stockMax" value={formData.stockMax} onChange={handleChange} />
-              <Input label="Ponto de reposicao" type="number" step="0.01" name="reorderPoint" value={formData.reorderPoint} onChange={handleChange} />
+              <Input
+                label="Estoque minimo"
+                type="number"
+                step="0.01"
+                name="stockMin"
+                value={formData.stockMin}
+                onChange={handleChange}
+              />
+              <Input
+                label="Estoque maximo"
+                type="number"
+                step="0.01"
+                name="stockMax"
+                value={formData.stockMax}
+                onChange={handleChange}
+              />
+              <Input
+                label="Ponto de reposicao"
+                type="number"
+                step="0.01"
+                name="reorderPoint"
+                value={formData.reorderPoint}
+                onChange={handleChange}
+              />
               <ControlOptionInput
-                label="Localizacao fisica"
+                label="Localização física"
                 value={formData.storageLocation}
                 options={controlOptions.storageLocations}
                 valueMode="name"
                 listId="storage-location-options"
-                onValueChange={(value) => setFormData((prev) => ({ ...prev, storageLocation: value }))}
+                onValueChange={(value) =>
+                  setFormData((prev) => ({ ...prev, storageLocation: value }))
+                }
               />
-              <Input label="Peso bruto (kg)" type="number" step="0.01" name="grossWeight" value={formData.grossWeight} onChange={handleChange} />
-              <Input label="Peso liquido (kg)" type="number" step="0.01" name="netWeight" value={formData.netWeight} onChange={handleChange} />
+              <Input
+                label="Peso bruto (kg)"
+                type="number"
+                step="0.01"
+                name="grossWeight"
+                value={formData.grossWeight}
+                onChange={handleChange}
+              />
+              <Input
+                label="Peso liquido (kg)"
+                type="number"
+                step="0.01"
+                name="netWeight"
+                value={formData.netWeight}
+                onChange={handleChange}
+              />
             </div>
           </section>
         )}
 
         {activeTab === "fiscal" && (
           <section className="rounded-xl border border-zinc-200 bg-white p-6">
-            <h2 className="mb-4 text-lg font-bold text-zinc-800">Fiscal e Tributario</h2>
+            <h2 className="mb-4 text-lg font-bold text-zinc-800">
+              Fiscal e Tributario
+            </h2>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-              <Input label="NCM" name="ncm" value={formData.ncm} onChange={handleChange} />
-              <Input label="CEST" name="cest" value={formData.cest} onChange={handleChange} />
+              <Input
+                label="NCM"
+                name="ncm"
+                value={formData.ncm}
+                onChange={handleChange}
+              />
+              <Input
+                label="CEST"
+                name="cest"
+                value={formData.cest}
+                onChange={handleChange}
+              />
               <div>
-                <label className="mb-1 block text-sm font-bold text-zinc-700">Origem da mercadoria</label>
-                <SelectField name="origin" value={formData.origin} onChange={handleChange} className="w-full rounded-lg border border-zinc-300 p-3">
+                <label className="mb-1 block text-sm font-bold text-zinc-700">
+                  Origem da mercadoria
+                </label>
+                <SelectField
+                  aria-label="Origem da mercadoria"
+                  name="origin"
+                  value={formData.origin}
+                  onChange={handleChange}
+                  className="w-full rounded-lg border border-zinc-300 p-3"
+                >
                   <option value="NACIONAL">Nacional</option>
-                  <option value="ESTRANGEIRA_IMPORTACAO_DIRETA">Estrangeira - Importacao direta</option>
-                  <option value="ESTRANGEIRA_MERCADO_INTERNO">Estrangeira - Mercado interno</option>
+                  <option value="ESTRANGEIRA_IMPORTACAO_DIRETA">
+                    Estrangeira - Importação direta
+                  </option>
+                  <option value="ESTRANGEIRA_MERCADO_INTERNO">
+                    Estrangeira - Mercado interno
+                  </option>
                 </SelectField>
               </div>
               <p className="md:col-span-4 text-xs text-zinc-500">
-                NCM, CEST e origem continuam no cadastro fiscal. Os percentuais que alteram preco ficam na tabela de formacao da aba Fornecedores e dependem de aprovacao financeira.
+                NCM, CEST e origem continuam no cadastro fiscal. Os percentuais
+                que alteram preço ficam na tabela de formacao da aba
+                Fornecedores e dependem de aprovação financeira.
               </p>
             </div>
           </section>
@@ -1734,15 +2686,20 @@ export default function CatalogFormPage() {
         {activeTab === "documents" && (
           <section className="space-y-5 rounded-xl border border-zinc-200 bg-white p-6">
             <div>
-              <h2 className="text-lg font-bold text-zinc-800">Documentos e historico</h2>
-              <p className="mt-1 text-sm text-zinc-500">Vinculos de ficha tecnica, manual, datasheet, orcamento e evidencias do item.</p>
+              <h2 className="text-lg font-bold text-zinc-800">
+                Documentos e histórico
+              </h2>
+              <p className="mt-1 text-sm text-zinc-500">
+                Vínculos de ficha técnica, manual, datasheet, orcamento e
+                evidencias do item.
+              </p>
             </div>
             <div className="overflow-hidden rounded-xl border border-zinc-200">
               <table className="min-w-full divide-y divide-zinc-200 text-sm">
                 <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
                   <tr>
                     <th className="px-4 py-3">Categoria</th>
-                    <th className="px-4 py-3">Titulo</th>
+                    <th className="px-4 py-3">Título</th>
                     <th className="px-4 py-3">Versao</th>
                     <th className="px-4 py-3">Arquivo/link</th>
                     <th className="px-4 py-3">Status</th>
@@ -1751,44 +2708,122 @@ export default function CatalogFormPage() {
                 <tbody className="divide-y divide-zinc-100 bg-white">
                   {documents.map((document) => (
                     <tr key={document.id}>
-                      <td className="px-4 py-3 font-semibold text-zinc-800">{commercialLabel(document.category)}</td>
-                      <td className="px-4 py-3 text-zinc-700">{document.title}</td>
-                      <td className="px-4 py-3 text-zinc-500">{document.version || "-"}</td>
+                      <td className="px-4 py-3 font-semibold text-zinc-800">
+                        {commercialLabel(document.category)}
+                      </td>
+                      <td className="px-4 py-3 text-zinc-700">
+                        {document.title}
+                      </td>
+                      <td className="px-4 py-3 text-zinc-500">
+                        {document.version || "-"}
+                      </td>
                       <td className="px-4 py-3 text-zinc-500">
                         {document.externalUrl ? (
-                          <a href={document.externalUrl} target="_blank" className="text-blue-700 hover:underline">Abrir link</a>
-                        ) : document.fileName || "-"}
+                          <a
+                            href={document.externalUrl}
+                            target="_blank"
+                            className="text-blue-700 hover:underline"
+                          >
+                            Abrir link
+                          </a>
+                        ) : (
+                          document.fileName || "-"
+                        )}
                       </td>
-                      <td className="px-4 py-3 text-zinc-500">{document.status || "ACTIVE"}</td>
+                      <td className="px-4 py-3 text-zinc-500">
+                        {document.status || "ACTIVE"}
+                      </td>
                     </tr>
                   ))}
                   {documents.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-sm text-zinc-500">Nenhum documento vinculado a este item.</td>
+                      <td
+                        colSpan={5}
+                        className="px-4 py-8 text-center text-sm text-zinc-500"
+                      >
+                        Nenhum documento vinculado a este item.
+                      </td>
                     </tr>
                   ) : null}
                 </tbody>
               </table>
             </div>
             <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-              <p className="text-sm font-bold text-zinc-800">Vincular documento</p>
+              <p className="text-sm font-bold text-zinc-800">
+                Vincular documento
+              </p>
               <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-5">
                 <div>
-                  <label className="mb-1 block text-sm font-bold text-zinc-700">Categoria</label>
-                  <SelectField value={documentDraft.category} onChange={(event) => setDocumentDraft((prev) => ({ ...prev, category: event.target.value }))} className="w-full rounded-lg border border-zinc-300 p-3">
-                    {(controlOptions.documentCategories.length ? controlOptions.documentCategories : DEFAULT_DOCUMENT_CATEGORIES).map((category) => (
+                  <label className="mb-1 block text-sm font-bold text-zinc-700">
+                    Categoria
+                  </label>
+                  <SelectField
+                    aria-label="Categoria"
+                    value={documentDraft.category}
+                    onChange={(event) =>
+                      setDocumentDraft((prev) => ({
+                        ...prev,
+                        category: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-lg border border-zinc-300 p-3"
+                  >
+                    {(controlOptions.documentCategories.length
+                      ? controlOptions.documentCategories
+                      : DEFAULT_DOCUMENT_CATEGORIES
+                    ).map((category) => (
                       <option key={category.code} value={category.code}>
                         {category.name}
                       </option>
                     ))}
                   </SelectField>
                 </div>
-                <Input label="Titulo" value={documentDraft.title} onChange={(event) => setDocumentDraft((prev) => ({ ...prev, title: event.target.value }))} />
-                <Input label="Versao" value={documentDraft.version} onChange={(event) => setDocumentDraft((prev) => ({ ...prev, version: event.target.value }))} />
-                <Input label="Link externo" value={documentDraft.externalUrl} onChange={(event) => setDocumentDraft((prev) => ({ ...prev, externalUrl: event.target.value }))} />
-                <Input label="Observacao" value={documentDraft.notes} onChange={(event) => setDocumentDraft((prev) => ({ ...prev, notes: event.target.value }))} />
+                <Input
+                  label="Título"
+                  value={documentDraft.title}
+                  onChange={(event) =>
+                    setDocumentDraft((prev) => ({
+                      ...prev,
+                      title: event.target.value,
+                    }))
+                  }
+                />
+                <Input
+                  label="Versao"
+                  value={documentDraft.version}
+                  onChange={(event) =>
+                    setDocumentDraft((prev) => ({
+                      ...prev,
+                      version: event.target.value,
+                    }))
+                  }
+                />
+                <Input
+                  label="Link externo"
+                  value={documentDraft.externalUrl}
+                  onChange={(event) =>
+                    setDocumentDraft((prev) => ({
+                      ...prev,
+                      externalUrl: event.target.value,
+                    }))
+                  }
+                />
+                <Input
+                  label="Observação"
+                  value={documentDraft.notes}
+                  onChange={(event) =>
+                    setDocumentDraft((prev) => ({
+                      ...prev,
+                      notes: event.target.value,
+                    }))
+                  }
+                />
               </div>
-              <button type="button" onClick={handleCreateDocument} className="mt-3 rounded-lg bg-zinc-950 px-4 py-2 text-sm font-bold text-white">
+              <button
+                type="button"
+                onClick={handleCreateDocument}
+                className="mt-3 rounded-lg bg-zinc-950 px-4 py-2 text-sm font-bold text-white"
+              >
                 Salvar documento
               </button>
             </div>
@@ -1802,11 +2837,17 @@ export default function CatalogFormPage() {
               isLoading ||
               isLoadingItem ||
               !formData.name ||
-              (formData.type === "PART" && !skuClassificationComplete && !formData.sku)
+              (formData.type === "PART" &&
+                !skuClassificationComplete &&
+                !formData.sku)
             }
             className="rounded-lg bg-blue-600 px-8 py-3 font-bold text-white disabled:opacity-50"
           >
-            {isLoading ? "Salvando..." : isEditing ? "Salvar alteracoes" : "Salvar item"}
+            {isLoading
+              ? "Salvando..."
+              : isEditing
+                ? "Salvar alteracoes"
+                : "Salvar item"}
           </button>
         </div>
       </form>
@@ -1835,12 +2876,6 @@ function formatNumber(value: number) {
   return Number.isFinite(value)
     ? value.toLocaleString("pt-BR", { maximumFractionDigits: 2 })
     : "0";
-}
-
-function formatDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
 }
 
 const IDENTIFIER_TYPES: IdentifierType[] = [
@@ -1902,10 +2937,16 @@ function ControlOptionInput({
 }) {
   return (
     <div className={className}>
-      <label className="mb-1 block text-sm font-bold text-zinc-700">{label}</label>
-      <SuggestionInput aria-label={label} id={listId}
+      <label
+        htmlFor={listId}
+        className="mb-1 block text-sm font-bold text-zinc-700"
+      >
+        {label}
+      </label>
+      <SuggestionInput
+        aria-label={label}
+        id={listId}
         value={value}
-
         placeholder={placeholder}
         onChange={(event) => onValueChange(event.target.value)}
         className="w-full rounded-lg border border-zinc-300 p-3"
@@ -1918,17 +2959,25 @@ function ControlOptionInput({
           />
         ))}
       </SuggestionInput>
-
     </div>
   );
 }
 
-function Badge({ children, tone = "blue" }: { children: ReactNode; tone?: "blue" | "amber" }) {
-  const classes = tone === "amber"
-    ? "border-amber-200 bg-amber-50 text-amber-700"
-    : "border-blue-200 bg-blue-50 text-blue-700";
+function Badge({
+  children,
+  tone = "blue",
+}: {
+  children: ReactNode;
+  tone?: "blue" | "amber";
+}) {
+  const classes =
+    tone === "amber"
+      ? "border-amber-200 bg-amber-50 text-amber-700"
+      : "border-blue-200 bg-blue-50 text-blue-700";
   return (
-    <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${classes}`}>
+    <span
+      className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${classes}`}
+    >
       {children}
     </span>
   );
@@ -1937,8 +2986,12 @@ function Badge({ children, tone = "blue" }: { children: ReactNode; tone?: "blue"
 function SummaryTile({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-blue-100 bg-white px-3 py-2">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-blue-700">{label}</p>
-      <p className="mt-1 truncate text-sm font-semibold text-zinc-900">{value}</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-blue-700">
+        {label}
+      </p>
+      <p className="mt-1 truncate text-sm font-semibold text-zinc-900">
+        {value}
+      </p>
     </div>
   );
 }
@@ -1975,11 +3028,27 @@ function Input({
   compact = false,
   requiredMark = false,
   ...props
-}: React.InputHTMLAttributes<HTMLInputElement> & { label: string; compact?: boolean; requiredMark?: boolean }) {
+}: React.InputHTMLAttributes<HTMLInputElement> & {
+  label: string;
+  compact?: boolean;
+  requiredMark?: boolean;
+}) {
+  const generatedFieldId = useId();
+  const accessibleFieldId = props.id || generatedFieldId;
+
   return (
     <div className={className}>
-      <label className="mb-1 block text-sm font-bold text-zinc-700">{label} {requiredMark ? <RequiredMark /> : null}</label>
-      <input {...props} className={`w-full rounded-lg border border-zinc-300 ${compact ? "p-2" : "p-3"}`} />
+      <label
+        htmlFor={accessibleFieldId}
+        className="mb-1 block text-sm font-bold text-zinc-700"
+      >
+        {label} {requiredMark ? <RequiredMark /> : null}
+      </label>
+      <input
+        id={accessibleFieldId}
+        {...props}
+        className={`w-full rounded-lg border border-zinc-300 ${compact ? "p-2" : "p-3"}`}
+      />
     </div>
   );
 }
@@ -1989,11 +3058,26 @@ function TextArea({
   className = "",
   hint,
   ...props
-}: React.TextareaHTMLAttributes<HTMLTextAreaElement> & { label: string; hint?: string }) {
+}: React.TextareaHTMLAttributes<HTMLTextAreaElement> & {
+  label: string;
+  hint?: string;
+}) {
+  const generatedFieldId = useId();
+  const accessibleFieldId = props.id || generatedFieldId;
+
   return (
     <div className={className}>
-      <label className="mb-1 block text-sm font-bold text-zinc-700">{label}</label>
-      <textarea {...props} className="min-h-28 w-full rounded-lg border border-zinc-300 p-3 text-sm" />
+      <label
+        htmlFor={accessibleFieldId}
+        className="mb-1 block text-sm font-bold text-zinc-700"
+      >
+        {label}
+      </label>
+      <textarea
+        id={accessibleFieldId}
+        {...props}
+        className="min-h-28 w-full rounded-lg border border-zinc-300 p-3 text-sm"
+      />
       {hint && <p className="mt-1 text-xs text-zinc-500">{hint}</p>}
     </div>
   );
