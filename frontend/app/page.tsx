@@ -3,7 +3,12 @@
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { LoginExperience } from "./login-experience";
-import { getAccessFromToken, getDefaultDashboardPath } from "@/lib/access";
+import {
+  canAccessDashboardPath,
+  getAccessFromToken,
+  getDefaultDashboardPath,
+} from "@/lib/access";
+import { stockLocationReturnPath } from "@/lib/stock-location-return";
 import { apiFetch, apiUrl } from "@/lib/api";
 import {
   clearAuthSession,
@@ -22,6 +27,17 @@ type MfaSetupData = {
   qrCodeDataUrl: string;
 };
 
+function loginDestination(role?: string) {
+  if (role === "CLIENT") return "/portal";
+  const access = getAccessFromToken();
+  const requested = stockLocationReturnPath(
+    new URLSearchParams(window.location.search).get("returnTo"),
+  );
+  return requested && canAccessDashboardPath(requested, access.pages)
+    ? requested
+    : getDefaultDashboardPath(access);
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -30,7 +46,9 @@ export default function LoginPage() {
   const [notice, setNotice] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const [flow, setFlow] = useState<"LOGIN" | "MFA_CHALLENGE" | "MFA_SETUP">("LOGIN");
+  const [flow, setFlow] = useState<"LOGIN" | "MFA_CHALLENGE" | "MFA_SETUP">(
+    "LOGIN",
+  );
   const [mfaCode, setMfaCode] = useState("");
   const [challengeToken, setChallengeToken] = useState("");
   const [setupData, setSetupData] = useState<MfaSetupData | null>(null);
@@ -48,12 +66,10 @@ export default function LoginPage() {
       const hasSession = await ensureValidSession();
       if (!cancelled && hasSession) {
         const token = getStoredAccessToken();
-        const payload = token ? decodeJwtPayload<{ role?: string }>(token) : null;
-        router.replace(
-          payload?.role === "CLIENT"
-            ? "/portal"
-            : getDefaultDashboardPath(getAccessFromToken()),
-        );
+        const payload = token
+          ? decodeJwtPayload<{ role?: string }>(token)
+          : null;
+        router.replace(loginDestination(payload?.role));
       }
     }
 
@@ -103,13 +119,11 @@ export default function LoginPage() {
       }
 
       persistAuthenticatedSession(data);
-      router.push(
-        data?.user?.role === "CLIENT"
-          ? "/portal"
-          : getDefaultDashboardPath(getAccessFromToken()),
-      );
+      router.push(loginDestination(data?.user?.role));
     } catch {
-      setError("Erro de conexao com o servidor. Verifique se o backend esta ativo.");
+      setError(
+        "Erro de conexao com o servidor. Verifique se o backend esta ativo.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -139,11 +153,7 @@ export default function LoginPage() {
       }
 
       persistAuthenticatedSession(data);
-      router.push(
-        data?.user?.role === "CLIENT"
-          ? "/portal"
-          : getDefaultDashboardPath(getAccessFromToken()),
-      );
+      router.push(loginDestination(data?.user?.role));
     } catch {
       setError("Falha ao validar MFA.");
     } finally {
@@ -163,12 +173,16 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data?.message || "Não foi possível gerar o QR Code. Tente novamente.");
+        setError(
+          data?.message || "Não foi possível gerar o QR Code. Tente novamente.",
+        );
         return;
       }
       setSetupData(data);
     } catch {
-      setError("Não foi possível gerar o QR Code. Verifique a conexão e tente novamente.");
+      setError(
+        "Não foi possível gerar o QR Code. Verifique a conexão e tente novamente.",
+      );
     }
   }
 
@@ -202,11 +216,7 @@ export default function LoginPage() {
         setRecoveryCodes(data.recoveryCodes);
       }
       persistAuthenticatedSession(data);
-      router.push(
-        data?.user?.role === "CLIENT"
-          ? "/portal"
-          : getDefaultDashboardPath(getAccessFromToken()),
-      );
+      router.push(loginDestination(data?.user?.role));
     } catch {
       setError("Falha ao concluir setup MFA.");
     } finally {

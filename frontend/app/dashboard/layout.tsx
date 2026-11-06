@@ -32,6 +32,7 @@ import {
   ensureValidSession,
   getStoredAccessToken,
 } from "@/lib/auth-session";
+import { stockLocationReturnPath } from "@/lib/stock-location-return";
 
 type VisiblePages = SidebarAccess;
 
@@ -77,7 +78,10 @@ export default function DashboardLayout({
 
       if (!hasSession || !token) {
         clearAuthSession();
-        router.replace("/");
+        const destination = stockLocationReturnPath(window.location.pathname);
+        router.replace(
+          destination ? "/?returnTo=" + encodeURIComponent(destination) : "/",
+        );
         return;
       }
 

@@ -126,6 +126,18 @@ export async function runDatabaseSafetyChecks() {
       'proposalPaymentKey',
     ]);
     await assertRequiredColumns(prisma, 'clients', ['portalEnabled']);
+    await assertRequiredColumns(prisma, 'warehouse_locations', [
+      'id',
+      'warehouseId',
+    ]);
+    await assertRequiredColumns(prisma, 'inventory_balances', [
+      'locationId',
+      'lastVerifiedAt',
+    ]);
+    await assertRequiredColumns(prisma, 'inventory_client_reservations', [
+      'balanceId',
+      'remainingQty',
+    ]);
     await assertRequiredColumns(prisma, 'service_contracts', [
       'includesFuelManagement',
       'costCenterId',
