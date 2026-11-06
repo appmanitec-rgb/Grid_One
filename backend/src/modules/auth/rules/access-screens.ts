@@ -1,6 +1,14 @@
 // Shared permission catalogue; mirrored in frontend and backend.
 export const ACCESS_SCREENS = [
   {
+    key: 'stockLocations',
+    label: 'Posições e QR Code',
+    department: 'Almoxarifado',
+    path: '/dashboard/inventory/locations',
+    parent: 'inventory',
+    section: 'inventory',
+  },
+  {
     key: 'studioTemplates',
     label: 'Biblioteca de modelos',
     department: 'Manitec Studio',

@@ -825,6 +825,8 @@ enum DocumentAccessResult {
 }
 
 model User {
+  stockLocationOperations StockLocationOperation[]
+  stockClientReservations InventoryClientReservation[]
   proposalEditingDrafts ProposalEditingDraft[]
   procurementRequests    ProcurementRequest[]
   procurementAttachments ProcurementAttachment[]
@@ -1334,6 +1336,7 @@ model Technician {
 }
 
 model Client {
+  stockReservations InventoryClientReservation[]
   procurementAllocations  ProcurementAllocation[]
   id                      String                  @id @default(uuid())
   code                    String                  @unique @default(dbgenerated())
@@ -3463,6 +3466,8 @@ model TelemetryEvent {
 }
 
 model Warehouse {
+  locations WarehouseLocation[]
+  qrBaseUrl String?
   procurementAllocations ProcurementAllocation[]
   procurementReceipts    ProcurementReceipt[]
   id                     String                  @id @default(uuid())
@@ -3487,6 +3492,13 @@ model Warehouse {
 }
 
 model InventoryBalance {
+  locationId String?
+  location WarehouseLocation? @relation(fields: [locationId, warehouseId], references: [id, warehouseId], onDelete: Restrict, onUpdate: Cascade)
+  lastVerifiedAt DateTime?
+  lastVerifiedById String?
+  lastVerifiedByName String?
+  clientReservations InventoryClientReservation[]
+  locationOperations StockLocationOperation[]
   id            String      @id @default(uuid())
   warehouseId   String
   warehouse     Warehouse   @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
@@ -3502,7 +3514,75 @@ model InventoryBalance {
 
   @@unique([warehouseId, catalogItemId])
   @@index([catalogItemId])
+  @@index([locationId, catalogItemId])
   @@map("inventory_balances")
+}
+
+model WarehouseLocation {
+  id String @id @default(uuid())
+  warehouseId String
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  code String
+  name String?
+  aisle String?
+  shelf String?
+  level String?
+  compartment String?
+  isActive Boolean @default(true)
+  version Int @default(1)
+  balances InventoryBalance[]
+  operations StockLocationOperation[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([warehouseId, code])
+  @@unique([id, warehouseId])
+  @@index([warehouseId, isActive, code])
+  @@map("warehouse_locations")
+}
+
+model InventoryClientReservation {
+  id String @id @default(uuid())
+  balanceId String
+  balance InventoryBalance @relation(fields: [balanceId], references: [id], onDelete: Restrict)
+  clientId String
+  client Client @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  quantity Float
+  remainingQty Float
+  notes String?
+  neededAt DateTime?
+  createdById String?
+  createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdByName String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([balanceId, remainingQty])
+  @@index([clientId, createdAt])
+  @@map("inventory_client_reservations")
+}
+
+model StockLocationOperation {
+  id String @id @default(uuid())
+  requestKey String @unique
+  payloadHash String
+  locationId String
+  location WarehouseLocation @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  balanceId String?
+  balance InventoryBalance? @relation(fields: [balanceId], references: [id], onDelete: SetNull)
+  action String
+  actorId String?
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actorName String
+  reason String?
+  beforeData Json?
+  afterData Json?
+  result Json
+  createdAt DateTime @default(now())
+
+  @@index([locationId, createdAt])
+  @@index([balanceId, createdAt])
+  @@map("stock_location_operations")
 }
 
 model InventoryMovement {

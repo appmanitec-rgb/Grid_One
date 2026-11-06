@@ -45,6 +45,7 @@ type SupplierItem = {
 };
 
 type InventoryBalance = {
+  location?: { id: string; code: string } | null;
   id: string;
   physicalQty: number;
   reservedQty: number;
@@ -666,6 +667,19 @@ export default function CatalogItemDetailPage() {
                           {balance.warehouse.code || "-"} |{" "}
                           {balance.warehouse.type || "-"}
                         </p>
+                        {balance.location && (
+                          <PermissionAwareLink
+                            href={
+                              "/dashboard/inventory/locations/" +
+                              balance.location.id
+                            }
+                            permission="inventory.view"
+                            className="dashboard-record-link mt-2 inline-flex text-xs"
+                            fallbackClassName="mt-2 text-xs"
+                          >
+                            Posição {balance.location.code}
+                          </PermissionAwareLink>
+                        )}
                       </div>
                       {available <= trigger ? (
                         <Badge tone="rose">Reposicao</Badge>

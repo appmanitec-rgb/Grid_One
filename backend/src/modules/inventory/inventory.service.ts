@@ -35,6 +35,7 @@ export class InventoryService {
       where,
       include: {
         warehouse: true,
+        location: { select: { id: true, code: true } },
         catalogItem: {
           select: {
             id: true,
@@ -70,7 +71,8 @@ export class InventoryService {
       maxQty: b.maxQty,
       reorderPoint: b.reorderPoint,
       brand: b.catalogItem.brand,
-      storageLocation: b.catalogItem.storageLocation,
+      storageLocation: b.location?.code ?? b.catalogItem.storageLocation,
+      locationId: b.location?.id ?? null,
       avgCost: canViewCosts ? b.catalogItem.averageCost : null,
     }));
   }
@@ -132,6 +134,24 @@ export class InventoryService {
       const itemIds: string[] = [];
 
       for (const item of dto.items) {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM inventory_balances WHERE "warehouseId"=${dto.warehouseId} AND "catalogItemId"=${item.catalogItemId} FOR UPDATE`,
+        );
+        const previous = await tx.inventoryBalance.findUnique({
+          where: {
+            warehouseId_catalogItemId: {
+              warehouseId: dto.warehouseId,
+              catalogItemId: item.catalogItemId,
+            },
+          },
+        });
+        const nextPhysical = Number(previous?.physicalQty ?? 0) + item.delta;
+        if (nextPhysical < 0)
+          throw new BadRequestException('Ajuste gera estoque fisico negativo.');
+        if (nextPhysical < Number(previous?.reservedQty ?? 0))
+          throw new BadRequestException(
+            'O ajuste deixa o saldo físico abaixo do reservado. Revise as reservas antes de ajustar.',
+          );
         const balance = await tx.inventoryBalance.upsert({
           where: {
             warehouseId_catalogItemId: {
@@ -303,13 +323,27 @@ export class InventoryService {
     return this.prisma.$transaction(async (tx) => {
       const balances = await tx.inventoryBalance.findMany({
         where: { catalogItemId: dto.catalogItemId, reservedQty: { gt: 0 } },
+        include: {
+          clientReservations: {
+            where: { remainingQty: { gt: 0 } },
+            select: { remainingQty: true },
+          },
+        },
         orderBy: [{ reservedQty: 'desc' }],
       });
 
       let remaining = dto.quantity;
       for (const balance of balances) {
         if (remaining <= 0) break;
-        const releaseQty = Math.min(remaining, Number(balance.reservedQty));
+        const customerHolds = balance.clientReservations.reduce(
+          (sum, hold) => sum + hold.remainingQty,
+          0,
+        );
+        const releaseQty = Math.min(
+          remaining,
+          Math.max(0, Number(balance.reservedQty) - customerHolds),
+        );
+        if (releaseQty <= 0) continue;
 
         await tx.inventoryBalance.update({
           where: { id: balance.id },

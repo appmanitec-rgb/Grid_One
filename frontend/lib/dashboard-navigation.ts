@@ -335,6 +335,15 @@ export const MAIN_SECTIONS: NavSection[] = [
     description: "Receber, armazenar, separar e repor",
     items: [
       {
+        key: "warehouse_locations",
+        label: "Posições e QR Code",
+        href: "/dashboard/inventory/locations",
+        enabled: true,
+        keywords:
+          "prateleira estante corredor endereco conferencia contagem etiqueta qrcode",
+        group: "Rotina do almoxarifado",
+      },
+      {
         key: "warehouse_operations",
         label: "Recebimento e separação",
         href: "/dashboard/inventory/operations",

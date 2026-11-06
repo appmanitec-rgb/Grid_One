@@ -2363,6 +2363,7 @@ export class CatalogsService {
       },
       inventoryBalances: {
         include: {
+          location: { select: { id: true, code: true } },
           warehouse: {
             select: { id: true, code: true, name: true, type: true },
           },

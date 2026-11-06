@@ -114,6 +114,7 @@ function Picker({
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState(false);
   const [active, setActive] = useState(0);
+  const [portalTarget, setPortalTarget] = useState<Element | null>(null);
   const [position, setPosition] = useState({
     left: 0,
     top: 0,
@@ -140,6 +141,7 @@ function Picker({
     const place = () => {
       const field = input.current;
       if (!field) return;
+      setPortalTarget(field.closest("dialog") ?? document.body);
       const box = field.getBoundingClientRect();
       const viewport = window.visualViewport;
       const height = viewport?.height ?? window.innerHeight;
@@ -323,7 +325,7 @@ function Picker({
                           (results.length === 1 ? " resultado" : " resultados")}
               </p>
             </div>,
-            document.body,
+            portalTarget ?? document.body,
           )
         : null}
     </>

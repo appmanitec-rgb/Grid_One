@@ -10,6 +10,7 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getAccessFromToken } from "@/lib/access";
+import { PermissionAwareLink } from "../components/OperationalLinks";
 import { apiFetch } from "@/lib/api";
 
 type Warehouse = {
@@ -20,6 +21,8 @@ type Warehouse = {
 };
 
 type InventoryRow = {
+  locationId?: string | null;
+  storageLocation?: string | null;
   id: string;
   warehouseId: string;
   warehouse: string;
@@ -170,6 +173,14 @@ export default function InventoryPage() {
         eyebrow="Suprimentos"
         title="Controle de estoque"
         description="Consulte saldos, movimentos e materiais por local."
+        actions={
+          <PermissionAwareLink
+            href="/dashboard/inventory/locations"
+            permission="inventory.view"
+          >
+            Posições e QR Code
+          </PermissionAwareLink>
+        }
       />
 
       <section className="dashboard-metrics-grid">
@@ -298,7 +309,23 @@ export default function InventoryPage() {
                 const low = row.availableQty <= Number(row.minQty || 0);
                 return (
                   <tr key={row.id} className="border-b border-zinc-100">
-                    <td className="px-2 py-2 text-zinc-700">{row.warehouse}</td>
+                    <td className="px-2 py-2 text-zinc-700">
+                      {row.warehouse}
+                      {row.locationId ? (
+                        <div className="mt-1">
+                          <PermissionAwareLink
+                            href={
+                              "/dashboard/inventory/locations/" + row.locationId
+                            }
+                            permission="inventory.view"
+                            className="dashboard-record-link"
+                            fallbackClassName="text-xs"
+                          >
+                            Posição {row.storageLocation}
+                          </PermissionAwareLink>
+                        </div>
+                      ) : null}
+                    </td>
                     <td className="px-2 py-2 font-semibold text-zinc-800">
                       <Link
                         href={`/dashboard/catalog/${row.catalogItemId}`}
